@@ -126,7 +126,10 @@ gated on the `manage_crowdsourcing` permission; the shared admin key passes):
   message of at least 100 characters plus a category) individual submissions,
   or bulk-approve everything awaiting review.
 - **Bonuses**: `POST /admin/api/crowd/study/<id>/bonus` with
-  `{"bonuses": [["<participant_id>", 1.50], ...], "pay": true}`.
+  `{"bonuses": [["<participant_id>", 1.50], ...], "pay": true}`. The request
+  is refused with a 400 if a participant id has anything but letters, digits,
+  `_` and `-`, if an amount is not a positive number, or if a participant is
+  listed twice.
 - **Paid screen-outs**: `POST /admin/api/crowd/study/<id>/screen_out` with
   submission IDs — or automatically: set
   `crowdsourcing.prolific.screen_out_on_block: true` (with `token` and

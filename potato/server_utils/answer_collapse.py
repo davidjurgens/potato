@@ -67,6 +67,11 @@ def is_selected(label_name: str, value: Any, markers_ok: bool = True) -> bool:
     free-text field holding the literal word "on" must not be read as its label
     name. Everywhere else a marker means the label carries the answer.
     """
+    if not markers_ok:
+        # A slider, number or text field stores the answer itself. A slider at
+        # 1 is the number 1, not "the slider label was ticked"; reading it as a
+        # selection collapsed every such answer to the label name "slider".
+        return False
     if value is True:
         return True
     if isinstance(value, bool):          # False is not a selection
@@ -78,9 +83,24 @@ def is_selected(label_name: str, value: Any, markers_ok: bool = True) -> bool:
             return True
         if label_name and value == label_name:
             return True
-        if markers_ok and label_name and is_selection_marker(value):
+        if label_name and is_selection_marker(value):
             return True
     return False
+
+
+#: Values a legacy client posts for an UNchecked box.
+_UNCHECKED = frozenset({"false", "0", "off", "no", ""})
+
+
+def _is_unchecked(value: Any) -> bool:
+    """Whether a stored value explicitly says the option is not selected."""
+    if value is None or value is False:
+        return True
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)) and value == 0:
+        return True
+    return isinstance(value, str) and value.strip().lower() in _UNCHECKED
 
 
 def _dedupe(entries: Sequence[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
@@ -135,7 +155,11 @@ def collapse_entries(entries: Sequence[Tuple[str, Any]],
         # Presence means checked — syncAnnotationsFromDOM deletes unchecked boxes
         # rather than storing them false. Keep the 1-element case scalar so existing
         # `operator: equals` conditions on a single-ticked multiselect keep working.
-        names = selected or [ln for ln, _v in main]
+        # The fallback covers values that are neither a marker nor an explicit
+        # "no" (a label stored with its numeric key, say). An entry stored as
+        # false is an unchecked box, and treating every box as ticked because
+        # none was recognised made "nothing selected" read as "all selected".
+        names = selected or [ln for ln, v in main if not _is_unchecked(v)]
         if not names:
             return None, None, "empty"
         if len(names) == 1:

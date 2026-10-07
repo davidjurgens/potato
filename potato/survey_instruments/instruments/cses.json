@@ -11,9 +11,9 @@
   "scoring": {
     "method": "subscales",
     "subscales": {
-      "membership": {"items": [1, 5, 9, 13], "reverse": [1, 9]},
+      "membership": {"items": [1, 5, 9, 13], "reverse": [5, 13]},
       "private": {"items": [2, 6, 10, 14], "reverse": [2, 10]},
-      "public": {"items": [3, 7, 11, 15], "reverse": [3, 11]},
+      "public": {"items": [3, 7, 11, 15], "reverse": [7, 15]},
       "identity": {"items": [4, 8, 12, 16], "reverse": [4, 12]}
     }
   },

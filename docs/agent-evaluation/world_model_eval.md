@@ -337,7 +337,8 @@ tolerance can be varied and the report re-run as more people annotate.
 
 Predictions are stored per prompt version in `rollout_predictions.json`, so
 re-running after changing the prompt compares like with like instead of
-overwriting the previous run's evidence.
+overwriting the previous run's evidence. Without `version`, the report scores
+the version run most recently.
 
 ### There is no single human answer, so one is built
 
@@ -349,7 +350,9 @@ annotator who answered about it:
 - more marked a break → the consensus time is the **median** of their marks and
   the category is the modal one. Median, so one annotator who marked the wrong
   moment entirely moves the answer by one position rather than dragging it
-  across the clip;
+  across the clip. A tie between categories leaves the category unscored;
+- as many marked a break as marked it clean → there is no consensus, and the
+  stream is left out and counted in `n_human_tied`;
 - **nobody answered** → the stream contributes nothing. Counting silence as
   "clean" would manufacture agreement with a judge that also found nothing.
 

@@ -26,6 +26,6 @@
     {"name": "grips_5", "description": "Taking risks is an important part of my life.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
     {"name": "grips_6", "description": "I commonly make risky decisions.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
     {"name": "grips_7", "description": "I am a believer in taking chances.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
-    {"name": "grips_8", "description": "I would never take risks.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}}
+    {"name": "grips_8", "description": "I am attracted, rather than scared, by risk.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}}
   ]
 }

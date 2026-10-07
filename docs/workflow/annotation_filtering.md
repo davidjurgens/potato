@@ -36,6 +36,7 @@ python -m potato.filter_by_annotation \
 | `--output`, `-o` | Output file path for filtered data |
 | `--id-key` | Key in data items containing the instance ID (default: `id`) |
 | `--invert` | Invert filter: return items that DON'T match |
+| `--rule` | With several annotators per item: `majority` (default), `any` or `all` of them must have chosen a value |
 | `--format` | Output format: `json` or `jsonl` (default: `json`) |
 | `--summary` | Show annotation summary instead of filtering |
 | `--verbose`, `-V` | Enable verbose logging |
@@ -79,8 +80,11 @@ Annotation summary for schema 'data_quality':
   reject: 75 (30.0%)
   skip: 25 (10.0%)
 ----------------------------------------
-  Total: 250
+  Total answers: 250
 ```
+
+The summary counts answers, not items: an item three annotators labelled
+`accept` adds 3 to `accept`.
 
 ## Option 2: Config-Based Filtering
 
@@ -107,6 +111,10 @@ data_files:
 | `schema` | string | Name of the annotation schema to filter by |
 | `value` | string or list | Value(s) to filter for |
 | `invert` | boolean | If true, return items that DON'T match (default: false) |
+| `rule` | string | With several annotators per item: `majority` (default) matches when more than half of the annotators who answered chose a filter value, `any` when one did, `all` when every one did |
+
+Every annotator's answer is read. For a multiselect, an annotator counts
+toward a value when they ticked it, whatever else they ticked.
 
 ### Examples
 

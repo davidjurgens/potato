@@ -141,7 +141,9 @@ def run_pipeline(config_path: str,
     gold_rows: List[dict] = []
     if opts.get("include_gold", True) and opts.get("aggregation", "majority") != "none":
         gold_rows = bundle_mod.build_gold_rows(
-            ann_rows, aggregation=str(opts.get("aggregation", "majority")))
+            annotations, aggregation=str(opts.get("aggregation", "majority")),
+            schemas=context.config.get("annotation_schemes") or [],
+            instance_ids={r.get("instance_id") for r in ann_rows})
 
     # --- spans / items ---------------------------------------------------------
     span_rows = bundle_mod.build_span_rows(annotations) \

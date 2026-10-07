@@ -112,8 +112,11 @@ def selected_labels(schema_values: Any) -> List[str]:
     is why this returns names rather than values.
     """
     if isinstance(schema_values, dict):
+        # A value echoing its own name is a selection even when the name is
+        # "0": a likert scale that starts at 0 stores {"0": "0"}, and the old
+        # FALSEY test dropped that answer and left the annotator unanswered.
         return [str(name) for name, value in schema_values.items()
-                if value not in FALSEY]
+                if value not in FALSEY or str(value) == str(name)]
     if schema_values in FALSEY:
         return []
     return [str(schema_values)]
@@ -461,13 +464,59 @@ def comparable_value(scheme: Any, stored: Any) -> Any:
             kind = _schema_kind(scheme)
             return tuple(atoms) if kind == _ORDERED_KIND else frozenset(atoms)
 
-        if _schema_kind(scheme) == _MATRIX_KIND:
+        kind = _schema_kind(scheme)
+        if kind == _MATRIX_KIND:
+            # A zero allocation in constant_sum or soft_label is the same as
+            # no allocation. Elsewhere 0 is a rating: multirate row x rated 0
+            # is an answer, and dropping it made "rated 0" equal "skipped".
+            empty = (_ZERO_IS_EMPTY if _annotation_type(scheme) in _ZERO_MEANS_NONE
+                     else _MISSING)
             return frozenset(
-                (str(k), str(v)) for k, v in stored.items() if v not in FALSEY
+                (str(k), str(v)) for k, v in stored.items()
+                if not any(v is e or (type(v) is type(e) and v == e) for e in empty)
             )
 
+        if kind == _CONTINUOUS_KIND:
+            return _scalar_answer(stored)
+
         return frozenset(selected_labels(stored))
+    if _schema_kind(scheme) == _CONTINUOUS_KIND:
+        return _number(stored)
     return stored
+
+
+#: Values that mean "no answer" for a matrix row.
+_MISSING = (None, "", False)
+#: ...plus zero, for the types where zero mass is the same as no mass.
+_ZERO_IS_EMPTY = (None, "", False, 0, 0.0, "0")
+_ZERO_MEANS_NONE = frozenset({"constant_sum", "soft_label"})
+
+_CONTINUOUS_KIND = "continuous"
+
+
+def _number(value: Any) -> Any:
+    """``"7"``, ``7`` and ``7.0`` as one comparable value; anything else as is."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _scalar_answer(stored: Dict[str, Any]) -> Any:
+    """The one number a slider, number or VAS stores as ``{label: value}``.
+
+    The label is the scheme's fixed key ("slider", "number"), identical for
+    every annotator, so reading the key set scored a slider at 1 and a slider
+    at 10 as perfect agreement. The value is the answer.
+    """
+    values = [v for k, v in stored.items()
+              if str(k) != "free_response" and v is not None and v != ""
+              and not isinstance(v, bool)]
+    if not values:
+        return None
+    return _number(values[-1])
 
 
 def distance(scheme: Any, value_a: Any, value_b: Any,

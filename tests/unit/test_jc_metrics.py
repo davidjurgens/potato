@@ -25,10 +25,11 @@ class TestGold:
         assert gold["i1"] == "a"  # 2x a vs 1x b
         assert gold["i2"] == "b"  # 2x b vs 1x c
 
-    def test_majority_tie_deterministic(self):
-        # i1: a,b tie -> sorted-first 'a'
+    def test_a_majority_tie_has_no_gold(self):
+        # i1: a,b tie -> no majority, so no gold to score a judge against.
+        # It used to resolve to the alphabetically first label.
         humans = {"h1": {"i1": "a"}, "h2": {"i1": "b"}}
-        assert resolve_gold(humans, "majority")["i1"] == "a"
+        assert "i1" not in resolve_gold(humans, "majority")
 
     def test_majority_helper(self):
         assert _majority(["x", "y", "x"]) == "x"

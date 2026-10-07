@@ -250,7 +250,9 @@ class ReviewVerdict:
 
 def review_metrics(verdicts: Sequence[ReviewVerdict],
                    reviewed_empty_ids: Sequence[str] = (),
-                   found_in_empty_ids: Sequence[str] = ()) -> Dict[str, Any]:
+                   found_in_empty_ids: Sequence[str] = (),
+                   n_empty_total: Optional[int] = None,
+                   n_prelabelled_total: Optional[int] = None) -> Dict[str, Any]:
     """
     Model precision, recall and human agreement, from review verdicts.
 
@@ -263,16 +265,22 @@ def review_metrics(verdicts: Sequence[ReviewVerdict],
             it.
         found_in_empty_ids: Of those, the ones where the human found something
             the model had not. Each is a confirmed false negative.
+        n_empty_total: How many items have no prediction at all. The sampled
+            miss rate is scaled to this pool: one miss in 2 sampled out of
+            1000 is about 500 misses, not 1.
+        n_prelabelled_total: How many items have a prediction, to scale the
+            reviewed hits the same way.
 
     Returns precision always, and recall only when the empty pool was
     sampled: ``recall: None`` with a stated reason beats a number computed
     from a denominator nobody checked.
     """
-    latest: Dict[Tuple[str, str], ReviewVerdict] = {}
+    latest: Dict[Tuple[str, str, str], ReviewVerdict] = {}
     for verdict in verdicts:
-        # Last verdict per (item, scheme) wins: a reviewer who changes their
-        # mind should not be counted twice.
-        latest[(verdict.instance_id, verdict.schema_name)] = verdict
+        # Last verdict per (item, scheme, reviewer) wins: a reviewer who
+        # changes their mind should not be counted twice. Keyed without the
+        # reviewer, a second reviewer's verdict replaced the first one's.
+        latest[(verdict.instance_id, verdict.schema_name, verdict.reviewer)] = verdict
 
     counts = {name: 0 for name in VERDICTS}
     for verdict in latest.values():
@@ -293,13 +301,24 @@ def review_metrics(verdicts: Sequence[ReviewVerdict],
                    "evidence about what the model missed and recall cannot be "
                    "computed. Sample it from the empty-prediction slice.")
     if n_sampled:
-        # Estimated over the reviewed sample: of everything a human found,
-        # what share had the model already found?
-        denominator = true_positives + counts["correct"] + n_missed
-        recall = (true_positives + counts["correct"]) / denominator if denominator else None
+        # Of everything there is to find, what share had the model found?
+        # Each side is a sample, so each is scaled to its own pool before
+        # they are compared: the reviewed prelabelled items stand for every
+        # prelabelled item, the reviewed empty items for every empty one.
+        found = true_positives + counts["correct"]
+        if n_empty_total and n_prelabelled_total and reviewed:
+            est_found = found / reviewed * n_prelabelled_total
+            est_missed = n_missed / n_sampled * n_empty_total
+            scale_note = (f" Scaled to {n_prelabelled_total} prelabelled and "
+                          f"{n_empty_total} empty item(s).")
+        else:
+            est_found, est_missed = found, n_missed
+            scale_note = " Not scaled: pool sizes were not given."
+        denominator = est_found + est_missed
+        recall = est_found / denominator if denominator else None
         recall_note = (f"Estimated over {n_sampled} sampled item(s) with no "
                        f"prediction, {n_missed} of which turned out to contain "
-                       f"something.")
+                       f"something.{scale_note}")
 
     return {
         "n_reviewed": reviewed,
@@ -431,7 +450,9 @@ def summarize_project(item_state_manager, config: Dict[str, Any]
                             and v.verdict in ("correct", "reject"))
 
     prelabelled = [v for v in verdicts if v.instance_id not in set(empty_ids)]
-    metrics = review_metrics(prelabelled, reviewed_empty, found_in_empty)
+    metrics = review_metrics(prelabelled, reviewed_empty, found_in_empty,
+                             n_empty_total=len(set(empty_ids)),
+                             n_prelabelled_total=sum(1 for s in summaries if not s.empty))
 
     return {
         "n_items": len(summaries),

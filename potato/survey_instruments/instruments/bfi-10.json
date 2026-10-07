@@ -11,11 +11,11 @@
   "scoring": {
     "method": "subscales",
     "subscales": {
-      "extraversion": {"items": [1, 6], "reverse": [6]},
-      "agreeableness": {"items": [2, 7], "reverse": [2]},
-      "conscientiousness": {"items": [3, 8], "reverse": [8]},
-      "neuroticism": {"items": [4, 9], "reverse": [9]},
-      "openness": {"items": [5, 10], "reverse": [10]}
+      "extraversion": {"items": [1, 6], "reverse": [1]},
+      "agreeableness": {"items": [2, 7], "reverse": [7]},
+      "conscientiousness": {"items": [3, 8], "reverse": [3]},
+      "neuroticism": {"items": [4, 9], "reverse": [4]},
+      "openness": {"items": [5, 10], "reverse": [5]}
     }
   },
   "instructions": "How well do the following statements describe your personality? I see myself as someone who...",

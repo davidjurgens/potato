@@ -134,8 +134,16 @@ found something the model had not, so each is a confirmed false negative and
 recall becomes computable. Only items a human actually opened count; anything
 else moves recall by assumption.
 
+Both sides are samples, so each is scaled to its own pool before recall is
+computed: the share of reviewed prelabelled items the model got right stands for
+every prelabelled item, and the share of reviewed empty items that held
+something stands for every empty item. One miss in 2 sampled empty items out of
+1,000 is about 500 misses, not 1. `recall_note` says what was sampled and
+scaled.
+
 Verdicts on empty items stay out of the precision denominator, so the model is
-not penalised for a prediction it never made.
+not penalised for a prediction it never made. When two reviewers judge the same
+item, both verdicts count.
 
 ---
 

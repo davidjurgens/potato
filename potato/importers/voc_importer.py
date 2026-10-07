@@ -18,10 +18,13 @@ Two details that are easy to lose:
 * **VOC boxes are corners** (``xmin ymin xmax ymax``), not origin-plus-size.
   Treating ``xmax`` as a width produces a box that starts in the right place and
   extends far too far — plausible enough on screen to survive review.
-* **VOC is 1-indexed** by its original convention, so a box at ``xmin=1`` is at
-  pixel 0. Left as-is by default (a one-pixel shift is well inside annotation
-  noise, and silently shifting everything would be worse), but recorded here so
-  the choice is visible rather than accidental.
+* **VOC is 1-indexed and inclusive**, so a box at ``xmin=1, xmax=10`` covers
+  pixels 0 to 9: origin 0, width 10. The importer converts that way and the
+  exporter writes it back the same way, so a round trip is exact. When both
+  read VOC's numbers as 0-based they agreed with each other and with no VOC
+  tool, which put every box a pixel off for anyone training on the export.
+  A file that uses ``xmin=0`` (some converters write 0-based corners) is read
+  with its origin clamped to 0.
 
 ``difficult`` and ``truncated`` flags are carried through as annotation
 attributes rather than dropped, because a benchmark that ignores difficult
@@ -141,9 +144,9 @@ class VOCImporter(BaseAnnotationImporter):
             ymin = self._float(box, "ymin", 0.0)
             xmax = self._float(box, "xmax", 0.0)
             ymax = self._float(box, "ymax", 0.0)
-            # Corners, not origin-plus-size.
-            w = xmax - xmin
-            h = ymax - ymin
+            # Corners, not origin-plus-size; 1-based and inclusive.
+            w = xmax - xmin + 1
+            h = ymax - ymin + 1
             if w <= 0 or h <= 0:
                 result.warnings.append(
                     f"{file_name}: object '{name}' has a degenerate box "
@@ -151,7 +154,7 @@ class VOCImporter(BaseAnnotationImporter):
                 continue
 
             obj = to_client_object("bbox", name, img_w=width, img_h=height,
-                                   bbox=[xmin, ymin, w, h])
+                                   bbox=[max(0.0, xmin - 1), max(0.0, ymin - 1), w, h])
             if obj is None:
                 continue
 

@@ -14,7 +14,7 @@
       "extraversion": {"items": [1, 6], "reverse": [6]},
       "agreeableness": {"items": [2, 7], "reverse": [2]},
       "conscientiousness": {"items": [3, 8], "reverse": [8]},
-      "emotional_stability": {"items": [4, 9], "reverse": [9]},
+      "emotional_stability": {"items": [4, 9], "reverse": [4]},
       "openness": {"items": [5, 10], "reverse": [10]}
     }
   },

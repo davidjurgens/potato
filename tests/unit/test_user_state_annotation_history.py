@@ -137,13 +137,14 @@ class TestUserStateAnnotationHistory(unittest.TestCase):
 
     def test_get_suspicious_activity(self):
         """Test detecting suspicious activity."""
-        # Add fast actions (suspicious)
+        # Five items, each started 0.3 s after the previous one (suspicious).
+        base = datetime.datetime.now()
         for i in range(5):
             action = AnnotationAction(
                 action_id=f"fast_action_{i}",
-                timestamp=datetime.datetime.now() + datetime.timedelta(seconds=i),
+                timestamp=base + datetime.timedelta(seconds=i * 0.3),
                 user_id="test_user",
-                instance_id="test_instance",
+                instance_id=f"item_{i}",
                 action_type="add_label",
                 schema_name="sentiment",
                 label_name="positive",
@@ -159,9 +160,10 @@ class TestUserStateAnnotationHistory(unittest.TestCase):
 
         suspicious_actions = self.user_state.get_suspicious_activity()
 
-        self.assertGreater(len(suspicious_actions), 0)
-        for action in suspicious_actions:
-            self.assertLess(action.server_processing_time_ms, 500)  # Fast threshold
+        # Every item after the first was started too soon; the first has no
+        # previous item to measure from.
+        self.assertEqual([a.instance_id for a in suspicious_actions],
+                         [f"item_{i}" for i in range(1, 5)])
 
     def test_get_performance_metrics(self):
         """Test getting performance metrics."""

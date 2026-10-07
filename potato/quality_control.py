@@ -1466,7 +1466,16 @@ class QualityControlManager:
         the caller passes the check if any one of them matches.
         """
         readings: List[Any] = []
-        if key in actual:
+        labelled = any(
+            (parsed := split_annotation_key(k)) is not None and parsed[0] == key
+            for k in actual)
+        # `/updateinstance` also writes the bare schema key, overwritten once
+        # per posted option, so for a multiselect it holds whichever box was
+        # posted LAST. Offering it as a reading let an annotator who ticked
+        # every box pass whenever the expected one happened to be posted last,
+        # and fail the same answer posted in another order. When the per-label
+        # keys are present they are the answer; the bare key is a lossy copy.
+        if key in actual and not labelled:
             readings.append(actual[key])
 
         # Both separators, because the route accepts both and its own 400

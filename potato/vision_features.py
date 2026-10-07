@@ -212,7 +212,7 @@ class ImageEmbeddingVectorizer:
 
         if self._cache is not None:
             for index, reference in enumerate(references):
-                cached = self._cache.get(fingerprint(reference))
+                cached = self._cache.get(self._key(reference))
                 if cached is not None:
                     vectors[index] = cached
                 else:
@@ -237,7 +237,7 @@ class ImageEmbeddingVectorizer:
                 for position, index in enumerate(loaded_indices):
                     vectors[index] = encoded[position]
                     if self._cache is not None:
-                        self._cache.put(fingerprint(references[index]),
+                        self._cache.put(self._key(references[index]),
                                         encoded[position])
 
         width = next((len(v) for v in vectors if v is not None), 1)
@@ -253,6 +253,27 @@ class ImageEmbeddingVectorizer:
         return self.transform(X)
 
     # -- loading --------------------------------------------------------
+
+    def _resolve(self, reference: str) -> Optional[Path]:
+        """The local file a reference names, as given or under image_root."""
+        candidate = str(reference)
+        if candidate.startswith(("http://", "https://")):
+            return None
+        path = Path(candidate)
+        if not path.is_file() and self.image_root:
+            path = Path(self.image_root) / candidate.lstrip("/")
+        return path if path.is_file() else None
+
+    def _key(self, reference: str) -> str:
+        """Cache key from the resolved file's content.
+
+        Taking the fingerprint of the reference as written missed every
+        relative path ("/media/a.png" is not a file until image_root is
+        applied), so the key was the path string, and an edited image kept
+        its stale embedding.
+        """
+        path = self._resolve(reference)
+        return fingerprint(str(path) if path is not None else reference)
 
     def _load(self, reference: str):
         """Open one image reference, or None if it cannot be read."""
@@ -274,10 +295,8 @@ class ImageEmbeddingVectorizer:
             # `is_absolute()` and skipping image_root on a leading slash would
             # therefore fail to resolve on essentially every real project.
             # Try the reference as given, then relative to image_root.
-            path = Path(candidate)
-            if not path.is_file() and self.image_root:
-                path = Path(self.image_root) / candidate.lstrip("/")
-            if not path.is_file():
+            path = self._resolve(candidate)
+            if path is None:
                 return None
             with Image.open(path) as image:
                 return image.convert("RGB")

@@ -248,6 +248,11 @@ def build_report(manager) -> Dict[str, Any]:
 
 # ----- HTML rendering -----------------------------------------------------
 
+def _na(value: Any) -> Any:
+    """An undefined metric reads as n/a, never "None"."""
+    return "n/a" if value is None else value
+
+
 def render_html(report: Dict[str, Any]) -> str:
     """Render a compact, self-contained HTML summary of the report."""
     parts = [
@@ -311,7 +316,7 @@ def render_html(report: Dict[str, Any]) -> str:
             parts.append(
                 f"<tr><td>{model}</td>"
                 f"<td class='metric'>{acc}</td>"
-                f"<td class='metric'>{f1}{mae}{extra}</td>"
+                f"<td class='metric'>{show(f1)}{mae}{extra}</td>"
                 f"<td class='metric'>{show(cal.get('ece', ''))}</td>"
                 f"<td class='metric'>{show(cal.get('brier', ''))}</td>"
                 f"<td class='metric'>{n}</td></tr>"
@@ -323,33 +328,33 @@ def render_html(report: Dict[str, Any]) -> str:
         parts.append("<div class='tbl-wrap'><table><tr><th>Agreement</th><th>Value</th></tr>")
         if "span_f1" in iaa:
             j = iaa["span_f1"]
-            parts.append(f"<tr><td>Span F1 (human↔LLM)</td><td class='metric'>{j.get('mean_human_llm')}</td></tr>")
-            parts.append(f"<tr><td>Span F1 (LLM↔LLM)</td><td class='metric'>{j.get('mean_llm_llm')}</td></tr>")
-            parts.append(f"<tr><td>Span F1 (human↔human)</td><td class='metric'>{j.get('mean_human_human')}</td></tr>")
+            parts.append(f"<tr><td>Span F1 (human↔LLM)</td><td class='metric'>{'n/a' if j.get('mean_human_llm') is None else j.get('mean_human_llm')}</td></tr>")
+            parts.append(f"<tr><td>Span F1 (LLM↔LLM)</td><td class='metric'>{'n/a' if j.get('mean_llm_llm') is None else j.get('mean_llm_llm')}</td></tr>")
+            parts.append(f"<tr><td>Span F1 (human↔human)</td><td class='metric'>{'n/a' if j.get('mean_human_human') is None else j.get('mean_human_human')}</td></tr>")
             tk = (iaa.get("token_kappa") or {}).get("cohen", {}) or {}
             if tk:
-                parts.append(f"<tr><td>Token κ (human↔LLM, chance-corrected)</td><td class='metric'>{tk.get('mean_human_llm')}</td></tr>")
-                parts.append(f"<tr><td>Token κ (LLM↔LLM)</td><td class='metric'>{tk.get('mean_llm_llm')}</td></tr>")
+                parts.append(f"<tr><td>Token κ (human↔LLM, chance-corrected)</td><td class='metric'>{_na(tk.get('mean_human_llm'))}</td></tr>")
+                parts.append(f"<tr><td>Token κ (LLM↔LLM)</td><td class='metric'>{_na(tk.get('mean_llm_llm'))}</td></tr>")
             tkr = (iaa.get("token_kappa") or {}).get("krippendorff") or {}
             if tkr:
-                parts.append(f"<tr><td>Token Krippendorff α</td><td class='metric'>{tkr.get('alpha')}</td></tr>")
+                parts.append(f"<tr><td>Token Krippendorff α</td><td class='metric'>{_na(tkr.get('alpha'))}</td></tr>")
             g = iaa.get("gamma") or {}
             if g and g.get("gamma") is not None:
-                parts.append(f"<tr><td>γ (Gamma, approx.) overall</td><td class='metric'>{g.get('gamma')}</td></tr>")
-                parts.append(f"<tr><td>γ (human↔LLM)</td><td class='metric'>{g.get('mean_human_llm')}</td></tr>")
+                parts.append(f"<tr><td>γ (Gamma, approx.) overall</td><td class='metric'>{_na(g.get('gamma'))}</td></tr>")
+                parts.append(f"<tr><td>γ (human↔LLM)</td><td class='metric'>{_na(g.get('mean_human_llm'))}</td></tr>")
         elif "jaccard" in iaa:
             j = iaa["jaccard"]
-            parts.append(f"<tr><td>Jaccard (human↔LLM)</td><td class='metric'>{j.get('mean_human_llm')}</td></tr>")
-            parts.append(f"<tr><td>Jaccard (LLM↔LLM)</td><td class='metric'>{j.get('mean_llm_llm')}</td></tr>")
-            parts.append(f"<tr><td>Jaccard (human↔human)</td><td class='metric'>{j.get('mean_human_human')}</td></tr>")
+            parts.append(f"<tr><td>Jaccard (human↔LLM)</td><td class='metric'>{'n/a' if j.get('mean_human_llm') is None else j.get('mean_human_llm')}</td></tr>")
+            parts.append(f"<tr><td>Jaccard (LLM↔LLM)</td><td class='metric'>{'n/a' if j.get('mean_llm_llm') is None else j.get('mean_llm_llm')}</td></tr>")
+            parts.append(f"<tr><td>Jaccard (human↔human)</td><td class='metric'>{'n/a' if j.get('mean_human_human') is None else j.get('mean_human_human')}</td></tr>")
         else:
             cohen = iaa.get("cohen", {})
             kripp = iaa.get("krippendorff") or {}
-            parts.append(f"<tr><td>Cohen κ (human↔LLM)</td><td class='metric'>{cohen.get('mean_human_llm')}</td></tr>")
-            parts.append(f"<tr><td>Cohen κ (LLM↔LLM)</td><td class='metric'>{cohen.get('mean_llm_llm')}</td></tr>")
-            parts.append(f"<tr><td>Cohen κ (human↔human)</td><td class='metric'>{cohen.get('mean_human_human')}</td></tr>")
-            parts.append(f"<tr><td>Fleiss κ (all raters)</td><td class='metric'>{iaa.get('fleiss',{}).get('kappa')}</td></tr>")
-            parts.append(f"<tr><td>Krippendorff α ({kripp.get('metric','')})</td><td class='metric'>{kripp.get('alpha')}</td></tr>")
+            parts.append(f"<tr><td>Cohen κ (human↔LLM)</td><td class='metric'>{_na(cohen.get('mean_human_llm'))}</td></tr>")
+            parts.append(f"<tr><td>Cohen κ (LLM↔LLM)</td><td class='metric'>{_na(cohen.get('mean_llm_llm'))}</td></tr>")
+            parts.append(f"<tr><td>Cohen κ (human↔human)</td><td class='metric'>{_na(cohen.get('mean_human_human'))}</td></tr>")
+            parts.append(f"<tr><td>Fleiss κ (all raters)</td><td class='metric'>{_na(iaa.get('fleiss',{}).get('kappa'))}</td></tr>")
+            parts.append(f"<tr><td>Krippendorff α ({kripp.get('metric','')})</td><td class='metric'>{_na(kripp.get('alpha'))}</td></tr>")
         parts.append("</table></div>")
 
     parts.append("</body></html>")

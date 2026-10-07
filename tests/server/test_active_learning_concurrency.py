@@ -68,15 +68,14 @@ class TestActiveLearningConcurrency:
             for i in range(10)
         }
 
-        # Create annotations from two users with conflicting labels on same items
-        user1_annotations = {
-            f"item_{i}": {"sentiment": "positive"}
-            for i in range(5)
-        }
-        user2_annotations = {
-            f"item_{i}": {"sentiment": "negative"}
-            for i in range(5)
-        }
+        # Two users agree on items 0-4 and conflict on 5-9. A 1-1 split has
+        # no majority, so only the agreed items train the model.
+        agreed = {f"item_{i}": {"sentiment": "positive" if i % 2 else "negative"}
+                  for i in range(5)}
+        user1_annotations = dict(agreed, **{
+            f"item_{i}": {"sentiment": "positive"} for i in range(5, 10)})
+        user2_annotations = dict(agreed, **{
+            f"item_{i}": {"sentiment": "negative"} for i in range(5, 10)})
 
         # CRITICAL: Set up mocks BEFORE initializing manager
         with patch('potato.active_learning_manager.get_item_state_manager') as mock_item_manager, \

@@ -6982,6 +6982,13 @@ display_logic:
 | `in_range` | Within range (inclusive) | `value: [3, 7]` |
 | `not_in_range` | Outside range | `value: [3, 7]` |
 
+A question that has not been answered matches none of `gt`, `gte`, `lt`, `lte` and
+`in_range`, so `lt 3` on a skipped optional number does not show its follow-up.
+It does match `not_in_range`. To branch on a skipped question, use `empty`.
+
+`equals` with a number compares numbers: `value: 3` matches a likert or slider
+answer of 3, which the form stores as the string `"3"`.
+
 #### Emptiness Checks
 
 | Operator | Description | Example |
@@ -17723,7 +17730,14 @@ re-parsing a two-million-point scan on every page load.
 | LAZ | ❌ | Compressed LAS. Convert first: `laszip -i scan.laz -o scan.las` |
 
 Colour is read where a format carries it (PLY, LAS formats 2/3/7/8, `.xyz`);
-intensity is read from KITTI, PCD and LAS.
+intensity is read from KITTI, PCD and LAS. LAS colour is 16-bit by the spec,
+but some writers store 8-bit values; the depth is decided once for the whole
+file.
+
+Positions are sent to the browser as 32-bit floats, which hold about seven
+significant digits. A LAS file in projected map coordinates (UTM northings run
+to millions of metres) loses its centimetres that way, and Potato logs a warning
+when it loads one. Re-centre such a file on a local origin before loading it.
 
 ### Options
 
@@ -18051,7 +18065,12 @@ For any other rig — nuScenes, a custom multi-camera setup, an RGB-D sensor:
 | `width` / `height` | Optional; the browser reads them from the image itself |
 
 nuScenes' `calibrated_sensor` spelling — `camera_intrinsic`, `rotation` and
-`translation` at the top level — is accepted as written.
+`translation` at the top level — is accepted as written, with nuScenes'
+meaning: the quaternion is `[w, x, y, z]` and the pair is the camera's pose
+in the ego frame, which Potato inverts. Points are then expected in the ego
+frame; a cloud in the lidar frame needs the lidar's own `calibrated_sensor`
+applied first. Inside `extrinsics`, the quaternion stays `[x, y, z, w]` and the
+transform stays sensor-to-camera.
 
 **Extrinsics map the sensor frame to the camera frame**, where +Z is forward,
 +X right and +Y down (the OpenCV convention). The sensor frame is whatever
@@ -21645,7 +21664,9 @@ Create a JSON file with your attention check items:
 **Fields:**
 - `id` (required): Unique identifier for the attention check
 - `text` (required): The text to display to annotators
-- `expected_answer` (required): Dictionary mapping schema names to expected values
+- `expected_answer` (required): Dictionary mapping schema names to expected values.
+  For a multiselect, a single label means "this box and no other"; a list means
+  exactly those boxes, in any order. An annotator who ticks extra boxes fails.
 
 ### When a check is injected and what happens next
 
@@ -22473,6 +22494,7 @@ python -m potato.filter_by_annotation \
 | `--output`, `-o` | Output file path for filtered data |
 | `--id-key` | Key in data items containing the instance ID (default: `id`) |
 | `--invert` | Invert filter: return items that DON'T match |
+| `--rule` | With several annotators per item: `majority` (default), `any` or `all` of them must have chosen a value |
 | `--format` | Output format: `json` or `jsonl` (default: `json`) |
 | `--summary` | Show annotation summary instead of filtering |
 | `--verbose`, `-V` | Enable verbose logging |
@@ -22516,8 +22538,11 @@ Annotation summary for schema 'data_quality':
   reject: 75 (30.0%)
   skip: 25 (10.0%)
 ----------------------------------------
-  Total: 250
+  Total answers: 250
 ```
+
+The summary counts answers, not items: an item three annotators labelled
+`accept` adds 3 to `accept`.
 
 ## Option 2: Config-Based Filtering
 
@@ -22544,6 +22569,10 @@ data_files:
 | `schema` | string | Name of the annotation schema to filter by |
 | `value` | string or list | Value(s) to filter for |
 | `invert` | boolean | If true, return items that DON'T match (default: false) |
+| `rule` | string | With several annotators per item: `majority` (default) matches when more than half of the annotators who answered chose a filter value, `any` when one did, `all` when every one did |
+
+Every annotator's answer is read. For a multiselect, an annotator counts
+toward a value when they ticked it, whatever else they ticked.
 
 ### Examples
 
@@ -26675,7 +26704,8 @@ tolerance can be varied and the report re-run as more people annotate.
 
 Predictions are stored per prompt version in `rollout_predictions.json`, so
 re-running after changing the prompt compares like with like instead of
-overwriting the previous run's evidence.
+overwriting the previous run's evidence. Without `version`, the report scores
+the version run most recently.
 
 ### There is no single human answer, so one is built
 
@@ -26687,7 +26717,9 @@ annotator who answered about it:
 - more marked a break → the consensus time is the **median** of their marks and
   the category is the modal one. Median, so one annotator who marked the wrong
   moment entirely moves the answer by one position rather than dragging it
-  across the clip;
+  across the clip. A tie between categories leaves the category unscored;
+- as many marked a break as marked it clean → there is no consensus, and the
+  stream is left out and counted in `n_human_tied`;
 - **nobody answered** → the stream contributes nothing. Counting silence as
   "clean" would manufacture agreement with a judge that also found nothing.
 
@@ -29184,8 +29216,8 @@ Inspired by ALCHEmist (NeurIPS 2024), this system extracts reusable labeling fun
 ### Extraction, voting, acceptance
 
 1. **Extraction**: From predictions where the LLM reports high confidence (`min_confidence`), the system asks the LLM to identify generalizable patterns (keywords, conditions). Falls back to keyword frequency analysis if the LLM is unavailable.
-2. **Application**: For each new instance, all enabled labeling functions vote on a label using confidence-weighted majority voting.
-3. **Acceptance**: If vote agreement exceeds `vote_threshold`, the label is accepted without calling the LLM. Otherwise the instance is passed through to the normal LLM labeling pipeline.
+2. **Application**: For each new instance, all enabled labeling functions vote on a label using confidence-weighted majority voting. A keyword matches whole words only, so "no" does not match "know".
+3. **Acceptance**: If vote agreement exceeds `vote_threshold`, the label is accepted without calling the LLM. A tie between labels is never accepted. Otherwise the instance is passed through to the normal LLM labeling pipeline.
 
 ### Configuration
 
@@ -29561,7 +29593,7 @@ solo_mode:
 | `low_confidence_weight` | `0.4` | Prioritize instances where the LLM is uncertain |
 | `diversity_weight` | `0.3` | Prioritize instances from different embedding clusters |
 | `random_weight` | `0.2` | Random sample for calibration |
-| `disagreement_weight` | `0.1` | Prioritize instances with prior human-LLM disagreement |
+| `disagreement_weight` | `0.1` | Show an item where you and the LLM disagreed again for re-review, once for each prompt version that labelled it. An item counts as a disagreement while any of its schemas disagrees |
 | `edge_case_rule_weight` | `0.0` | Prioritize instances matching discovered edge case rules |
 | `cartography_weight` | `0.0` | Prioritize instances based on dataset cartography (training dynamics) |
 
@@ -31201,7 +31233,7 @@ active_learning:
     confidence_method: "logprobs"
 ```
 
-Computes `confidence = exp(mean_logprob)` over the response tokens. Falls back to verbalized confidence if the endpoint doesn't return logprobs.
+Computes the probability of the predicted label: `exp` of the summed logprobs of the tokens that spell it. The rest of the JSON reply (braces, keys, any reasoning) is ignored. Falls back to verbalized confidence if the endpoint doesn't return logprobs or the label can't be found in the reply.
 
 **Requires:** VLLM or OpenAI-compatible endpoint with logprobs support.
 
@@ -31216,7 +31248,7 @@ active_learning:
     consistency_samples: 3
 ```
 
-Works with any endpoint (Anthropic, Ollama, etc.) that doesn't support logprobs. Higher agreement = higher confidence.
+Works with any endpoint (Anthropic, Ollama, etc.) that doesn't support logprobs. Confidence is the share of the `consistency_samples` requests that returned the most common label, so a failed request or a reply without a label counts against it.
 
 ### Which Method to Use?
 
@@ -32780,9 +32812,13 @@ active_learning:
 
 | Strategy | Description | Use When |
 |----------|-------------|----------|
-| `majority_vote` | Most common label wins | Multiple annotators, clear disagreements |
+| `majority_vote` | Most common label wins. A tie has no majority and the item is left out of training | Multiple annotators, clear disagreements |
 | `consensus` | All annotators must agree | High-quality requirements |
 | `random` | Randomly select one annotation | Quick testing, simple workflows |
+
+Each annotator contributes one answer per item. A radio's "Other" text is not a
+class. A multiselect answer is one class made of its ticked labels together
+(`sports+tech`), since the classifier predicts a single label.
 
 ## LLM Integration
 
@@ -33164,7 +33200,7 @@ active_learning:
 
 ## Cold-Start with LLM Selection
 
-Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized.
+Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized. The LLM chooses among the schema's own labels, with the schema's description as its instructions; a schema with no labels skips the LLM cold start.
 
 ```yaml
 active_learning:
@@ -34297,7 +34333,7 @@ judge_calibration:
     seed: 42
   human:
     num_raters: 1                  # 1 = solo researcher; N adds human↔human IAA
-    gold: single                   # single | majority (majority across humans)
+    gold: single                   # single | majority (majority across humans; a tie has no gold)
   schemas: [sentiment]             # annotation_scheme names to evaluate ([] = all)
   calibration:
     n_bins: 10                     # ECE / reliability-diagram bins
@@ -34369,10 +34405,14 @@ The clustering and matching are heuristic — treat span numbers as directional.
 ## Metrics in the report
 
 - **Accuracy / Precision / Recall / F1** — each LLM vs the human gold label.
+  Macro averages run over the labels that occur in the gold or the
+  predictions, so a configured label nobody used does not count as a 0. A
+  model with no items in common with the gold shows `n/a` for every metric.
 - **Cohen's κ (pairwise)** — partitioned into human↔LLM, LLM↔LLM, human↔human.
 - **Fleiss' κ** and **Krippendorff's α** — across all raters (humans + each LLM).
 - **ECE** (Expected Calibration Error) + **reliability bins** + **Brier score** —
-  how well the vote-fraction confidence tracks correctness.
+  how well the vote-fraction confidence tracks correctness. A prediction with
+  no confidence is left out rather than counted at 0.
 - **Confusion matrix** — per LLM, vs the human gold.
 - For likert: **MAE**. For multiselect: **mean Jaccard** and **exact-match accuracy**.
 
@@ -34558,8 +34598,16 @@ found something the model had not, so each is a confirmed false negative and
 recall becomes computable. Only items a human actually opened count; anything
 else moves recall by assumption.
 
+Both sides are samples, so each is scaled to its own pool before recall is
+computed: the share of reviewed prelabelled items the model got right stands for
+every prelabelled item, and the share of reviewed empty items that held
+something stands for every empty item. One miss in 2 sampled empty items out of
+1,000 is about 500 misses, not 1. `recall_note` says what was sampled and
+scaled.
+
 Verdicts on empty items stay out of the precision denominator, so the model is
-not penalised for a prediction it never made.
+not penalised for a prediction it never made. When two reviewers judge the same
+item, both verdicts count.
 
 ---
 
@@ -36628,7 +36676,7 @@ diversity_ordering:
 **How it works**:
 1. Items are embedded using a sentence-transformer model
 2. K-means clustering groups similar items together
-3. Items are sampled round-robin from different clusters
+3. Items are sampled round-robin from different clusters, one cluster per item served, taking each cluster's items in data order
 4. When all clusters are sampled, reclustering occurs
 
 **Best for**: Tasks where annotator fatigue from similar content is a concern, or when early coverage of the full topic space is important.
@@ -44077,16 +44125,16 @@ AI assistance metrics, shown when there are any:
 - **Total Requests**: Number of times annotators requested AI help
 - **Accepted**: Number of AI suggestions accepted
 - **Rejected**: Number of AI suggestions rejected
-- **Accept Rate**: Percentage of suggestions accepted
+- **Accept Rate**: Share of the suggestions the annotator decided on that they accepted. A suggestion with no decision yet counts as pending, not rejected
 - **Avg Decision Time**: Average time from seeing suggestion to making a decision
 
 **Quality Indicators Section:**
 
 Metrics that point at possible quality problems:
 - **High Suspicion Users**: Count of users with suspicious behavior patterns
-- **Fast Annotation Rate**: Percentage of annotations completed in under 2 seconds
-- **Low Interaction Rate**: Percentage of instances with minimal interaction
-- **No Change Rate**: Percentage of instances where no annotation changes were made
+- **Fast Annotation Rate**: Share of annotators with at least one instance finished in under 5 seconds
+- **Low Interaction Rate**: Share of annotators with at least one instance of fewer than 3 interactions
+- **No Change Rate**: Share of annotators with at least one instance where no annotation changes were made
 
 **Interaction Types Breakdown:**
 
@@ -44106,7 +44154,13 @@ How each annotation change was made:
 Detailed behavioral metrics for each annotator:
 - **User ID**: Annotator identifier
 - **Instances**: Number of instances with behavioral data
-- **Avg Time (s)**: Average annotation time in seconds
+- **Avg Time (s)**: Average time on an instance, in seconds. "n/a" when no time was measured
+
+Time on an instance is the sum of the gaps between its interaction events. A gap
+longer than five minutes counts as five minutes, and the time between leaving an
+instance and coming back to it does not count. An instance with fewer than two
+events has no measured time and is left out of the averages rather than counted
+as zero.
 - **Interactions**: Total interaction count
 - **Changes**: Number of annotation modifications
 - **AI Requests**: Number of AI assistance requests
@@ -44118,7 +44172,7 @@ Users are sorted by suspicion score to help identify potentially problematic ann
 **Quality Detection:**
 
 The suspicion score is calculated based on:
-1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort
+1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort. Measured over the instances with a recorded time; with none it drops out and the other weights are rescaled
 2. **Low Interaction Rate**: Very few interactions may indicate random clicking
 3. **No Change Rate**: Never changing initial selections may indicate lack of careful consideration
 
@@ -44184,6 +44238,11 @@ For each worker, displays:
 - Completion percentage
 - Suspicious activity level
 - Session ID (Prolific) or Assignment ID (MTurk)
+
+A worker's platform is the one they arrived through, recorded when they first
+log in. Workers who registered before that was recorded are classified by the
+Prolific or MTurk IDs they carry. **Completed** counts workers who reached the
+end of the study; **in progress** counts everyone between consent and the end.
 
 This tab is particularly useful for:
 - Monitoring crowdsourcing campaign progress
@@ -44321,14 +44380,15 @@ Returns the behavioral analytics for every annotator.
     "total_requests": 150,
     "total_accepts": 105,
     "total_rejects": 45,
-    "accept_rate": 70.0,
+    "total_pending": 0,
+    "accept_rate": 0.7,
     "avg_decision_time_ms": 3500
   },
   "quality_summary": {
     "high_suspicion_users": 2,
-    "fast_annotation_rate": 5.5,
-    "low_interaction_rate": 3.2,
-    "no_change_rate": 8.1
+    "fast_annotation_rate": 0.055,
+    "low_interaction_rate": 0.032,
+    "no_change_rate": 0.081
   },
   "interaction_types": {
     "click": 8000,
@@ -45337,7 +45397,11 @@ metrics = AnnotationHistoryManager.calculate_performance_metrics(actions)
 
 ## Suspicious Activity Detection
 
-The system can detect potentially problematic annotation patterns:
+The detector measures the gap between an annotator's last action on one item
+and their first action on the next, which is the time they had to read it.
+Several actions on the same item (ticking three boxes) are one answer and are
+not compared with each other. With fewer than two items there is no gap to
+measure: the score is `None` and the level is "Not enough data".
 
 ```python
 from potato.annotation_history import AnnotationHistoryManager
@@ -45345,17 +45409,18 @@ from potato.annotation_history import AnnotationHistoryManager
 # Analyze actions for suspicious patterns
 analysis = AnnotationHistoryManager.detect_suspicious_activity(
     actions,
-    fast_threshold_ms=500,      # Actions faster than this are flagged
-    burst_threshold_seconds=2   # Actions closer than this are flagged
+    fast_threshold_ms=500,      # an item started this soon is "fast"
+    burst_threshold_seconds=2   # an item started this soon is a "burst"
 )
 
 # Returns:
 {
-    'suspicious_actions': [...],
+    'suspicious_actions': [...],      # the first action on each flagged item
     'fast_actions_count': 5,
     'burst_actions_count': 12,
-    'fast_actions_percentage': 3.3,
+    'fast_actions_percentage': 3.3,   # of the items measured
     'burst_actions_percentage': 8.0,
+    'items_measured': 150,
     'suspicious_score': 15.2,
     'suspicious_level': 'Low'
 }
@@ -45375,8 +45440,11 @@ analysis = AnnotationHistoryManager.detect_suspicious_activity(
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `fast_threshold_ms` | 500 | Actions faster than this are flagged |
-| `burst_threshold_seconds` | 2 | Actions closer together than this are flagged |
+| `fast_threshold_ms` | 500 | An item started within this many ms of the previous one is fast |
+| `burst_threshold_seconds` | 2 | An item started within this many seconds of the previous one is a burst |
+
+`server_processing_time_ms` is how long the server took to handle the save, a
+few milliseconds for every annotator, so it is not part of the score.
 
 ## API Reference
 
@@ -45549,8 +45617,9 @@ Actions are serialized with ISO 8601 timestamps:
 
 Check the suspicious-activity report periodically rather than only at the end
 of a study, and tune `fast_threshold_ms` to your task: 500 ms is far too fast
-for a paragraph and too slow for a one-key triage decision. History lives in
-the user state files, so back those up if you need it long term. Timestamps are
+for a paragraph and too slow for a one-key triage decision. History is appended
+to `annotation_history.jsonl` in each annotator's output directory, beside
+`user_state.json`, so back those up if you need it long term. Timestamps are
 personal data in most jurisdictions, so decide on a retention policy before you
 collect a study's worth of them.
 
@@ -46164,8 +46233,8 @@ python -m potato.export --config config.yaml --format coco --output ./export/
 python -m potato.export --config config.yaml --format yolo --output ./export/
 
 # Export with options
-python -m potato.export --config config.yaml --format coco --output ./export/ \
-    --option split_ratio=0.8 --option include_unlabeled=false
+python -m potato.export --config config.yaml --format conll_2003 --output ./export/ \
+    --option schema_name=entities --option annotator=annotator_1
 ```
 
 ### Command Options
@@ -46296,19 +46365,20 @@ YOLO format for object detection, with one text file per image.
 **Output Structure:**
 ```
 export/
-├── images/
-│   ├── train/
-│   │   └── image_001.jpg
-│   └── val/
-│       └── image_002.jpg
 ├── labels/
-│   ├── train/
-│   │   └── image_001.txt
-│   └── val/
-│       └── image_002.txt
+│   ├── image_001.txt
+│   └── image_002.txt
 ├── data.yaml
 └── classes.txt
 ```
+
+A label file is named after its image, which is how YOLO pairs them. Two
+different images with the same file name (`set1/img.jpg` and `set2/img.jpg`)
+keep their folders: `labels/set1/img.txt` and `labels/set2/img.txt`.
+
+When more than one annotator drew boxes, each gets a directory of their own
+(`labels/<annotator>/image_001.txt`) and the export warns. A YOLO label file
+is one set of boxes, so choose or merge the annotators before training.
 
 **Label File Format (image_001.txt):**
 ```
@@ -46317,22 +46387,24 @@ export/
 1 0.3 0.4 0.15 0.20
 ```
 
+A box that reaches past the edge of the image is clipped to it. One that lies
+entirely outside is skipped with a warning.
+
 **data.yaml:**
 ```yaml
-train: ./images/train
-val: ./images/val
+train: images/train
+val: images/val
 nc: 3
 names: ['person', 'vehicle', 'object']
 ```
 
+The `train` and `val` paths are placeholders: the exporter writes labels, not
+images, and does not split them.
+
 **Usage:**
 ```bash
-python -m potato.export -c config.yaml -f yolo -o ./yolo_export/ \
-    --option split_ratio=0.8
+python -m potato.export -c config.yaml -f yolo -o ./yolo_export/
 ```
-
-**Options:**
-- `split_ratio`: Train/val split ratio (default: 0.8)
 
 ### Pascal VOC (pascal_voc)
 
@@ -46343,20 +46415,18 @@ Pascal Visual Object Classes format using XML annotation files.
 **Output Structure:**
 ```
 export/
-├── Annotations/
-│   └── image_001.xml
-├── ImageSets/
-│   └── Main/
-│       ├── train.txt
-│       └── val.txt
-└── JPEGImages/
-    └── image_001.jpg
+├── image_001.xml
+└── image_002.xml
 ```
+
+Files are named and laid out the same way as YOLO's: by image, with folders
+kept for images that share a name, and one directory per annotator when there
+are several.
 
 **Annotation XML:**
 ```xml
 <annotation>
-    <folder>JPEGImages</folder>
+    <folder>images</folder>
     <filename>image_001.jpg</filename>
     <size>
         <width>1920</width>
@@ -46366,14 +46436,18 @@ export/
     <object>
         <name>person</name>
         <bndbox>
-            <xmin>100</xmin>
-            <ymin>50</ymin>
+            <xmin>101</xmin>
+            <ymin>51</ymin>
             <xmax>300</xmax>
             <ymax>350</ymax>
         </bndbox>
     </object>
 </annotation>
 ```
+
+Corners are 1-based and inclusive, as VOC defines them: a box covering pixels
+100 to 299 is written `xmin=101`, `xmax=300`. The VOC importer reads them the
+same way, so exporting and re-importing gives back the same box.
 
 **Usage:**
 ```bash
@@ -46416,21 +46490,21 @@ CoNLL-2003 format for named entity recognition.
 
 **Best for:** NER/span annotations, sequence labeling
 
-**Output Format:**
+**Output Format** (tab-separated: token, POS, chunk, NER tag):
 ```
--DOCSTART- -X- O O
+-DOCSTART- -X- -X- O
 
-Alice B-PERSON
-went O O
-to O O
-Paris B-LOCATION
-. O O
+Alice	_	_	B-PER
+went	_	_	O
+to	_	_	O
+Paris	_	_	B-LOC
+.	_	_	O
 
-Bob B-PERSON
-works O O
-at O O
-Google B-ORGANIZATION
-. O O
+Bob	_	_	B-PER
+works	_	_	O
+at	_	_	O
+Google	_	_	B-ORG
+.	_	_	O
 ```
 
 **Usage:**
@@ -46439,29 +46513,49 @@ python -m potato.export -c config.yaml -f conll_2003 -o ./conll_export/
 ```
 
 **Options:**
-- `tag_scheme`: BIO, BIOES, or IOB (default: BIO)
+- `schema_name`: the span schema to export (default: the first one)
+- `annotator`: export this annotator's spans to `annotations.conll`
+- `tokenization`: `whitespace` (default) or `word_punct`
+- `pos_column`, `chunk_column`: the text written in those columns (default `_`)
+
+A CoNLL file has one tag column, so it holds one annotator's spans. Without
+`annotator`, a study with several annotators gets one file each,
+`annotations.<annotator>.conll`, and a warning.
+
+Each span is tokenised against the field it was drawn on, rendered the way the
+annotation page renders it, so spans on a `dialogue` or `document` field
+export correctly. A sentence never ends inside an entity, after an initialism
+such as "U.S.", or after a title such as "Dr.". When a span does not line up
+with token boundaries ("Trump" inside "anti-Trump"), the tokens it touches are
+tagged and the export says so in a warning.
 
 ### CoNLL-U (conll_u)
 
-Universal Dependencies CoNLL-U format for linguistic annotation.
+Universal Dependencies CoNLL-U format. Span labels go in the MISC column as
+NER tags.
 
-**Best for:** POS tagging, dependency parsing, morphological analysis
+**Best for:** Combining span labels with a UD toolchain
 
 **Output Format:**
 ```
-# sent_id = 1
+# sent_id = item_001-s1
 # text = Alice went to Paris.
-1	Alice	Alice	PROPN	NNP	Number=Sing	2	nsubj	_	SpaceAfter=No
-2	went	go	VERB	VBD	Tense=Past	0	root	_	_
-3	to	to	ADP	IN	_	4	case	_	_
-4	Paris	Paris	PROPN	NNP	Number=Sing	2	obl	_	SpaceAfter=No
-5	.	.	PUNCT	.	_	2	punct	_	_
+1	Alice	_	_	_	_	_	_	_	NER=B-PER
+2	went	_	_	_	_	_	_	_	_
+3	to	_	_	_	_	_	_	_	_
+4	Paris.	_	_	_	_	_	_	_	NER=B-LOC
 ```
+
+Lemma, POS, features and dependencies are left `_`: Potato records spans, not
+parses. `SpaceAfter=No` is set where the source has no space between tokens.
 
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 ```
+
+Takes the same options as CoNLL-2003, and with several annotators writes
+`annotations.<annotator>.conllu` for each.
 
 ### Segmentation Masks (mask)
 
@@ -46943,12 +47037,11 @@ export_registry.register(MyExporter())
    - Verify label distributions
 
 3. **Handle missing data:**
-   - Use `--option include_unlabeled=false` to skip unannotated items
    - Check export warnings for skipped items
 
-4. **Use consistent splits:**
-   - Set `split_ratio` for reproducible train/val splits
-   - Or manage splits externally and export separately
+4. **Split externally:**
+   - The exporters do not split data into train and validation sets; split
+     the exported files with your training framework's own tooling
 
 ## Troubleshooting
 
@@ -48111,7 +48204,7 @@ By default the dataset contains two data splits plus auxiliary splits:
 | Split | Contents |
 | :-- | :-- |
 | `annotations` | one row per (instance, annotator) — raw, unaggregated labels |
-| `gold` | one aggregated row per instance (majority vote / mean), with `n_annotators` |
+| `gold` | one row per instance with a column per schema, plus `n_annotators` |
 | `spans` | one row per text span across all annotators |
 | `items` | the source items that were annotated |
 | `phase_responses` | survey / instruction / consent responses (**opt-in** — often PII) |
@@ -48133,6 +48226,14 @@ All optional; sensible, privacy-preserving defaults are applied.
 | `include_annotations` | `true` | Emit the raw per-annotator split. |
 | `include_gold` | `true` | Emit the aggregated split. |
 | `aggregation` | `majority` | `majority` (vote), `mean` (numeric columns), or `none`. |
+
+How the `gold` split resolves each schema, from each annotator's answer:
+
+- **Single choice:** the answer most annotators gave. A tie has no majority,
+  so the column is empty and `gold_notes` names the tied answers.
+- **Multiselect:** the labels ticked by more than half of the annotators who
+  answered.
+- **Numbers, with `aggregation: mean`:** the mean.
 | `min_annotators` | `1` | Keep only instances with at least this many annotators. |
 | `include_spans` | `true` | Emit the spans split. |
 | `include_items` | `true` | Emit the source-items split. |
@@ -51949,7 +52050,10 @@ gated on the `manage_crowdsourcing` permission; the shared admin key passes):
   message of at least 100 characters plus a category) individual submissions,
   or bulk-approve everything awaiting review.
 - **Bonuses**: `POST /admin/api/crowd/study/<id>/bonus` with
-  `{"bonuses": [["<participant_id>", 1.50], ...], "pay": true}`.
+  `{"bonuses": [["<participant_id>", 1.50], ...], "pay": true}`. The request
+  is refused with a 400 if a participant id has anything but letters, digits,
+  `_` and `-`, if an amount is not a positive number, or if a participant is
+  listed twice.
 - **Paid screen-outs**: `POST /admin/api/crowd/study/<id>/screen_out` with
   submission IDs — or automatically: set
   `crowdsourcing.prolific.screen_out_on_block: true` (with `token` and
@@ -52068,7 +52172,7 @@ This creates subscriptions for `submission.status.change`,
 | Event | Potato's reaction |
 |-------|-------------------|
 | `submission.status.change` → RETURNED / TIMED-OUT / REJECTED | Reclaims the participant's unannotated item assignments immediately (respects `instance_reclaim` retention policies). |
-| `submission.status.change` → AWAITING REVIEW | Auto-approves via the API if `auto_approve: true`. |
+| `submission.status.change` → AWAITING REVIEW | Auto-approves via the API if `auto_approve: true`, unless quality control blocked the participant. A blocked participant's submission stays in AWAITING REVIEW for you to decide. |
 | `study.status.change`, `study.progress.change` | Recorded for the admin dashboard. |
 | `study.has_high_return_rate` | Logged as a warning. |
 

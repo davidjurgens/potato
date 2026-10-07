@@ -23,11 +23,25 @@ from potato.psychometrics.config import (
     parse_psychometrics_config,
 )
 from potato.psychometrics.irt import IRTModel
+from potato.server_utils.annotation_values import group_by_schema
 
 logger = logging.getLogger(__name__)
 
 # Label values that mean "not selected" in stored annotations.
 _FALSY_VALUES = {None, "", 0, False, "false", "False", "unchecked", "0"}
+
+
+def _is_chosen(name: Any, value: Any) -> bool:
+    """Whether a stored entry is a selection.
+
+    A radio stores the label name as its value, so a label called "0" is
+    stored as ``{Label(s, "0"): "0"}``. Testing the value against the falsy
+    set dropped every such answer and fitted the model on the "1"s alone.
+    """
+    if (isinstance(value, (str, int, float)) and not isinstance(value, bool)
+            and str(value) == str(name)):
+        return True
+    return not (isinstance(value, Hashable) and value in _FALSY_VALUES)
 
 
 class PsychometricsManager:
@@ -77,14 +91,15 @@ class PsychometricsManager:
             if not include_machines and is_machine(user_state):
                 continue
             for instance_id, annotations in user_state.get_all_annotations().items():
+                # group_by_schema reads both stores: {Label: value} in memory,
+                # {schema: {label: value}} from MySQL.
+                by_label = group_by_schema(annotations.get("labels") or {}).get(schema)
                 names = [
-                    label_obj.get_name()
-                    for label_obj, value in (annotations.get("labels") or {}).items()
-                    if label_obj.get_schema() == schema
+                    name for name, value in (
+                        by_label.items() if isinstance(by_label, dict) else [])
                     # A radio's free-text box is its own label, not a second
                     # choice; counting it dropped the answer as ambiguous.
-                    and label_obj.get_name() != "free_response"
-                    and not (isinstance(value, Hashable) and value in _FALSY_VALUES)
+                    if name != "free_response" and _is_chosen(name, value)
                 ]
                 if len(names) == 1:
                     observations.append((instance_id, user_id, names[0]))

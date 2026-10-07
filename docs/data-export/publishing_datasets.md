@@ -31,7 +31,7 @@ By default the dataset contains two data splits plus auxiliary splits:
 | Split | Contents |
 | :-- | :-- |
 | `annotations` | one row per (instance, annotator) — raw, unaggregated labels |
-| `gold` | one aggregated row per instance (majority vote / mean), with `n_annotators` |
+| `gold` | one row per instance with a column per schema, plus `n_annotators` |
 | `spans` | one row per text span across all annotators |
 | `items` | the source items that were annotated |
 | `phase_responses` | survey / instruction / consent responses (**opt-in** — often PII) |
@@ -53,6 +53,14 @@ All optional; sensible, privacy-preserving defaults are applied.
 | `include_annotations` | `true` | Emit the raw per-annotator split. |
 | `include_gold` | `true` | Emit the aggregated split. |
 | `aggregation` | `majority` | `majority` (vote), `mean` (numeric columns), or `none`. |
+
+How the `gold` split resolves each schema, from each annotator's answer:
+
+- **Single choice:** the answer most annotators gave. A tie has no majority,
+  so the column is empty and `gold_notes` names the tied answers.
+- **Multiselect:** the labels ticked by more than half of the annotators who
+  answered.
+- **Numbers, with `aggregation: mean`:** the mean.
 | `min_annotators` | `1` | Keep only instances with at least this many annotators. |
 | `include_spans` | `true` | Emit the spans split. |
 | `include_items` | `true` | Emit the source-items split. |

@@ -515,6 +515,26 @@ def _intrinsics_from(raw: Any) -> Tuple[float, ...]:
                            f"{type(raw).__name__}")
 
 
+def _nuscenes_pose_to_extrinsics(rotation: Any, translation: Any) -> Dict[str, Any]:
+    """A nuScenes camera pose (``[w, x, y, z]``, camera -> ego) as the
+    ego -> camera ``{"rotation": 3x3, "translation": t}`` this module uses."""
+    t = [float(v) for v in (translation or [0.0, 0.0, 0.0])[:3]]
+    if rotation is None:
+        r = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    else:
+        q = [float(v) for v in rotation]
+        if len(q) != 4:
+            raise CalibrationError(
+                f"a top-level nuScenes 'rotation' is a quaternion [w, x, y, z]; "
+                f"got {len(q)} numbers")
+        w, x, y, z = q
+        r = rotation_matrix([x, y, z, w])          # camera -> ego
+    # Invert: ego -> camera is R^T (p - t) = R^T p - R^T t.
+    rt = tuple(tuple(r[j][i] for j in range(3)) for i in range(3))
+    t_inv = [-sum(rt[i][k] * t[k] for k in range(3)) for i in range(3)]
+    return {"rotation": [list(row) for row in rt], "translation": t_inv}
+
+
 def _extrinsics_from(raw: Any) -> Tuple[float, ...]:
     """A 3x4 sensor-to-camera transform from any of the shapes datasets ship."""
     if raw is None:
@@ -575,8 +595,13 @@ def parse_camera_dict(raw: Dict[str, Any], index: int = 0) -> Camera:
     if extrinsics is None and ("rotation" in raw or "translation" in raw):
         # nuScenes' calibrated_sensor puts rotation/translation at the top
         # level, so accept that spelling rather than making the caller reshape.
-        extrinsics = {"rotation": raw.get("rotation"),
-                      "translation": raw.get("translation")}
+        # It is not the same transform, though: the quaternion is [w, x, y, z]
+        # and the pair is the camera's POSE in the ego frame (camera -> ego),
+        # the inverse of the sensor -> camera mapping `extrinsics` holds. Read
+        # as [x, y, z, w] sensor -> camera, a point 10 m ahead of the car
+        # projected to (3469, -9412) rather than near the image centre.
+        extrinsics = _nuscenes_pose_to_extrinsics(raw.get("rotation"),
+                                                  raw.get("translation"))
 
     distortion = raw.get("distortion") or raw.get("D") or []
     dist = [float(v) for v in list(distortion)[:5]]

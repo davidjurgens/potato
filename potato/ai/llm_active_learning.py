@@ -377,7 +377,8 @@ Example response:
         """Extract confidence from token-level log probabilities.
 
         Requests logprobs=True from VLLM/OpenAI-compatible endpoints and
-        computes confidence as exp(mean_logprob) over the label tokens.
+        computes confidence as the probability of the label: exp of the summed
+        logprobs of the tokens that spell it.
         Falls back to verbalized confidence if logprobs unavailable.
         """
         instance_id = instance.get('id', 'unknown')
@@ -425,14 +426,15 @@ Example response:
                     token_logprobs = logprobs_data.get('content', [])
 
                     if token_logprobs:
-                        # Compute mean logprob across all tokens
-                        log_probs = [
-                            t['logprob'] for t in token_logprobs
-                            if 'logprob' in t and t['logprob'] is not None
-                        ]
+                        # The probability of the label: the product over the
+                        # tokens that spell it.
+                        # Averaging every token of the JSON reply ({, "label",
+                        # :, the reasoning...) mostly measured how predictable
+                        # the punctuation was: a label at p=0.40 read as 0.91.
+                        log_probs = _label_token_logprobs(token_logprobs, predicted_label)
                         if log_probs:
-                            mean_logprob = sum(log_probs) / len(log_probs)
-                            confidence_score = min(1.0, max(0.0, math.exp(mean_logprob)))
+                            label_logprob = sum(log_probs)
+                            confidence_score = min(1.0, max(0.0, math.exp(label_logprob)))
                         else:
                             # No valid logprobs, fall back to verbalized
                             confidence_score = parsed.get('confidence', 5)
@@ -529,6 +531,8 @@ Example response:
             except Exception as e:
                 self.logger.debug(f"Consistency sample failed for {instance_id}: {e}")
 
+        # A reply with no label is not a vote for the empty label.
+        labels = [label for label in labels if isinstance(label, str) and label.strip()]
         if not labels:
             return LLMPrediction(
                 instance_id=instance_id,
@@ -539,10 +543,12 @@ Example response:
                 confidence_method="consistency"
             )
 
-        # Most common label
+        # Most common label, as a share of the samples ASKED FOR. Dividing by
+        # the samples that came back made one answer out of five requests
+        # (four failures) read as full confidence.
         label_counts = Counter(labels)
         predicted_label, count = label_counts.most_common(1)[0]
-        confidence_score = count / len(labels)
+        confidence_score = count / max(n_samples, len(labels))
 
         return LLMPrediction(
             instance_id=instance_id,
@@ -730,3 +736,29 @@ def create_llm_active_learning(config: Dict[str, Any]) -> LLMActiveLearning:
         return MockLLMActiveLearning(llm_config)
     else:
         return LLMActiveLearning(llm_config)
+
+
+def _label_token_logprobs(token_logprobs, label: str):
+    """Logprobs of the tokens that spell ``label`` in the reply, or [].
+
+    The reply is the concatenation of the tokens. The label's text is found
+    after its ``"label"`` key and every token overlapping it is taken. When the
+    label cannot be located the caller falls back to verbalized confidence
+    rather than averaging unrelated tokens.
+    """
+    if not label:
+        return []
+    pieces = [t.get("token", "") or "" for t in token_logprobs]
+    text = "".join(pieces)
+    key = text.find('"label"')
+    start = text.find(label, key if key >= 0 else 0)
+    if start < 0:
+        return []
+    end = start + len(label)
+    out, pos = [], 0
+    for piece, entry in zip(pieces, token_logprobs):
+        lo, hi = pos, pos + len(piece)
+        pos = hi
+        if hi > start and lo < end and entry.get("logprob") is not None:
+            out.append(entry["logprob"])
+    return out

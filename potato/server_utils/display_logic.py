@@ -528,6 +528,16 @@ class DisplayLogicEvaluator:
         if actual is None or expected is None:
             return False
 
+        # A number in the YAML (`value: 3`) against a form value, which is
+        # always a string ("3"): compare as numbers. Without this an `equals`
+        # on a likert or slider never matched.
+        if (isinstance(expected, (int, float)) and not isinstance(expected, bool)
+                and not isinstance(actual, bool)):
+            try:
+                return float(actual) == float(expected)
+            except (TypeError, ValueError):
+                return False
+
         # String comparison with case sensitivity
         if isinstance(expected, str):
             actual_str = str(actual)
@@ -574,7 +584,12 @@ class DisplayLogicEvaluator:
     def _check_numeric(operator: str, actual: Any, expected: Any) -> bool:
         """Check numeric comparison."""
         try:
-            actual_num = float(actual) if actual is not None else 0
+            # Unanswered is not 0: `lt 3` on a skipped optional number must
+            # not show (and require) its follow-up. The browser already reads
+            # it this way (parseFloat(null) is NaN).
+            if actual is None or isinstance(actual, bool):
+                return False
+            actual_num = float(actual)
             expected_num = float(expected)
         except (ValueError, TypeError):
             return False
@@ -594,7 +609,9 @@ class DisplayLogicEvaluator:
     def _check_range(actual: Any, range_val: List) -> bool:
         """Check if actual is within range (inclusive)."""
         try:
-            actual_num = float(actual) if actual is not None else 0
+            if actual is None or isinstance(actual, bool):
+                return False
+            actual_num = float(actual)
             min_val, max_val = float(range_val[0]), float(range_val[1])
         except (ValueError, TypeError, IndexError):
             return False

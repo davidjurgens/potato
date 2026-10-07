@@ -134,6 +134,7 @@ class InstanceSelector:
         confidence_threshold: float = 0.5,
         edge_case_rule_ids: Optional[Set[str]] = None,
         cartography_scores: Optional[Dict[str, float]] = None,
+        revisit_ids: Optional[Set[str]] = None,
     ) -> None:
         """
         Refresh the selection pools based on current state.
@@ -145,6 +146,10 @@ class InstanceSelector:
             confidence_threshold: Threshold for low confidence pool
             edge_case_rule_ids: Set of instance IDs matching edge case rule patterns
             cartography_scores: Dict of instance_id -> variability score
+            revisit_ids: Already-labelled disagreements to offer again for
+                re-review. They are not in ``available_ids`` (which holds
+                unlabelled items), so the disagreement pool is built from
+                these directly.
         """
         with self._lock:
             available_list = list(available_ids)
@@ -206,7 +211,9 @@ class InstanceSelector:
                 ]
 
             # Build disagreement pool
-            if disagreement_ids:
+            if revisit_ids:
+                self._disagreement_pool = sorted(revisit_ids)
+            elif disagreement_ids:
                 self._disagreement_pool = [
                     iid for iid in available_list
                     if iid in disagreement_ids

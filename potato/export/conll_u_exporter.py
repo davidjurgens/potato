@@ -13,9 +13,13 @@ import logging
 from typing import Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
-from .nlp_utils import tokenize_text, char_spans_to_bio_tags, group_sentences
+from .nlp_utils import annotator_groups, conll_documents
 
 logger = logging.getLogger(__name__)
+
+
+def _safe(name: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in name) or "_"
 
 
 class CoNLLUExporter(BaseExporter):
@@ -46,123 +50,87 @@ class CoNLLUExporter(BaseExporter):
                     break
 
         os.makedirs(output_path, exist_ok=True)
-        out_file = os.path.join(output_path, "annotations.conllu")
 
-        lines = []
+        files_written = []
         total_tokens = 0
         total_entities = 0
+        total_documents = 0
         sent_counter = 0
 
-        item_props = context.config.get("item_properties", {})
-        text_key = item_props.get("text_key", "text")
+        for suffix, records in annotator_groups(
+                context.annotations, options.get("annotator"), warnings, "CoNLL-U"):
+            lines = []
+            for doc_id, text, tokens, bio_tags, sentences in conll_documents(
+                    context, records, schema_name, tokenization, warnings):
+                total_documents += 1
+                total_tokens += len(tokens)
+                total_entities += sum(1 for t in bio_tags if t.startswith("B-"))
 
-        # Deduplicate by instance
-        instance_annotations = {}
-        for ann in context.annotations:
-            iid = ann.get("instance_id", "")
-            if iid not in instance_annotations:
-                instance_annotations[iid] = ann
+                for sentence_indices in sentences:
+                    sent_counter += 1
+                    sent_tokens = [tokens[i] for i in sentence_indices]
+                    sent_tags = [bio_tags[i] for i in sentence_indices]
 
-        for instance_id, ann in instance_annotations.items():
-            item = context.items.get(instance_id, {})
-            text = item.get(text_key, "")
-            if not text:
-                for alt_key in ("text", "sentence", "content"):
-                    if alt_key in item:
-                        text = item[alt_key]
-                        break
+                    # Reconstruct sentence text
+                    if sent_tokens:
+                        s_start = sent_tokens[0]["start"]
+                        s_end = sent_tokens[-1]["end"]
+                        sent_text = text[s_start:s_end].replace("\n", " ")
+                    else:
+                        sent_text = ""
 
-            if not text:
-                warnings.append(f"No text found for {instance_id}")
-                continue
+                    lines.append(f"# sent_id = {doc_id}-s{sent_counter}")
+                    lines.append(f"# text = {sent_text}")
 
-            if isinstance(text, list):
-                text = " ".join(str(t) for t in text)
+                    for tok_num, (tok, ner_tag) in enumerate(
+                        zip(sent_tokens, sent_tags), start=1
+                    ):
+                        # Build MISC field
+                        misc_parts = []
 
-            tokens = tokenize_text(text, method=tokenization)
-            if not tokens:
-                continue
+                        # SpaceAfter=No if no space before next token
+                        if tok_num < len(sent_tokens):
+                            next_tok = sent_tokens[tok_num]  # 0-indexed next
+                            if tok["end"] == next_tok["start"]:
+                                misc_parts.append("SpaceAfter=No")
 
-            # Get spans
-            spans = []
-            for span_schema, span_list in ann.get("spans", {}).items():
-                if schema_name and span_schema != schema_name:
-                    continue
-                for sp in span_list:
-                    spans.append({
-                        "start": sp.get("start", 0),
-                        "end": sp.get("end", 0),
-                        "label": sp.get("name") or sp.get("label", "ENTITY"),
-                    })
+                        # NER tag
+                        if ner_tag != "O":
+                            misc_parts.append(f"NER={ner_tag}")
 
-            bio_tags = char_spans_to_bio_tags(tokens, spans)
-            total_tokens += len(tokens)
-            total_entities += sum(1 for t in bio_tags if t.startswith("B-"))
+                        misc = "|".join(misc_parts) if misc_parts else "_"
 
-            sentences = group_sentences(tokens, text)
+                        # 10-column CoNLL-U format
+                        # ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC
+                        cols = [
+                            str(tok_num),       # ID
+                            tok["token"],       # FORM
+                            "_",                # LEMMA
+                            "_",                # UPOS
+                            "_",                # XPOS
+                            "_",                # FEATS
+                            "_",                # HEAD
+                            "_",                # DEPREL
+                            "_",                # DEPS
+                            misc,               # MISC
+                        ]
+                        lines.append("\t".join(cols))
 
-            for sentence_indices in sentences:
-                sent_counter += 1
-                sent_tokens = [tokens[i] for i in sentence_indices]
-                sent_tags = [bio_tags[i] for i in sentence_indices]
+                    lines.append("")  # Blank line between sentences
 
-                # Reconstruct sentence text
-                if sent_tokens:
-                    s_start = sent_tokens[0]["start"]
-                    s_end = sent_tokens[-1]["end"]
-                    sent_text = text[s_start:s_end]
-                else:
-                    sent_text = ""
-
-                lines.append(f"# sent_id = {instance_id}-s{sent_counter}")
-                lines.append(f"# text = {sent_text}")
-
-                for tok_num, (tok, ner_tag) in enumerate(
-                    zip(sent_tokens, sent_tags), start=1
-                ):
-                    # Build MISC field
-                    misc_parts = []
-
-                    # SpaceAfter=No if no space before next token
-                    if tok_num < len(sent_tokens):
-                        next_tok = sent_tokens[tok_num]  # 0-indexed next
-                        if tok["end"] == next_tok["start"]:
-                            misc_parts.append("SpaceAfter=No")
-
-                    # NER tag
-                    if ner_tag != "O":
-                        misc_parts.append(f"NER={ner_tag}")
-
-                    misc = "|".join(misc_parts) if misc_parts else "_"
-
-                    # 10-column CoNLL-U format
-                    # ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC
-                    cols = [
-                        str(tok_num),       # ID
-                        tok["token"],       # FORM
-                        "_",                # LEMMA
-                        "_",                # UPOS
-                        "_",                # XPOS
-                        "_",                # FEATS
-                        "_",                # HEAD
-                        "_",                # DEPREL
-                        "_",                # DEPS
-                        misc,               # MISC
-                    ]
-                    lines.append("\t".join(cols))
-
-                lines.append("")  # Blank line between sentences
-
-        with open(out_file, "w") as f:
-            f.write("\n".join(lines))
+            name = f"annotations.{_safe(suffix)}.conllu" if suffix else "annotations.conllu"
+            out_file = os.path.join(output_path, name)
+            with open(out_file, "w") as f:
+                f.write("\n".join(lines))
+            files_written.append(out_file)
 
         return ExportResult(
             success=True,
             format_name=self.format_name,
-            files_written=[out_file],
+            files_written=files_written,
             warnings=warnings,
             stats={
-                "num_documents": len(instance_annotations),
+                "num_documents": total_documents,
                 "num_sentences": sent_counter,
                 "num_tokens": total_tokens,
                 "num_entities": total_entities,

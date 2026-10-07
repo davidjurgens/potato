@@ -1250,8 +1250,10 @@
       }
 
       function generateMultiselectAnalysis(analysis) {
-        const { labels, counts, percentages, average_labels_per_item } =
-          analysis.data;
+        const { labels, counts, percentages } = analysis.data;
+        // Sent beside `data`, not inside it; reading it from `data` showed
+        // "undefined".
+        const average_labels_per_item = analysis.average_labels_per_item;
         const maxCount = Math.max(...counts);
 
         let html = "<h4>Label Frequency</h4>";
@@ -1272,7 +1274,7 @@
 
         html += "</div>";
 
-        html += `<p><strong>Average labels per item:</strong> ${average_labels_per_item}</p>`;
+        html += `<p><strong>Average labels per answer:</strong> ${average_labels_per_item}</p>`;
 
         if (analysis.most_common && analysis.most_common.length > 0) {
           html += "<p><strong>Most common labels:</strong> ";
@@ -1573,8 +1575,10 @@
         `;
 
         workers.forEach(worker => {
-          const phaseClass = worker.phase.includes("DONE") ? "status-completed" :
-                            worker.phase.includes("ANNOTATION") ? "status-active" : "status-login";
+          // Phases arrive as str(UserPhase): "done", "annotation", ...
+          const phase = String(worker.phase || "").toLowerCase();
+          const phaseClass = phase.includes("done") ? "status-completed" :
+                            phase.includes("annotation") ? "status-active" : "status-login";
           const suspiciousClass = worker.suspicious_level === "High" || worker.suspicious_level === "Very High" ?
                                  "color: var(--error-color);" : "";
 
@@ -1583,7 +1587,7 @@
                     <td>${worker.worker_id}</td>
                     <td><span class="status-badge ${phaseClass}">${worker.phase.replace("Phase.", "")}</span></td>
                     <td>${worker.total_annotations}</td>
-                    <td>${formatTime(worker.total_seconds)}</td>
+                    <td>${formatTime(Math.round(worker.total_seconds || 0))}</td>
                     <td>${worker.annotations_per_hour.toFixed(1)}/hr</td>
                     <td>${worker.completion_percentage.toFixed(1)}%</td>
                     <td style="${suspiciousClass}">${worker.suspicious_level}</td>
@@ -1788,7 +1792,7 @@
                 <span class="label">Rejected</span>
               </div>
               <div class="question-stat">
-                <span class="value">${ai.accept_rate.toFixed(1)}%</span>
+                <span class="value">${ai.accept_rate == null ? 'n/a' : (ai.accept_rate * 100).toFixed(1) + '%'}</span>
                 <span class="label">Accept Rate</span>
               </div>
               <div class="question-stat">
@@ -1811,15 +1815,15 @@
               <span class="label">High Suspicion Users</span>
             </div>
             <div class="question-stat">
-              <span class="value">${quality.fast_annotation_rate.toFixed(1)}%</span>
-              <span class="label">Fast Annotations (&lt;2s)</span>
+              <span class="value">${(quality.fast_annotation_rate * 100).toFixed(1)}%</span>
+              <span class="label">Annotators with fast items (&lt;5s)</span>
             </div>
             <div class="question-stat">
-              <span class="value">${quality.low_interaction_rate.toFixed(1)}%</span>
+              <span class="value">${(quality.low_interaction_rate * 100).toFixed(1)}%</span>
               <span class="label">Low Interaction Rate</span>
             </div>
             <div class="question-stat">
-              <span class="value">${quality.no_change_rate.toFixed(1)}%</span>
+              <span class="value">${(quality.no_change_rate * 100).toFixed(1)}%</span>
               <span class="label">No Change Rate</span>
             </div>
           </div>
@@ -1849,11 +1853,11 @@
             <tr>
               <td>${user.user_id}</td>
               <td>${user.total_instances}</td>
-              <td>${user.avg_time_sec.toFixed(1)}</td>
+              <td>${user.avg_time_sec == null ? 'n/a' : user.avg_time_sec.toFixed(1)}</td>
               <td>${user.total_interactions}</td>
               <td>${user.total_changes}</td>
               <td>${user.ai_requests}</td>
-              <td>${user.ai_requests > 0 ? (user.ai_accept_rate * 100).toFixed(0) + '%' : 'N/A'}</td>
+              <td>${user.ai_accept_rate == null ? 'N/A' : (user.ai_accept_rate * 100).toFixed(0) + '%'}</td>
               <td style="${suspicionClass}">${(user.suspicion_score * 100).toFixed(0)}%</td>
             </tr>
           `;

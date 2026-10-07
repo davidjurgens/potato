@@ -41,6 +41,7 @@ Access Control:
 
 import json
 import logging
+import statistics
 import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from collections import defaultdict, Counter
@@ -53,6 +54,9 @@ from potato.flask_server import (
 )
 from potato.annotation_history import AnnotationHistoryManager, AnnotationAction
 from potato.quality_control import get_quality_control_manager
+from potato.server_utils.answer_collapse import collapse_entries
+from potato.phase import UserPhase
+
 
 @dataclass
 class AnnotatorTimingData:
@@ -80,7 +84,7 @@ class AnnotatorTimingData:
     fastest_action_time_ms: int
     slowest_action_time_ms: int
     actions_per_minute: float
-    suspicious_score: float
+    suspicious_score: Optional[float]
     suspicious_level: str
     fast_actions_count: int
     burst_actions_count: int
@@ -311,8 +315,13 @@ class AdminDashboard:
                             "training_total_questions": timing_data.training_total_questions
                         })
 
-            # Sort by suspicious score (highest first)
-            annotators_data.sort(key=lambda x: x["suspicious_score"], reverse=True)
+            # Sort by suspicious score (highest first); unscored last.
+            annotators_data.sort(
+                key=lambda x: (x["suspicious_score"] is not None,
+                               x["suspicious_score"] or 0),
+                reverse=True)
+            scored = [a["suspicious_score"] for a in annotators_data
+                      if a["suspicious_score"] is not None]
 
             return {
                 "total_annotators": len(annotators_data),
@@ -322,7 +331,8 @@ class AdminDashboard:
                     "medium_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] == "Medium"]),
                     "low_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] == "Low"]),
                     "normal_count": len([a for a in annotators_data if a["suspicious_level"] == "Normal"]),
-                    "average_suspicious_score": sum(a["suspicious_score"] for a in annotators_data) / len(annotators_data) if annotators_data else 0
+                    "not_enough_data_count": len([a for a in annotators_data if a["suspicious_score"] is None]),
+                    "average_suspicious_score": sum(scored) / len(scored) if scored else None
                 }
             }
 
@@ -631,37 +641,52 @@ class AdminDashboard:
 
                     for username in users:
                         user_state = get_user_state_manager().get_user_state(username)
-                        if user_state:
-                            label_annotations = user_state.get_label_annotations(item_id)
-                            for label, value in label_annotations.items():
-                                label_schema = None
-                                label_name = None
-                                if hasattr(label, 'get_schema'):
-                                    label_schema = label.get_schema()
-                                    label_name = label.get_name()
-                                elif hasattr(label, 'schema'):
-                                    label_schema = label.schema
-                                    label_name = getattr(label, 'name', None)
-                                elif isinstance(label, str):
-                                    label_schema = label
+                        if not user_state:
+                            continue
+                        # One answer per annotator, through the same collapse
+                        # the export and display logic use. Each stored Label
+                        # used to be appended separately as its NAME, so a
+                        # slider read as the string "slider" (no numbers to
+                        # chart), a text box as "text", and a multiselect as
+                        # one string per tick, which the list-only multiselect
+                        # analysis never counted.
+                        entries = []
+                        for label, value in user_state.get_label_annotations(item_id).items():
+                            if hasattr(label, 'get_schema'):
+                                label_schema, label_name = label.get_schema(), label.get_name()
+                            elif hasattr(label, 'schema'):
+                                label_schema = label.schema
+                                label_name = getattr(label, 'name', None)
+                            elif isinstance(label, str):
+                                label_schema, label_name = label, None
+                            else:
+                                continue
+                            if label_schema == scheme_name:
+                                entries.append((label_name, value))
+                        if not entries:
+                            continue
+                        answer, _w, _m = collapse_entries(
+                            entries, schema=scheme_name, annotation_type=annotation_type)
+                        if answer is None and annotation_type in ["radio", "select"]:
+                            # A schema-keyed record holding the answer as a
+                            # dict ({"name": "positive", "score": 0.97}).
+                            answer = next((v for _n, v in entries if isinstance(v, dict)), None)
+                        if answer is None:
+                            continue
 
-                                if label_schema == scheme_name:
-                                    normalized_value = label_name if label_name else value
+                        if annotation_type in ["radio", "select"]:
+                            answer = self._normalize_categorical_value(answer)
+                        elif annotation_type == "multiselect":
+                            answer = [
+                                normalized for normalized in (
+                                    self._normalize_categorical_value(v)
+                                    for v in (answer if isinstance(answer, list) else [answer]))
+                                if normalized is not None
+                            ]
 
-                                    if annotation_type in ["radio", "select"]:
-                                        normalized_value = self._normalize_categorical_value(normalized_value)
-                                    elif annotation_type == "multiselect" and isinstance(normalized_value, list):
-                                        normalized_value = [
-                                            normalized_label
-                                            for normalized_label in (
-                                                self._normalize_categorical_value(v) for v in normalized_value
-                                            )
-                                            if normalized_label is not None
-                                        ]
-
-                                    if normalized_value is not None:
-                                        all_annotations.append(normalized_value)
-                                        item_annotations[item_id].append(normalized_value)
+                        if answer is not None and answer != []:
+                            all_annotations.append(answer)
+                            item_annotations[item_id].append(answer)
 
                 analysis = self._analyze_annotation_scheme(
                     annotation_type, scheme, all_annotations, item_annotations
@@ -734,32 +759,32 @@ class AdminDashboard:
             # Multi-label data - show label frequency and co-occurrence
             label_counts = Counter()
             co_occurrence = defaultdict(int)
-            labels = scheme.get("labels", [])
+            labels = [
+                normalized for normalized in
+                (self._normalize_categorical_value(label) for label in scheme.get("labels", []))
+                if normalized is not None
+            ]
 
             for annotations in item_annotations.values():
-                if isinstance(annotations, list):
-                    # Count individual labels
-                    for annotation in annotations:
-                        if isinstance(annotation, list):
-                            for label in annotation:
-                                label_counts[label] += 1
-
-                    # Count co-occurrences
-                    for i, annotation1 in enumerate(annotations):
-                        if isinstance(annotation1, list):
-                            for j, annotation2 in enumerate(annotations):
-                                if i != j and isinstance(annotation2, list):
-                                    for label1 in annotation1:
-                                        for label2 in annotation2:
-                                            if label1 < label2:
-                                                co_occurrence[(label1, label2)] += 1
+                for annotation in annotations:
+                    if not isinstance(annotation, list):
+                        continue
+                    chosen = sorted(set(annotation))
+                    label_counts.update(chosen)
+                    # Co-occurrence is two labels chosen together by ONE
+                    # annotator. Pairing labels across different annotators
+                    # measured disagreement, not co-occurrence.
+                    for i, label1 in enumerate(chosen):
+                        for label2 in chosen[i + 1:]:
+                            co_occurrence[f"{label1}|{label2}"] += 1
 
             analysis.update({
                 "visualization_type": "multiselect_analysis",
                 "data": {
                     "labels": labels,
                     "counts": [label_counts.get(label, 0) for label in labels],
-                    "percentages": [round(label_counts.get(label, 0) / len(item_annotations) * 100, 1)
+                    # Share of answers that chose the label.
+                    "percentages": [round(label_counts.get(label, 0) / len(all_annotations) * 100, 1)
                                   for label in labels],
                     "co_occurrence": dict(co_occurrence)
                 },
@@ -789,15 +814,15 @@ class AdminDashboard:
                         "bins": self._create_histogram_bins(numeric_values, scheme),
                         "statistics": {
                             "mean": round(sum(numeric_values) / len(numeric_values), 2),
-                            "median": round(sorted(numeric_values)[len(numeric_values)//2], 2),
+                            "median": round(statistics.median(numeric_values), 2),
                             "min": min(numeric_values),
                             "max": max(numeric_values),
                             "std": round((sum((x - sum(numeric_values)/len(numeric_values))**2
                                             for x in numeric_values) / len(numeric_values))**0.5, 2)
                         }
                     },
-                    "range": scheme.get("min", 0) if "min" in scheme else None,
-                    "max": scheme.get("max", 10) if "max" in scheme else None
+                    "range": scheme.get("min_value", scheme.get("min")),
+                    "max": scheme.get("max_value", scheme.get("max"))
                 })
             else:
                 analysis["error"] = "No valid numeric values found"
@@ -999,8 +1024,15 @@ class AdminDashboard:
         if not values:
             return {"bins": [], "counts": []}
 
-        min_val = scheme.get("min", min(values))
-        max_val = scheme.get("max", max(values))
+        # Sliders declare their scale as min_value/max_value; older configs
+        # use min/max.
+        min_val = float(scheme.get("min_value", scheme.get("min", min(values))))
+        max_val = float(scheme.get("max_value", scheme.get("max", max(values))))
+        min_val, max_val = min(min_val, min(values)), max(max_val, max(values))
+        if max_val == min_val:
+            # Every answer is the same number: one bin holds them all.
+            return {"bins": [round(min_val, 2), round(max_val, 2)],
+                    "counts": [len(values)]}
 
         # Create 10 bins
         bin_size = (max_val - min_val) / 10
@@ -1127,7 +1159,7 @@ class AdminDashboard:
                 fastest_action_time_ms=performance_metrics.get('fastest_action_time_ms', 0),
                 slowest_action_time_ms=performance_metrics.get('slowest_action_time_ms', 0),
                 actions_per_minute=performance_metrics.get('actions_per_minute', 0.0),
-                suspicious_score=suspicious_analysis.get('suspicious_score', 0.0),
+                suspicious_score=suspicious_analysis.get('suspicious_score'),
                 suspicious_level=suspicious_analysis.get('suspicious_level', 'Normal'),
                 fast_actions_count=suspicious_analysis.get('fast_actions_count', 0),
                 burst_actions_count=suspicious_analysis.get('burst_actions_count', 0),
@@ -1444,8 +1476,24 @@ class AdminDashboard:
                     "suspicious_level": timing_data.suspicious_level if timing_data else "Normal",
                 }
 
+                # The platform the worker arrived through, recorded at arrival.
+                # Users registered before that was recorded fall back to which
+                # IDs they carry. Never the username: "Paul" is not a Prolific
+                # worker and "Alice" is not an MTurk one.
+                provider = stored_data.get('crowd_provider')
+                # The legacy url_direct provider serves `login.type: prolific`
+                # too, so its workers are classified by the IDs they carry.
+                if provider in (None, "url_direct"):
+                    if mturk_assignment_id or mturk_hit_id:
+                        provider = "mturk"
+                    elif prolific_session_id or prolific_study_id:
+                        provider = "prolific"
+                if provider not in ("prolific", "mturk"):
+                    provider = None
+                worker_info["arrival_provider"] = stored_data.get('crowd_provider')
+
                 # Check for Prolific workers
-                if prolific_session_id or prolific_study_id or username.startswith('P'):
+                if provider == "prolific":
                     worker_info["platform"] = "prolific"
                     worker_info["session_id"] = prolific_session_id
                     worker_info["study_id"] = prolific_study_id
@@ -1454,7 +1502,7 @@ class AdminDashboard:
                         prolific_study_ids.add(prolific_study_id)
 
                 # Check for MTurk workers
-                elif mturk_assignment_id or mturk_hit_id or username.startswith('A'):
+                elif provider == "mturk":
                     worker_info["platform"] = "mturk"
                     worker_info["assignment_id"] = mturk_assignment_id
                     worker_info["hit_id"] = mturk_hit_id
@@ -1482,8 +1530,12 @@ class AdminDashboard:
                     }
                 total_annotations = sum(w["total_annotations"] for w in workers)
                 total_time = sum(w["total_seconds"] for w in workers)
-                completed = len([w for w in workers if w["phase"] == "Phase.DONE"])
-                in_progress = len([w for w in workers if w["phase"] == "Phase.ANNOTATION"])
+                # str(UserPhase.DONE) is "done". These compared against
+                # "Phase.DONE", which no phase renders as, so both were always 0.
+                done, not_started = str(UserPhase.DONE), str(UserPhase.LOGIN)
+                completed = len([w for w in workers if w["phase"] == done])
+                in_progress = len([w for w in workers
+                                   if w["phase"] not in (done, not_started, "unknown")])
                 return {
                     "count": len(workers),
                     "total_annotations": total_annotations,
@@ -1953,22 +2005,7 @@ class AdminDashboard:
                     all_anns = user_state.get_all_annotations()
                     if instance_id not in all_anns:
                         continue
-                    instance_anns = all_anns[instance_id]
-                    labels = instance_anns.get("labels", {}) or {}
-                    for label, value in labels.items():
-                        schema_name = self._schema_for_label_key(label)
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for code in self._labels_from_value(value):
-                            codes.add(f"{schema_name}::{code}")
-                    spans = instance_anns.get("spans", {}) or {}
-                    for schema_name, span_list in spans.items():
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for span in span_list or []:
-                            code = span.get("label") or span.get("annotation")
-                            if code:
-                                codes.add(f"{schema_name}::{code}")
+                    codes |= self._codes_applied(all_anns[instance_id], schema_filter)
                 if codes:
                     codes_per_instance[instance_id] = codes
 
@@ -2067,22 +2104,7 @@ class AdminDashboard:
                     all_anns = user_state.get_all_annotations()
                     if instance_id not in all_anns:
                         continue
-                    instance_anns = all_anns[instance_id]
-                    labels = instance_anns.get("labels", {}) or {}
-                    for label, value in labels.items():
-                        schema_name = self._schema_for_label_key(label)
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for code in self._labels_from_value(value):
-                            codes.add(f"{schema_name}::{code}")
-                    spans = instance_anns.get("spans", {}) or {}
-                    for schema_name, span_list in spans.items():
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for span in span_list or []:
-                            code = span.get("label") or span.get("annotation")
-                            if code:
-                                codes.add(f"{schema_name}::{code}")
+                    codes |= self._codes_applied(all_anns[instance_id], schema_filter)
 
                 for code in codes:
                     codes_seen.add(code)
@@ -2116,16 +2138,60 @@ class AdminDashboard:
             return label_key.get_schema()
         return str(label_key)
 
-    @staticmethod
-    def _labels_from_value(value) -> List[str]:
-        """Pull individual code names out of an annotation value blob."""
-        if value is None or value == "":
-            return []
-        if isinstance(value, dict):
-            return [k for k, v in value.items() if v]
-        if isinstance(value, list):
-            return [str(x) for x in value]
-        return [str(value)]
+    def _codes_applied(self, instance_anns: dict,
+                       schema_filter: Optional[str] = None) -> set:
+        """``schema::code`` for every code one annotator applied to one item.
+
+        Labels are ``{Label(schema, name): value}`` and the code is the label
+        NAME; the value is the page's own marker ("on", "true", the name
+        again). Reading the value merged every code posted as "on" into one
+        `themes::on`, and showed a slider's number as a code. Spans are
+        ``{SpanAnnotation: value}``, not ``{schema: [dict]}``: iterating them
+        as the latter raised on the first span and the endpoint returned 500.
+        """
+        schema_types = {
+            sc.get("name"): sc.get("annotation_type")
+            for sc in (config.get("annotation_schemes", []) or [])
+            if isinstance(sc, dict)
+        }
+        from potato.server_utils.annotation_values import group_by_schema
+
+        codes: set = set()
+        # In memory: {Label: value}. MySQL: {schema: {label: value}}.
+        for schema_name, by_label in group_by_schema(instance_anns.get("labels") or {}).items():
+            if schema_filter and schema_name != schema_filter:
+                continue
+            if not isinstance(by_label, dict):
+                continue
+            answer, winner, method = collapse_entries(
+                list(by_label.items()), schema=schema_name,
+                annotation_type=schema_types.get(schema_name))
+            # A selection collapses to its label (answer == winner) or to a
+            # list of labels; a number, free text or nothing is not a code.
+            if answer is None or not (method == "multi" or
+                                      (winner is not None and answer == winner)):
+                continue
+            for code in (answer if isinstance(answer, list) else [answer]):
+                codes.add(f"{schema_name}::{code}")
+        for span, value in (instance_anns.get("spans") or {}).items():
+            if isinstance(span, str):
+                # MySQL: {schema: {span_name: {...}}}; legacy: {schema: [dicts]}.
+                if schema_filter and span != schema_filter:
+                    continue
+                if isinstance(value, dict):
+                    names = list(value)
+                else:
+                    names = [item.get("label") or item.get("annotation")
+                             for item in value or [] if isinstance(item, dict)]
+                codes.update(f"{span}::{name}" for name in names if name)
+                continue
+            schema_name = getattr(span, "schema", None)
+            if schema_filter and schema_name != schema_filter:
+                continue
+            code = getattr(span, "name", None) or (value if isinstance(value, str) else None)
+            if schema_name and code:
+                codes.add(f"{schema_name}::{code}")
+        return codes
 
     @staticmethod
     def _get_item_data(item) -> dict:
@@ -2279,19 +2345,23 @@ class AdminDashboard:
                 user_changes = 0
                 user_ai_requests = 0
                 user_ai_accepts = 0
+                user_ai_decided = 0
                 user_fast_count = 0
                 user_low_interaction_count = 0
                 user_no_scroll_count = 0
                 user_no_change_count = 0
 
                 for instance_id, bd in behavioral_data.items():
+                    # 0 means no time was measured (fewer than two events),
+                    # not that the annotator took no time. Counting it as a
+                    # 0-second answer flagged every such instance as fast.
                     time_ms = self._behavioral_field(bd, 'total_time_ms', 0) or 0
-                    time_sec = time_ms / 1000
-                    user_times.append(time_sec)
-                    all_times.append(time_sec)
-
-                    if time_sec < 5:
-                        user_fast_count += 1
+                    if time_ms > 0:
+                        time_sec = time_ms / 1000
+                        user_times.append(time_sec)
+                        all_times.append(time_sec)
+                        if time_sec < 5:
+                            user_fast_count += 1
 
                     interactions = self._behavioral_sequence(self._behavioral_field(bd, 'interactions', []))
                     user_interactions += len(interactions)
@@ -2323,12 +2393,21 @@ class AdminDashboard:
                         total_ai_requests += 1
                         ai_usage_total['requests'] += 1
 
+                        # An accepted label can be "0" or "", so test for
+                        # presence, not truthiness. No accept and no decision
+                        # yet is pending, not a reject.
                         accepted = self._behavioral_field(ai, 'suggestion_accepted', None)
-                        if accepted:
+                        decided = (self._behavioral_field(ai, 'time_to_decision_ms', None) is not None
+                                   or self._behavioral_field(ai, 'final_annotation', None) is not None)
+                        if accepted is not None and accepted is not False:
                             user_ai_accepts += 1
+                            user_ai_decided += 1
                             ai_usage_total['accepts'] += 1
-                        else:
+                        elif decided:
+                            user_ai_decided += 1
                             ai_usage_total['rejects'] += 1
+                        else:
+                            ai_usage_total['pending'] = ai_usage_total.get('pending', 0) + 1
 
                         decision_time = self._behavioral_field(ai, 'time_to_decision_ms', None)
                         if isinstance(decision_time, (int, float)):
@@ -2336,11 +2415,17 @@ class AdminDashboard:
 
                 total_instances = len(behavioral_data)
                 if total_instances > 0:
-                    fast_rate = user_fast_count / total_instances
+                    # Fast rate is over the instances whose time was measured.
+                    # With none, it is unknown and drops out of the score,
+                    # whose remaining weights are rescaled to sum to 1.
+                    fast_rate = (user_fast_count / len(user_times)) if user_times else None
                     low_interaction_rate = user_low_interaction_count / total_instances
                     no_scroll_rate = user_no_scroll_count / total_instances
                     no_change_rate = user_no_change_count / total_instances
-                    suspicion_score = fast_rate * 0.3 + low_interaction_rate * 0.35 + no_scroll_rate * 0.2 + no_change_rate * 0.15
+                    parts = [(fast_rate, 0.3), (low_interaction_rate, 0.35),
+                             (no_scroll_rate, 0.2), (no_change_rate, 0.15)]
+                    known = [(v, w) for v, w in parts if v is not None]
+                    suspicion_score = sum(v * w for v, w in known) / sum(w for _v, w in known)
 
                     if user_fast_count > 0:
                         users_with_fast_annotations += 1
@@ -2353,16 +2438,17 @@ class AdminDashboard:
                         'user_id': user_id,
                         'total_instances': total_instances,
                         'total_time_sec': sum(user_times),
-                        'avg_time_sec': sum(user_times) / len(user_times) if user_times else 0,
-                        'min_time_sec': min(user_times) if user_times else 0,
-                        'max_time_sec': max(user_times) if user_times else 0,
+                        # None when no instance had a measured time.
+                        'avg_time_sec': sum(user_times) / len(user_times) if user_times else None,
+                        'min_time_sec': min(user_times) if user_times else None,
+                        'max_time_sec': max(user_times) if user_times else None,
                         'total_interactions': user_interactions,
                         'avg_interactions': user_interactions / total_instances,
                         'total_changes': user_changes,
                         'avg_changes': user_changes / total_instances,
                         'ai_requests': user_ai_requests,
                         'ai_accepts': user_ai_accepts,
-                        'ai_accept_rate': (user_ai_accepts / user_ai_requests) if user_ai_requests > 0 else None,
+                        'ai_accept_rate': (user_ai_accepts / user_ai_decided) if user_ai_decided > 0 else None,
                         'fast_annotation_rate': fast_rate,
                         'low_interaction_rate': low_interaction_rate,
                         'no_scroll_rate': no_scroll_rate,
@@ -2376,7 +2462,7 @@ class AdminDashboard:
                 'total_instances': sum(u['total_instances'] for u in user_stats),
                 'total_time_minutes': sum(u['total_time_sec'] for u in user_stats) / 60,
                 'avg_time_per_instance': sum(all_times) / len(all_times) if all_times else 0,
-                'median_time_per_instance': sorted(all_times)[len(all_times)//2] if all_times else 0,
+                'median_time_per_instance': statistics.median(all_times) if all_times else None,
             }
             aggregate_stats = {
                 'total_users': len(user_stats),
@@ -2391,7 +2477,12 @@ class AdminDashboard:
                 'total_requests': ai_usage_total['requests'],
                 'total_accepts': ai_usage_total['accepts'],
                 'total_rejects': ai_usage_total['rejects'],
-                'accept_rate': (ai_usage_total['accepts'] / ai_usage_total['requests']) if ai_usage_total['requests'] > 0 else 0,
+                'total_pending': ai_usage_total.get('pending', 0),
+                # Of the suggestions the annotator decided on; pending ones
+                # are neither.
+                'accept_rate': (ai_usage_total['accepts']
+                                / (ai_usage_total['accepts'] + ai_usage_total['rejects'])
+                                if ai_usage_total['accepts'] + ai_usage_total['rejects'] else None),
                 'avg_decision_time_ms': sum(ai_usage_total['decision_times']) / len(ai_usage_total['decision_times']) if ai_usage_total['decision_times'] else 0
             }
 

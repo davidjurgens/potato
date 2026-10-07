@@ -184,6 +184,8 @@ class SoloModeManager:
         self.human_labeled_ids: Set[str] = set()
         self.llm_labeled_ids: Set[str] = set()
         self.disagreement_ids: Set[str] = set()
+        #: _revisit_key()s of disagreements already shown again for re-review.
+        self._reviewed_disagreements: Set[str] = set()
         self.validation_sample_ids: Set[str] = set()
 
         # Edge cases
@@ -2003,10 +2005,7 @@ class SoloModeManager:
                 # replaces the old one in every count. Only the disagreement
                 # set used to follow it, so a corrected label left the rate
                 # (and the gate that ends human annotation) at the old value.
-                if agrees:
-                    self.disagreement_ids.discard(instance_id)
-                else:
-                    self.disagreement_ids.add(instance_id)
+                self._refresh_disagreement(instance_id)
                 if previous_agrees is not None and previous_agrees != agrees:
                     step = 1 if agrees else -1
                     self.agreement_metrics.agreements += step
@@ -2288,6 +2287,39 @@ class SoloModeManager:
             logger.debug(f"Could not look up human label for {instance_id}: {e}")
         return None
 
+    def _refresh_disagreement(self, instance_id: str) -> None:
+        """An instance is a disagreement while ANY of its schemas disagrees.
+
+        The set is per instance but answers are per (instance, schema): a
+        re-saved schema that agreed used to discard the instance even when
+        another schema on it still disagreed, while the tracker kept counting
+        that disagreement.
+        """
+        if any(p.agrees_with_human is False
+               for p in (self.predictions.get(instance_id) or {}).values()):
+            self.disagreement_ids.add(instance_id)
+        else:
+            self.disagreement_ids.discard(instance_id)
+
+    def _revisit_key(self, instance_id: str) -> str:
+        """A disagreement under the LLM's current answer, for re-review once."""
+        versions = sorted(str(p.prompt_version)
+                          for p in (self.predictions.get(instance_id) or {}).values())
+        return f"{instance_id}@{','.join(versions)}"
+
+    def _disagreements_to_revisit(self, all_ids: Set[str]) -> Set[str]:
+        """Disagreements the human has not re-reviewed under the current prompt.
+
+        These are human-labelled by definition, and the pool used to be built
+        from the unlabelled items only, so it was always empty and its weight
+        went to the other pools. Each is offered once per prompt version: after
+        the human has looked again, it comes back only when a new prompt has
+        produced a new answer.
+        """
+        reviewed = getattr(self, '_reviewed_disagreements', set())
+        return {iid for iid in self.disagreement_ids
+                if iid in all_ids and self._revisit_key(iid) not in reviewed}
+
     # === Disagreement Resolution ===
 
     def get_pending_disagreements(self) -> List[str]:
@@ -2396,21 +2428,27 @@ class SoloModeManager:
                         for iid, s in cartography.items()
                     }
 
+            revisit = self._disagreements_to_revisit(all_ids)
+
             # Refresh pools with current data
             self.instance_selector.refresh_pools(
                 available_ids=available,
                 llm_predictions=pred_dicts,
-                disagreement_ids=self.disagreement_ids,
+                disagreement_ids=revisit,
+                revisit_ids=revisit,
                 confidence_threshold=self.config.thresholds.confidence_low,
                 edge_case_rule_ids=edge_case_rule_ids,
                 cartography_scores=cartography_variability,
             )
 
             # Select next instance
-            return self.instance_selector.select_next(
-                available_ids=available,
-                exclude_ids=self.human_labeled_ids,
+            chosen = self.instance_selector.select_next(
+                available_ids=available | revisit,
+                exclude_ids=self.human_labeled_ids - revisit,
             )
+            if chosen in revisit:
+                self._reviewed_disagreements.add(self._revisit_key(chosen))
+            return chosen
 
     def get_cartography_scores(self) -> Dict[str, Dict[str, float]]:
         """Compute cartography signals for each instance.
@@ -2902,6 +2940,7 @@ class SoloModeManager:
                     'human_labeled_ids': list(self.human_labeled_ids),
                     'llm_labeled_ids': list(self.llm_labeled_ids),
                     'disagreement_ids': list(self.disagreement_ids),
+                    'reviewed_disagreements': sorted(self._reviewed_disagreements),
                     'validation_sample_ids': list(self.validation_sample_ids),
                     'edge_case_ids': list(self.edge_case_ids),
                     'edge_case_labels': self.edge_case_labels,
@@ -2981,6 +3020,7 @@ class SoloModeManager:
                 self.human_labeled_ids = set(state.get('human_labeled_ids', []))
                 self.llm_labeled_ids = set(state.get('llm_labeled_ids', []))
                 self.disagreement_ids = set(state.get('disagreement_ids', []))
+                self._reviewed_disagreements = set(state.get('reviewed_disagreements', []))
                 self.validation_sample_ids = set(state.get('validation_sample_ids', []))
                 self.edge_case_ids = set(state.get('edge_case_ids', []))
                 self.edge_case_labels = state.get('edge_case_labels', {})

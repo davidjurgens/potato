@@ -97,6 +97,44 @@ from potato.item_state_management import Item
 from potato.flask_server import get_displayed_text
 
 
+def _qc_answer_payload(annotations: dict):
+    """Flatten a `/updateinstance` annotations payload for QC and webhooks.
+
+    Returns ``(all_annotations, final_by_schema)``. A function rather than
+    inline in the route so the shape quality control grades is the one tests
+    feed it.
+    """
+    all_annotations = {}
+    final_by_schema = {}
+    for key, value in (annotations or {}).items():
+        # Parse schema:label format. `:::` first -- it is the form
+        # this route's own refusal message asks callers to send, and
+        # splitting on the first colon reads its label as "::Sincere".
+        parsed = split_annotation_key(key)
+        if parsed is not None:
+            schema_name, label_name = parsed
+            all_annotations[schema_name] = value
+            # ALSO keep the label. The annotation page happens to put
+            # it in the value as well, so collapsing to `schema` looked
+            # lossless; anything posting what the form element holds
+            # sends `{"sarcasm:Sincere": "on"}`, and this threw away
+            # the only copy of the answer. Grading then compared the
+            # expected label against the string "on" and failed every
+            # check and gold item, however well they were answered.
+            # Both keys are kept because the bare one is what the
+            # webhook payload and auto-promotion have always carried.
+            all_annotations[key] = value
+            # What the annotator ends up with, as a LABEL. The value
+            # beside it is the form's own marker ("on"), and
+            # `suggestion_accepted` holds a label -- comparing the two
+            # is the whole point of recording both.
+            final_by_schema[schema_name] = (
+                label_name if is_selection_marker(value) else value)
+        else:
+            all_annotations[key] = value
+    return all_annotations, final_by_schema
+
+
 def _inject_quality_control_item_if_needed(username, user_state):
     """Delegates to `server_utils.quality_control_injection`.
 
@@ -465,9 +503,15 @@ def home():
 
                 # Add user if not exists (passwordless for URL-direct)
                 if not user_authenticator.is_valid_username(username):
+                    # crowd_provider records which platform the worker came
+                    # from; the admin crowd tab reads it. The prolific_* keys
+                    # are historical and are written for every provider.
                     result = user_authenticator.add_user(username, None,
                                                          prolific_session_id=identity.session_id,
-                                                         prolific_study_id=identity.study_id)
+                                                         prolific_study_id=identity.study_id,
+                                                         crowd_provider=provider.name,
+                                                         mturk_assignment_id=identity.extra.get('assignmentId'),
+                                                         mturk_hit_id=identity.extra.get('hitId'))
                     logger.debug(f"Auto-registered URL-direct user {username}: {result}")
 
                 # Set session
@@ -6365,32 +6409,8 @@ def update_instance():
         #: schema -> the label the annotator settled on, for `final_annotation`.
         final_by_schema = {}
         if "annotations" in request.json:
-            for key, value in request.json.get("annotations", {}).items():
-                # Parse schema:label format. `:::` first -- it is the form
-                # this route's own refusal message asks callers to send, and
-                # splitting on the first colon reads its label as "::Sincere".
-                parsed = split_annotation_key(key)
-                if parsed is not None:
-                    schema_name, label_name = parsed
-                    all_annotations[schema_name] = value
-                    # ALSO keep the label. The annotation page happens to put
-                    # it in the value as well, so collapsing to `schema` looked
-                    # lossless; anything posting what the form element holds
-                    # sends `{"sarcasm:Sincere": "on"}`, and this threw away
-                    # the only copy of the answer. Grading then compared the
-                    # expected label against the string "on" and failed every
-                    # check and gold item, however well they were answered.
-                    # Both keys are kept because the bare one is what the
-                    # webhook payload and auto-promotion have always carried.
-                    all_annotations[key] = value
-                    # What the annotator ends up with, as a LABEL. The value
-                    # beside it is the form's own marker ("on"), and
-                    # `suggestion_accepted` holds a label -- comparing the two
-                    # is the whole point of recording both.
-                    final_by_schema[schema_name] = (
-                        label_name if is_selection_marker(value) else value)
-                else:
-                    all_annotations[key] = value
+            all_annotations, final_by_schema = _qc_answer_payload(
+                request.json.get("annotations", {}))
         elif "schema" in request.json:
             schema_name = request.json.get("schema")
             schema_state = request.json.get("state", [])
@@ -6921,6 +6941,16 @@ def done():
     auto_redirect = config.get('auto_redirect_on_completion', False)
     auto_redirect_delay = config.get('auto_redirect_delay', 5000)  # milliseconds
 
+    # Flush the user's state to disk BEFORE rendering any completion action:
+    # an auto-redirect must never race the final save. For every study, not
+    # only crowd ones: nothing else saves the move to DONE, so after a restart
+    # a finished annotator was back in the annotation phase, and the events
+    # their last page sent on its way out were gone.
+    try:
+        get_user_state_manager().save_user_state(user_state)
+    except Exception as e:
+        logger.warning(f"Could not flush user state before completion: {e}")
+
     if provider is not None:
         extra = dict(session.get('crowd_extra') or {})
         if session.get('mturk_assignment_id'):
@@ -6942,15 +6972,13 @@ def done():
             qc_manager = get_quality_control_manager()
             if qc_manager is not None and qc_manager.is_user_blocked(username):
                 outcome = CompletionOutcome.FAILED_CHECKS
-        except Exception as e:
-            logger.debug(f"Could not evaluate quality-control block state: {e}")
-
-        # Flush the user's state to disk BEFORE rendering any completion
-        # action: an auto-redirect must never race the final save.
-        try:
-            get_user_state_manager().save_user_state(user_state)
-        except Exception as e:
-            logger.warning(f"Could not flush user state before completion redirect: {e}")
+        except Exception:
+            # Left at COMPLETED: a screen-out code given because of a bug costs
+            # a good worker their pay, while a wrong success code is still
+            # caught in the platform's review. Logged as an error so it is.
+            logger.error("Could not evaluate quality-control block state for %s; "
+                         "serving the success code. Review this submission.",
+                         username, exc_info=True)
 
         try:
             provider.on_completion(identity, outcome)
@@ -7852,6 +7880,9 @@ def track_interactions():
                 client_timestamp=event.get('client_timestamp'),
                 metadata=event.get('metadata', {}),
             ))
+
+    # Time on this instance, from its own events. Nothing else sets it.
+    bd.refresh_total_time()
 
     # Update focus time if provided
     focus_time = data.get('focus_time', {})

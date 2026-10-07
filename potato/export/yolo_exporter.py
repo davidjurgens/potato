@@ -14,6 +14,8 @@ from typing import Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     build_category_mapping,
+    clip_bbox,
+    label_file_paths,
     normalize_bbox,
     extract_image_annotations,
     blank_item_warning,
@@ -69,8 +71,18 @@ class YOLOExporter(BaseExporter):
         labels_dir = os.path.join(output_path, "labels")
         os.makedirs(labels_dir, exist_ok=True)
 
-        # Track which images have been written (handle multiple annotators)
-        image_labels = {}  # filename_stem -> list of label lines
+        # One label set per (annotator, image). Merging every annotator's boxes
+        # into one file trained on duplicates; when the study has several
+        # annotators each gets their own labels/<annotator>/ directory.
+        image_labels = {}  # (user_id, instance_id) -> list of label lines
+        annotators = sorted({str(a.get("user_id", "")) for a in context.annotations
+                             if extract_image_annotations(a)})
+        per_annotator = len(annotators) > 1
+        label_paths = label_file_paths({
+            a.get("instance_id", ""): (get_image_filename(
+                context.items.get(a.get("instance_id", ""), {}), context.config)
+                or a.get("instance_id", ""))
+            for a in context.annotations if extract_image_annotations(a)})
 
         for ann in context.annotations:
             instance_id = ann.get("instance_id", "")
@@ -85,10 +97,7 @@ class YOLOExporter(BaseExporter):
                 warnings.append(f"Skipping {instance_id}: no image dimensions")
                 continue
 
-            file_name = get_image_filename(item, context.config) or instance_id
-            raw_stem = os.path.splitext(os.path.basename(file_name))[0]
-            stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
-
+            stem = (str(ann.get("user_id", "")), instance_id)
             if stem not in image_labels:
                 image_labels[stem] = []
 
@@ -134,14 +143,29 @@ class YOLOExporter(BaseExporter):
                         )
 
                     bx, by, bw, bh = canon["bbox"]
+                    if clip_bbox(bx, by, bw, bh, img_w, img_h) is None:
+                        warnings.append(
+                            f"{obj_type} in {instance_id} lies outside the image, skipping")
+                        continue
                     cx, cy, nw, nh = normalize_bbox(bx, by, bw, bh, img_w, img_h)
                     image_labels[stem].append(
                         f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
                     )
 
+        if per_annotator:
+            warnings.append(
+                f"{len(annotators)} annotators drew boxes: wrote one label set per "
+                f"annotator under labels/<annotator>/. Choose or merge them "
+                f"before training.")
+
         # Write label files
-        for stem, lines in image_labels.items():
-            label_file = os.path.join(labels_dir, f"{stem}.txt")
+        for (user_id, instance_id), lines in image_labels.items():
+            rel = label_paths.get(instance_id, instance_id)
+            if per_annotator:
+                safe_user = "".join(c if c.isalnum() or c in "-_." else "_" for c in user_id)
+                rel = f"{safe_user or '_'}/{rel}"
+            label_file = os.path.join(labels_dir, *f"{rel}.txt".split("/"))
+            os.makedirs(os.path.dirname(label_file), exist_ok=True)
             with open(label_file, "w") as f:
                 f.write("\n".join(lines))
                 if lines:
@@ -178,7 +202,8 @@ class YOLOExporter(BaseExporter):
             files_written=files_written,
             warnings=warnings,
             stats={
-                "num_images": len(image_labels),
+                "num_images": len({iid for _u, iid in image_labels}),
+                "num_annotators": len(annotators),
                 "num_annotations": sum(len(v) for v in image_labels.values()),
                 "num_classes": len(sorted_labels),
             },

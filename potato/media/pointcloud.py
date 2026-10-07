@@ -788,20 +788,46 @@ def _read_las(path: Path) -> PointCloud:
                        count, available)
         count = available
 
+    # LAS colour is 16-bit by the spec, but some writers store 8-bit values
+    # in it. Decide once for the FILE: deciding per point read a dark point
+    # of a 16-bit file (200 of 65535) as 8-bit 200, near white.
+    sixteen_bit = False
+    if colors is not None:
+        for i in range(count):
+            r, g, b = struct.unpack_from("<3H", raw, offset_to_data + i * record_len + color_at)
+            if max(r, g, b) > 255:
+                sixteen_bit = True
+                break
+    shift = 8 if sixteen_bit else 0
+
+    largest = 0.0
     for i in range(count):
         base = offset_to_data + i * record_len
         xi, yi, zi = struct.unpack_from("<3i", raw, base)
-        positions.append(float(xi * scale[0] + origin[0]))
-        positions.append(float(yi * scale[1] + origin[1]))
-        positions.append(float(zi * scale[2] + origin[2]))
+        x = xi * scale[0] + origin[0]
+        y = yi * scale[1] + origin[1]
+        z = zi * scale[2] + origin[2]
+        largest = max(largest, abs(x), abs(y), abs(z))
+        positions.append(float(x))
+        positions.append(float(y))
+        positions.append(float(z))
         intensity.append(float(struct.unpack_from("<H", raw, base + 12)[0]))
         if colors is not None:
             r, g, b = struct.unpack_from("<3H", raw, base + color_at)
-            # LAS colour is 16-bit; 8-bit files leave the high byte clear, so
-            # scaling unconditionally by 257 would darken them to near black.
-            shift = 8 if max(r, g, b) > 255 else 0
             colors.extend(((r >> shift) & 0xff, (g >> shift) & 0xff,
                            (b >> shift) & 0xff))
+
+    # Positions are float32 for the browser. Past about 100 km from the
+    # origin (projected map coordinates: UTM northings run to millions of
+    # metres) float32 cannot hold centimetres, and points snap to a grid as
+    # coarse as 0.5 m. Say so rather than shift the frame the annotations are
+    # stored in.
+    if largest > 1e5:
+        step = largest * 2 ** -23
+        logger.warning(
+            "LAS coordinates reach %.0f; as 32-bit floats they are stored to "
+            "about %.2f m. Re-centre the file (subtract a local origin) to "
+            "keep the file's precision.", largest, step)
 
     return PointCloud(positions=positions, colors=colors, intensity=intensity)
 

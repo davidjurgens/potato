@@ -75,7 +75,7 @@ judge_calibration:
     seed: 42
   human:
     num_raters: 1                  # 1 = solo researcher; N adds human↔human IAA
-    gold: single                   # single | majority (majority across humans)
+    gold: single                   # single | majority (majority across humans; a tie has no gold)
   schemas: [sentiment]             # annotation_scheme names to evaluate ([] = all)
   calibration:
     n_bins: 10                     # ECE / reliability-diagram bins
@@ -147,10 +147,14 @@ The clustering and matching are heuristic — treat span numbers as directional.
 ## Metrics in the report
 
 - **Accuracy / Precision / Recall / F1** — each LLM vs the human gold label.
+  Macro averages run over the labels that occur in the gold or the
+  predictions, so a configured label nobody used does not count as a 0. A
+  model with no items in common with the gold shows `n/a` for every metric.
 - **Cohen's κ (pairwise)** — partitioned into human↔LLM, LLM↔LLM, human↔human.
 - **Fleiss' κ** and **Krippendorff's α** — across all raters (humans + each LLM).
 - **ECE** (Expected Calibration Error) + **reliability bins** + **Brier score** —
-  how well the vote-fraction confidence tracks correctness.
+  how well the vote-fraction confidence tracks correctness. A prediction with
+  no confidence is left out rather than counted at 0.
 - **Confusion matrix** — per LLM, vs the human gold.
 - For likert: **MAE**. For multiselect: **mean Jaccard** and **exact-match accuracy**.
 

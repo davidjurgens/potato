@@ -2079,6 +2079,9 @@ class InMemoryUserState(UserState):
         # New: Annotation history tracking
         self.annotation_history: List[AnnotationAction] = []
         self.instance_action_history: Dict[str, List[AnnotationAction]] = defaultdict(list)
+        #: How many of annotation_history are already in annotation_history.jsonl.
+        self._history_saved = 0
+        self._history_lock = threading.Lock()
 
         # New: Session tracking
         self.session_start_time: Optional[datetime.datetime] = None
@@ -3231,6 +3234,52 @@ class InMemoryUserState(UserState):
                 os.unlink(temp_path)
             raise
 
+        self._append_history(user_dir)
+
+    #: Annotation history lives beside user_state.json, appended to rather than
+    #: rewritten: user_state.json is written in full on every save, and the
+    #: history grows by an entry per save. It was never written at all, so a
+    #: restart emptied every annotator's history and with it the suspicious-
+    #: activity analysis on the admin dashboard.
+    HISTORY_FILE = 'annotation_history.jsonl'
+
+    def _append_history(self, user_dir: str) -> None:
+        lock = getattr(self, '_history_lock', None) or threading.Lock()
+        with lock:
+            history = getattr(self, 'annotation_history', []) or []
+            start = getattr(self, '_history_saved', 0)
+            pending = history[start:]
+            if not pending:
+                return
+            path = os.path.join(user_dir, self.HISTORY_FILE)
+            with open(path, 'at', encoding='utf-8') as out:
+                for action in pending:
+                    out.write(json.dumps(action.to_dict(), default=str) + '\n')
+                out.flush()
+                os.fsync(out.fileno())
+            self._history_saved = start + len(pending)
+
+    def _load_history(self, user_dir: str) -> None:
+        path = os.path.join(user_dir, self.HISTORY_FILE)
+        if not os.path.exists(path):
+            return
+        loaded = []
+        with open(path, 'rt', encoding='utf-8') as f:
+            for line_no, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    loaded.append(AnnotationAction.from_dict(json.loads(line)))
+                except Exception:
+                    # A torn last line from a crash mid-append; skip it.
+                    logger.warning("Skipping unreadable annotation history line %d in %s",
+                                   line_no, path)
+        for action in loaded:
+            self.annotation_history.append(action)
+            self.instance_action_history[action.instance_id].append(action)
+        self._history_saved = len(self.annotation_history)
+
     @staticmethod
     def load(user_dir: str) -> UserState:
         '''Loads the user's state from disk'''
@@ -3363,6 +3412,8 @@ class InMemoryUserState(UserState):
             user_state.prune_missing_assigned_instances()
         except Exception:
             pass
+
+        user_state._load_history(user_dir)
 
         return user_state
 

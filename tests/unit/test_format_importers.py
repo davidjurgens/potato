@@ -150,8 +150,11 @@ def voc_object(name="dog", xmin=100, ymin=200, xmax=300, ymax=600, extra=""):
 
 class TestVOC:
     def test_corners_become_origin_plus_size(self):
-        """xmin=100 xmax=300 is a width of 200, not a width of 300."""
-        obj = only_object(VOCImporter().parse(ET.fromstring(voc_xml(voc_object()))))
+        """VOC corners are 1-based and inclusive: xmin=101 xmax=300 covers
+        pixels 100..299, origin 100 and width 200 -- not width 300, and not
+        origin 101."""
+        obj = only_object(VOCImporter().parse(ET.fromstring(
+            voc_xml(voc_object(xmin=101, ymin=201)))))
         c = obj["coordinates"]
         assert c["x"] == pytest.approx(0.1)
         assert c["y"] == pytest.approx(0.2)

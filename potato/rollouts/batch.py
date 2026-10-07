@@ -137,9 +137,20 @@ def human_consensus(schema: Dict[str, Any],
             if not times and not clean_votes:
                 continue  # nobody answered about this stream
             key = f"{instance_id}::{stream_id}"
-            if len(times) > clean_votes:
+            if len(times) == clean_votes:
+                # As many said "breaks" as said "clean": no consensus. This
+                # used to fall through as "no break", and the judge was scored
+                # against an answer half the annotators rejected.
+                consensus[key] = {"t": None, "type": "", "tied": True,
+                                  "n_marked": len(times), "n_clean": clean_votes}
+            elif len(times) > clean_votes:
+                ranked = Counter(types).most_common()
+                # A tie between categories has no consensus category; ""
+                # leaves the category unscored rather than taking whichever
+                # annotator was read first.
+                tied_type = len(ranked) > 1 and ranked[0][1] == ranked[1][1]
                 consensus[key] = {"t": _median(times),
-                                  "type": Counter(types).most_common(1)[0][0],
+                                  "type": "" if tied_type else ranked[0][0],
                                   "n_marked": len(times),
                                   "n_clean": clean_votes}
             else:
@@ -206,6 +217,7 @@ def run_judge_batch(config: Dict[str, Any],
                 "judged": 0}
 
     stored = load_predictions(config)
+    written = set()
     judged = failed = 0
     skipped: List[str] = []
     for schema in schemas:
@@ -246,7 +258,12 @@ def run_judge_batch(config: Dict[str, Any],
                     prompt_version=prompt_version)
                 payload = prediction.to_dict()
                 version = payload.get("prompt_version") or prompt_version or "v0"
-                stored.setdefault(version, {})[
+                if version not in written:
+                    # Re-inserted so the file's last version is the one run
+                    # most recently: "latest" is a run, not a string sort.
+                    stored[version] = stored.pop(version, {})
+                    written.add(version)
+                stored[version][
                     f"{instance_id}::{schema_name}::{stream.stream_id}"] = payload
                 if payload.get("error"):
                     failed += 1
@@ -278,7 +295,9 @@ def alignment_report(config: Dict[str, Any],
     if not stored:
         return {"error": "No judge predictions have been recorded yet. Run the "
                          "batch first.", "n_predictions": 0}
-    chosen = version or sorted(stored)[-1]
+    # The version run most recently (see run_judge_batch). Sorting the names
+    # picked "v2" over "v10", and so scored an older run.
+    chosen = version or list(stored)[-1]
     rows = stored.get(chosen) or {}
 
     manager = get_item_state_manager()

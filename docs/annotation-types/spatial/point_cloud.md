@@ -37,7 +37,14 @@ re-parsing a two-million-point scan on every page load.
 | LAZ | ❌ | Compressed LAS. Convert first: `laszip -i scan.laz -o scan.las` |
 
 Colour is read where a format carries it (PLY, LAS formats 2/3/7/8, `.xyz`);
-intensity is read from KITTI, PCD and LAS.
+intensity is read from KITTI, PCD and LAS. LAS colour is 16-bit by the spec,
+but some writers store 8-bit values; the depth is decided once for the whole
+file.
+
+Positions are sent to the browser as 32-bit floats, which hold about seven
+significant digits. A LAS file in projected map coordinates (UTM northings run
+to millions of metres) loses its centimetres that way, and Potato logs a warning
+when it loads one. Re-centre such a file on a local origin before loading it.
 
 ### Options
 

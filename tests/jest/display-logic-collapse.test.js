@@ -83,3 +83,20 @@ describe('transformRawAnnotations', () => {
         expect(manager.transformRawAnnotations('nonsense', {})).toEqual({});
     });
 });
+
+describe('numeric comparisons match the server', () => {
+    // valuesEqual and checkNumeric are instance methods that touch no state.
+    const manager = Object.create(DisplayLogicManager.prototype);
+
+    test('a YAML number equals the string a form posts', () => {
+        expect(manager.valuesEqual('3', 3, false)).toBe(true);
+        expect(manager.valuesEqual('3', 4, false)).toBe(false);
+        expect(manager.valuesEqual('', 0, false)).toBe(false);
+        expect(manager.valuesEqual(' ', 0, false)).toBe(false);
+    });
+
+    test('an unanswered number satisfies no comparison', () => {
+        expect(manager.checkNumeric('lt', null, 3)).toBe(false);
+        expect(manager.checkRange(null, [0, 5])).toBe(false);
+    });
+});

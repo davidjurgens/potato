@@ -98,16 +98,39 @@ class TestAggregation:
         bundle = run_pipeline(cp)
         gold = {r["instance_id"]: r for r in bundle.splits["gold"]}
         # i2/i3: both neg -> neg. i0: both pos -> pos.
-        assert gold["i0"]["sentiment.pos"] == "pos"
-        assert gold["i2"]["sentiment.neg"] == "neg"
+        assert gold["i0"]["sentiment"] == "pos"
+        assert gold["i2"]["sentiment"] == "neg"
         assert gold["i0"]["n_annotators"] == 2
 
+    def test_a_split_vote_has_no_gold(self):
+        """i1 is pos vs neg. The first annotator read used to win."""
+        cp = build_publish_project(_TWO_ANNOTATORS)
+        gold = {r["instance_id"]: r for r in run_pipeline(cp).splits["gold"]}
+        assert gold["i1"]["sentiment"] is None
+        assert gold["i1"]["gold_notes"] == ["sentiment: tie between neg, pos"]
+
+    def test_the_minority_label_is_not_gold(self):
+        cp = build_publish_project({
+            "a": {"i0": ("sentiment", "pos")}, "b": {"i0": ("sentiment", "pos")},
+            "c": {"i0": ("sentiment", "neg")}})
+        row = run_pipeline(cp).splits["gold"][0]
+        assert row["sentiment"] == "pos"
+        assert not any(k.startswith("sentiment.") for k in row)
+
+    def test_multiselect_gold_is_the_labels_most_annotators_ticked(self):
+        anns = [{"instance_id": "i0", "user_id": u,
+                 "labels": {"topics": {t: t for t in ticks}}}
+                for u, ticks in (("a", ["sports"]), ("b", ["sports", "politics"]),
+                                 ("c", ["politics", "tech"]))]
+        gold = build_gold_rows(anns, schemas=[
+            {"name": "topics", "annotation_type": "multiselect"}])
+        assert gold[0]["topics"] == ["politics", "sports"]
+
     def test_mean_aggregation_numeric(self):
-        rows = [
-            {"instance_id": "i0", "user_id": "A1", "score": "4"},
-            {"instance_id": "i0", "user_id": "A2", "score": "2"},
-        ]
-        gold = build_gold_rows(rows, aggregation="mean")
+        anns = [{"instance_id": "i0", "user_id": u, "labels": {"score": {"slider": v}}}
+                for u, v in (("A1", "4"), ("A2", "2"))]
+        gold = build_gold_rows(anns, aggregation="mean",
+                               schemas=[{"name": "score", "annotation_type": "slider"}])
         assert gold[0]["score"] == pytest.approx(3.0)
 
     def test_gold_can_be_disabled(self):

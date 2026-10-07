@@ -53,7 +53,7 @@ This creates subscriptions for `submission.status.change`,
 | Event | Potato's reaction |
 |-------|-------------------|
 | `submission.status.change` → RETURNED / TIMED-OUT / REJECTED | Reclaims the participant's unannotated item assignments immediately (respects `instance_reclaim` retention policies). |
-| `submission.status.change` → AWAITING REVIEW | Auto-approves via the API if `auto_approve: true`. |
+| `submission.status.change` → AWAITING REVIEW | Auto-approves via the API if `auto_approve: true`, unless quality control blocked the participant. A blocked participant's submission stays in AWAITING REVIEW for you to decide. |
 | `study.status.change`, `study.progress.change` | Recorded for the admin dashboard. |
 | `study.has_high_return_rate` | Logged as a warning. |
 

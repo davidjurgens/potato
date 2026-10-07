@@ -685,24 +685,19 @@ class ICLLabeler:
         if ism is None:
             return 0
 
-        # Count unlabeled instances (not labeled by humans or LLM)
-        unlabeled_count = 0
+        # Count unlabeled instances (not labeled by humans or LLM).
+        # get_all_users() returns the states themselves; passing one back to
+        # get_user_state() returned None, so no item ever counted as
+        # human-annotated and the cap was computed over too many items.
         usm = get_user_state_manager()
-        for instance_id in ism.instance_id_ordering:
-            if instance_id in self.labeled_instance_ids:
-                continue
-
-            has_human_annotation = False
-            for username in usm.get_all_users():
-                user_state = usm.get_user_state(username)
-                if user_state:
-                    all_annotations = user_state.get_all_annotations()
-                    if instance_id in all_annotations:
-                        has_human_annotation = True
-                        break
-
-            if not has_human_annotation:
-                unlabeled_count += 1
+        human_annotated = set()
+        for user_state in usm.get_all_users():
+            if user_state is not None and hasattr(user_state, "get_all_annotations"):
+                human_annotated.update(user_state.get_all_annotations().keys())
+        unlabeled_count = sum(
+            1 for instance_id in ism.instance_id_ordering
+            if instance_id not in self.labeled_instance_ids
+            and instance_id not in human_annotated)
 
         current_llm_labels = len(self.labeled_instance_ids)
 

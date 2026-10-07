@@ -41,6 +41,9 @@
 /* Tab Navigation */
 .admin-tabs {
   display: flex;
+  /* Ten-plus tabs do not fit a phone; scroll the strip, not the page. */
+  overflow-x: auto;
+  max-width: 100%;
   background: white;
   border-radius: var(--radius);
   padding: 0.25rem;

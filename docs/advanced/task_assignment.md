@@ -108,7 +108,7 @@ diversity_ordering:
 **How it works**:
 1. Items are embedded using a sentence-transformer model
 2. K-means clustering groups similar items together
-3. Items are sampled round-robin from different clusters
+3. Items are sampled round-robin from different clusters, one cluster per item served, taking each cluster's items in data order
 4. When all clusters are sampled, reclustering occurs
 
 **Best for**: Tasks where annotator fatigue from similar content is a concern, or when early coverage of the full topic space is important.

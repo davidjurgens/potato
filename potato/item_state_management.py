@@ -1989,6 +1989,13 @@ class ItemStateManager:
             return len(assigned)
         return count_dataset_items(assigned)
 
+    def _in_queue_order(self, ids) -> List[str]:
+        """``ids`` in the order items were loaded, for reproducible sampling."""
+        ids = set(ids)
+        ordered = [iid for iid in self.remaining_instance_ids if iid in ids]
+        seen = set(ordered)
+        return ordered + sorted(i for i in ids if i not in seen)
+
     def _already_with_user(self, user_state, iid) -> bool:
         """True when the user already holds this item, annotated or not.
 
@@ -2339,9 +2346,11 @@ class ItemStateManager:
                     candidate_ids = set(self.remaining_instance_ids)
                 # 'none' fallback means no assignment
 
-            # Filter candidates: not already annotated by user, not completed
+            # Filter candidates: not already annotated by user, not completed.
+            # In queue order: iterating the set made a seeded sample depend on
+            # PYTHONHASHSEED, so `random_seed` did not reproduce an assignment.
             unlabeled_items = []
-            for iid in candidate_ids:
+            for iid in self._in_queue_order(candidate_ids):
                 # Skip if item is not in remaining (already completed)
                 if iid not in self.remaining_instance_ids:
                     continue
@@ -2380,8 +2389,8 @@ class ItemStateManager:
                     # Skip if item has reached annotation limit
                     if self._item_is_saturated(iid):
                         continue
-                    # Skip if user already annotated
-                    if user_state.has_annotated(iid):
+                    # Skip if the user already holds or annotated it
+                    if self._already_with_user(user_state, iid):
                         continue
                     available_ids.append(iid)
 
@@ -2398,9 +2407,12 @@ class ItemStateManager:
 
                 # Assign items from diverse order
                 assigned = 0
+                served = []
                 for item_id in diverse_order[:instances_to_assign]:
                     user_state.assign_instance(self._store.get(item_id))
+                    served.append(item_id)
                     assigned += 1
+                dm.note_assigned(user_id, served)
 
                 return assigned
             else:
@@ -2419,7 +2431,7 @@ class ItemStateManager:
                 for iid in self.remaining_instance_ids:
                     if self._item_is_saturated(iid):
                         continue
-                    if user_state.has_annotated(iid):
+                    if self._already_with_user(user_state, iid):
                         continue
                     available_ids.append(iid)
 
@@ -2584,7 +2596,7 @@ class ItemStateManager:
 
             for category, instance_ids in self.category_to_instance_ids.items():
                 eligible_items = []
-                for iid in instance_ids:
+                for iid in self._in_queue_order(instance_ids):
                     # Skip if item is not in remaining (already completed)
                     if iid not in self.remaining_instance_ids:
                         continue
@@ -2592,7 +2604,7 @@ class ItemStateManager:
                     if self._item_is_saturated(iid):
                         continue
                     # Skip if user already annotated this item
-                    if not user_state.has_annotated(iid):
+                    if not self._already_with_user(user_state, iid):
                         eligible_items.append(iid)
 
                 if eligible_items:
@@ -2601,12 +2613,12 @@ class ItemStateManager:
 
             # Also check uncategorized instances
             uncategorized_eligible = []
-            for iid in self.uncategorized_instance_ids:
+            for iid in self._in_queue_order(self.uncategorized_instance_ids):
                 if iid not in self.remaining_instance_ids:
                     continue
                 if self._item_is_saturated(iid):
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     uncategorized_eligible.append(iid)
 
             if not available_categories and not uncategorized_eligible:
@@ -2649,7 +2661,7 @@ class ItemStateManager:
         for iid in self.remaining_instance_ids:
             if self._item_is_saturated(iid):
                 continue
-            if not user_state.has_annotated(iid):
+            if not self._already_with_user(user_state, iid):
                 unlabeled_items.append(iid)
 
         if not unlabeled_items:

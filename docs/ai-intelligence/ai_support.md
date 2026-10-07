@@ -769,7 +769,7 @@ active_learning:
     confidence_method: "logprobs"
 ```
 
-Computes `confidence = exp(mean_logprob)` over the response tokens. Falls back to verbalized confidence if the endpoint doesn't return logprobs.
+Computes the probability of the predicted label: `exp` of the summed logprobs of the tokens that spell it. The rest of the JSON reply (braces, keys, any reasoning) is ignored. Falls back to verbalized confidence if the endpoint doesn't return logprobs or the label can't be found in the reply.
 
 **Requires:** VLLM or OpenAI-compatible endpoint with logprobs support.
 
@@ -784,7 +784,7 @@ active_learning:
     consistency_samples: 3
 ```
 
-Works with any endpoint (Anthropic, Ollama, etc.) that doesn't support logprobs. Higher agreement = higher confidence.
+Works with any endpoint (Anthropic, Ollama, etc.) that doesn't support logprobs. Confidence is the share of the `consistency_samples` requests that returned the most common label, so a failed request or a reply without a label counts against it.
 
 ### Which Method to Use?
 

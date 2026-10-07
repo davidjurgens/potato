@@ -228,8 +228,16 @@ class ValidationTracker:
             return False
 
     def _update_recent_metrics(self) -> None:
-        """Update metrics based on recent comparisons."""
-        if len(self._comparison_history) < 2:
+        """Update metrics based on recent comparisons.
+
+        Recomputed on every change, including a retraction. Returning early
+        below two comparisons left the rate at 0.0 after one agreeing
+        comparison, and left it (and the trend) at its old value when a
+        retraction brought the history back under two.
+        """
+        if not self._comparison_history:
+            self._metrics.recent_agreement_rate = 0.0
+            self._metrics.trend = "stable"
             return
 
         # Calculate recent agreement rate
@@ -251,6 +259,9 @@ class ValidationTracker:
                 self._metrics.trend = "declining"
             else:
                 self._metrics.trend = "stable"
+        else:
+            # Not enough history for two windows: no trend to report.
+            self._metrics.trend = "stable"
 
     def get_metrics(self) -> AgreementMetrics:
         """Get current agreement metrics."""

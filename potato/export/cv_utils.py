@@ -172,11 +172,53 @@ def normalize_bbox(x: float, y: float, w: float, h: float,
     """
     if img_w <= 0 or img_h <= 0:
         return (0, 0, 0, 0)
-    cx = max(0.0, min(1.0, (x + w / 2) / img_w))
-    cy = max(0.0, min(1.0, (y + h / 2) / img_h))
-    nw = max(0.0, min(1.0, w / img_w))
-    nh = max(0.0, min(1.0, h / img_h))
-    return (cx, cy, nw, nh)
+    clipped = clip_bbox(x, y, w, h, img_w, img_h)
+    if clipped is None:
+        return (0, 0, 0, 0)
+    x, y, w, h = clipped
+    return ((x + w / 2) / img_w, (y + h / 2) / img_h, w / img_w, h / img_h)
+
+
+def clip_bbox(x: float, y: float, w: float, h: float,
+              img_w: float, img_h: float) -> Optional[Tuple[float, float, float, float]]:
+    """The part of an ``(x, y, w, h)`` box inside the image, or None if none is.
+
+    Clamping the centre and the size separately did not clip: a box from
+    x=-10 to 10 in a 100 px image came out centred at 0 with width 0.2, still
+    reaching x=-10.
+    """
+    x0, y0 = max(0.0, float(x)), max(0.0, float(y))
+    x1, y1 = min(float(img_w), float(x) + float(w)), min(float(img_h), float(y) + float(h))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def label_file_paths(file_names: Dict[str, str]) -> Dict[str, str]:
+    """A relative label-file path (no extension) for each item's image.
+
+    The image's own stem, which is what YOLO and VOC tools pair labels with.
+    When two different images share a stem (``a/img.jpg`` and ``b/img.jpg``),
+    both keep their directories, the layout the tools expect for nested image
+    folders. Keying on the stem alone merged them into one file.
+    """
+    def clean(part: str) -> str:
+        return "".join(c if c.isalnum() or c in "-_." else "_" for c in part) or "_"
+
+    def parts_of(name: str) -> List[str]:
+        name = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*", "", str(name))
+        name = os.path.splitext(name.split("?")[0])[0]
+        return [clean(p) for p in re.split(r"[\\/]+", name) if p not in ("", ".", "..")]
+
+    by_stem: Dict[str, set] = {}
+    for iid, name in file_names.items():
+        parts = parts_of(name) or [clean(iid)]
+        by_stem.setdefault(parts[-1], set()).add(tuple(parts))
+    out = {}
+    for iid, name in file_names.items():
+        parts = parts_of(name) or [clean(iid)]
+        out[iid] = "/".join(parts) if len(by_stem[parts[-1]]) > 1 else parts[-1]
+    return out
 
 
 def flatten_polygon(points: List[List[float]]) -> List[float]:

@@ -95,6 +95,26 @@
       "entries": [["Yes", "Yes"]],
       "annotation_type": null,
       "expected": "Yes"
+    },
+    {
+      "name": "slider at 1 is the number 1, not the label",
+      "why": "Test-gap audit 2026-10: value == 1 was read as a tick before the scalar check, so a slider at 1 collapsed to the string 'slider'.",
+      "entries": [["slider", 1]],
+      "annotation_type": "slider",
+      "expected": 1
+    },
+    {
+      "name": "number field stored as a string keeps its value",
+      "entries": [["number", "7"]],
+      "annotation_type": "number",
+      "expected": "7"
+    },
+    {
+      "name": "multiselect with every box stored false is unanswered",
+      "why": "Test-gap audit 2026-10: nothing recognised as selected fell back to every label, so 'none ticked' read as 'all ticked'.",
+      "entries": [["a", false], ["b", "false"]],
+      "annotation_type": "multiselect",
+      "expected": null
     }
   ]
 }

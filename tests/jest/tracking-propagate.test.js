@@ -283,3 +283,25 @@ describe('what the annotator is told', () => {
         expect(m.statusKind).toBe('error');
     });
 });
+
+describe('frame times use the schema frame rate', () => {
+    // The server config only ever sends `videoFps`. Keyframe times were
+    // stamped with `config.fps || 25` and seeks used `this.fps || 30`, which
+    // is never set: every propagated keyframe 20% off at the 30 fps default.
+    test('a propagated keyframe is stamped at videoFps', async () => {
+        respondWith({ frames: trackedFrames(1), occluded: 0 });
+        const m = manager({ config: { videoFps: 30, schemaName: 'tracks',
+                                      videoPath: '/media/clip.webm' } });
+        await m.propagateForward();
+        expect(m.tracks.track_1.keyframes[1].time).toBeCloseTo(1 / 30);
+    });
+
+    test('jumping to a keyframe seeks at videoFps', () => {
+        const m = manager({ config: { videoFps: 24, schemaName: 'tracks' } });
+        m.tracks.track_1.keyframes[48] = { frame: 48, type: 'bbox',
+            bbox: { x: 0, y: 0, width: 1, height: 1 } };
+        m._getCurrentFrame = () => 0;
+        expect(m.seekToAdjacentKeyframe(1)).toBe(true);
+        expect(m.video.currentTime).toBeCloseTo(2.0);
+    });
+});

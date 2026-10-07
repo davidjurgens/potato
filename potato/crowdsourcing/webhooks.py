@@ -155,7 +155,16 @@ def _handle_submission_change(payload, prolific_config, webhook_config):
 
     elif status == 'AWAITING REVIEW' and webhook_config.get('auto_approve', False):
         token = prolific_config.get('token')
-        if token and submission_id:
+        blocked = _blocked_by_quality_control(participant_id)
+        if blocked:
+            # A participant blocked for failing attention checks was given the
+            # failure code; approving them would pay for the work QC rejected.
+            # Left in AWAITING REVIEW for the researcher to decide.
+            logger.warning("Webhook: not auto-approving submission %s: participant %s "
+                           "is blocked by quality control", submission_id, participant_id)
+            result["auto_approved"] = False
+            result["auto_approve_skipped"] = "blocked by quality control"
+        elif token and submission_id:
             from potato.crowdsourcing.prolific_api import ProlificClient
             ProlificClient(token).approve_submission(submission_id)
             logger.info("Webhook: auto-approved submission %s", submission_id)
@@ -164,3 +173,20 @@ def _handle_submission_change(payload, prolific_config, webhook_config):
             logger.warning("auto_approve set but token/submission id missing")
 
     return result
+
+
+def _blocked_by_quality_control(participant_id) -> bool:
+    """Whether QC blocked this participant. Unknown counts as blocked.
+
+    Approval pays, and cannot be undone, so a failure to check is not a pass.
+    """
+    if not participant_id:
+        return True
+    try:
+        from potato.quality_control import get_quality_control_manager
+        qc = get_quality_control_manager()
+        return bool(qc and qc.is_user_blocked(participant_id))
+    except Exception:
+        logger.warning("Could not check quality control for %s; not auto-approving",
+                       participant_id, exc_info=True)
+        return True

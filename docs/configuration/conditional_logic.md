@@ -79,6 +79,13 @@ display_logic:
 | `in_range` | Within range (inclusive) | `value: [3, 7]` |
 | `not_in_range` | Outside range | `value: [3, 7]` |
 
+A question that has not been answered matches none of `gt`, `gte`, `lt`, `lte` and
+`in_range`, so `lt 3` on a skipped optional number does not show its follow-up.
+It does match `not_in_range`. To branch on a skipped question, use `empty`.
+
+`equals` with a number compares numbers: `value: 3` matches a likert or slider
+answer of 3, which the form stores as the string `"3"`.
+
 #### Emptiness Checks
 
 | Operator | Description | Example |

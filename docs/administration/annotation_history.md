@@ -88,7 +88,11 @@ metrics = AnnotationHistoryManager.calculate_performance_metrics(actions)
 
 ## Suspicious Activity Detection
 
-The system can detect potentially problematic annotation patterns:
+The detector measures the gap between an annotator's last action on one item
+and their first action on the next, which is the time they had to read it.
+Several actions on the same item (ticking three boxes) are one answer and are
+not compared with each other. With fewer than two items there is no gap to
+measure: the score is `None` and the level is "Not enough data".
 
 ```python
 from potato.annotation_history import AnnotationHistoryManager
@@ -96,17 +100,18 @@ from potato.annotation_history import AnnotationHistoryManager
 # Analyze actions for suspicious patterns
 analysis = AnnotationHistoryManager.detect_suspicious_activity(
     actions,
-    fast_threshold_ms=500,      # Actions faster than this are flagged
-    burst_threshold_seconds=2   # Actions closer than this are flagged
+    fast_threshold_ms=500,      # an item started this soon is "fast"
+    burst_threshold_seconds=2   # an item started this soon is a "burst"
 )
 
 # Returns:
 {
-    'suspicious_actions': [...],
+    'suspicious_actions': [...],      # the first action on each flagged item
     'fast_actions_count': 5,
     'burst_actions_count': 12,
-    'fast_actions_percentage': 3.3,
+    'fast_actions_percentage': 3.3,   # of the items measured
     'burst_actions_percentage': 8.0,
+    'items_measured': 150,
     'suspicious_score': 15.2,
     'suspicious_level': 'Low'
 }
@@ -126,8 +131,11 @@ analysis = AnnotationHistoryManager.detect_suspicious_activity(
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `fast_threshold_ms` | 500 | Actions faster than this are flagged |
-| `burst_threshold_seconds` | 2 | Actions closer together than this are flagged |
+| `fast_threshold_ms` | 500 | An item started within this many ms of the previous one is fast |
+| `burst_threshold_seconds` | 2 | An item started within this many seconds of the previous one is a burst |
+
+`server_processing_time_ms` is how long the server took to handle the save, a
+few milliseconds for every annotator, so it is not part of the score.
 
 ## API Reference
 
@@ -300,8 +308,9 @@ Actions are serialized with ISO 8601 timestamps:
 
 Check the suspicious-activity report periodically rather than only at the end
 of a study, and tune `fast_threshold_ms` to your task: 500 ms is far too fast
-for a paragraph and too slow for a one-key triage decision. History lives in
-the user state files, so back those up if you need it long term. Timestamps are
+for a paragraph and too slow for a one-key triage decision. History is appended
+to `annotation_history.jsonl` in each annotator's output directory, beside
+`user_state.json`, so back those up if you need it long term. Timestamps are
 personal data in most jurisdictions, so decide on a retention policy before you
 collect a study's worth of them.
 

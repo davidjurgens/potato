@@ -71,10 +71,16 @@ class ProlificProvider(CrowdProvider):
                            "skipping API screen-out for %s",
                            identity.worker_id if identity else '?')
             return
+        # The done page re-renders on every visit and on_completion must be
+        # idempotent; without this each reload sent another screen-out request.
+        screened = self.__dict__.setdefault('_screened_out_sessions', set())
+        if identity.session_id in screened:
+            return
         try:
             from potato.crowdsourcing.prolific_api import ProlificClient
             client = ProlificClient(token)
             client.screen_out_submissions(study_id, [identity.session_id])
+            screened.add(identity.session_id)
             logger.info("Screened out Prolific submission %s (blocked participant %s)",
                         identity.session_id, identity.worker_id)
         except Exception as e:

@@ -20,6 +20,8 @@ API notes (from docs.prolific.com/api-reference):
 """
 
 import logging
+import math
+import re
 
 import requests
 
@@ -218,7 +220,8 @@ class ProlificClient:
         the study's currency (e.g. 1.50). Returns the bulk payment object —
         pass its id to pay_bonuses() to dispatch.
         """
-        csv_bonuses = "\n".join(f"{pid},{amount}" for pid, amount in bonuses)
+        csv_bonuses = "\n".join(f"{pid},{amount}" for pid, amount in
+                                validate_bonus_rows(bonuses))
         return self._post('/submissions/bonus-payments/',
                           {'study_id': study_id, 'csv_bonuses': csv_bonuses})
 
@@ -299,3 +302,39 @@ class ProlificClient:
     def hook_subscription_events(self, subscription_id):
         """Delivery log for a subscription (debugging failed deliveries)."""
         return self._get(f'/hooks/subscriptions/{subscription_id}/events/')
+
+
+_PARTICIPANT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def validate_bonus_rows(bonuses):
+    """``(participant_id, amount)`` rows that are safe to send as CSV.
+
+    Raises ValueError naming the first bad row. The rows are joined into the
+    CSV Prolific pays from, so a participant id holding a comma or newline
+    added a row of its own, and a negative, zero, NaN or non-numeric amount
+    went through unchecked. A participant listed twice is refused rather than
+    paid twice.
+    """
+    rows, seen = [], set()
+    for index, row in enumerate(bonuses or []):
+        try:
+            pid, amount = row
+        except (TypeError, ValueError):
+            raise ValueError(f"bonus row {index}: expected [participant_id, amount], got {row!r}")
+        pid = str(pid).strip() if pid is not None else ""
+        if not _PARTICIPANT_ID.match(pid):
+            raise ValueError(f"bonus row {index}: participant id {pid!r} is not a plain id")
+        if pid in seen:
+            raise ValueError(f"bonus row {index}: participant {pid} is listed twice")
+        seen.add(pid)
+        if isinstance(amount, bool):
+            raise ValueError(f"bonus row {index}: amount {amount!r} is not a number")
+        try:
+            value = float(amount)
+        except (TypeError, ValueError):
+            raise ValueError(f"bonus row {index}: amount {amount!r} is not a number")
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"bonus row {index}: amount {amount!r} must be a positive number")
+        rows.append((pid, amount.strip() if isinstance(amount, str) else amount))
+    return rows

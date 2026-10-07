@@ -267,7 +267,7 @@
                 if (!result.visible || !result.rle) { occluded += 1; return; }
                 track.keyframes[result.frame] = {
                     frame: result.frame,
-                    time: result.frame / (this.config.fps || 25),
+                    time: result.frame / this._frameRate(),
                     type: 'mask',
                     rle: result.rle,
                     // Converted into CANVAS pixels, which is the space the
@@ -466,8 +466,7 @@
             }
             if (target === null) return false;
 
-            var fps = this.fps || 30;
-            this.video.currentTime = target / fps;
+            this.video.currentTime = target / this._frameRate();
             this.selectedKeyframe = { trackId: this.activeTrackId, frame: target };
             this.renderOverlay();
             return true;
@@ -1098,10 +1097,21 @@
                 return this.manager.getCurrentFrame();
             }
             if (this.video) {
-                var fps = this.config.videoFps || 30;
-                return Math.round(this.video.currentTime * fps);
+                return Math.round(this.video.currentTime * this._frameRate());
             }
             return 0;
+        }
+
+        /**
+         * Frames per second, from the one place the schema sets it. The config
+         * only ever carries `videoFps`; stamping keyframe times with
+         * `config.fps || 25` and seeking with `this.fps || 30` (never set)
+         * put every propagated keyframe 20% off at the 30 fps default, and
+         * keyframe navigation off whenever video_fps was not 30.
+         */
+        _frameRate() {
+            var rate = Number(this.config.videoFps || this.config.fps);
+            return rate > 0 ? rate : 30;
         }
 
         _renderTrackPanel() {

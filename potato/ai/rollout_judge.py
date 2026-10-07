@@ -403,11 +403,15 @@ def align_with_humans(predictions: Sequence[BreakPrediction],
     offsets: List[float] = []
     category_hits = 0
     category_total = 0
+    tied = 0
 
     for prediction in usable:
         key = f"{prediction.instance_id}::{prediction.stream_id}"
         truth = human.get(key)
         if truth is None:
+            continue
+        if truth.get("tied"):
+            tied += 1   # the humans split; nothing to score against
             continue
         human_t = truth.get("t")
         if prediction.t is None and human_t is None:
@@ -434,6 +438,7 @@ def align_with_humans(predictions: Sequence[BreakPrediction],
         "n_predictions": len(predictions),
         "n_excluded_errors": excluded,
         "n_compared": compared,
+        "n_human_tied": tied,
         "detection": {
             "both_found": both, "judge_only": judge_only,
             "human_only": human_only, "neither_found": neither,

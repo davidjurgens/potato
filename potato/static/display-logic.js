@@ -232,14 +232,19 @@ class DisplayLogicManager {
             return null;
         }
 
-        const selected = main
+        // A slider or number stores the answer itself: 1 is the number 1, not
+        // "the label was ticked".
+        const scalarType = DisplayLogicManager.SCALAR_TYPES.has(annotationType);
+        const selected = scalarType ? [] : main
             .filter(([label, value]) => DisplayLogicManager.isSelected(label, value))
             .map(([label]) => label);
 
         if (annotationType === 'multiselect') {
             // Presence means checked: unchecked boxes are deleted from state, not
             // stored false. One selection stays scalar so `equals` keeps working.
-            const names = selected.length ? selected : main.map(([label]) => label);
+            // An entry stored as false is still an unchecked box.
+            const names = selected.length ? selected
+                : main.filter(([, v]) => !DisplayLogicManager.isUnchecked(v)).map(([label]) => label);
             if (!names.length) return null;
             return names.length === 1 ? names[0] : names;
         }
@@ -256,6 +261,13 @@ class DisplayLogicManager {
         // Post-#167 a single-select schema cannot hold several values; the browser
         // has no behavioural trail, so last-in-order is the best it can do here.
         return scalars[scalars.length - 1];
+    }
+
+    /** A stored value that explicitly says "not selected". */
+    static isUnchecked(value) {
+        if (value === null || value === undefined || value === false || value === 0) return true;
+        return typeof value === 'string'
+            && ['false', '0', 'off', 'no', ''].includes(value.trim().toLowerCase());
     }
 
     /** Rule 3: True/1/"true", or a value echoing its own label name. */
@@ -474,6 +486,13 @@ class DisplayLogicManager {
     valuesEqual(actual, expected, caseSensitive) {
         if (actual === null || actual === undefined) {
             return expected === null || expected === undefined;
+        }
+
+        // A number in the YAML (`value: 3`) against a form value, which is a
+        // string ("3"): compare as numbers. Mirrors display_logic.py.
+        if (typeof expected === 'number' && typeof actual !== 'boolean') {
+            const actualNum = Number(actual);
+            return String(actual).trim() !== '' && !isNaN(actualNum) && actualNum === expected;
         }
 
         // String comparison with case sensitivity
@@ -802,6 +821,13 @@ class DisplayLogicManager {
 // Labels that coexist with a schema's real answer instead of competing with it.
 // Mirrors EXEMPT_LABEL_NAMES in potato/server_utils/answer_collapse.py.
 DisplayLogicManager.EXEMPT_LABELS = new Set(['free_response']);
+
+// Types whose stored value is the answer itself. Mirrors SCALAR_ANSWER_TYPES in
+// potato/server_utils/annotation_keys.py.
+DisplayLogicManager.SCALAR_TYPES = new Set([
+    'text', 'textbox', 'number', 'slider', 'range_slider', 'vas',
+    'soft_label', 'constant_sum', 'span', 'span_link',
+]);
 
 // Global instance
 let displayLogicManager = null;

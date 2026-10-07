@@ -57,7 +57,9 @@ def tokenize_text(text: str, method: str = "whitespace") -> List[Dict]:
 def char_spans_to_bio_tags(
     tokens: List[Dict],
     spans: List[Dict],
-    scheme: str = "BIO"
+    scheme: str = "BIO",
+    warnings: Optional[List[str]] = None,
+    where: str = "",
 ) -> List[str]:
     """
     Convert character-level spans to token-level BIO tags.
@@ -117,7 +119,23 @@ def char_spans_to_bio_tags(
                     span_tokens.append(i)
 
         if not span_tokens:
-            continue
+            # No token is mostly inside the span ("Trump" in "anti-Trump").
+            # Dropping it lost the entity without a word; tag the tokens it
+            # touches instead and say so, since the token is wider than what
+            # was marked.
+            span_tokens = [
+                i for i, tok in enumerate(tokens)
+                if not assigned[i]
+                and min(tok["end"], span_end) > max(tok["start"], span_start)
+            ]
+            if not span_tokens:
+                continue
+        if warnings is not None and (tokens[span_tokens[0]]["start"] != span_start
+                                     or tokens[span_tokens[-1]]["end"] != span_end):
+            covered = " ".join(tokens[i]["token"] for i in span_tokens)
+            warnings.append(
+                f"{where}: {label} span {span_start}-{span_end} does not "
+                f"align with token boundaries; tagged '{covered}'")
 
         # Assign BIO tags
         for j, tok_idx in enumerate(span_tokens):
@@ -137,13 +155,27 @@ def char_spans_to_bio_tags(
     return tags
 
 
-def group_sentences(tokens: List[Dict], text: str) -> List[List[int]]:
+#: Tokens ending in a period that do not end a sentence.
+_ABBREVIATIONS = frozenset({"mr.", "mrs.", "ms.", "dr.", "prof.", "st.", "jr.",
+                            "sr.", "vs.", "e.g.", "i.e.", "no.", "fig."})
+_INITIALISM = re.compile(r"^(?:[A-Za-z]\.){2,}$")
+
+
+def group_sentences(tokens: List[Dict], text: str,
+                    tags: Optional[List[str]] = None) -> List[List[int]]:
     """
     Group token indices into sentences based on sentence-ending punctuation.
+
+    A period does not end a sentence inside an entity (``tags``: the next
+    token's tag continues one), after an initialism such as "U.S.", or after a
+    title such as "Dr.". "the U.S. Army" with an ORG span used to export as
+    ``U.S. B-ORG``, a sentence break, then ``Army I-ORG``: one entity cut
+    across two sentences, which a CoNLL reader cannot put back together.
 
     Args:
         tokens: List of token dicts
         text: Original text
+        tags: BIO tags for the tokens, when known
 
     Returns:
         List of lists of token indices, one list per sentence
@@ -165,6 +197,11 @@ def group_sentences(tokens: List[Dict], text: str) -> List[List[int]]:
             or token_text.endswith("!")
             or token_text.endswith("?")
         )
+        if ends_with_sent_punct and (
+                (tags and i + 1 < len(tags) and tags[i + 1][:2] in ("I-", "E-"))
+                or token_text.lower() in _ABBREVIATIONS
+                or _INITIALISM.match(token_text)):
+            continue
         if ends_with_sent_punct:
             # Check if next token starts a new sentence (uppercase or end)
             if i + 1 >= len(tokens):
@@ -180,3 +217,73 @@ def group_sentences(tokens: List[Dict], text: str) -> List[List[int]]:
         sentences.append(current)
 
     return sentences
+
+
+def annotator_groups(annotations: List[Dict], annotator: Optional[str],
+                     warnings: List[str], fmt: str) -> List[Tuple[str, List[Dict]]]:
+    """``[(file suffix, records)]``: one group, or one per annotator.
+
+    CoNLL has one tag column, so it holds one annotator's spans. With
+    ``annotator`` set, that annotator's records; otherwise, with several
+    annotators, one file each. Keeping only the first record per item made
+    the export depend on which annotator was read first, and an annotator
+    who marked nothing could replace one who marked everything.
+    """
+    users = sorted({str(a.get("user_id", "")) for a in annotations})
+    if annotator:
+        chosen = [a for a in annotations if str(a.get("user_id", "")) == annotator]
+        if not chosen:
+            warnings.append(f"No annotations by '{annotator}' to export")
+        return [("", chosen)]
+    if len(users) <= 1:
+        return [("", list(annotations))]
+    warnings.append(
+        f"{len(users)} annotators: wrote one {fmt} file per annotator. Pass "
+        f"the 'annotator' option to export one of them as the main file.")
+    return [(u, [a for a in annotations if str(a.get("user_id", "")) == u]) for u in users]
+
+
+def conll_documents(context, records: List[Dict], schema_name: Optional[str],
+                    tokenization: str, warnings: List[str]):
+    """Yield ``(doc_id, text, tokens, tags, sentences)`` per annotated field.
+
+    The text is what the span offsets were measured against: the field the
+    span names (``target_field``), rendered the way the browser renders it
+    (``ExportContext._span_anchor_text``). Reading ``item[text_key]`` raw
+    tokenised a dialogue field as Python reprs (``{'speaker':``) and tagged
+    every token O.
+    """
+    text_key = (context.config.get("item_properties", {}) or {}).get("text_key", "text")
+    for ann in records:
+        instance_id = ann.get("instance_id", "")
+        item = context.items.get(instance_id, {})
+        by_field: Dict[str, List[Dict]] = {}
+        for span_schema, span_list in (ann.get("spans", {}) or {}).items():
+            if schema_name and span_schema != schema_name:
+                continue
+            for sp in span_list or []:
+                field = sp.get("target_field") or text_key
+                by_field.setdefault(field, []).append({
+                    "start": sp.get("start", 0),
+                    "end": sp.get("end", 0),
+                    "label": sp.get("name") or sp.get("label", "ENTITY"),
+                })
+        if not by_field:
+            by_field[text_key] = []
+        for field, spans in by_field.items():
+            text = context._span_anchor_text(item, field) if isinstance(item, dict) else None
+            if text is None and isinstance(item, dict):
+                for alt in (text_key, "text", "sentence", "content"):
+                    if isinstance(item.get(alt), str):
+                        text = item[alt]
+                        break
+            if not isinstance(text, str) or not text:
+                warnings.append(f"No text found for {instance_id}"
+                                + (f" field '{field}'" if field != text_key else ""))
+                continue
+            tokens = tokenize_text(text, method=tokenization)
+            if not tokens:
+                continue
+            doc_id = instance_id if field == text_key else f"{instance_id}:{field}"
+            tags = char_spans_to_bio_tags(tokens, spans, warnings=warnings, where=doc_id)
+            yield doc_id, text, tokens, tags, group_sentences(tokens, text, tags)

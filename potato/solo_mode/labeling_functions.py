@@ -454,13 +454,15 @@ class LabelingFunctionApplier:
         for v in votes:
             label_scores[v.label] = label_scores.get(v.label, 0) + v.confidence
 
-        # Find winning label
+        # Find winning label. A tie has no winner: it used to go to whichever
+        # function was listed first, and at threshold 0.5 an even split passed.
         best_label = max(label_scores, key=label_scores.get)
         total_score = sum(label_scores.values())
         agreement = label_scores[best_label] / total_score if total_score > 0 else 0
+        tied = sum(1 for v in label_scores.values() if v == label_scores[best_label]) > 1
 
         # Check if agreement meets threshold
-        if agreement < self._vote_threshold:
+        if tied or agreement < self._vote_threshold:
             return ApplyResult(
                 instance_id=instance_id,
                 votes=votes,
@@ -514,8 +516,10 @@ class LabelingFunctionApplier:
         if not keywords:
             return False
 
-        # Check if any keyword appears in the text
-        return any(kw in text_lower for kw in keywords)
+        # Whole words only: as substrings, the keyword "no" matched "I know
+        # it is good" and labelled it negative.
+        return any(re.search(r"(?<!\w)" + re.escape(kw) + r"(?!\w)", text_lower)
+                   for kw in keywords)
 
     def _get_keywords(self, fn: LabelingFunction) -> List[str]:
         """Extract lowercase keywords from a labeling function."""

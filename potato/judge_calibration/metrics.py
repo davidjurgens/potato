@@ -37,14 +37,20 @@ HUMAN_PREFIX = "human::"
 # ----- gold resolution ----------------------------------------------------
 
 def _majority(labels: List[Any]) -> Optional[Any]:
-    """Most common label; ties broken by sorted string order (deterministic)."""
+    """Most common label, or None when there is a tie.
+
+    A tie has no majority. Breaking it alphabetically made "neg" the gold for
+    every pos/neg split, and every judge was then scored against an answer no
+    majority of humans gave.
+    """
     if not labels:
         return None
     counts = Counter(str(l) for l in labels)
     top = max(counts.values())
-    winners = sorted(k for k, v in counts.items() if v == top)
-    winner_str = winners[0]
-    return next(l for l in labels if str(l) == winner_str)
+    winners = [k for k, v in counts.items() if v == top]
+    if len(winners) > 1:
+        return None
+    return next(l for l in labels if str(l) == winners[0])
 
 
 def resolve_gold(human_labels: Dict[str, Dict[str, Any]], gold_strategy: str) -> Dict[str, Any]:
@@ -77,13 +83,26 @@ def _classification_metrics(y_true: List[str], y_pred: List[str], valid_labels: 
     from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
 
     labels = valid_labels or sorted(set(y_true) | set(y_pred))
-    # No gold overlap: undefined, not 0% (or, with ECE 0, "perfectly calibrated").
-    acc = float(accuracy_score(y_true, y_pred)) if y_true else None
+    if not y_true:
+        # No gold overlap: every metric is undefined, not 0% (and, with ECE 0,
+        # "perfectly calibrated"). Rounding the None accuracy below raised and
+        # took down the whole report.
+        return {
+            "accuracy": None, "precision_macro": None, "recall_macro": None,
+            "f1_macro": None, "precision_weighted": None, "recall_weighted": None,
+            "f1_weighted": None, "confusion_matrix": {}, "labels": labels, "n": 0,
+            "note": "no instances overlap the human gold",
+        }
+    acc = float(accuracy_score(y_true, y_pred))
+    # Macro averages over the labels that occur in the gold or the predictions.
+    # A configured label nobody used scored 0 and dragged a perfect judge's
+    # macro F1 to 0.667 on a three-label schema.
+    present = [l for l in labels if l in set(y_true) | set(y_pred)] or labels
     p, r, f1, _ = precision_recall_fscore_support(
-        y_true, y_pred, labels=labels, average="macro", zero_division=0
+        y_true, y_pred, labels=present, average="macro", zero_division=0
     )
     pw, rw, f1w, _ = precision_recall_fscore_support(
-        y_true, y_pred, labels=labels, average="weighted", zero_division=0
+        y_true, y_pred, labels=present, average="weighted", zero_division=0
     )
     cm = confusion_matrix(y_true, y_pred, labels=labels)
     confusion = {
@@ -284,15 +303,24 @@ def compute_multiselect_report(
             continue
         y_true = mlb.transform([sorted(gold[iid]) for iid in overlap])
         y_pred = mlb.transform([sorted(preds[iid] or []) for iid in overlap])
+        # Macro over the labels that occur in this gold or these predictions:
+        # an unused label otherwise counts as a 0 for every judge.
+        used = [i for i in range(y_true.shape[1])
+                if y_true[:, i].any() or y_pred[:, i].any()]
         p, r, f1, _ = precision_recall_fscore_support(
-            y_true, y_pred, average="macro", zero_division=0)
+            y_true, y_pred, average="macro", zero_division=0,
+            labels=used or None)
         pmi, rmi, f1mi, _ = precision_recall_fscore_support(
             y_true, y_pred, average="micro", zero_division=0)
         jacc = sum(_jaccard(preds[iid], gold[iid]) for iid in overlap) / len(overlap)
 
         conf = llm_conf.get(model, {})
-        confidences = [float(conf.get(iid, 0.0)) for iid in overlap]
-        correctness = [1 if set(preds[iid] or []) == set(gold[iid]) else 0 for iid in overlap]
+        # Only predictions that carry a confidence. A missing one read as 0.0,
+        # so every correct answer without a score counted as a 0%-confident hit
+        # and inflated the ECE.
+        scored = [iid for iid in overlap if conf.get(iid) is not None]
+        confidences = [float(conf[iid]) for iid in scored]
+        correctness = [1 if set(preds[iid] or []) == set(gold[iid]) else 0 for iid in scored]
 
         per_model[model] = {
             "precision_macro": round(float(p), 6),
@@ -367,11 +395,24 @@ def span_prf(predicted: List[dict], gold: List[dict],
     return out
 
 
-def _prf(tp: int, fp: int, fn: int) -> Dict[str, float]:
-    precision = tp / (tp + fp) if (tp + fp) else 0.0
-    recall = tp / (tp + fn) if (tp + fn) else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
-    return {"precision": round(precision, 6), "recall": round(recall, 6), "f1": round(f1, 6)}
+def _prf(tp: int, fp: int, fn: int) -> Dict[str, Optional[float]]:
+    """Precision, recall and F1, each None where it is undefined.
+
+    No predicted spans leaves precision undefined, no gold spans leaves recall
+    undefined; with neither, nothing was there to find and nothing was found,
+    which is not a score of 0 (the old reading: total failure). F1 is 0 when
+    only one side is empty, since then every span on the other side is missed.
+    """
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+    if precision is None and recall is None:
+        f1 = None
+    elif precision is None or recall is None:
+        f1 = 0.0
+    else:
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    r6 = lambda v: None if v is None else round(v, 6)
+    return {"precision": r6(precision), "recall": r6(recall), "f1": r6(f1)}
 
 
 def _pairwise_span_f1(a: Dict[str, List[dict]], b: Dict[str, List[dict]], iou_threshold: float):
@@ -499,7 +540,9 @@ def compute_span_report(
             tp += t; fp += f_p; fn += f_n
             all_ious.extend(ious)
             for p, ok in zip(pred, matched):
-                confidences.append(float(p.get("confidence", 0.0)))
+                if p.get("confidence") is None:
+                    continue    # unscored, not 0.0
+                confidences.append(float(p["confidence"]))
                 correctness.append(1 if ok else 0)
         block = _prf(tp, fp, fn)
         block["mean_iou"] = round(sum(all_ious) / len(all_ious), 6) if all_ious else 0.0
@@ -603,8 +646,10 @@ def compute_schema_report(
 
         # calibration: correct vs gold; confidence = vote fraction
         conf = llm_conf.get(model, {})
-        confidences = [float(conf.get(iid, 0.0)) for iid in overlap]
-        correctness = [1 if str(preds[iid]) == str(gold[iid]) else 0 for iid in overlap]
+        # Only predictions that carry a confidence; a missing one is not 0.0.
+        scored = [iid for iid in overlap if conf.get(iid) is not None]
+        confidences = [float(conf[iid]) for iid in scored]
+        correctness = [1 if str(preds[iid]) == str(gold[iid]) else 0 for iid in scored]
         block["calibration"] = calibration_report(confidences, correctness, n_bins)
         per_model[model] = block
 

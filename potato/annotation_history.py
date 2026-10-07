@@ -169,47 +169,53 @@ class AnnotationHistoryManager:
                                  fast_threshold_ms: int = 500,
                                  burst_threshold_seconds: int = 2) -> Dict[str, Any]:
         """
-        Detect potentially suspicious annotation activity.
+        Flag items an annotator started answering too soon after the last one.
 
-        Args:
-            actions: List of annotation actions to analyze
-            fast_threshold_ms: Threshold for considering an action "too fast"
-            burst_threshold_seconds: Threshold for burst activity detection
+        The signal is the gap between an annotator's last action on one item
+        and their first action on the next: the time they had to read it. A
+        gap under ``fast_threshold_ms`` counts as fast, one under
+        ``burst_threshold_seconds`` as a burst. Several actions on the SAME
+        item (ticking three boxes) are one answer and are not compared with
+        each other.
+
+        This used to call an action fast when ``server_processing_time_ms`` was
+        under 500. That is how long Flask took to handle the request, which is
+        a few milliseconds for everyone, so every annotator scored at least 60
+        ("High").
+
+        With fewer than two items there is no gap to measure, and the score is
+        None ("Not enough data") rather than 0 ("Normal").
 
         Returns:
             Dictionary containing suspicious activity analysis
         """
-        if not actions:
+        ordered = sorted(actions or [], key=lambda a: a.timestamp)
+        item_starts = [
+            (current, (current.timestamp - previous.timestamp).total_seconds())
+            for previous, current in zip(ordered, ordered[1:])
+            if current.instance_id != previous.instance_id
+        ]
+        if not item_starts:
             return {
                 'suspicious_actions': [],
                 'fast_actions_count': 0,
                 'burst_actions_count': 0,
-                'suspicious_score': 0
+                'fast_actions_percentage': None,
+                'burst_actions_percentage': None,
+                'items_measured': 0,
+                'suspicious_score': None,
+                'suspicious_level': _get_suspicious_level(None),
             }
 
-        suspicious_actions = []
-        fast_actions = []
-        burst_actions = []
+        fast_actions = [a for a, gap in item_starts if gap * 1000 < fast_threshold_ms]
+        burst_actions = [a for a, gap in item_starts if gap < burst_threshold_seconds]
+        # Every fast start is also a burst start, so the bursts are the union.
+        suspicious_actions = list(burst_actions) + [
+            a for a in fast_actions if not any(a is b for b in burst_actions)]
 
-        # Detect fast actions
-        for action in actions:
-            if action.server_processing_time_ms < fast_threshold_ms:
-                fast_actions.append(action)
-                suspicious_actions.append(action)
-
-        # Detect burst activity (multiple actions in quick succession)
-        for i in range(1, len(actions)):
-            time_diff = (actions[i].timestamp - actions[i-1].timestamp).total_seconds()
-            if time_diff < burst_threshold_seconds:
-                burst_actions.append(actions[i])
-                if actions[i] not in suspicious_actions:
-                    suspicious_actions.append(actions[i])
-
-        # Calculate suspicious score (0-100)
-        total_actions = len(actions)
-        fast_percentage = (len(fast_actions) / total_actions) * 100 if total_actions > 0 else 0
-        burst_percentage = (len(burst_actions) / total_actions) * 100 if total_actions > 0 else 0
-
+        n = len(item_starts)
+        fast_percentage = len(fast_actions) / n * 100
+        burst_percentage = len(burst_actions) / n * 100
         suspicious_score = min(100, (fast_percentage * 0.6) + (burst_percentage * 0.4))
 
         return {
@@ -218,6 +224,7 @@ class AnnotationHistoryManager:
             'burst_actions_count': len(burst_actions),
             'fast_actions_percentage': fast_percentage,
             'burst_actions_percentage': burst_percentage,
+            'items_measured': n,
             'suspicious_score': suspicious_score,
             'suspicious_level': _get_suspicious_level(suspicious_score)
         }
@@ -271,8 +278,10 @@ class AnnotationHistoryManager:
         return [action for action in actions if action.action_type == action_type]
 
 
-def _get_suspicious_level(score: float) -> str:
+def _get_suspicious_level(score: Optional[float]) -> str:
     """Convert suspicious score to level description."""
+    if score is None:
+        return "Not enough data"
     if score < 10:
         return "Normal"
     elif score < 30:

@@ -12,10 +12,10 @@
     "method": "subscales",
     "subscales": {
       "past_negative": {"items": [4, 5, 16, 22, 27, 33, 34, 36, 50, 54]},
-      "past_positive": {"items": [2, 7, 11, 15, 20, 25, 29, 41, 49]},
+      "past_positive": {"items": [2, 7, 11, 15, 20, 25, 29, 41, 49], "reverse": [25, 41]},
       "present_hedonistic": {"items": [1, 8, 12, 17, 19, 23, 26, 28, 31, 32, 42, 44, 46, 48, 55]},
       "present_fatalistic": {"items": [3, 14, 35, 37, 38, 39, 47, 52, 53]},
-      "future": {"items": [6, 9, 10, 13, 18, 21, 24, 30, 40, 43, 45, 51, 56]}
+      "future": {"items": [6, 9, 10, 13, 18, 21, 24, 30, 40, 43, 45, 51, 56], "reverse": [9, 24, 56]}
     }
   },
   "instructions": "Read each item and, as honestly as you can, answer the question: 'How characteristic or true is this of you?'",

@@ -460,7 +460,13 @@ def compute_agent_rollup(item_state_manager, user_state_manager, config) -> Dict
     Turn entries with no ``agent_id`` snapshot roll up under ``""``
     (surfaced as "(unattributed)" in the UI).
     """
-    scheme_names = {s["name"] for s in get_turn_level_schemes(config)}
+    turn_schemes = get_turn_level_schemes(config)
+    scheme_names = {s["name"] for s in turn_schemes}
+    # A number or slider widget stores el.value, which is a string ("3"), so
+    # these values never reached the mean: it read null and "3" turned up as
+    # a category in value_counts.
+    numeric_schemes = {s["name"] for s in turn_schemes
+                       if s.get("annotation_type") in ("number", "slider")}
     result: Dict[str, Any] = {"schemas": {}, "n_annotators": 0}
     if not scheme_names:
         return result
@@ -492,6 +498,11 @@ def compute_agent_rollup(item_state_manager, user_state_manager, config) -> Dict
                     if values is None and "value" in row:
                         values = [row["value"]]
                     for v in values or []:
+                        if schema in numeric_schemes and isinstance(v, str):
+                            try:
+                                v = float(v)
+                            except ValueError:
+                                pass
                         if isinstance(v, (int, float)) and not isinstance(v, bool):
                             stats["_numeric"].append(v)
                         else:

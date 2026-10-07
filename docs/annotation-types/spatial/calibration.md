@@ -75,7 +75,12 @@ For any other rig — nuScenes, a custom multi-camera setup, an RGB-D sensor:
 | `width` / `height` | Optional; the browser reads them from the image itself |
 
 nuScenes' `calibrated_sensor` spelling — `camera_intrinsic`, `rotation` and
-`translation` at the top level — is accepted as written.
+`translation` at the top level — is accepted as written, with nuScenes'
+meaning: the quaternion is `[w, x, y, z]` and the pair is the camera's pose
+in the ego frame, which Potato inverts. Points are then expected in the ego
+frame; a cloud in the lidar frame needs the lidar's own `calibrated_sensor`
+applied first. Inside `extrinsics`, the quaternion stays `[x, y, z, w]` and the
+transform stays sensor-to-camera.
 
 **Extrinsics map the sensor frame to the camera frame**, where +Z is forward,
 +X right and +Y down (the OpenCV convention). The sensor frame is whatever

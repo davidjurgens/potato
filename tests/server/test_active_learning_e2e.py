@@ -206,10 +206,12 @@ class TestActiveLearningEndToEnd:
             "item2": {"sentiment": "neutral"},
             "item3": {"sentiment": "negative"},
         }
+        # item3 is positive 2-1. A three-way split has no majority and would
+        # be left out of training.
         user3_annotations = {
             "item1": {"sentiment": "positive"},
             "item2": {"sentiment": "positive"},
-            "item3": {"sentiment": "neutral"},
+            "item3": {"sentiment": "positive"},
         }
 
         with patch('potato.active_learning_manager.get_item_state_manager') as mock_item_manager, \

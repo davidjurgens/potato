@@ -38,6 +38,11 @@ def normalize_instance_id(instance_id: Any) -> str:
     return PHASE_PAGE_SENTINEL if text in _MISSING_INSTANCE_IDS else text
 
 
+#: A gap between two events longer than this counts as this long: the
+#: annotator stopped working. Five minutes leaves room to read a long item.
+IDLE_GAP_CAP_SECONDS = 300.0
+
+
 @dataclass
 class InteractionEvent:
     """
@@ -412,6 +417,11 @@ class BehavioralData:
         bd.annotation_telemetry = data.get('annotation_telemetry', {})
         bd.room_provenance = data.get('room_provenance', {}) or {}
 
+        # States saved before total_time_ms was computed carry 0 beside a
+        # full event log; derive it so old studies get real times too.
+        if not bd.total_time_ms and bd.interactions:
+            bd.total_time_ms = bd.active_time_ms()
+
         return bd
 
     def add_interaction(self, event_type: str, target: str,
@@ -541,6 +551,42 @@ class BehavioralData:
         """Mark session as ended and calculate total time."""
         self.session_end = time.time()
         self.total_time_ms = int((self.session_end - self.session_start) * 1000)
+
+    def active_time_ms(self, idle_cap_seconds: float = IDLE_GAP_CAP_SECONDS) -> int:
+        """Time spent on this instance, from its own interaction events.
+
+        The sum of the gaps between consecutive events, each capped at
+        ``idle_cap_seconds`` so a tab left open over lunch does not count as
+        work. A gap that ends in an ``instance_load`` is the time AWAY from the
+        instance between two visits, and counts nothing. Client clocks are used
+        when every event has one, since the gaps are what matter and the client
+        stamps them where they happen.
+
+        Nothing called ``finalize_session``, so ``total_time_ms`` stayed 0 for
+        every instance: the dashboard showed 0h worked, 0 annotations per hour,
+        and every annotator as answering faster than the "fast" threshold.
+        """
+        events = [e for e in self.interactions if getattr(e, "timestamp", None) is not None]
+        if len(events) < 2:
+            return 0
+        use_client = all(getattr(e, "client_timestamp", None) for e in events)
+
+        def when(e):
+            return e.client_timestamp / 1000.0 if use_client else e.timestamp
+
+        events.sort(key=when)
+        total = 0.0
+        for previous, current in zip(events, events[1:]):
+            if current.event_type == "navigation" and current.target == "instance_load":
+                continue
+            total += min(max(when(current) - when(previous), 0.0), idle_cap_seconds)
+        return int(total * 1000)
+
+    def refresh_total_time(self) -> None:
+        """Recompute ``total_time_ms`` and ``session_end`` from the events."""
+        self.total_time_ms = self.active_time_ms()
+        if self.interactions:
+            self.session_end = max(e.timestamp for e in self.interactions)
 
 
 def create_behavioral_data(instance_id: str) -> BehavioralData:

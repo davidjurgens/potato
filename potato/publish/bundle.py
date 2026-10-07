@@ -21,8 +21,6 @@ from typing import Any, Dict, List, Optional
 from potato.export.origin_columns import origin_in_use
 from potato.export.tabular_exporter import _flatten_annotation
 
-_RESERVED_COLS = {"instance_id", "user_id", "n_annotators"}
-
 
 @dataclass
 class PublishBundle:
@@ -102,35 +100,80 @@ def _looks_numeric(values: List[Any]) -> bool:
     return bool(values)
 
 
-def build_gold_rows(annotation_rows: List[dict],
-                    aggregation: str = "majority") -> List[dict]:
-    """Aggregate per-annotator rows into one resolved row per instance.
+def build_gold_rows(annotations: List[dict],
+                    aggregation: str = "majority",
+                    schemas: Optional[List[dict]] = None,
+                    instance_ids: Optional[set] = None) -> List[dict]:
+    """One resolved row per instance, with a column per schema.
 
-    Categorical columns resolve by majority vote; with ``aggregation="mean"``,
-    columns whose values are all numeric resolve to their mean instead. Each row
-    carries ``n_annotators`` (distinct annotators who labeled the instance) so
-    consumers can weight or filter by coverage.
+    Each annotator's stored labels are first collapsed to their answer (the
+    same collapse the exporter and display logic use), and the vote is taken
+    over annotators:
+
+    - a single choice is the answer most annotators gave. A tie has no
+      majority: the column is None and ``gold_notes`` says so.
+    - a multiselect is the list of labels ticked by more than half of the
+      annotators who answered it.
+    - with ``aggregation="mean"``, an all-numeric schema is the mean.
+
+    This used to vote inside each flattened ``schema.label`` column, where
+    every value present was that column's own label. A radio voted pos, pos,
+    neg came out with both ``sentiment.positive`` and ``sentiment.negative``
+    set, a multiselect kept every label anyone ticked, and a tie went to
+    whichever annotator was read first.
+
+    ``instance_ids`` limits the rows to instances that survived the coverage
+    filter. ``n_annotators`` counts the annotators who answered anything.
     """
-    by_instance: Dict[str, List[dict]] = defaultdict(list)
-    for row in annotation_rows:
-        by_instance[row.get("instance_id", "")].append(row)
+    from potato.server_utils.answer_collapse import (MULTI_SELECT_TYPES,
+                                                     collapse_entries)
+
+    types = {s.get("name"): s.get("annotation_type")
+             for s in (schemas or []) if isinstance(s, dict)}
+    # instance -> user -> schema -> answer
+    answers: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+    for ann in annotations or []:
+        iid = ann.get("instance_id", "")
+        if instance_ids is not None and iid not in instance_ids:
+            continue
+        user = ann.get("user_id", "")
+        for schema, labels in (ann.get("labels") or {}).items():
+            if isinstance(labels, dict):
+                answer, _w, _m = collapse_entries(
+                    list(labels.items()), schema=schema,
+                    annotation_type=types.get(schema), changes=ann.get("_changes"))
+            else:
+                answer = labels
+            if answer is None or answer == "":
+                continue
+            answers[iid].setdefault(user, {})[schema] = answer
 
     gold = []
-    for instance_id, rows in by_instance.items():
-        annotators = {r.get("user_id", "") for r in rows}
-        out = {"instance_id": instance_id, "n_annotators": len(annotators)}
-        columns = set()
-        for r in rows:
-            columns.update(k for k in r if k not in _RESERVED_COLS)
-        for col in sorted(columns):
-            values = [r[col] for r in rows
-                      if col in r and r[col] not in (None, "")]
-            if not values:
+    for iid, by_user in answers.items():
+        out: Dict[str, Any] = {"instance_id": iid, "n_annotators": len(by_user)}
+        notes: List[str] = []
+        schema_names = sorted({sc for per in by_user.values() for sc in per})
+        for schema in schema_names:
+            given = [per[schema] for per in by_user.values() if schema in per]
+            if types.get(schema) in MULTI_SELECT_TYPES or any(isinstance(g, list) for g in given):
+                ticks = Counter(label for g in given
+                                for label in set(g if isinstance(g, list) else [g]))
+                out[schema] = sorted(label for label, n in ticks.items()
+                                     if n * 2 > len(given))
                 continue
-            if aggregation == "mean" and _looks_numeric(values):
-                out[col] = sum(float(v) for v in values) / len(values)
-            else:
-                out[col] = Counter(values).most_common(1)[0][0]
+            if aggregation == "mean" and _looks_numeric(given):
+                out[schema] = sum(float(v) for v in given) / len(given)
+                continue
+            ranked = Counter(str(g) for g in given).most_common()
+            if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+                tied = sorted(v for v, n in ranked if n == ranked[0][1])
+                out[schema] = None
+                notes.append(f"{schema}: tie between {', '.join(tied)}")
+                continue
+            winner = ranked[0][0]
+            out[schema] = next(g for g in given if str(g) == winner)
+        if notes:
+            out["gold_notes"] = notes
         gold.append(out)
     gold.sort(key=lambda r: str(r["instance_id"]))
     return gold

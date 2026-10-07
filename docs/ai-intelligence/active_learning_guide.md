@@ -147,9 +147,13 @@ active_learning:
 
 | Strategy | Description | Use When |
 |----------|-------------|----------|
-| `majority_vote` | Most common label wins | Multiple annotators, clear disagreements |
+| `majority_vote` | Most common label wins. A tie has no majority and the item is left out of training | Multiple annotators, clear disagreements |
 | `consensus` | All annotators must agree | High-quality requirements |
 | `random` | Randomly select one annotation | Quick testing, simple workflows |
+
+Each annotator contributes one answer per item. A radio's "Other" text is not a
+class. A multiselect answer is one class made of its ticked labels together
+(`sports+tech`), since the classifier predicts a single label.
 
 ## LLM Integration
 
@@ -531,7 +535,7 @@ active_learning:
 
 ## Cold-Start with LLM Selection
 
-Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized.
+Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized. The LLM chooses among the schema's own labels, with the schema's description as its instructions; a schema with no labels skips the LLM cold start.
 
 ```yaml
 active_learning:

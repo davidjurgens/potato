@@ -65,7 +65,9 @@ Create a JSON file with your attention check items:
 **Fields:**
 - `id` (required): Unique identifier for the attention check
 - `text` (required): The text to display to annotators
-- `expected_answer` (required): Dictionary mapping schema names to expected values
+- `expected_answer` (required): Dictionary mapping schema names to expected values.
+  For a multiselect, a single label means "this box and no other"; a list means
+  exactly those boxes, in any order. An annotator who ticks extra boxes fails.
 
 ### When a check is injected and what happens next
 

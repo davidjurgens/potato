@@ -1038,21 +1038,37 @@ class ActiveLearningManager:
         # Collect annotations per instance
         instance_annotations = defaultdict(list)
 
+        from potato.server_utils.annotation_values import group_by_schema
+        from potato.server_utils.answer_collapse import collapse_entries
+        schema_type = self.config.schema_types.get(schema_name) or None
+
         for user_state in user_states:
             user_annotations = user_state.get_all_annotations()
             self.logger.debug(f"User {user_state.user_id} has {len(user_annotations)} annotations")
             for instance_id, annotations in user_annotations.items():
-                # Check if the schema exists in the labels section
-                if 'labels' in annotations:
-                    labels_dict = annotations['labels']
-                    # Handle Label objects as keys
-                    for label_obj, value in labels_dict.items():
-                        if hasattr(label_obj, 'get_schema') and label_obj.get_schema() == schema_name:
-                            instance_annotations[instance_id].append({
-                                "label": label_obj.get_name(),
-                                "value": value,
-                                "user": user_state.user_id
-                            })
+                # One vote per annotator. Each stored Label used to be a vote,
+                # so a radio's free_response text resolved as the class
+                # "free_response", and one annotator who ticked two boxes met
+                # min_annotations_per_instance=2 alone.
+                # Both stores: {Label: value} in memory, {schema: {label:
+                # value}} from MySQL.
+                by_label = group_by_schema(annotations.get('labels') or {}).get(schema_name)
+                entries = list(by_label.items()) if isinstance(by_label, dict) else []
+                if not entries:
+                    continue
+                answer, _winner, _method = collapse_entries(
+                    entries, schema=schema_name, annotation_type=schema_type)
+                if answer is None:
+                    continue
+                # The classifier is single-label, so a multiselect answer with
+                # several ticks is one class: its label set (label powerset).
+                label = ("+".join(sorted(str(a) for a in answer))
+                         if isinstance(answer, list) else str(answer))
+                instance_annotations[instance_id].append({
+                    "label": label,
+                    "value": answer,
+                    "user": user_state.user_id
+                })
 
         self.logger.debug(f"Collected annotations for {len(instance_annotations)} instances")
 
@@ -1089,14 +1105,17 @@ class ActiveLearningManager:
         else:
             return self._majority_vote(annotations)  # Default fallback
 
-    def _majority_vote(self, annotations: List[Dict]) -> str:
+    def _majority_vote(self, annotations: List[Dict]) -> Optional[str]:
         """Resolve annotations using majority vote with random tie-breaking."""
         label_counts = Counter(ann["label"] for ann in annotations)
         max_count = max(label_counts.values())
-        # Find all labels with the maximum count (handles ties)
         tied_labels = [label for label, count in label_counts.items() if count == max_count]
-        # Break ties randomly
-        return random.choice(tied_labels)
+        # A tie has no majority. Picking one at random put a different label
+        # on the same item on every retrain, and the item is not evidence for
+        # either class.
+        if len(tied_labels) > 1:
+            return None
+        return tied_labels[0]
 
     def _random_selection(self, annotations: List[Dict]) -> str:
         """Resolve annotations by random selection."""
@@ -1496,13 +1515,31 @@ class ActiveLearningManager:
             if not instances:
                 return
 
-            # Get LLM predictions
+            # Get LLM predictions over the schema's own labels. Every study
+            # used to be asked positive/negative/neutral, so on any other
+            # label set the "moderate confidence" ranking measured the wrong
+            # question.
             schema_name = self.schema_cycler.get_current_schema() if self.schema_cycler else None
+            if not schema_name and self.config.schema_names:
+                schema_name = self.config.schema_names[0]
+            scheme = next((sc for sc in ((self.config.project_config or {})
+                                         .get("annotation_schemes") or [])
+                           if isinstance(sc, dict) and sc.get("name") == schema_name), {})
+            label_options = []
+            for label in scheme.get("labels") or []:
+                name = label.get("name") if isinstance(label, dict) else label
+                if name not in (None, ""):
+                    label_options.append(str(name))
+            if not label_options:
+                self.logger.info("LLM cold start skipped: schema %r has no labels to "
+                                 "predict", schema_name)
+                return
             predictions = llm.predict_instances(
                 instances=instances,
-                annotation_instructions="Rate your confidence in labeling this text.",
+                annotation_instructions=(scheme.get("description")
+                                         or "Rate your confidence in labeling this text."),
                 schema_name=schema_name or "default",
-                label_options=["positive", "negative", "neutral"],
+                label_options=label_options,
             )
 
             # Select instances with moderate confidence (decision boundary)

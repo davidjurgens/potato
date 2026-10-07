@@ -333,19 +333,25 @@ class EmbeddingVisualizationManager:
 
             # Use first categorical schema
             target_schema = None
+            target_type = None
             for scheme in annotation_schemes:
                 if scheme.get("annotation_type") in ["radio", "select", "multiselect"]:
                     target_schema = scheme.get("name")
+                    target_type = scheme.get("annotation_type")
                     break
 
             if not target_schema:
                 return result
 
-            # Count labels per instance
+            from potato.server_utils.annotation_values import group_by_schema
+            from potato.server_utils.answer_collapse import collapse_entries
             from potato.flask_server import get_users
             users = get_users()
 
             for instance_id in instance_ids:
+                # One answer per annotator. Every stored Label used to be a
+                # vote, so a radio's free_response text coloured the point
+                # "free_response" and each multiselect tick was its own vote.
                 labels = []
                 for username in users:
                     user_state = usm.get_user_state(username)
@@ -356,26 +362,24 @@ class EmbeddingVisualizationManager:
                     if instance_id not in annotations:
                         continue
 
-                    instance_annot = annotations[instance_id]
-                    label_annotations = instance_annot.get("labels", {})
-
-                    for label, value in label_annotations.items():
-                        label_schema = None
-                        label_name = None
-
-                        if hasattr(label, 'schema'):
-                            label_schema = label.schema
-                            label_name = getattr(label, 'name', None)
-                        elif hasattr(label, 'get_schema'):
-                            label_schema = label.get_schema()
-                            label_name = label.get_name() if hasattr(label, 'get_name') else None
-
-                        if label_schema == target_schema and label_name:
-                            labels.append(label_name)
+                    by_label = group_by_schema(
+                        annotations[instance_id].get("labels") or {}).get(target_schema)
+                    entries = list(by_label.items()) if isinstance(by_label, dict) else []
+                    if not entries:
+                        continue
+                    answer, _w, _m = collapse_entries(
+                        entries, schema=target_schema, annotation_type=target_type)
+                    if answer is None:
+                        continue
+                    labels.append("+".join(sorted(map(str, answer)))
+                                  if isinstance(answer, list) else str(answer))
 
                 if labels:
-                    counter = Counter(labels)
-                    result[instance_id] = counter.most_common(1)[0][0]
+                    counts = Counter(labels).most_common()
+                    # A tie has no majority; leave the point uncoloured rather
+                    # than colour it by whichever annotator was read first.
+                    if len(counts) == 1 or counts[0][1] > counts[1][1]:
+                        result[instance_id] = counts[0][0]
 
         except Exception as e:
             self.logger.error(f"Error getting majority labels: {e}")

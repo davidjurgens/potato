@@ -61,8 +61,8 @@ Inspired by ALCHEmist (NeurIPS 2024), this system extracts reusable labeling fun
 ### Extraction, voting, acceptance
 
 1. **Extraction**: From predictions where the LLM reports high confidence (`min_confidence`), the system asks the LLM to identify generalizable patterns (keywords, conditions). Falls back to keyword frequency analysis if the LLM is unavailable.
-2. **Application**: For each new instance, all enabled labeling functions vote on a label using confidence-weighted majority voting.
-3. **Acceptance**: If vote agreement exceeds `vote_threshold`, the label is accepted without calling the LLM. Otherwise the instance is passed through to the normal LLM labeling pipeline.
+2. **Application**: For each new instance, all enabled labeling functions vote on a label using confidence-weighted majority voting. A keyword matches whole words only, so "no" does not match "know".
+3. **Acceptance**: If vote agreement exceeds `vote_threshold`, the label is accepted without calling the LLM. A tie between labels is never accepted. Otherwise the instance is passed through to the normal LLM labeling pipeline.
 
 ### Configuration
 
@@ -438,7 +438,7 @@ solo_mode:
 | `low_confidence_weight` | `0.4` | Prioritize instances where the LLM is uncertain |
 | `diversity_weight` | `0.3` | Prioritize instances from different embedding clusters |
 | `random_weight` | `0.2` | Random sample for calibration |
-| `disagreement_weight` | `0.1` | Prioritize instances with prior human-LLM disagreement |
+| `disagreement_weight` | `0.1` | Show an item where you and the LLM disagreed again for re-review, once for each prompt version that labelled it. An item counts as a disagreement while any of its schemas disagrees |
 | `edge_case_rule_weight` | `0.0` | Prioritize instances matching discovered edge case rules |
 | `cartography_weight` | `0.0` | Prioritize instances based on dataset cartography (training dynamics) |
 

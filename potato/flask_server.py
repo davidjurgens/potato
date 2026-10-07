@@ -551,12 +551,15 @@ def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> l
             - schema: Name of the annotation schema to filter by
             - value: Value(s) to filter for (string or list)
             - invert: If True, return items that DON'T match (optional)
+            - rule: majority (default), any, or all -- how several
+              annotators decide
         id_key: Key in items containing the instance ID
 
     Returns:
         Filtered list of items
     """
-    from potato.filter_by_annotation import load_annotations_from_dir
+    from potato.filter_by_annotation import (filter_loaded_items,
+                                             load_annotations_from_dir)
 
     annotation_dir = filter_config.get("annotation_dir")
     schema_name = filter_config.get("schema")
@@ -583,28 +586,9 @@ def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> l
     annotations = load_annotations_from_dir(annotation_dir)
     logger.debug(f"Loaded prior annotations for {len(annotations)} instances")
 
-    # Filter items
-    filtered = []
-    for item in items:
-        instance_id = str(item.get(id_key, ""))
-        if not instance_id:
-            continue
-
-        # Check if this instance has the annotation we're looking for
-        instance_annotations = annotations.get(instance_id, {})
-        schema_annotation = instance_annotations.get(schema_name, {})
-
-        # Get the annotation value
-        anno_value = schema_annotation.get("name") or schema_annotation.get("value")
-        matches = anno_value in filter_values
-
-        if invert:
-            matches = not matches
-
-        if matches:
-            filtered.append(item)
-
-    return filtered
+    return filter_loaded_items(items, annotations, schema_name, filter_values,
+                               id_key=id_key, invert=invert,
+                               rule=filter_config.get("rule", "majority"))
 
 
 def load_instance_data(config: dict):
@@ -3385,31 +3369,28 @@ def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) 
 def _flat_annotations_for_instance(user_state, instance_id: str) -> dict:
     """`{schema: value}` for one instance, in the shape display_logic compares.
 
-    Mirrors `flatten_phase_annotations`, which does the same job for phase
-    pages; annotation pages key by `Label` objects rather than by page, so the
-    flattening differs even though the comparison afterwards is identical.
+    Goes through the same collapse as `flatten_phase_annotations` (phase pages)
+    and the browser. This used to be its own loop that kept the label NAME for
+    every entry, so a slider stored as `{Label("rating", "slider"): "7"}`
+    flattened to `{"rating": "slider"}`, a `rating gt 5` follow-up was always
+    hidden, and the server never required it. It also dropped an answer of 0.
     """
-    flat: dict = {}
+    from potato.server_utils.answer_collapse import collapse_answers
+
+    entries: dict = {}
     for label_key, value in (
         user_state.instance_id_to_label_to_value.get(instance_id, {}) or {}
     ).items():
         if not hasattr(label_key, "get_schema"):
             continue
-        schema = label_key.get_schema()
         name = label_key.get_name() if hasattr(label_key, "get_name") else None
-        if not value:
-            continue
-        existing = flat.get(schema)
-        # A multiselect contributes one entry per ticked label, so collect them
-        # into a list; single-choice schemes keep the label name, which is what
-        # `equals` is written against in a config.
-        if existing is None:
-            flat[schema] = name if name is not None else value
-        elif isinstance(existing, list):
-            existing.append(name)
-        else:
-            flat[schema] = [existing, name]
-    return flat
+        entries.setdefault(label_key.get_schema(), []).append((name, value))
+    schema_types = {
+        s.get("name"): s.get("annotation_type")
+        for s in (config.get("annotation_schemes", []) or [])
+        if isinstance(s, dict) and s.get("name")
+    }
+    return collapse_answers(entries, schema_types)
 
 
 def _hidden_scheme_names(user_state, instance_id: str) -> set:

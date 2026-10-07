@@ -154,16 +154,16 @@ AI assistance metrics, shown when there are any:
 - **Total Requests**: Number of times annotators requested AI help
 - **Accepted**: Number of AI suggestions accepted
 - **Rejected**: Number of AI suggestions rejected
-- **Accept Rate**: Percentage of suggestions accepted
+- **Accept Rate**: Share of the suggestions the annotator decided on that they accepted. A suggestion with no decision yet counts as pending, not rejected
 - **Avg Decision Time**: Average time from seeing suggestion to making a decision
 
 **Quality Indicators Section:**
 
 Metrics that point at possible quality problems:
 - **High Suspicion Users**: Count of users with suspicious behavior patterns
-- **Fast Annotation Rate**: Percentage of annotations completed in under 2 seconds
-- **Low Interaction Rate**: Percentage of instances with minimal interaction
-- **No Change Rate**: Percentage of instances where no annotation changes were made
+- **Fast Annotation Rate**: Share of annotators with at least one instance finished in under 5 seconds
+- **Low Interaction Rate**: Share of annotators with at least one instance of fewer than 3 interactions
+- **No Change Rate**: Share of annotators with at least one instance where no annotation changes were made
 
 **Interaction Types Breakdown:**
 
@@ -183,7 +183,13 @@ How each annotation change was made:
 Detailed behavioral metrics for each annotator:
 - **User ID**: Annotator identifier
 - **Instances**: Number of instances with behavioral data
-- **Avg Time (s)**: Average annotation time in seconds
+- **Avg Time (s)**: Average time on an instance, in seconds. "n/a" when no time was measured
+
+Time on an instance is the sum of the gaps between its interaction events. A gap
+longer than five minutes counts as five minutes, and the time between leaving an
+instance and coming back to it does not count. An instance with fewer than two
+events has no measured time and is left out of the averages rather than counted
+as zero.
 - **Interactions**: Total interaction count
 - **Changes**: Number of annotation modifications
 - **AI Requests**: Number of AI assistance requests
@@ -195,7 +201,7 @@ Users are sorted by suspicion score to help identify potentially problematic ann
 **Quality Detection:**
 
 The suspicion score is calculated based on:
-1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort
+1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort. Measured over the instances with a recorded time; with none it drops out and the other weights are rescaled
 2. **Low Interaction Rate**: Very few interactions may indicate random clicking
 3. **No Change Rate**: Never changing initial selections may indicate lack of careful consideration
 
@@ -261,6 +267,11 @@ For each worker, displays:
 - Completion percentage
 - Suspicious activity level
 - Session ID (Prolific) or Assignment ID (MTurk)
+
+A worker's platform is the one they arrived through, recorded when they first
+log in. Workers who registered before that was recorded are classified by the
+Prolific or MTurk IDs they carry. **Completed** counts workers who reached the
+end of the study; **in progress** counts everyone between consent and the end.
 
 This tab is particularly useful for:
 - Monitoring crowdsourcing campaign progress
@@ -398,14 +409,15 @@ Returns the behavioral analytics for every annotator.
     "total_requests": 150,
     "total_accepts": 105,
     "total_rejects": 45,
-    "accept_rate": 70.0,
+    "total_pending": 0,
+    "accept_rate": 0.7,
     "avg_decision_time_ms": 3500
   },
   "quality_summary": {
     "high_suspicion_users": 2,
-    "fast_annotation_rate": 5.5,
-    "low_interaction_rate": 3.2,
-    "no_change_rate": 8.1
+    "fast_annotation_rate": 0.055,
+    "low_interaction_rate": 0.032,
+    "no_change_rate": 0.081
   },
   "interaction_types": {
     "click": 8000,

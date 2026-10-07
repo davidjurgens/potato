@@ -86,8 +86,8 @@ python -m potato.export --config config.yaml --format coco --output ./export/
 python -m potato.export --config config.yaml --format yolo --output ./export/
 
 # Export with options
-python -m potato.export --config config.yaml --format coco --output ./export/ \
-    --option split_ratio=0.8 --option include_unlabeled=false
+python -m potato.export --config config.yaml --format conll_2003 --output ./export/ \
+    --option schema_name=entities --option annotator=annotator_1
 ```
 
 ### Command Options
@@ -218,19 +218,20 @@ YOLO format for object detection, with one text file per image.
 **Output Structure:**
 ```
 export/
-├── images/
-│   ├── train/
-│   │   └── image_001.jpg
-│   └── val/
-│       └── image_002.jpg
 ├── labels/
-│   ├── train/
-│   │   └── image_001.txt
-│   └── val/
-│       └── image_002.txt
+│   ├── image_001.txt
+│   └── image_002.txt
 ├── data.yaml
 └── classes.txt
 ```
+
+A label file is named after its image, which is how YOLO pairs them. Two
+different images with the same file name (`set1/img.jpg` and `set2/img.jpg`)
+keep their folders: `labels/set1/img.txt` and `labels/set2/img.txt`.
+
+When more than one annotator drew boxes, each gets a directory of their own
+(`labels/<annotator>/image_001.txt`) and the export warns. A YOLO label file
+is one set of boxes, so choose or merge the annotators before training.
 
 **Label File Format (image_001.txt):**
 ```
@@ -239,22 +240,24 @@ export/
 1 0.3 0.4 0.15 0.20
 ```
 
+A box that reaches past the edge of the image is clipped to it. One that lies
+entirely outside is skipped with a warning.
+
 **data.yaml:**
 ```yaml
-train: ./images/train
-val: ./images/val
+train: images/train
+val: images/val
 nc: 3
 names: ['person', 'vehicle', 'object']
 ```
 
+The `train` and `val` paths are placeholders: the exporter writes labels, not
+images, and does not split them.
+
 **Usage:**
 ```bash
-python -m potato.export -c config.yaml -f yolo -o ./yolo_export/ \
-    --option split_ratio=0.8
+python -m potato.export -c config.yaml -f yolo -o ./yolo_export/
 ```
-
-**Options:**
-- `split_ratio`: Train/val split ratio (default: 0.8)
 
 ### Pascal VOC (pascal_voc)
 
@@ -265,20 +268,18 @@ Pascal Visual Object Classes format using XML annotation files.
 **Output Structure:**
 ```
 export/
-├── Annotations/
-│   └── image_001.xml
-├── ImageSets/
-│   └── Main/
-│       ├── train.txt
-│       └── val.txt
-└── JPEGImages/
-    └── image_001.jpg
+├── image_001.xml
+└── image_002.xml
 ```
+
+Files are named and laid out the same way as YOLO's: by image, with folders
+kept for images that share a name, and one directory per annotator when there
+are several.
 
 **Annotation XML:**
 ```xml
 <annotation>
-    <folder>JPEGImages</folder>
+    <folder>images</folder>
     <filename>image_001.jpg</filename>
     <size>
         <width>1920</width>
@@ -288,14 +289,18 @@ export/
     <object>
         <name>person</name>
         <bndbox>
-            <xmin>100</xmin>
-            <ymin>50</ymin>
+            <xmin>101</xmin>
+            <ymin>51</ymin>
             <xmax>300</xmax>
             <ymax>350</ymax>
         </bndbox>
     </object>
 </annotation>
 ```
+
+Corners are 1-based and inclusive, as VOC defines them: a box covering pixels
+100 to 299 is written `xmin=101`, `xmax=300`. The VOC importer reads them the
+same way, so exporting and re-importing gives back the same box.
 
 **Usage:**
 ```bash
@@ -338,21 +343,21 @@ CoNLL-2003 format for named entity recognition.
 
 **Best for:** NER/span annotations, sequence labeling
 
-**Output Format:**
+**Output Format** (tab-separated: token, POS, chunk, NER tag):
 ```
--DOCSTART- -X- O O
+-DOCSTART- -X- -X- O
 
-Alice B-PERSON
-went O O
-to O O
-Paris B-LOCATION
-. O O
+Alice	_	_	B-PER
+went	_	_	O
+to	_	_	O
+Paris	_	_	B-LOC
+.	_	_	O
 
-Bob B-PERSON
-works O O
-at O O
-Google B-ORGANIZATION
-. O O
+Bob	_	_	B-PER
+works	_	_	O
+at	_	_	O
+Google	_	_	B-ORG
+.	_	_	O
 ```
 
 **Usage:**
@@ -361,29 +366,49 @@ python -m potato.export -c config.yaml -f conll_2003 -o ./conll_export/
 ```
 
 **Options:**
-- `tag_scheme`: BIO, BIOES, or IOB (default: BIO)
+- `schema_name`: the span schema to export (default: the first one)
+- `annotator`: export this annotator's spans to `annotations.conll`
+- `tokenization`: `whitespace` (default) or `word_punct`
+- `pos_column`, `chunk_column`: the text written in those columns (default `_`)
+
+A CoNLL file has one tag column, so it holds one annotator's spans. Without
+`annotator`, a study with several annotators gets one file each,
+`annotations.<annotator>.conll`, and a warning.
+
+Each span is tokenised against the field it was drawn on, rendered the way the
+annotation page renders it, so spans on a `dialogue` or `document` field
+export correctly. A sentence never ends inside an entity, after an initialism
+such as "U.S.", or after a title such as "Dr.". When a span does not line up
+with token boundaries ("Trump" inside "anti-Trump"), the tokens it touches are
+tagged and the export says so in a warning.
 
 ### CoNLL-U (conll_u)
 
-Universal Dependencies CoNLL-U format for linguistic annotation.
+Universal Dependencies CoNLL-U format. Span labels go in the MISC column as
+NER tags.
 
-**Best for:** POS tagging, dependency parsing, morphological analysis
+**Best for:** Combining span labels with a UD toolchain
 
 **Output Format:**
 ```
-# sent_id = 1
+# sent_id = item_001-s1
 # text = Alice went to Paris.
-1	Alice	Alice	PROPN	NNP	Number=Sing	2	nsubj	_	SpaceAfter=No
-2	went	go	VERB	VBD	Tense=Past	0	root	_	_
-3	to	to	ADP	IN	_	4	case	_	_
-4	Paris	Paris	PROPN	NNP	Number=Sing	2	obl	_	SpaceAfter=No
-5	.	.	PUNCT	.	_	2	punct	_	_
+1	Alice	_	_	_	_	_	_	_	NER=B-PER
+2	went	_	_	_	_	_	_	_	_
+3	to	_	_	_	_	_	_	_	_
+4	Paris.	_	_	_	_	_	_	_	NER=B-LOC
 ```
+
+Lemma, POS, features and dependencies are left `_`: Potato records spans, not
+parses. `SpaceAfter=No` is set where the source has no space between tokens.
 
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 ```
+
+Takes the same options as CoNLL-2003, and with several annotators writes
+`annotations.<annotator>.conllu` for each.
 
 ### Segmentation Masks (mask)
 
@@ -865,12 +890,11 @@ export_registry.register(MyExporter())
    - Verify label distributions
 
 3. **Handle missing data:**
-   - Use `--option include_unlabeled=false` to skip unannotated items
    - Check export warnings for skipped items
 
-4. **Use consistent splits:**
-   - Set `split_ratio` for reproducible train/val splits
-   - Or manage splits externally and export separately
+4. **Split externally:**
+   - The exporters do not split data into train and validation sets; split
+     the exported files with your training framework's own tooling
 
 ## Troubleshooting
 

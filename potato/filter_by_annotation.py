@@ -38,17 +38,21 @@ from typing import List, Dict, Any, Optional, Set, Union
 logger = logging.getLogger(__name__)
 
 
-def load_annotations_from_dir(annotation_dir: str) -> Dict[str, Dict[str, Any]]:
+def load_annotations_from_dir(annotation_dir: str) -> Dict[str, Dict[str, Dict[str, Set[str]]]]:
     """
-    Load all annotations from an annotation output directory.
-
-    Args:
-        annotation_dir: Path to annotation_output directory
+    Load every annotator's answers from an annotation output directory.
 
     Returns:
-        Dict mapping instance_id -> {schema_name -> value}
+        ``{instance_id: {schema_name: {user_id: {selected label names}}}}``
+
+    Each annotator is kept. This used to return one ``{"name", "value"}`` per
+    instance and schema, overwritten by each user directory in turn, so with
+    several annotators the result was whoever ``iterdir`` listed last, and a
+    multiselect kept only its last ticked box.
     """
-    annotations = {}
+    from potato.server_utils.answer_collapse import collapse_entries
+
+    annotations: Dict[str, Dict[str, Dict[str, Set[str]]]] = {}
     annotation_path = Path(annotation_dir)
 
     if not annotation_path.exists():
@@ -56,7 +60,7 @@ def load_annotations_from_dir(annotation_dir: str) -> Dict[str, Dict[str, Any]]:
         return annotations
 
     # Look for user_state.json files in user subdirectories
-    for user_dir in annotation_path.iterdir():
+    for user_dir in sorted(annotation_path.iterdir()):
         if not user_dir.is_dir():
             continue
 
@@ -71,29 +75,71 @@ def load_annotations_from_dir(annotation_dir: str) -> Dict[str, Dict[str, Any]]:
             logger.warning(f"Failed to load {state_file}: {e}")
             continue
 
-        # Extract label annotations
+        user_id = str(user_state.get("user_id") or user_dir.name)
         instance_labels = user_state.get("instance_id_to_label_to_value", {})
 
         for instance_id, label_list in instance_labels.items():
-            if instance_id not in annotations:
-                annotations[instance_id] = {}
-
             # label_list is a list of [label_dict, value] pairs
+            by_schema: Dict[str, list] = {}
             for label_entry in label_list:
                 if isinstance(label_entry, (list, tuple)) and len(label_entry) >= 2:
                     label_dict, value = label_entry[0], label_entry[1]
-                    schema = label_dict.get("schema", "")
-                    name = label_dict.get("name", "")
-
-                    # For triage, the "name" is the decision (accept/reject/skip)
-                    # Store both the name and raw value
-                    if schema:
-                        annotations[instance_id][schema] = {
-                            "name": name,
-                            "value": value
-                        }
+                    if isinstance(label_dict, dict) and label_dict.get("schema"):
+                        by_schema.setdefault(label_dict["schema"], []).append(
+                            (label_dict.get("name", ""), value))
+            for schema, entries in by_schema.items():
+                answer, _w, _m = collapse_entries(entries, schema=schema)
+                if answer is None or answer == "":
+                    continue
+                chosen = {str(a) for a in (answer if isinstance(answer, list) else [answer])}
+                annotations.setdefault(str(instance_id), {}).setdefault(schema, {})[user_id] = chosen
 
     return annotations
+
+
+#: How several annotators' answers decide whether an item matches.
+RULES = ("majority", "any", "all")
+
+
+def instance_matches(answers_by_user: Dict[str, Set[str]], filter_values: Set[str],
+                     rule: str = "majority") -> bool:
+    """Whether an item's annotators chose one of ``filter_values``.
+
+    ``majority``: more than half of the annotators who answered did.
+    ``any``: at least one did. ``all``: every one did. An item nobody
+    answered matches nothing.
+    """
+    if rule not in RULES:
+        raise ValueError(f"Unknown rule {rule!r}; use one of {', '.join(RULES)}")
+    votes = [bool(labels & filter_values) for labels in (answers_by_user or {}).values()]
+    if not votes:
+        return False
+    if rule == "any":
+        return any(votes)
+    if rule == "all":
+        return all(votes)
+    return sum(votes) * 2 > len(votes)
+
+
+def filter_loaded_items(items: List[Dict[str, Any]], annotations: dict, schema_name: str,
+                        filter_values: Set[str], id_key: str = "id",
+                        invert: bool = False, rule: str = "majority") -> List[Dict[str, Any]]:
+    """Filter ``items`` against annotations already loaded by
+    :func:`load_annotations_from_dir`. Shared by the CLI and the server's
+    ``filter_by_prior_annotation``."""
+    filtered = []
+    for item in items:
+        instance_id = str(item.get(id_key, ""))
+        if not instance_id:
+            logger.warning(f"Item missing id_key '{id_key}': {item}")
+            continue
+        matches = instance_matches(
+            annotations.get(instance_id, {}).get(schema_name, {}), filter_values, rule)
+        if invert:
+            matches = not matches
+        if matches:
+            filtered.append(item)
+    return filtered
 
 
 def load_data_file(data_file: str) -> List[Dict[str, Any]]:
@@ -143,7 +189,8 @@ def filter_items_by_annotation(
     schema_name: str,
     filter_value: Union[str, List[str]],
     id_key: str = "id",
-    invert: bool = False
+    invert: bool = False,
+    rule: str = "majority",
 ) -> List[Dict[str, Any]]:
     """
     Filter data items based on prior annotation decisions.
@@ -155,6 +202,7 @@ def filter_items_by_annotation(
         filter_value: Value(s) to filter for (e.g., "accept" or ["accept", "maybe"])
         id_key: Key in data items containing the instance ID
         invert: If True, return items that DON'T match the filter
+        rule: How several annotators decide: "majority" (default), "any", "all"
 
     Returns:
         List of filtered data items
@@ -173,29 +221,8 @@ def filter_items_by_annotation(
     data_items = load_data_file(data_file)
     logger.info(f"Loaded {len(data_items)} data items")
 
-    # Filter items
-    filtered = []
-    for item in data_items:
-        instance_id = str(item.get(id_key, ""))
-
-        if not instance_id:
-            logger.warning(f"Item missing id_key '{id_key}': {item}")
-            continue
-
-        # Check if this instance has the annotation we're looking for
-        instance_annotations = annotations.get(instance_id, {})
-        schema_annotation = instance_annotations.get(schema_name, {})
-
-        # Get the annotation value (check both 'name' and 'value' fields)
-        anno_value = schema_annotation.get("name") or schema_annotation.get("value")
-
-        matches = anno_value in filter_values
-
-        if invert:
-            matches = not matches
-
-        if matches:
-            filtered.append(item)
+    filtered = filter_loaded_items(data_items, annotations, schema_name,
+                                   filter_values, id_key, invert, rule)
 
     logger.info(f"Filtered to {len(filtered)} items (schema={schema_name}, value={filter_values})")
     return filtered
@@ -214,11 +241,13 @@ def get_annotation_summary(annotation_dir: str, schema_name: str) -> Dict[str, i
     """
     annotations = load_annotations_from_dir(annotation_dir)
 
-    counts = {}
-    for instance_id, schemas in annotations.items():
-        if schema_name in schemas:
-            value = schemas[schema_name].get("name") or schemas[schema_name].get("value")
-            if value:
+    # One count per annotator answer: an item three people labelled "accept"
+    # counts three times. Counting one value per item, the last annotator's,
+    # reported 2 annotations where there were 5.
+    counts: Dict[str, int] = {}
+    for schemas in annotations.values():
+        for labels in schemas.get(schema_name, {}).values():
+            for value in labels:
                 counts[value] = counts.get(value, 0) + 1
 
     return counts
@@ -289,6 +318,13 @@ Examples:
         help="Invert filter: return items that DON'T match"
     )
     parser.add_argument(
+        "--rule",
+        choices=list(RULES),
+        default="majority",
+        help="With several annotators, match when a majority (default), any, "
+             "or all of them chose a value"
+    )
+    parser.add_argument(
         "--summary",
         action="store_true",
         help="Show annotation value summary instead of filtering"
@@ -324,7 +360,7 @@ Examples:
                 pct = 100 * count / total
                 print(f"  {value}: {count} ({pct:.1f}%)")
             print("-" * 40)
-            print(f"  Total: {total}")
+            print(f"  Total answers: {total}")
         else:
             print(f"No annotations found for schema '{args.schema}'")
         return
@@ -344,7 +380,8 @@ Examples:
         schema_name=args.schema,
         filter_value=args.value,
         id_key=args.id_key,
-        invert=args.invert
+        invert=args.invert,
+        rule=args.rule,
     )
 
     # Write output

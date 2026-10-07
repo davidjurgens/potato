@@ -263,7 +263,11 @@ def crowd_bonus(study_id):
     if not bonuses:
         return jsonify({"error": "bonuses required: [[participant_id, amount], ...]"}), 400
 
-    from potato.crowdsourcing.prolific_api import ProlificAPIError
+    from potato.crowdsourcing.prolific_api import ProlificAPIError, validate_bonus_rows
+    try:
+        validate_bonus_rows(bonuses)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     try:
         setup = client.set_up_bonuses(study_id, bonuses)
         result = {"setup": setup}

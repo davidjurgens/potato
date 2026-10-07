@@ -150,19 +150,22 @@ def _frame_paths(video_path: Path, start: int, count: int,
             "would not line up. Set `video_fps` on the schema, which is also "
             "what the annotator's timeline counts in.")
 
+    # Only the requested window. Extracting from frame 0 with the default
+    # 600-frame cap put everything past 20 s of a 30 fps clip out of reach
+    # ("past the end ... has 600 frames"), and a window crossing frame 600
+    # came back short with nothing saying so.
     try:
-        extract_frames(str(video_path), str(temp_dir), fps=rate)
+        extract_frames(str(video_path), str(temp_dir), fps=rate,
+                       start_frame=start, limit=count)
     except VideoTranscodeError as exc:
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise TrackingUnavailable(str(exc)) from exc
 
-    everything = sorted(temp_dir.glob("*.jpg")) or sorted(temp_dir.glob("*.png"))
-    window = everything[start:start + count]
+    window = sorted(temp_dir.glob("*.jpg")) or sorted(temp_dir.glob("*.png"))
+    window = window[:count]
     if not window:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        raise TrackingUnavailable(
-            f"Frame {start} is past the end of this video, which has "
-            f"{len(everything)} frames.")
+        raise TrackingUnavailable(f"Frame {start} is past the end of this video.")
     return window, temp_dir
 
 

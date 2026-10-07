@@ -89,7 +89,7 @@ def probe_video(source: str) -> Dict[str, object]:
     try:
         output = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height,codec_name,duration",
+             "-show_entries", "stream=width,height,codec_name,duration,r_frame_rate",
              "-of", "default=noprint_wrappers=1", str(source)],
             capture_output=True, text=True, timeout=30, check=False).stdout
     except (subprocess.SubprocessError, OSError):
@@ -109,6 +109,16 @@ def probe_video(source: str) -> Dict[str, object]:
             try:
                 info[key] = float(value)
             except ValueError:
+                pass
+        elif key == "r_frame_rate":
+            # "30000/1001". Read by video tracking, which refused every clip
+            # whose request lacked a client fps because this key was never set.
+            try:
+                num, _, den = value.partition("/")
+                rate = float(num) / float(den or 1)
+                if rate > 0:
+                    info["fps"] = rate
+            except (ValueError, ZeroDivisionError):
                 pass
         else:
             info[key] = value
@@ -193,13 +203,17 @@ def transcode_video(source: str, destination: str, *,
 
 
 def extract_frames(source: str, output_dir: str, *, fps: float = 1.0,
-                   limit: int = 600) -> List[str]:
+                   limit: int = 600, start_frame: int = 0) -> List[str]:
     """
     Fallback when a video cannot be transcoded: annotate stills instead.
 
     Worse than a real player, and honestly so — but a set of frames is
     annotatable and an empty player is not. Capped so a long video cannot fill
     the disk with stills nobody asked for.
+
+    ``start_frame`` skips that many frames (counted at ``fps``) first, so a
+    caller that wants frames 650-680 asks for those rather than for the first
+    600 and finds nothing there.
     """
     if not ffmpeg_available():
         raise VideoTranscodeError(
@@ -209,10 +223,13 @@ def extract_frames(source: str, output_dir: str, *, fps: float = 1.0,
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     pattern = str(out / "frame_%06d.jpg")
+    video_filter = f"fps={fps}"
+    if start_frame > 0:
+        video_filter += f",select=gte(n\\,{int(start_frame)})"
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-i", str(source), "-vf", f"fps={fps}",
-             "-frames:v", str(limit), pattern],
+            ["ffmpeg", "-y", "-i", str(source), "-vf", video_filter,
+             "-fps_mode", "vfr", "-frames:v", str(limit), pattern],
             capture_output=True, text=True, timeout=DEFAULT_TIMEOUT_SECONDS,
             check=False)
     except (subprocess.SubprocessError, OSError) as exc:
