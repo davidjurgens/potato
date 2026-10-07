@@ -152,9 +152,17 @@ eventually read one as the other.
 
 ## Matching, and its one honest weakness
 
-Objects are paired across annotators by the Hungarian algorithm on IoU
-(globally optimal when scipy is present; greedy best-first otherwise), above a
-threshold that defaults to 0.5.
+Objects are paired across annotators above an IoU threshold that defaults to
+0.5. The three measures pair them differently:
+
+- **Localization** matches objects between every two annotators with the Hungarian
+  algorithm on IoU (globally optimal when scipy is present; greedy best-first
+  otherwise).
+- **Detection and classification** group each item's objects into clusters
+  greedily: annotators are taken in sorted order, and each object joins the
+  first cluster whose first object it overlaps above the threshold. The result
+  can differ from an optimal assignment when several annotators draw heavily
+  overlapping objects on one item.
 
 **The threshold is a real modelling choice, not an implementation detail.** Two
 boxes at IoU 0.4 are recorded as a *detection* disagreement — two different
@@ -177,8 +185,12 @@ report["confidence"]   # {"sigma_lower": .., "sigma_upper": .., "n_resamples": .
 Two boxes on one image are not independent observations. Resampling instances
 individually produces intervals far too narrow to be honest.
 
-The chance baseline is sampled, so the seed is fixed by default: an agreement
-number that moves between runs of identical data cannot go in a paper.
+When a corpus has no more between-item pairs than `chance_samples` (2,000 by
+default), the chance baseline uses all of them and nothing is sampled. Larger
+corpora are sampled with a fixed seed, in sorted item and annotator order, so
+identical data gives the same σ, KS and interval after a server restart.
+Within a bootstrap resample, two draws of the same item never form a
+between-item pair.
 
 ## Usage
 

@@ -131,7 +131,7 @@ class BwsScorer:
 
         Converts each BWS annotation to pairwise comparisons:
         - Best item beats every other item (K-1 comparisons)
-        - Every item beats the worst item (K-1 comparisons)
+        - Every item other than best beats the worst item (K-2 comparisons)
         """
         try:
             import choix
@@ -162,10 +162,12 @@ class BwsScorer:
                 if idx is not None and idx != best_idx:
                     comparisons.append((best_idx, idx))
 
-            # All others beat worst
+            # All others beat worst. Best over worst is already counted
+            # above; adding it again weighted it double, so a judgment over
+            # k items gives 2k - 3 pairs, not 2k - 2.
             for iid in all_ids:
                 idx = self.item_id_to_idx.get(iid)
-                if idx is not None and idx != worst_idx:
+                if idx is not None and idx not in (worst_idx, best_idx):
                     comparisons.append((idx, worst_idx))
 
         if not comparisons:

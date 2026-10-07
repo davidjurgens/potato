@@ -56,6 +56,7 @@ from __future__ import annotations
 import logging
 import math
 import random
+from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import geometry
@@ -248,7 +249,10 @@ def _within_item_distances(items: Dict[str, Dict[str, List[dict]]],
     budget = max_pairs
     skipped = 0
 
-    for objects_by_annotator in items.values():
+    # Sorted, so the budget skips the same items whatever order the caller's
+    # dict is in.
+    for item_id in sorted(items):
+        objects_by_annotator = items[item_id]
         annotators = sorted(objects_by_annotator)
         # Cheap upper bound on this item's cost, so a pathological item is
         # skipped WHOLE rather than half-measured -- a partially processed item
@@ -276,21 +280,49 @@ def _within_item_distances(items: Dict[str, Dict[str, List[dict]]],
 
 def _between_item_distances(items: Dict[str, Dict[str, List[dict]]],
                             distance: Callable[[dict, dict], float],
-                            samples: int, rng: random.Random) -> List[float]:
+                            samples: int, rng: random.Random,
+                            source: Optional[Dict[str, str]] = None
+                            ) -> List[float]:
     """
     The chance baseline: distances between objects on DIFFERENT items.
 
     This is what makes the measure chance-corrected. An easy corpus -- one big
     centred object per image -- produces small between-item distances too, so
     the ratio stays honest instead of rewarding the task for being easy.
+
+    Every between-item pair is used when there are no more of them than
+    ``samples``, so small corpora get the exact baseline and no sampling at
+    all. Larger ones are sampled from a pool built in sorted item and
+    annotator order: the callers' dicts are built from sets, whose order
+    follows per-process string hashing, so an unsorted pool drew different
+    pairs from the same seed after every restart.
+
+    ``source`` maps an item key to the item it stands for. The bootstrap keys
+    its draws ``item~i`` so a twice-drawn item survives as two entries, and
+    without the mapping two copies of one item counted as different items,
+    putting same-item distances into the chance baseline.
     """
+    source = source or {}
     pool: List[Tuple[str, dict]] = []
-    for item_id, objects_by_annotator in items.items():
-        for objects in objects_by_annotator.values():
-            for obj in objects:
-                pool.append((item_id, obj))
+    for item_id in sorted(items):
+        objects_by_annotator = items[item_id]
+        origin = source.get(item_id, item_id)
+        for annotator in sorted(objects_by_annotator):
+            for obj in objects_by_annotator[annotator]:
+                pool.append((origin, obj))
     if len(pool) < 2:
         return []
+
+    per_origin: Dict[str, int] = defaultdict(int)
+    for origin, _obj in pool:
+        per_origin[origin] += 1
+    n_between = (len(pool) * (len(pool) - 1)
+                 - sum(c * (c - 1) for c in per_origin.values())) // 2
+    if n_between <= samples:
+        return [distance(left, right)
+                for i, (left_item, left) in enumerate(pool)
+                for right_item, right in pool[i + 1:]
+                if left_item != right_item]
 
     out: List[float] = []
     attempts = 0
@@ -319,17 +351,18 @@ def _ks_statistic(a: Sequence[float], b: Sequence[float]) -> float:
     sorted_a = sorted(a)
     sorted_b = sorted(b)
     i = j = 0
-    cdf_a = cdf_b = 0.0
     best = 0.0
     n, m = len(sorted_a), len(sorted_b)
+    # Step past every copy of the next value on BOTH sides before comparing.
+    # Advancing one side at a time compared CDFs in the middle of a tie, so
+    # two identical samples of one repeated value scored 1.0 instead of 0.
     while i < n and j < m:
-        if sorted_a[i] <= sorted_b[j]:
+        value = min(sorted_a[i], sorted_b[j])
+        while i < n and sorted_a[i] == value:
             i += 1
-            cdf_a = i / n
-        else:
+        while j < m and sorted_b[j] == value:
             j += 1
-            cdf_b = j / m
-        best = max(best, abs(cdf_a - cdf_b))
+        best = max(best, abs(i / n - j / m))
     return best
 
 
@@ -591,12 +624,15 @@ def _bootstrap_intervals(items, metric, threshold, chance_samples,
     for _ in range(resamples):
         drawn = [item_ids[rng.randrange(len(item_ids))]
                  for _ in range(len(item_ids))]
-        # Distinct keys, or a duplicate draw would silently collapse.
+        # Distinct keys, or a duplicate draw would silently collapse; the
+        # source map keeps the copies one item for the chance baseline.
         sample = {f"{item_id}~{i}": items[item_id]
+                  for i, item_id in enumerate(drawn)}
+        source = {f"{item_id}~{i}": item_id
                   for i, item_id in enumerate(drawn)}
         within, _skipped = _within_item_distances(sample, metric, threshold)
         between = _between_item_distances(
-            sample, metric, chance_samples, rng)
+            sample, metric, chance_samples, rng, source)
         value = sigma_agreement(within, between)
         if not math.isnan(value):
             sigmas.append(value)

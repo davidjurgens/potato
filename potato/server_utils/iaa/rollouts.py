@@ -460,7 +460,8 @@ def _within_offsets(items: Dict[str, Dict[str, Dict[str, Any]]],
                     tolerance: float) -> List[float]:
     """Absolute time offsets between matched marks, same item and stream."""
     out: List[float] = []
-    for by_annotator in items.values():
+    for item_id in sorted(items):
+        by_annotator = items[item_id]
         annotators = sorted(by_annotator)
         for stream in sorted(_streams_in(by_annotator)):
             marks = {a: by_stream(by_annotator[a].get("violations")).get(
@@ -486,16 +487,32 @@ def _between_offsets(items: Dict[str, Dict[str, Dict[str, Any]]],
     clips produces small offsets whether or not anyone agrees, so the ratio
     stays honest instead of rewarding the corpus for being short.
     """
+    # Sorted, because the callers' dicts are built from sets whose order
+    # follows per-process string hashing: an unsorted pool drew different
+    # pairs from the same seed after every restart.
     pool: List[Tuple[str, float]] = []
-    for item_id, by_annotator in items.items():
-        for value in by_annotator.values():
-            for mark in value.get("violations") or []:
+    for item_id in sorted(items):
+        by_annotator = items[item_id]
+        for annotator in sorted(by_annotator):
+            for mark in by_annotator[annotator].get("violations") or []:
                 try:
                     pool.append((item_id, float(mark["t"])))
                 except (KeyError, TypeError, ValueError):
                     continue
     if len(pool) < 2:
         return []
+
+    # Small corpora get the exact baseline over every between-item pair.
+    per_item: Dict[str, int] = {}
+    for item_id, _t in pool:
+        per_item[item_id] = per_item.get(item_id, 0) + 1
+    n_between = (len(pool) * (len(pool) - 1)
+                 - sum(c * (c - 1) for c in per_item.values())) // 2
+    if n_between <= samples:
+        return [abs(left - right)
+                for i, (left_item, left) in enumerate(pool)
+                for right_item, right in pool[i + 1:]
+                if left_item != right_item]
 
     out: List[float] = []
     attempts = 0
@@ -535,17 +552,18 @@ def _ks_statistic(a: Sequence[float], b: Sequence[float]) -> float:
         return float("nan")
     sorted_a, sorted_b = sorted(a), sorted(b)
     i = j = 0
-    cdf_a = cdf_b = 0.0
     best = 0.0
     n, m = len(sorted_a), len(sorted_b)
+    # Step past every copy of the next value on BOTH sides before comparing.
+    # Advancing one side at a time compared CDFs in the middle of a tie, so
+    # two identical samples of one repeated value scored 1.0 instead of 0.
     while i < n and j < m:
-        if sorted_a[i] <= sorted_b[j]:
+        value = min(sorted_a[i], sorted_b[j])
+        while i < n and sorted_a[i] == value:
             i += 1
-            cdf_a = i / n
-        else:
+        while j < m and sorted_b[j] == value:
             j += 1
-            cdf_b = j / m
-        best = max(best, abs(cdf_a - cdf_b))
+        best = max(best, abs(i / n - j / m))
     return best
 
 

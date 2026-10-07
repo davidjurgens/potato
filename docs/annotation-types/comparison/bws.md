@@ -156,7 +156,7 @@ score(item) = (best_count - worst_count) / appearance_count
 
 Converts each BWS annotation to pairwise comparisons:
 - Best item beats every other item (K-1 comparisons per annotation)
-- Every item beats the worst item (K-1 comparisons per annotation)
+- Every other item beats the worst item (K-2 more, since best over worst is already counted)
 
 Fits a Bradley-Terry model via `choix.ilsr_pairwise()`. Produces log-scale strength parameters.
 

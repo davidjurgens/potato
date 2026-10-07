@@ -336,10 +336,13 @@ def gamma(
     """
     import random as _random
 
-    users = list(spans_by_user)
+    # Sorted: the seeded shuffle below deals spans back out by position, so an
+    # input order that follows set iteration (per-process string hashing)
+    # gave a different gamma for the same data after a restart.
+    users = sorted(spans_by_user, key=str)
     if len(users) < 2:
         return float("nan")
-    normed = {u: _normalize(spans_by_user[u]) for u in users}
+    normed = {u: sorted(_normalize(spans_by_user[u])) for u in users}
 
     # Empty-unit dissimilarity follows Mathet: a moderate constant ~ 1
     delta_empty = 1.0

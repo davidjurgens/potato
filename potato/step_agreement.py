@@ -60,7 +60,10 @@ def _compute_step_krippendorff_alpha(
 ) -> Dict[str, Any]:
     """Compute Krippendorff's alpha at step level."""
     # Collect step-level annotations across all instances
-    step_data = defaultdict(list)  # step_index -> [(annotator, label)]
+    # step_index -> [(annotator, instance_id, label)]. The instance is the
+    # unit alpha compares across: without it every rating was its own unit,
+    # nothing was pairable, and alpha was None even under perfect agreement.
+    step_data = defaultdict(list)
     per_instance = {}
     all_annotators = set()
 
@@ -72,7 +75,7 @@ def _compute_step_krippendorff_alpha(
             step_annotations = _extract_step_annotations(ann_data, scheme_name)
 
             for step_idx, label in step_annotations.items():
-                step_data[step_idx].append((annotator_id, label))
+                step_data[step_idx].append((annotator_id, instance_id, label))
                 instance_step_data[step_idx][annotator_id] = label
 
         # Compute per-instance agreement
@@ -86,11 +89,12 @@ def _compute_step_krippendorff_alpha(
     per_step = {}
     all_step_pairs = []
     for step_idx in sorted(step_data.keys()):
-        pairs = step_data[step_idx]
-        if len(pairs) >= 2:
-            alpha = _alpha_from_pairs(pairs, level_of_measurement)
-            per_step[step_idx] = alpha
-            all_step_pairs.extend(pairs)
+        rows = step_data[step_idx]
+        if len(rows) >= 2:
+            per_step[step_idx] = _alpha_from_pairs(rows, level_of_measurement)
+            # Overall: each (instance, step) is its own unit.
+            all_step_pairs.extend((annotator, f"{instance_id}#{step_idx}", label)
+                                  for annotator, instance_id, label in rows)
 
     # Compute overall
     overall = None
@@ -192,38 +196,21 @@ def _extract_step_annotations(
 
 
 def _alpha_from_pairs(
-    pairs: List[Tuple[str, str]], level: str
+    rows: List[Tuple[str, Any, str]], level: str
 ) -> Optional[float]:
-    """Compute Krippendorff's alpha from (annotator, label) pairs."""
+    """Krippendorff's alpha from (annotator, unit, label) rows.
+
+    ``level`` was accepted and then dropped, so ordinal and interval steps
+    were scored as nominal.
+    """
+    if len(rows) < 2:
+        return None
     try:
-        import simpledorff
-        import pandas as pd
+        from potato.server_utils.iaa.alpha import krippendorff_alpha
 
-        data = []
-        for i, (annotator, label) in enumerate(pairs):
-            data.append({
-                "annotator": annotator,
-                "item": i,
-                "label": label,
-            })
-
-        if len(data) < 2:
-            return None
-
-        df = pd.DataFrame(data)
-
-        metric_func = {
-            "nominal": "nominal",
-            "ordinal": "ordinal",
-            "interval": "interval",
-        }.get(level, "nominal")
-
-        alpha = simpledorff.calculate_krippendorffs_alpha_for_df(
-            df,
-            experiment_col="item",
-            annotator_col="annotator",
-            class_col="label",
-        )
+        if level not in ("nominal", "ordinal", "interval"):
+            level = "nominal"
+        alpha = krippendorff_alpha(rows, level=level)
         return float(alpha) if not np.isnan(alpha) else None
 
     except Exception as e:
@@ -234,12 +221,13 @@ def _alpha_from_pairs(
 def _alpha_from_step_dict(
     step_dict: Dict[Any, Dict[str, str]], level: str = "nominal"
 ) -> Optional[float]:
-    """Compute alpha from {step_idx: {annotator: label}} dict."""
-    pairs = []
+    """Alpha within one instance, from {step_idx: {annotator: label}}; each
+    step is a unit."""
+    rows = []
     for step_idx, annotator_labels in step_dict.items():
         for ann_id, label in annotator_labels.items():
-            pairs.append((ann_id, label))
-    return _alpha_from_pairs(pairs, level) if pairs else None
+            rows.append((ann_id, step_idx, label))
+    return _alpha_from_pairs(rows, level) if rows else None
 
 
 def _kappa_from_annotator_dict(
