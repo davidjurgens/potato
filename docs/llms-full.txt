@@ -57875,6 +57875,40 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 
 ---
 
+<!-- source: docs/releasenotes/v2.10.3.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.10.3/
+
+# Release Notes: v2.10.3 — Agreement, Deploy Button and Pyodide Fixes
+
+Three fixes for bugs found in 2.10.2 after it was published.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## Bug fixes
+
+- **`/admin/api/agreement` when everyone agrees.** If every annotator gave
+  the same answer on every item, the schema came back as
+  `{"error": "float division by zero"}`. Chance agreement is 1 in that case,
+  so alpha and both kappas are undefined. The route now reports them as
+  `null`, with `percent_agreement` 1.0 and the same note `/admin/iaa` gives.
+  `overall` leaves the schema out of its averages.
+- **`potato deploy button --dry-run` stays offline.** Without
+  `--hf-backup-repo`, the dry run asked HuggingFace who the token belonged
+  to, and a bad token ended in a traceback. The dry run now uses the
+  placeholder `<hf-account>/<name>-annotations`, as `potato deploy up
+  --dry-run` does. A real run reports a rejected token as an error message.
+- **Importing Potato no longer hashes a password.** `potato.authentication`
+  computed a PBKDF2 hash at import, used to make failed logins for unknown
+  usernames take as long as real ones. That cost every process 100,000
+  PBKDF2 iterations at startup, CLI tools included, and broke the import
+  under Pyodide, whose `hashlib` has no `pbkdf2_hmac`. The hash is now made
+  the first time an unknown username tries to log in.
+
+
+---
+
 <!-- source: docs/releasenotes/v2.10.2.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.10.2/
 
