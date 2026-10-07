@@ -397,3 +397,65 @@ describe('sibling modules', () => {
         });
     });
 });
+
+describe('a cloud served relative to an origin', () => {
+    // Annotations are restored from the input at init, before the cloud and
+    // its origin arrive. They must end up in the viewer's frame without the
+    // stored value changing, and everything written back must be in the
+    // file's frame.
+    const origin = [500000, 4700006, 314];
+    const utmBox = () => cuboid('car', '#ff0000', [500000.13, 4700000.27, 312.45]);
+
+    function input() { return document.getElementById('input-objects'); }
+
+    test('restored before the cloud loads, then re-expressed', () => {
+        const value = JSON.stringify([utmBox()]);
+        input().value = value;
+        const m = makeManager();
+        m._restoreFromInput();
+        m._setOrigin(origin);
+
+        const c = m.annotations[0].coordinates.center;
+        expect(c[0]).toBeCloseTo(0.13, 9);
+        expect(c[1]).toBeCloseTo(-5.73, 9);
+        expect(input().value).toBe(value);
+        expect(input().getAttribute('data-modified')).toBeNull();
+        expect(m.serialize()).toBe(value);
+    });
+
+    test('restored after the cloud loads, straight into the viewer frame', () => {
+        input().value = JSON.stringify([utmBox()]);
+        const m = makeManager();
+        m._setOrigin(origin);
+        m._restoreFromInput();
+        expect(m.annotations[0].coordinates.center[0]).toBeCloseTo(0.13, 9);
+    });
+
+    test('a box drawn in the viewer is saved in the file\'s frame', () => {
+        const m = makeManager();
+        m._setOrigin(origin);
+        m._addLocal(cuboid('car', '#ff0000', [0.13, -5.73, -1.55]));
+        const saved = JSON.parse(input().value);
+        expect(saved[0].coordinates.center).toEqual([500000.13, 4700000.27, 312.45]);
+    });
+
+    test('addAnnotation takes the file\'s frame, like the input', () => {
+        const m = makeManager();
+        m._setOrigin(origin);
+        m.addAnnotation(utmBox());
+        expect(m.annotations[0].coordinates.center[0]).toBeCloseTo(0.13, 9);
+        expect(JSON.parse(input().value)[0].coordinates.center)
+            .toEqual([500000.13, 4700000.27, 312.45]);
+    });
+
+    test('undo history follows the origin', () => {
+        const m = makeManager();
+        m.addAnnotation(utmBox());
+        m.addAnnotation(cuboid('person', '#0000ff', [500001, 4700001, 313]));
+        m._setOrigin(origin);
+        m.undo();
+        const saved = JSON.parse(input().value);
+        expect(saved).toHaveLength(1);
+        expect(saved[0].coordinates.center).toEqual([500000.13, 4700000.27, 312.45]);
+    });
+});

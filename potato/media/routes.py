@@ -344,6 +344,12 @@ def serve_model_file(filepath: str):
     return response
 
 
+#: Part of the point-cloud cache key. Bumped when the reader starts serving
+#: positions relative to an origin, so a cache built before that is not served
+#: with its float32-rounded map coordinates.
+POINT_CLOUD_FRAME = 2
+
+
 def point_cloud(filepath: str):
     """
     Serve a point cloud as the PNT1 buffer the 3D viewer fetches.
@@ -383,7 +389,8 @@ def point_cloud(filepath: str):
     cache.ensure_dir()
 
     source = Path(resolved)
-    target = cache.path_for(source, ".pnt", max_points=max_points)
+    target = cache.path_for(source, ".pnt", max_points=max_points,
+                            frame=POINT_CLOUD_FRAME)
     with cache.lock_for(target):
         if not target.exists():
             try:
@@ -552,7 +559,7 @@ def _point_cloud_lod(source: Path, request):
     cache.ensure_dir()
 
     target = cache.path_for(source, ".oct", grid=grid, max_level=max_level,
-                            min_points=min_points)
+                            min_points=min_points, frame=POINT_CLOUD_FRAME)
     with cache.lock_for(target):
         if not target.exists():
             try:

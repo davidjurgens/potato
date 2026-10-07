@@ -796,11 +796,11 @@
          an import map and would not work from a file:// mirror. -->
     {% if frontend_assets.spatial_annotation | default(false) %}
     <script src="{{ url_for('static', filename='vendor/three-0.160.0.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-wire.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-wire.js') }}?v=3"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=7"></script>
     {% endif %}
 
     <!-- Depth maps. A display type, so it is gated on the display's wrapper

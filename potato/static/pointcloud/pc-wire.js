@@ -296,9 +296,96 @@
         return { center, radius };
     }
 
+    /**
+     * The `[x, y, z]` the server subtracted from every position, or null.
+     *
+     * A cloud in map coordinates is served relative to a round origin, because
+     * as float32 a UTM northing snaps to a 0.5 m grid. See "Why positions can
+     * be relative to an origin" in `potato/media/pointcloud.py`. Null means
+     * the positions are the file's own coordinates.
+     */
+    function originOf(header) {
+        const o = header && header.origin;
+        if (!Array.isArray(o) || o.length !== 3) return null;
+        if (!o.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+            return null;
+        }
+        return (o[0] || o[1] || o[2]) ? o.slice() : null;
+    }
+
+    function shiftPoint(p, d) {
+        if (!Array.isArray(p) || p.length < 3) return p;
+        return [p[0] + d[0], p[1] + d[1], p[2] + d[2]].concat(p.slice(3));
+    }
+
+    /**
+     * A copy of `obj` with its geometry moved by `delta`.
+     *
+     * Only positions move: a cuboid's centre, a point, a polyline's vertices.
+     * Size and rotation do not depend on the frame's origin, and `segment_3d`
+     * stores point indices, which do not either.
+     */
+    function shiftAnnotation(obj, delta) {
+        if (!obj || !obj.coordinates) return obj;
+        const out = Object.assign({}, obj);
+        if (obj.type === 'cuboid_3d') {
+            out.coordinates = Object.assign({}, obj.coordinates, {
+                center: shiftPoint(obj.coordinates.center, delta),
+            });
+        } else if (obj.type === 'point_3d') {
+            out.coordinates = shiftPoint(obj.coordinates, delta);
+        } else if (obj.type === 'polyline_3d' && Array.isArray(obj.coordinates)) {
+            out.coordinates = obj.coordinates.map((p) => shiftPoint(p, delta));
+        }
+        return out;
+    }
+
+    /** Micrometres: below any scanner's precision, above float64 noise. */
+    function roundStored(v) {
+        return Math.round(v * 1e6) / 1e6;
+    }
+
+    /**
+     * Annotations in the viewer's frame -> the file's frame, for storage.
+     *
+     * Rounded, so that adding the origin back does not store
+     * 4700000.130000001. With no origin the annotations are returned as they
+     * are, so a cloud near zero stores exactly what it always did.
+     */
+    function toStored(annotations, origin) {
+        if (!origin) return annotations;
+        return annotations.map(
+            (obj) => roundAnnotation(shiftAnnotation(obj, origin)));
+    }
+
+    function roundAnnotation(obj) {
+        if (!obj || !obj.coordinates) return obj;
+        const r = (p) => (Array.isArray(p) ? p.map(
+            (v) => (typeof v === 'number' ? roundStored(v) : v)) : p);
+        const out = Object.assign({}, obj);
+        if (obj.type === 'cuboid_3d') {
+            out.coordinates = Object.assign({}, obj.coordinates, {
+                center: r(obj.coordinates.center),
+            });
+        } else if (obj.type === 'point_3d') {
+            out.coordinates = r(obj.coordinates);
+        } else if (obj.type === 'polyline_3d' && Array.isArray(obj.coordinates)) {
+            out.coordinates = obj.coordinates.map(r);
+        }
+        return out;
+    }
+
+    /** Stored annotations (the file's frame) -> the viewer's frame. */
+    function toLocal(annotations, origin) {
+        if (!origin) return annotations;
+        const back = [-origin[0], -origin[1], -origin[2]];
+        return annotations.map((obj) => shiftAnnotation(obj, back));
+    }
+
     const api = {
         MAGIC, parseWire, describeCloud, colorize, scalarFor, ramp,
         percentileRange, hexToRgb01, framing, sourceIndex,
+        originOf, shiftAnnotation, toStored, toLocal,
     };
 
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

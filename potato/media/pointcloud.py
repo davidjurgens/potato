@@ -51,12 +51,27 @@ carries its index **into the source file**. Absent indices means the identity
 mapping, which keeps the common small-cloud case a byte-for-byte no-op. Octree
 LOD (:mod:`potato.media.octree`) needs the same channel for the same reason:
 there, the set of loaded points changes as the camera moves.
+
+## Why positions can be relative to an origin
+
+Positions are float32 because that is what WebGL takes, and float32 holds
+about seven significant digits. A survey in projected map coordinates (UTM
+northings run to millions of metres) has seven digits before the decimal
+point, so as float32 every point snaps to a grid as coarse as 0.5 m and a
+file recorded to the centimetre is drawn, and annotated, on that grid.
+
+So when a cloud's coordinates are large, the reader subtracts a round
+``origin`` before the float32 conversion, and the wire header carries it. The
+viewer works in the shifted frame and adds the origin back when it writes an
+annotation, so stored annotations and exports stay in the file's own
+coordinates. A cloud near zero has no origin and is served exactly as before.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import struct
 from array import array
@@ -81,6 +96,26 @@ SUPPORTED_SUFFIXES = (".pcd", ".ply", ".bin", ".las", ".xyz", ".pts")
 #: the index channel is read on the client as a Uint32Array, so a 2- or 8-byte
 #: itemsize would produce silently misaligned garbage rather than an error.
 U32 = "I" if array("I").itemsize == 4 else "L"
+
+#: A cloud whose coordinates reach past this is shifted to a local origin
+#: before the float32 conversion. At 10 km float32 still resolves 1 mm; past
+#: it the grid coarsens, reaching 0.5 m at UTM northings.
+RECENTRE_ABOVE = 1e4
+
+
+def choose_origin(lo: List[float], hi: List[float]) -> Optional[List[float]]:
+    """
+    The origin to subtract for a cloud spanning ``lo``..``hi``, or None.
+
+    None when every coordinate is already small enough for float32. Otherwise
+    the centre of the bounds rounded to whole metres: rounded so the origin is
+    exact in any later arithmetic and reads as a plain number in the header.
+    """
+    if not all(math.isfinite(v) for v in list(lo) + list(hi)):
+        return None
+    if max(abs(v) for v in list(lo) + list(hi)) <= RECENTRE_ABOVE:
+        return None
+    return [float(round((a + b) / 2.0)) for a, b in zip(lo, hi)]
 
 
 class PointCloudError(RuntimeError):
@@ -107,6 +142,10 @@ class PointCloud:
     #: mapping. See the module docstring: this is what makes ``segment_3d``
     #: survive a change of ``max_points`` or a switch to octree LOD.
     indices: Optional[array] = None
+    #: ``[x, y, z]`` subtracted from every position before it became float32,
+    #: or None when positions are the file's own coordinates. See the module
+    #: docstring. ``positions + origin`` is the point in the file's frame.
+    origin: Optional[List[float]] = None
 
     @property
     def count(self) -> int:
@@ -252,6 +291,7 @@ def decimate(cloud: PointCloud, max_points: int) -> PointCloud:
         source_format=cloud.source_format,
         original_count=cloud.original_count or n,
         indices=indices,
+        origin=cloud.origin,
     )
 
 
@@ -272,6 +312,8 @@ def to_wire(cloud: PointCloud, extra: Optional[Dict[str, Any]] = None) -> bytes:
         "original_count": cloud.original_count or n,
         "bounds": cloud.bounds(),
     }
+    if cloud.origin is not None:
+        header["origin"] = list(cloud.origin)
     if extra:
         header.update(extra)
 
@@ -326,6 +368,7 @@ def from_wire(data: bytes) -> Tuple[Dict[str, Any], PointCloud]:
         source_format=header.get("source_format", ""),
         original_count=int(header.get("original_count", n)),
         indices=indices,
+        origin=header.get("origin"),
     )
 
 
@@ -391,7 +434,9 @@ def _read_xyz(path: Path) -> PointCloud:
     apart. Guessing wrong would colour a cloud by its surface normals and look
     like a rendering bug.
     """
-    positions = array("f")
+    # float64 until the origin is known: text exports of survey data are
+    # usually in map coordinates, and float32 would round them first.
+    exact = array("d")
     colors = bytearray()
     saw_color = False
     for line in path.read_text(errors="replace").splitlines():
@@ -402,7 +447,7 @@ def _read_xyz(path: Path) -> PointCloud:
         if len(parts) < 3:
             continue
         try:
-            positions.extend((float(parts[0]), float(parts[1]), float(parts[2])))
+            exact.extend((float(parts[0]), float(parts[1]), float(parts[2])))
         except ValueError:
             continue
         if len(parts) >= 6:
@@ -410,8 +455,18 @@ def _read_xyz(path: Path) -> PointCloud:
             colors.extend(_as_byte(p) for p in parts[3:6])
         else:
             colors.extend(b"\x00\x00\x00")
+    origin = None
+    if exact:
+        origin = choose_origin([min(exact[a::3]) for a in range(3)],
+                               [max(exact[a::3]) for a in range(3)])
+    ox, oy, oz = origin or (0.0, 0.0, 0.0)
+    positions = array("f", bytes(4 * len(exact)))
+    for i in range(0, len(exact), 3):
+        positions[i] = exact[i] - ox
+        positions[i + 1] = exact[i + 1] - oy
+        positions[i + 2] = exact[i + 2] - oz
     return PointCloud(positions=positions,
-                      colors=colors if saw_color else None)
+                      colors=colors if saw_color else None, origin=origin)
 
 
 def _as_byte(text: str) -> int:
@@ -767,7 +822,7 @@ def _read_las(path: Path) -> PointCloud:
     # offset that is a few bytes out reads part of the scale block as the
     # origin and produces a cloud at a plausible-looking wrong position.
     scale = struct.unpack_from("<3d", raw, 131)
-    origin = struct.unpack_from("<3d", raw, 155)
+    las_offset = struct.unpack_from("<3d", raw, 155)
 
     count = legacy_count
     if count == 0 and header_size >= 375:
@@ -798,38 +853,51 @@ def _read_las(path: Path) -> PointCloud:
             if max(r, g, b) > 255:
                 sixteen_bit = True
                 break
-    shift = 8 if sixteen_bit else 0
+    bits = 8 if sixteen_bit else 0
 
-    largest = 0.0
+    # Chosen before the float32 conversion, which is where the precision goes.
+    shift = _las_origin(raw, offset_to_data, scale, las_offset, count) or [0.0, 0.0, 0.0]
     for i in range(count):
         base = offset_to_data + i * record_len
         xi, yi, zi = struct.unpack_from("<3i", raw, base)
-        x = xi * scale[0] + origin[0]
-        y = yi * scale[1] + origin[1]
-        z = zi * scale[2] + origin[2]
-        largest = max(largest, abs(x), abs(y), abs(z))
-        positions.append(float(x))
-        positions.append(float(y))
-        positions.append(float(z))
+        positions.append(xi * scale[0] + las_offset[0] - shift[0])
+        positions.append(yi * scale[1] + las_offset[1] - shift[1])
+        positions.append(zi * scale[2] + las_offset[2] - shift[2])
         intensity.append(float(struct.unpack_from("<H", raw, base + 12)[0]))
         if colors is not None:
             r, g, b = struct.unpack_from("<3H", raw, base + color_at)
-            colors.extend(((r >> shift) & 0xff, (g >> shift) & 0xff,
-                           (b >> shift) & 0xff))
+            colors.extend(((r >> bits) & 0xff, (g >> bits) & 0xff,
+                           (b >> bits) & 0xff))
 
-    # Positions are float32 for the browser. Past about 100 km from the
-    # origin (projected map coordinates: UTM northings run to millions of
-    # metres) float32 cannot hold centimetres, and points snap to a grid as
-    # coarse as 0.5 m. Say so rather than shift the frame the annotations are
-    # stored in.
-    if largest > 1e5:
-        step = largest * 2 ** -23
-        logger.warning(
-            "LAS coordinates reach %.0f; as 32-bit floats they are stored to "
-            "about %.2f m. Re-centre the file (subtract a local origin) to "
-            "keep the file's precision.", largest, step)
+    origin = None if shift == [0.0, 0.0, 0.0] else shift
+    if origin is not None:
+        logger.info("LAS coordinates are large; serving them relative to the "
+                    "origin %s to keep the file's precision.", origin)
+    return PointCloud(positions=positions, colors=colors, intensity=intensity,
+                      origin=origin)
 
-    return PointCloud(positions=positions, colors=colors, intensity=intensity)
+
+def _las_origin(raw: bytes, offset_to_data: int, scale, las_offset,
+                count: int) -> Optional[List[float]]:
+    """
+    The origin for a LAS file, from its header bounds.
+
+    The header records max and min x, y, z at byte 179, which saves a second
+    pass over every point. Writers do get them wrong, so they are used only
+    when the first point lies inside them; otherwise the first point stands in.
+    A poor choice costs precision, never a misplaced annotation: the origin
+    travels with the points.
+    """
+    if count <= 0:
+        return None
+    xi, yi, zi = struct.unpack_from("<3i", raw, offset_to_data)
+    first = [xi * scale[0] + las_offset[0], yi * scale[1] + las_offset[1],
+             zi * scale[2] + las_offset[2]]
+    max_x, min_x, max_y, min_y, max_z, min_z = struct.unpack_from("<6d", raw, 179)
+    lo, hi = [min_x, min_y, min_z], [max_x, max_y, max_z]
+    sane = all(math.isfinite(v) for v in lo + hi) and all(
+        lo[a] - 1.0 <= first[a] <= hi[a] + 1.0 for a in range(3))
+    return choose_origin(lo, hi) if sane else choose_origin(first, first)
 
 
 # ---------------------------------------------------------------------------
@@ -851,11 +919,18 @@ def _records_to_cloud(records: Dict[str, List[float]],
 
     xs, ys, zs = lowered["x"], lowered["y"], lowered["z"]
     n = min(len(xs), len(ys), len(zs))
+    # PLY, PCD and text files can hold float64 coordinates, which lose their
+    # precision at the float32 conversion below exactly as LAS ones do.
+    origin = None
+    if n:
+        origin = choose_origin([min(xs[:n]), min(ys[:n]), min(zs[:n])],
+                               [max(xs[:n]), max(ys[:n]), max(zs[:n])])
+    ox, oy, oz = origin or (0.0, 0.0, 0.0)
     positions = array("f", bytes(12 * n))
     for i in range(n):
-        positions[i * 3] = xs[i]
-        positions[i * 3 + 1] = ys[i]
-        positions[i * 3 + 2] = zs[i]
+        positions[i * 3] = xs[i] - ox
+        positions[i * 3 + 1] = ys[i] - oy
+        positions[i * 3 + 2] = zs[i] - oz
 
     colors = None
     for names in _COLOR_ALIASES:
@@ -879,4 +954,5 @@ def _records_to_cloud(records: Dict[str, List[float]],
             intensity = array("f", (float(v) for v in lowered[name][:n]))
             break
 
-    return PointCloud(positions=positions, colors=colors, intensity=intensity)
+    return PointCloud(positions=positions, colors=colors, intensity=intensity,
+                      origin=origin)

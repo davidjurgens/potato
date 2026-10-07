@@ -27,6 +27,13 @@
  *
  * Absolute metres in the sensor frame, never normalized. See
  * `potato/export/spatial_utils.py` for why 3D has its own contract.
+ *
+ * A cloud in map coordinates arrives relative to an `origin` (see
+ * `originOf` in pc-wire.js), and everything inside this manager -- meshes,
+ * picking, the slab panels, `this.annotations`, undo history -- is in that
+ * shifted frame. The file's frame is restored at the edges: the hidden input,
+ * `addAnnotation`, the camera projection and the coordinates the status line
+ * reports. Stored annotations and exports therefore never see the shift.
  */
 (function (root) {
     'use strict';
@@ -104,7 +111,10 @@
             this._slabDrag = null;
             this._mprObserver = null;
 
-            this.annotations = [];      // client-contract objects
+            this.annotations = [];      // client-contract objects, local frame
+            // Subtracted from the cloud by the server; null for a cloud near
+            // zero. Set when the cloud or octree manifest arrives.
+            this.origin = null;
             this.meshes = [];           // one THREE.Object3D per annotation
             this.currentTool = null;
             this.currentLabel = null;
@@ -390,6 +400,7 @@
                 return;
             }
             this.parsed = parsed;
+            this._setOrigin(wire.originOf(parsed.header));
             this._buildPoints(parsed);
             this._status(wire.describeCloud(parsed.header));
         }
@@ -532,6 +543,7 @@
 
             this.lodIndex = new octree.OctreeIndex(manifest);
             this._lodBaseUrl = baseUrl;
+            this._setOrigin(wire.originOf(manifest));
             if (!this.lodIndex.root) {
                 this._status('This point cloud is empty.', 'warn');
                 return;
@@ -846,11 +858,11 @@
                 coords = fitHeightToPoints(coords, this._loadedPositions(),
                                            this.groundZ);
             }
-            this.addAnnotation({ type: 'cuboid_3d', label: this.currentLabel,
+            this._addLocal({ type: 'cuboid_3d', label: this.currentLabel,
                                  color: this.currentColor,
                                  coordinates: coords });
             this.selectedIndex = this.annotations.length - 1;
-            this._status(`Box added: ${describeBox(coords)}. `
+            this._status(`Box added: ${describeBox(coords, this.origin)}. `
                          + 'Press q/e to rotate it, Delete to remove it.');
         }
 
@@ -859,7 +871,7 @@
                 this._status('Pick a class before placing a point.', 'warn');
                 return;
             }
-            this.addAnnotation({ type: 'point_3d', label: this.currentLabel,
+            this._addLocal({ type: 'point_3d', label: this.currentLabel,
                                  color: this.currentColor, coordinates: hit });
             this.selectedIndex = this.annotations.length - 1;
         }
@@ -912,7 +924,7 @@
             this._drawOverlays();
             const obj = this.annotations[this.selectedIndex];
             const where = obj.type === 'cuboid_3d' && obj.coordinates
-                ? ` ${describeBox(obj.coordinates)}` : '';
+                ? ` ${describeBox(obj.coordinates, this.origin)}` : '';
             const message = `${this.selectedIndex + 1} of ${n}: `
                 + `${obj.label}.${where}`;
             this._status(message);
@@ -1397,7 +1409,7 @@
             // One history entry per keypress, unlike a drag: each press is a
             // discrete, deliberate edit and should undo on its own.
             this._saveState();
-            this._announce(describeBox(selection.coordinates));
+            this._announce(describeBox(selection.coordinates, this.origin));
         }
 
         _nudgeSlabThickness(factor) {
@@ -1466,7 +1478,11 @@
                 if (obj.type !== 'cuboid_3d') return;
                 if (this._hiddenLabels && this._hiddenLabels.has(obj.label)) return;
                 const c = obj.coordinates || {};
-                const corners = cuboidCorners(c.center, c.size, c.rotation);
+                // The calibration is in the file's frame, so the corners go
+                // back to it before projecting.
+                const o = this.origin || [0, 0, 0];
+                const corners = cuboidCorners(c.center, c.size, c.rotation)
+                    .map((p) => [p[0] + o[0], p[1] + o[1], p[2] + o[2]]);
                 const projected = calib.projectCuboid(cam, corners);
                 if (!projected.visible) return;
                 if (!calib.overlapsImage(projected.bbox, naturalW, naturalH)) return;
@@ -1678,6 +1694,14 @@
          * here so the contract is enforced in exactly one place.
          */
         addAnnotation(obj) {
+            // In the file's frame, like the hidden input: importers and AI
+            // suggestions hold stored coordinates, not this viewer's shift.
+            if (!obj || typeof obj !== 'object') return false;
+            return this._addLocal(wire.toLocal([obj], this.origin)[0]);
+        }
+
+        /** `addAnnotation` for geometry already in the viewer's frame. */
+        _addLocal(obj) {
             if (!obj || typeof obj !== 'object') return false;
             const known = ['cuboid_3d', 'point_3d', 'polyline_3d', 'segment_3d'];
             if (known.indexOf(obj.type) < 0) {
@@ -1778,7 +1802,27 @@
         }
 
         _serializeAnnotations() {
-            return JSON.stringify(this.annotations);
+            return JSON.stringify(wire.toStored(this.annotations, this.origin));
+        }
+
+        /**
+         * Adopt the origin the server shifted this cloud by.
+         *
+         * Annotations restored before the cloud arrived were converted with
+         * the old origin (null on first load), so they are re-expressed in the
+         * new frame, and so is the undo history. The stored value does not
+         * change, so the input is not marked modified.
+         */
+        _setOrigin(origin) {
+            const prev = this.origin;
+            const next = origin || null;
+            if (JSON.stringify(prev) === JSON.stringify(next)) return;
+            const reframe = (list) => wire.toLocal(wire.toStored(list, prev), next);
+            this.annotations = reframe(this.annotations);
+            this.history = this.history.map(
+                (entry) => JSON.stringify(reframe(JSON.parse(entry))));
+            this.origin = next;
+            this._rebuildMeshes();
         }
 
         _updateAnnotationData() {
@@ -1807,7 +1851,7 @@
                 return;
             }
             if (!Array.isArray(parsed)) return;
-            this.annotations = parsed;
+            this.annotations = wire.toLocal(parsed, this.origin);
             this._rebuildMeshes();
         }
 
@@ -2194,9 +2238,11 @@
     }
 
     /** "4.2 x 1.8 x 1.5 m at 12.0, 1.5" — the numbers, for the status line. */
-    function describeBox(coords) {
+    function describeBox(coords, origin) {
         const s = coords.size;
-        const c = coords.center;
+        // Reported in the file's frame, the numbers the export will hold.
+        const o = origin || [0, 0, 0];
+        const c = [coords.center[0] + o[0], coords.center[1] + o[1]];
         return `${s[0].toFixed(1)} x ${s[1].toFixed(1)} x ${s[2].toFixed(1)} m `
             + `at ${c[0].toFixed(1)}, ${c[1].toFixed(1)}`;
     }

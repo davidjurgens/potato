@@ -121,6 +121,9 @@ class Octree:
     source_format: str = ""
     spacing: float = 0.0
     truncated: bool = False
+    #: The cloud's origin; positions and bounds are relative to it. See
+    #: ``PointCloud.origin``.
+    origin: Optional[List[float]] = None
 
     @property
     def depth(self) -> int:
@@ -163,7 +166,8 @@ def build_octree(cloud: PointCloud,
                       blobs={"r": to_wire(channels.subset(
                           np.zeros(0, dtype=np.int64)))},
                       bounds=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-                      total_count=0, source_format=cloud.source_format)
+                      total_count=0, source_format=cloud.source_format,
+                      origin=cloud.origin)
 
     lo = positions.min(axis=0)
     hi = positions.max(axis=0)
@@ -238,6 +242,7 @@ def build_octree(cloud: PointCloud,
         source_format=cloud.source_format,
         spacing=size / grid,
         truncated=truncated,
+        origin=cloud.origin,
     )
 
 
@@ -332,6 +337,7 @@ class _Channels:
             source_format=self._cloud.source_format,
             original_count=self._cloud.original_count or self._cloud.count,
             indices=indices,
+            origin=self._cloud.origin,
         )
 
 
@@ -374,6 +380,8 @@ def to_octree_bytes(tree: Octree) -> bytes:
         "truncated": tree.truncated,
         "nodes": [node.to_json() for node in ordered],
     }
+    if tree.origin is not None:
+        header["origin"] = list(tree.origin)
     blob_json = json.dumps(header, separators=(",", ":")).encode("utf-8")
 
     out = bytearray(OCT_MAGIC)
@@ -447,6 +455,7 @@ def manifest_for_client(manifest: Dict[str, Any]) -> Dict[str, Any]:
         "spacing": manifest.get("spacing", 0.0),
         "depth": manifest.get("depth", 0),
         "truncated": bool(manifest.get("truncated")),
+        "origin": manifest.get("origin"),
         "nodes": [
             {k: node[k] for k in
              ("key", "level", "bounds", "count", "children") if k in node}

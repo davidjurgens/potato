@@ -296,12 +296,12 @@
     "version": "5"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "2d3bbcbe0e711dd4",
-    "version": "6"
+    "sha256": "e8856ec18572d7db",
+    "version": "7"
   },
   "pointcloud/pc-wire.js": {
-    "sha256": "482b899ec60b7947",
-    "version": "2"
+    "sha256": "63b2cecee7f6dd3d",
+    "version": "3"
   },
   "region-caption.css": {
     "sha256": "8f898abad57c7a4b",

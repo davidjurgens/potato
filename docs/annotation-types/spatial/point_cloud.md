@@ -42,9 +42,13 @@ but some writers store 8-bit values; the depth is decided once for the whole
 file.
 
 Positions are sent to the browser as 32-bit floats, which hold about seven
-significant digits. A LAS file in projected map coordinates (UTM northings run
-to millions of metres) loses its centimetres that way, and Potato logs a warning
-when it loads one. Re-centre such a file on a local origin before loading it.
+significant digits. A cloud in projected map coordinates (UTM northings run to
+millions of metres) would lose its centimetres that way, so when any
+coordinate is beyond 10 km from zero, Potato subtracts an origin, rounded to
+whole metres, before the conversion. This applies to LAS, PLY, PCD and `.xyz` files; KITTI files
+are already 32-bit. The viewer adds the origin back to everything it saves, so
+stored annotations, exports and the coordinates shown in the status line are
+all in the file's own frame. You don't need to re-centre the file yourself.
 
 ### Options
 
@@ -227,6 +231,10 @@ This is the one thing to get right when moving from 2D.
 Image annotations are normalized to `[0, 1]` against the image. Spatial ones are
 **absolute metres in the sensor frame**, because there is no extent to normalize
 against — a lidar sweep has no "width" the way a photograph does.
+
+For a cloud in map coordinates, that frame is the map's: a box on a UTM survey
+is stored with its UTM centre, even though the viewer draws it relative to a
+local origin (see [Formats](#formats)).
 
 ```json
 {"type": "cuboid_3d", "label": "car", "color": "#FF6B6B",

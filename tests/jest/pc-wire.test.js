@@ -355,3 +355,60 @@ describe('a shared colour range', () => {
         expect(wire.scalarFor('intensity', heightCloud([1]))).toBeNull();
     });
 });
+
+describe('the origin of a cloud in map coordinates', () => {
+    // The server serves a UTM cloud relative to a round origin, because as
+    // float32 a northing snaps to a 0.5 m grid. The viewer works in the
+    // shifted frame; what it stores must be the file's own coordinates.
+    const origin = [500000, 4700006, 314];
+    const stored = [
+        { type: 'cuboid_3d', label: 'car',
+          coordinates: { center: [500000.13, 4700000.27, 312.45],
+                         size: [4, 2, 1.5], rotation: [0, 0, 0.38, 0.92] } },
+        { type: 'point_3d', label: 'pole', coordinates: [500012.58, 4700021.91, 318.02] },
+        { type: 'polyline_3d', label: 'kerb',
+          coordinates: [[499987.06, 4699990.44, 309.77], [500001.5, 4700001.25, 310]] },
+        { type: 'segment_3d', label: 'road', indices: [3, 4, 5] },
+    ];
+
+    test('originOf reads a header origin and ignores anything else', () => {
+        expect(wire.originOf({ origin })).toEqual(origin);
+        expect(wire.originOf({})).toBeNull();
+        expect(wire.originOf({ origin: [0, 0, 0] })).toBeNull();
+        expect(wire.originOf({ origin: [1, 2] })).toBeNull();
+        expect(wire.originOf({ origin: [1, NaN, 2] })).toBeNull();
+        expect(wire.originOf(null)).toBeNull();
+    });
+
+    test('local then stored gives back the stored values exactly', () => {
+        const local = wire.toLocal(stored, origin);
+        expect(local[0].coordinates.center[1]).toBeCloseTo(-5.73, 9);
+        expect(wire.toStored(local, origin)).toEqual(stored);
+    });
+
+    test('a box drawn in the viewer stores to the micrometre', () => {
+        // 0.1 + 0.2 style noise must not reach the saved annotation.
+        const drawn = [{ type: 'point_3d', coordinates: [0.13, -5.73, -1.55] }];
+        expect(wire.toStored(drawn, origin)[0].coordinates)
+            .toEqual([500000.13, 4700000.27, 312.45]);
+    });
+
+    test('size, rotation and point indices do not move', () => {
+        const local = wire.toLocal(stored, origin);
+        expect(local[0].coordinates.size).toEqual([4, 2, 1.5]);
+        expect(local[0].coordinates.rotation).toEqual([0, 0, 0.38, 0.92]);
+        expect(local[3]).toEqual(stored[3]);
+    });
+
+    test('without an origin nothing is touched', () => {
+        expect(wire.toStored(stored, null)).toBe(stored);
+        expect(wire.toLocal(stored, null)).toBe(stored);
+    });
+
+    test('the stored objects are not mutated', () => {
+        const before = JSON.stringify(stored);
+        wire.toLocal(stored, origin);
+        wire.toStored(stored, origin);
+        expect(JSON.stringify(stored)).toBe(before);
+    });
+});
