@@ -82,6 +82,30 @@ let aiAssistantManger = new AIAssistantManager();
  * sendBeacon is the W3C standard for fire-and-forget requests during page unload —
  * regular fetch() is cancelled by browsers during unload.
  */
+/**
+ * Multiselect schemas on the page with no box ticked.
+ *
+ * Unticking the last box removes the schema from the payload entirely, and
+ * the server only clears a schema it is told about, so the last box to be
+ * unticked used to come back on the next visit. Naming these lets the server
+ * clear them.
+ */
+function clearedMultiselectSchemas(labelAnnotations) {
+    const named = new Set();
+    for (const key of Object.keys(labelAnnotations)) {
+        named.add(key);
+    }
+    const cleared = [];
+    document.querySelectorAll('form[data-annotation-type="multiselect"][data-schema-name]').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        const prefix = schema + ':';
+        if (![...named].some(key => key.startsWith(prefix))) {
+            cleared.push(schema);
+        }
+    });
+    return cleared;
+}
+
 function flushPendingSave() {
     if ((!textSaveTimer && pendingInputChanges.size === 0) || !currentInstance) return;
     flushPendingInputChanges();
@@ -101,6 +125,7 @@ function flushPendingSave() {
     const payload = JSON.stringify({
         instance_id: currentInstance.id,
         annotations: labelAnnotations,
+        cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
         span_annotations: extractSpanAnnotationsFromDOM(),
         client_timestamp: new Date().toISOString(),
         response_time_seconds: currentInstanceResponseSeconds()
@@ -1332,7 +1357,7 @@ function clearAllFormInputs() {
         const placeholder = input.getAttribute('data-placeholder-order');
         if (!list || !placeholder) return;
         const items = Array.from(list.querySelectorAll('.ranking-item'));
-        placeholder.split(',').forEach(value => {
+        splitKnownValues(placeholder, items.map(it => it.getAttribute('data-value'))).forEach(value => {
             const item = items.find(it => it.getAttribute('data-value') === value);
             if (item) list.appendChild(item);
         });
@@ -1469,19 +1494,24 @@ async function loadAnnotations() {
             // Sync the browser state to match server state
             input.checked = serverChecked;
             if (schema && labelName && serverChecked) {
-                if (restoredRadios[schema]) {
+                // One selection per radio GROUP, which the browser defines by
+                // name. A multirate, rubric or conjoint schema has a group per
+                // row; keying by schema kept only the last row's answer.
+                const group = input.name || schema;
+                const earlier = restoredRadios[group];
+                if (earlier && earlier.labelName !== labelName) {
                     debugWarn(`Multiple stored values for single-select schema '${schema}' ` +
-                              `('${restoredRadios[schema].labelName}' and '${labelName}'); ` +
+                              `('${earlier.labelName}' and '${labelName}'); ` +
                               `keeping the last. Run 'potato repair-annotations' to fix the ` +
                               `stored state.`);
                     // Undo the earlier winner so state matches the rendered selection.
-                    delete currentAnnotations[schema][restoredRadios[schema].labelName];
+                    delete currentAnnotations[schema][earlier.labelName];
                 }
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
                 }
                 currentAnnotations[schema][labelName] = input.value;
-                restoredRadios[schema] = { labelName: labelName };
+                restoredRadios[group] = { labelName: labelName };
             }
         });
 
@@ -1724,6 +1754,7 @@ async function saveAnnotations({ background = false } = {}) {
             body: JSON.stringify({
                 instance_id: currentInstance.id,
                 annotations: labelAnnotations,
+                cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
                 span_annotations: spanAnnotations,
                 client_timestamp: new Date().toISOString(),
                 response_time_seconds: currentInstanceResponseSeconds()
@@ -3136,6 +3167,36 @@ function populateInputValues() {
 /**
  * Restore ranking annotations by reordering items to match saved order.
  */
+function splitKnownValues(stored, values) {
+    // Split a comma-joined answer back into option values. A plain
+    // split(',') breaks any option whose own text has a comma in it
+    // ("Paris, France"), so match the known values first.
+    var known = values.filter(function (v) { return v; })
+        .sort(function (a, b) { return b.length - a.length; });
+    var out = [], pos = 0;
+    while (pos <= stored.length - 1) {
+        while (stored.charAt(pos) === ' ') pos++;
+        var match = null;
+        for (var i = 0; i < known.length; i++) {
+            var v = known[i], end = pos + v.length;
+            if (stored.substr(pos, v.length) === v && (end === stored.length || stored.charAt(end) === ',')) {
+                match = v; break;
+            }
+        }
+        if (match === null) {
+            var next = stored.indexOf(',', pos);
+            var stop = next < 0 ? stored.length : next;
+            var piece = stored.slice(pos, stop).trim();
+            if (piece) out.push(piece);
+            pos = stop + 1;
+        } else {
+            out.push(match);
+            pos += match.length + 1;
+        }
+    }
+    return out;
+}
+
 function restoreRankingAnnotations() {
     const hiddenInputs = document.querySelectorAll('.ranking-order-input');
     hiddenInputs.forEach(input => {
@@ -3149,8 +3210,8 @@ function restoreRankingAnnotations() {
             // Reorder DOM items
             const list = input.closest('fieldset').querySelector('.ranking-list');
             if (list) {
-                const order = savedOrder.split(',');
                 const items = Array.from(list.querySelectorAll('.ranking-item'));
+                const order = splitKnownValues(savedOrder, items.map(it => it.getAttribute('data-value')));
                 order.forEach((val, idx) => {
                     const item = items.find(it => it.getAttribute('data-value') === val);
                     if (item) {
@@ -3178,8 +3239,9 @@ function restoreHierarchicalAnnotations() {
             input.setAttribute('data-modified', 'true');
             input.setAttribute('data-server-set', 'true');
             // Check matching checkboxes
-            const selected = savedLabels.split(',').map(s => s.trim()).filter(Boolean);
             const tree = input.closest('fieldset').querySelector('.hier-tree');
+            const allValues = tree ? Array.from(tree.querySelectorAll('.hier-checkbox')).map(cb => cb.value) : [];
+            const selected = splitKnownValues(savedLabels, allValues);
             if (tree) {
                 tree.querySelectorAll('.hier-checkbox').forEach(cb => {
                     cb.checked = selected.includes(cb.value);
@@ -3187,9 +3249,12 @@ function restoreHierarchicalAnnotations() {
                 // Update tags display
                 const tagsContainer = tree.parentElement.querySelector('.hier-selected-tags');
                 if (tagsContainer) {
-                    tagsContainer.innerHTML = selected.map(s =>
-                        '<span class="hier-tag">' + s + '</span>'
-                    ).join('');
+                    tagsContainer.replaceChildren(...selected.map(s => {
+                        const tag = document.createElement('span');
+                        tag.className = 'hier-tag';
+                        tag.textContent = s;
+                        return tag;
+                    }));
                 }
             }
             debugLog('Restored hierarchical annotation for', schema);
@@ -3630,7 +3695,10 @@ function extractSpanAnnotationsFromDOM() {
      */
     debugLog('[DEBUG] extractSpanAnnotationsFromDOM called');
 
-    const overlays = document.querySelectorAll('.span-overlay');
+    // AI keyword highlights share the .span-overlay class but are display
+    // only: they carry no schema or offsets, and posting them made the server
+    // refuse the whole save.
+    const overlays = document.querySelectorAll('.span-overlay:not(.ai-keyword-overlay)');
     const spanAnnotations = [];
 
     for (const overlay of overlays) {
@@ -3638,6 +3706,9 @@ function extractSpanAnnotationsFromDOM() {
         const label = overlay.getAttribute('data-label');
         const start = parseInt(overlay.getAttribute('data-start'));
         const end = parseInt(overlay.getAttribute('data-end'));
+        if (!schema || !label || Number.isNaN(start) || Number.isNaN(end)) {
+            continue;
+        }
         const title = overlay.querySelector('.span-label')?.textContent?.trim() || label;
 
         // Get the text value by finding the covered segments

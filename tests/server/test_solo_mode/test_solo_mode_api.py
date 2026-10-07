@@ -21,6 +21,9 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+SOLO_ADMIN_KEY = "solo-api-test-admin-key"
+
+
 def _create_solo_mode_test_config(test_dir):
     """Create a Solo Mode config that works without external LLM services."""
     data_dir = os.path.join(test_dir, "data")
@@ -77,6 +80,7 @@ def _create_solo_mode_test_config(test_dir):
             ]
         }],
         'user_config': {'allow_no_password': True},
+        'admin_api_key': SOLO_ADMIN_KEY,
         'output': {
             'annotation_output_format': 'json',
             'annotation_output_dir': 'annotations',
@@ -136,66 +140,66 @@ def authed_session(solo_server):
 class TestSoloModeAPIStatus:
     """Tests for /solo/api/status endpoint."""
 
-    def test_returns_json(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/status")
+    def test_returns_json(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/status")
         assert response.status_code == 200
         data = response.json()
         assert 'phase' in data
         assert 'phase_name' in data
 
-    def test_contains_annotation_stats(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/status")
+    def test_contains_annotation_stats(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/status")
         assert response.status_code == 200
         data = response.json()
         assert 'annotation_stats' in data
         assert 'agreement_metrics' in data
 
-    def test_contains_llm_stats(self, solo_server):
-        data = requests.get(f"{solo_server.base_url}/solo/api/status").json()
+    def test_contains_llm_stats(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
         assert 'llm_stats' in data
         assert 'labeled_count' in data['llm_stats']
 
-    def test_contains_validation_progress(self, solo_server):
-        data = requests.get(f"{solo_server.base_url}/solo/api/status").json()
+    def test_contains_validation_progress(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
         assert 'validation_progress' in data
 
 
 class TestSoloModeAPIPrompts:
     """Tests for /solo/api/prompts endpoint."""
 
-    def test_returns_prompt_data(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/prompts")
+    def test_returns_prompt_data(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/prompts")
         assert response.status_code == 200
         data = response.json()
         assert 'current_prompt' in data
         assert 'history' in data
         assert 'current_version' in data
 
-    def test_history_is_list(self, solo_server):
-        data = requests.get(f"{solo_server.base_url}/solo/api/prompts").json()
+    def test_history_is_list(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/prompts").json()
         assert isinstance(data['history'], list)
 
 
 class TestSoloModeAPIPredictions:
     """Tests for /solo/api/predictions endpoint."""
 
-    def test_returns_predictions(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/predictions")
+    def test_returns_predictions(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/predictions")
         assert response.status_code == 200
         data = response.json()
         assert 'count' in data
         assert 'predictions' in data
 
-    def test_predictions_is_dict(self, solo_server):
-        data = requests.get(f"{solo_server.base_url}/solo/api/predictions").json()
+    def test_predictions_is_dict(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/predictions").json()
         assert isinstance(data['predictions'], dict)
 
 
 class TestSoloModeAPIAdvancePhase:
     """Tests for /solo/api/advance-phase endpoint."""
 
-    def test_get_not_allowed(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/advance-phase")
+    def test_get_not_allowed(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/advance-phase")
         assert response.status_code == 405
 
     def test_missing_phase_returns_400(self, solo_server, authed_session):
@@ -218,8 +222,8 @@ class TestSoloModeAPIAdvancePhase:
 class TestSoloModeAPIDisagreements:
     """Tests for /solo/api/disagreements endpoint."""
 
-    def test_returns_disagreement_data(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/disagreements")
+    def test_returns_disagreement_data(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/disagreements")
         assert response.status_code == 200
         data = response.json()
         assert 'pending' in data
@@ -229,8 +233,8 @@ class TestSoloModeAPIDisagreements:
 class TestSoloModeAPIEdgeCases:
     """Tests for /solo/api/edge-cases endpoint."""
 
-    def test_returns_edge_case_data(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/edge-cases")
+    def test_returns_edge_case_data(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/edge-cases")
         assert response.status_code == 200
         data = response.json()
         assert 'total_edge_cases' in data
@@ -239,15 +243,15 @@ class TestSoloModeAPIEdgeCases:
 class TestSoloModeAPIRules:
     """Tests for /solo/api/rules endpoints."""
 
-    def test_rules_endpoint(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/rules")
+    def test_rules_endpoint(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/rules")
         assert response.status_code == 200
         data = response.json()
         assert 'rules' in data
         assert 'stats' in data
 
-    def test_rules_categories_endpoint(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/rules/categories")
+    def test_rules_categories_endpoint(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/rules/categories")
         assert response.status_code == 200
         data = response.json()
         assert 'categories' in data
@@ -257,8 +261,8 @@ class TestSoloModeAPIRules:
 class TestSoloModeAPIConfusionAnalysis:
     """Tests for /solo/api/confusion-analysis endpoint."""
 
-    def test_returns_patterns(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/confusion-analysis")
+    def test_returns_patterns(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/confusion-analysis")
         assert response.status_code == 200
         data = response.json()
         assert 'patterns' in data
@@ -267,13 +271,33 @@ class TestSoloModeAPIConfusionAnalysis:
 class TestSoloModeAPIExport:
     """Tests for /solo/api/export endpoint."""
 
-    def test_returns_export_data(self, solo_server):
-        response = requests.get(f"{solo_server.base_url}/solo/api/export")
+    def test_returns_export_data(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/export", headers={"X-API-Key": SOLO_ADMIN_KEY})
         assert response.status_code == 200
         data = response.json()
         assert 'phase' in data
         assert 'annotations' in data
         assert 'llm_predictions' in data
+
+
+class TestSoloModeAPIRefusals:
+    """The read APIs hold every annotation and the prompt history.
+
+    They answered anonymous requests: only the POST routes checked the session.
+    """
+
+    @pytest.mark.parametrize("path", [
+        "status", "prompts", "predictions", "disagreements", "edge-cases",
+        "rules", "confusion-analysis", "refinement/log", "labeling-functions",
+        "disagreement-explorer", "export",
+    ])
+    def test_anonymous_reads_are_refused(self, solo_server, path):
+        response = requests.get(f"{solo_server.base_url}/solo/api/{path}")
+        assert response.status_code in (401, 403)
+
+    def test_export_needs_more_than_a_login(self, solo_server, authed_session):
+        response = authed_session.get(f"{solo_server.base_url}/solo/api/export")
+        assert response.status_code == 403
 
 
 class TestSoloModeAPILabeling:
@@ -318,8 +342,8 @@ class TestSoloModePageRoutes:
 class TestSoloModePhaseTransitions:
     """Tests for phase transition via API."""
 
-    def test_initial_phase(self, solo_server):
-        data = requests.get(f"{solo_server.base_url}/solo/api/status").json()
+    def test_initial_phase(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
         phase = data.get('phase_name', '').upper()
         # Initial phase should be SETUP
         assert 'SETUP' in phase
@@ -362,13 +386,13 @@ class TestSoloModeSetupForm:
 class TestSoloModeDataConsistency:
     """Tests that state is consistent across API calls."""
 
-    def test_status_is_consistent(self, solo_server):
-        data1 = requests.get(f"{solo_server.base_url}/solo/api/status").json()
-        data2 = requests.get(f"{solo_server.base_url}/solo/api/status").json()
+    def test_status_is_consistent(self, solo_server, authed_session):
+        data1 = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
+        data2 = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
         assert data1['phase'] == data2['phase']
 
-    def test_export_has_required_fields(self, solo_server):
-        data = requests.get(f"{solo_server.base_url}/solo/api/export").json()
+    def test_export_has_required_fields(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/export", headers={"X-API-Key": SOLO_ADMIN_KEY}).json()
         assert 'phase' in data
         assert 'annotations' in data
         assert 'llm_predictions' in data

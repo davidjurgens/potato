@@ -89,6 +89,9 @@ def _verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(expected_hash, actual_hash)
 
 
+_TIMING_DUMMY_HASH = _hash_password_with_salt(secrets.token_hex(8))
+
+
 class AuthBackend(ABC):
     """
     Abstract base class for authentication backends.
@@ -139,6 +142,10 @@ class InMemoryAuthBackend(AuthBackend):
 
     def authenticate(self, username: str, password: Optional[str]) -> bool:
         if username not in self.users:
+            # Spend the same hashing time as a wrong password, so response
+            # time does not reveal which usernames exist.
+            if password:
+                _verify_password(password, _TIMING_DUMMY_HASH)
             return False
         if password is None:  # Passwordless login
             return True
@@ -284,6 +291,8 @@ class DatabaseAuthBackend(AuthBackend):
             (username,), fetch="one"
         )
         if not row:
+            if password:
+                _verify_password(password, _TIMING_DUMMY_HASH)
             return False
         if password is None:  # Passwordless login
             return True
@@ -379,6 +388,12 @@ class ClerkAuthBackend(AuthBackend):
             )
             if response.status_code == 200:
                 user_data = response.json()
+                # A valid session proves who its owner is, not that they are
+                # `username`: the form field is the caller's claim. Accept only
+                # an active session whose Clerk user is that username.
+                if user_data.get("status") != "active" or user_data.get("user_id") != username:
+                    logger.warning("Clerk session does not belong to %r", username)
+                    return False
                 self.users[username] = user_data
                 return True
             return False
@@ -634,8 +649,13 @@ class UserAuthenticator:
     def authenticate(username: str, password: Optional[str]) -> bool:
         authenticator = UserAuthenticator.get_instance()
 
-        if not authenticator.auth_backend.is_valid_username(username):
+        # Clerk accounts live with Clerk; its backend verifies the token itself
+        # and learns the user on first sign-in.
+        if (not isinstance(authenticator.auth_backend, ClerkAuthBackend)
+                and not authenticator.auth_backend.is_valid_username(username)):
             logger.warning(f"Authentication failed: user '{username}' does not exist")
+            if password and authenticator.require_password:
+                _verify_password(password, _TIMING_DUMMY_HASH)
             return False
 
         if not authenticator.require_password:
@@ -658,6 +678,25 @@ class UserAuthenticator:
             return "Unauthorized user"
         if not self.require_password:
             logger.debug(f"Passwordless mode - allowing any user: {username}")
+
+        # The username names the account's directory on disk; see usernames.py.
+        from potato.server_utils.usernames import colliding_username, username_problem
+        problem = username_problem(username)
+        if problem:
+            logger.warning("Rejected registration for %r: %s", username, problem)
+            return problem
+        existing = list(self.userlist)
+        try:
+            from potato.user_state_management import get_user_state_manager
+            existing += list(get_user_state_manager().get_user_ids())
+        except Exception:
+            pass
+        clash = colliding_username(username, existing)
+        if clash is not None:
+            logger.warning("Rejected registration for %r: it shares a directory "
+                           "with the existing account %r on case-insensitive "
+                           "file systems", username, clash)
+            return "That username is already in use on this task."
 
         result = self.auth_backend.add_user(username, password, **kwargs)
         if result == "Success":

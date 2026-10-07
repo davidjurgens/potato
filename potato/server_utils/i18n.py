@@ -715,6 +715,27 @@ def available_language_codes():
     return {BASE_LANGUAGE_CODE} | bundled_catalog_codes()
 
 
+def resolve_language_code(code):
+    """The bundled language a configured code selects, or None.
+
+    Language tags are case-insensitive (RFC 5646 section 2.1.1) and are often
+    written with an underscore, so ``pt-BR``, ``PT_br`` and ``ES`` are
+    accepted. A regional tag with no catalog of its own uses the language's
+    catalog: ``pt-BR`` renders with ``pt``. Exact matching fell back to
+    English for all of these.
+    """
+    if not isinstance(code, str):
+        return None
+    normalized = code.strip().lower().replace("_", "-")
+    if not is_valid_language_code(normalized):
+        return None
+    available = available_language_codes()
+    if normalized in available:
+        return normalized
+    primary = normalized.split("-", 1)[0]
+    return primary if primary in available else None
+
+
 def resolve_ui_language(ui_lang_config, defaults):
     """Resolve the effective ``ui_lang`` dict from config + English defaults.
 
@@ -748,7 +769,7 @@ def resolve_ui_language(ui_lang_config, defaults):
         )
 
     if base_code:
-        catalog = load_catalog(base_code)
+        catalog = load_catalog(resolve_language_code(base_code) or base_code)
         if catalog:
             merged.update(catalog)
 

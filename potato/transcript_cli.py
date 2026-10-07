@@ -140,6 +140,36 @@ def item_id_for(path: str, *, prefix: str = "") -> str:
     return f"{prefix}{stem}"
 
 
+def _disambiguate_ids(items: List[Dict[str, Any]], paths: List[str],
+                      prefix: str = "") -> None:
+    """Give items whose file names collide an id from their relative path.
+
+    ``a/int01.srt`` and ``b/int01.vtt`` both became ``int01``; the CLI
+    reported success and the server then refused the data file. Unique ids
+    are left alone, so most runs keep the plain file-stem ids.
+    """
+    from collections import Counter
+    from potato.importers._common import safe_instance_id
+
+    counts = Counter(item["id"] for item in items)
+    clashing = [i for i, item in enumerate(items) if counts[item["id"]] > 1]
+    if not clashing:
+        return
+    root = os.path.commonpath([os.path.dirname(os.path.abspath(paths[i])) for i in clashing])
+    for keep_extension in (False, True):
+        for i in clashing:
+            rel = os.path.relpath(os.path.abspath(paths[i]), root)
+            if not keep_extension:
+                rel = os.path.join(os.path.dirname(rel), item_id_for(rel))
+            items[i]["id"] = prefix + safe_instance_id(rel.replace(os.sep, "/"))
+        if len({items[i]["id"] for i in clashing}) == len(clashing):
+            break
+    taken = Counter(item["id"] for item in items)
+    if any(n > 1 for n in taken.values()):
+        from potato.importers._common import assert_unique_ids
+        assert_unique_ids(item["id"] for item in items)
+
+
 def find_media(
     transcript_path: str,
     media_dir: Optional[str],
@@ -665,6 +695,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             }
 
     items: List[Dict[str, Any]] = []
+    item_paths: List[str] = []
     reports: List[Dict[str, Any]] = []
 
     for path in paths:
@@ -688,6 +719,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reports.append(report)
         if item is not None:
             items.append(item)
+            item_paths.append(path)
+
+    _disambiguate_ids(items, item_paths, args.id_prefix)
 
     if not args.quiet:
         print(f"Scanned {len(paths)} file(s):")

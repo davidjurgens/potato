@@ -56,21 +56,7 @@ def api_login_required(f):
     return wrapper
 
 
-def same_origin_required(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        origin = request.headers.get("Origin")
-        referer = request.headers.get("Referer")
-        host = request.host_url.rstrip("/")
-        if not origin and not referer:
-            return f(*args, **kwargs)
-        if origin and not origin.startswith(host):
-            return jsonify({"error": "Cross-origin request rejected"}), 403
-        if referer and not referer.startswith(host):
-            return jsonify({"error": "Cross-origin request rejected"}), 403
-        return f(*args, **kwargs)
-
-    return wrapper
+from potato.server_utils.origin_check import same_origin_required
 
 
 # Admin gate reuses the shared RBAC layer (shared API key stays superuser).

@@ -112,25 +112,15 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
     """
     annotations = []
 
-    if not os.path.isdir(output_dir):
+    from potato.server_utils.stored_states import iter_stored_states, uses_mysql
+    if not uses_mysql(config) and not os.path.isdir(output_dir):
         logger.warning(f"Output directory not found: {output_dir}")
         return annotations
 
     from potato.annotator_origin import parse_machine_annotators
     roster = parse_machine_annotators(config)
 
-    for user_dir in sorted(os.listdir(output_dir)):
-        user_path = os.path.join(output_dir, user_dir)
-        if not os.path.isdir(user_path):
-            continue
-
-        state_file = os.path.join(user_path, "user_state.json")
-        if not os.path.exists(state_file):
-            continue
-
-        with open(state_file, "r") as f:
-            user_state = json.load(f)
-
+    for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
 
         # Extract label annotations
@@ -241,6 +231,7 @@ def load_phase_responses_from_output_dir(
     display_logic_schemes: list = None,
     exclude_hidden: bool = True,
     single_select_schemas: set = None,
+    config: Optional[Mapping] = None,
 ) -> list:
     """
     Load phase/surveyflow responses from the Potato output directory.
@@ -271,27 +262,17 @@ def load_phase_responses_from_output_dir(
         List of dicts with keys: user_id, phase, page, sequence, schema, label_name,
         value (plus ``hidden`` when ``display_logic_schemes`` is provided, and
         ``superseded`` when ``single_select_schemas`` is provided).
+
+    ``config`` is read only for its ``database`` block: a MySQL study's states
+    are read from the database rather than ``output_dir``.
     """
     from potato.export.single_select import resolve_final_label, phase_changes
 
     responses = []
     single_select_schemas = single_select_schemas or set()
 
-    if not os.path.isdir(output_dir):
-        return responses
-
-    for user_dir in sorted(os.listdir(output_dir)):
-        user_path = os.path.join(output_dir, user_dir)
-        if not os.path.isdir(user_path):
-            continue
-
-        state_file = os.path.join(user_path, "user_state.json")
-        if not os.path.exists(state_file):
-            continue
-
-        with open(state_file, "r") as f:
-            user_state = json.load(f)
-
+    from potato.server_utils.stored_states import iter_stored_states
+    for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
         phase_data = user_state.get("phase_to_page_to_label_to_value", {})
 
@@ -502,7 +483,8 @@ def build_export_context(config_path: str) -> ExportContext:
     items = load_items_from_data_files(config, config_dir)
     annotations = load_annotations_from_output_dir(output_annotation_dir, schemas,
                                                    config)
-    phase_responses = load_phase_responses_from_output_dir(output_annotation_dir)
+    phase_responses = load_phase_responses_from_output_dir(output_annotation_dir,
+                                                           config=config)
 
     return ExportContext(
         config=config,

@@ -71,34 +71,7 @@ def api_login_required(f):
     return decorated_function
 
 
-def same_origin_required(f):
-    """CSRF protection for state-changing API routes.
-
-    Rejects requests whose Origin or Referer header doesn't match the host.
-    Browsers automatically attach these headers; cross-origin forms cannot
-    forge them. This is a lightweight CSRF defense without requiring token
-    machinery wired into every JS call site.
-
-    Allows requests with no Origin/Referer (server-to-server, curl from
-    admins with X-API-Key) since those aren't subject to CSRF.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        origin = request.headers.get('Origin')
-        referer = request.headers.get('Referer')
-        host = request.host_url.rstrip('/')
-
-        # If neither header is present, this isn't a browser request — allow.
-        if not origin and not referer:
-            return f(*args, **kwargs)
-
-        if origin and not origin.startswith(host):
-            return jsonify({'error': 'Cross-origin request rejected'}), 403
-        if referer and not referer.startswith(host):
-            return jsonify({'error': 'Cross-origin request rejected'}), 403
-
-        return f(*args, **kwargs)
-    return decorated_function
+from potato.server_utils.origin_check import same_origin_required
 
 
 # Admin gate for destructive ops (forced phase transitions, refinement approval,
@@ -321,6 +294,12 @@ def annotate():
                 session['disagreement_instance'] = instance_id
                 return redirect(url_for('solo_mode.disagreements'))
 
+            # The agreement gate. It used to run only once the human had no
+            # items left, so a study that reached the threshold kept serving
+            # the human items the LLM was meant to take over.
+            if manager.check_and_advance_to_autonomous():
+                return redirect(url_for('solo_mode.status'))
+
             # Periodic review of low-confidence LLM labels (due every
             # periodic_review_interval fresh LLM labels).
             if manager.check_and_enter_periodic_review():
@@ -334,6 +313,13 @@ def annotate():
             return redirect(url_for('solo_mode.annotate'))
 
         return jsonify({'error': 'Missing instance_id or annotation'}), 400
+
+    # The threshold can also be crossed by LLM labels compared against
+    # earlier human labels in the background, between two page loads.
+    if (manager.check_and_advance_to_autonomous()
+            or manager.get_current_phase() == SoloPhase.AUTONOMOUS_LABELING):
+        # Once the LLM has taken over, the annotate page stops serving items.
+        return redirect(url_for('solo_mode.status'))
 
     # Get next instance ID
     instance_id = manager.get_next_instance_for_human(user_id)
@@ -726,6 +712,7 @@ def status():
 # =============================================================================
 
 @solo_mode_bp.route('/api/status')
+@api_login_required
 @solo_mode_required
 def api_status():
     """Get comprehensive Solo Mode status."""
@@ -743,6 +730,7 @@ def api_status():
 
 
 @solo_mode_bp.route('/api/prompts')
+@api_login_required
 @solo_mode_required
 def api_prompts():
     """Get prompt version history."""
@@ -766,6 +754,7 @@ def api_prompts():
 
 
 @solo_mode_bp.route('/api/predictions')
+@api_login_required
 @solo_mode_required
 def api_predictions():
     """Get all LLM predictions."""
@@ -915,6 +904,7 @@ def api_optimize_prompt():
 
 
 @solo_mode_bp.route('/api/disagreements')
+@api_login_required
 @solo_mode_required
 def api_disagreements():
     """Get all disagreements and their status.
@@ -938,6 +928,7 @@ def api_disagreements():
 
 
 @solo_mode_bp.route('/api/edge-cases')
+@api_login_required
 @solo_mode_required
 def api_edge_cases():
     """Get edge case status."""
@@ -954,6 +945,7 @@ def api_edge_cases():
 
 
 @solo_mode_bp.route('/api/rules')
+@api_login_required
 @solo_mode_required
 def api_rules():
     """Get all edge case rules and their status."""
@@ -968,6 +960,7 @@ def api_rules():
 
 
 @solo_mode_bp.route('/api/rules/categories')
+@api_login_required
 @solo_mode_required
 def api_rules_categories():
     """Get aggregated edge case rule categories."""
@@ -1043,6 +1036,7 @@ def api_rules_cluster():
 
 
 @solo_mode_bp.route('/api/rules/viz-data')
+@api_login_required
 @solo_mode_required
 def api_rules_viz_data():
     """Return 2D-projected rule embeddings for D3 scatter plot visualization."""
@@ -1107,6 +1101,7 @@ def api_rules_viz_data():
 
 
 @solo_mode_bp.route('/api/confusion-analysis')
+@api_login_required
 @solo_mode_required
 def api_confusion_analysis():
     """Get full confusion analysis with enriched patterns and heatmap data."""
@@ -1246,6 +1241,7 @@ def api_confusion_suggest_guideline():
 
 
 @solo_mode_bp.route('/api/refinement-status')
+@api_login_required
 @solo_mode_required
 def api_refinement_status():
     """Get refinement loop status and cycle history."""
@@ -1273,6 +1269,7 @@ def api_refinement_trigger():
 
 
 @solo_mode_bp.route('/api/reannotation-report')
+@api_login_required
 @solo_mode_required
 def api_reannotation_report():
     """Get before/after accuracy report for re-annotated instances."""
@@ -1298,6 +1295,7 @@ def api_refinement_reset():
 
 
 @solo_mode_bp.route('/api/refinement/log')
+@api_login_required
 @solo_mode_required
 def api_refinement_log():
     """Get the full log of refinement cycles (validated framework only).
@@ -1311,6 +1309,7 @@ def api_refinement_log():
 
 
 @solo_mode_bp.route('/api/refinement/pending')
+@api_login_required
 @solo_mode_required
 def api_refinement_pending():
     """Get refinement candidates awaiting admin approval.
@@ -1363,6 +1362,7 @@ def api_refinement_reject():
 
 
 @solo_mode_bp.route('/api/refinement/strategies')
+@api_login_required
 @solo_mode_required
 def api_refinement_strategies():
     """List available refinement strategies and their metadata."""
@@ -1374,6 +1374,7 @@ def api_refinement_strategies():
 
 
 @solo_mode_bp.route('/api/labeling-functions')
+@api_login_required
 @solo_mode_required
 def api_labeling_functions():
     """Get all labeling functions and their stats."""
@@ -1432,6 +1433,7 @@ def api_labeling_function_toggle(function_id):
 
 
 @solo_mode_bp.route('/api/labeling-functions/stats')
+@api_login_required
 @solo_mode_required
 def api_labeling_functions_stats():
     """Get labeling function statistics."""
@@ -1440,6 +1442,7 @@ def api_labeling_functions_stats():
 
 
 @solo_mode_bp.route('/api/disagreement-explorer')
+@api_login_required
 @solo_mode_required
 def api_disagreement_explorer():
     """Get disagreement explorer data with scatter plots and label breakdowns."""
@@ -1455,6 +1458,7 @@ def api_disagreement_explorer():
 
 
 @solo_mode_bp.route('/api/disagreement-timeline')
+@api_login_required
 @solo_mode_required
 def api_disagreement_timeline():
     """Get temporal disagreement trend data."""
@@ -1471,6 +1475,7 @@ def api_disagreement_timeline():
 
 
 @solo_mode_bp.route('/api/export')
+@admin_required
 @solo_mode_required
 def api_export():
     """Export all Solo Mode data."""

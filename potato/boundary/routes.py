@@ -39,23 +39,7 @@ def api_login_required(f):
     return decorated_function
 
 
-def same_origin_required(f):
-    """Lightweight CSRF defense for state-changing routes (Origin/Referer check)."""
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        origin = request.headers.get("Origin")
-        referer = request.headers.get("Referer")
-        host = request.host_url.rstrip("/")
-        if not origin and not referer:
-            return f(*args, **kwargs)
-        if origin and not origin.startswith(host):
-            return jsonify({"error": "Cross-origin request rejected"}), 403
-        if referer and not referer.startswith(host):
-            return jsonify({"error": "Cross-origin request rejected"}), 403
-        return f(*args, **kwargs)
-
-    return decorated_function
+from potato.server_utils.origin_check import same_origin_required
 
 
 def boundary_required(f):

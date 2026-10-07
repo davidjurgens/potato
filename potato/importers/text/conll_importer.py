@@ -48,6 +48,12 @@ DOCSTART = "-DOCSTART-"
 #: instance ids rather than inventing new ones.
 SENT_ID_DOC = re.compile(r"^(?P<doc>.+)-s\d+$")
 
+#: The last column of a CoNLL-2003-style token row: O, or a scheme prefix and type.
+_TAG = re.compile(r"^(?:O|[BIESLU]-\S+)$")
+
+#: A CoNLL-U token row: ten columns, the first a token index.
+_CONLLU_ROW = re.compile(r"^\d+(?:[-.]\d+)?$")
+
 
 def bio_tags_to_spans(tags: List[str]) -> List[Tuple[int, int, str]]:
     """
@@ -238,13 +244,22 @@ class CoNLLImporter(BaseTextImporter):
                 sentences.append(current)
             current = _Sentence()
 
+        # In CoNLL-U every token row starts with an index, so a '#' line is
+        # always a comment. In CoNLL-2003-style files a token can itself start
+        # with '#' (#WorldCup in WNUT and other Twitter NER sets), so there a
+        # '#' line is a token row when it has the shape of one.
+        is_conllu = any(
+            len(f) >= 10 and _CONLLU_ROW.match(f[0])
+            for f in (ln.split("\t") for ln in text.splitlines()))
+
         for raw_line in text.splitlines():
             line = raw_line.rstrip("\r\n")
             if not line.strip():
                 flush()
                 continue
 
-            if line.startswith("#"):
+            if line.startswith("#") and not (
+                    not is_conllu and CoNLLImporter._is_hash_token_row(line)):
                 comment = line.lstrip("#").strip()
                 key, sep, value = comment.partition("=")
                 if not sep:
@@ -275,6 +290,12 @@ class CoNLLImporter(BaseTextImporter):
 
         flush()
         return sentences
+
+    @staticmethod
+    def _is_hash_token_row(line: str) -> bool:
+        """True for ``#WorldCup<TAB>B-event`` or ``# O``; False for ``# text = ...``."""
+        fields = line.split("\t") if "\t" in line else line.split()
+        return len(fields) >= 2 and "=" not in fields and bool(_TAG.match(fields[-1]))
 
     @staticmethod
     def _read_row(fields: List[str]) -> Tuple[Optional[str], str, bool]:
@@ -366,6 +387,7 @@ class CoNLLImporter(BaseTextImporter):
         tokens: List[str] = []
         offsets: List[Tuple[int, int]] = []
         tags: List[str] = []
+        span_tags: List[Tuple[int, int, str]] = []
         cursor = 0
 
         for sentence in sentences:
@@ -394,6 +416,12 @@ class CoNLLImporter(BaseTextImporter):
                 tokens.append(token)
                 offsets.append((cursor + start, cursor + end)
                                if start >= 0 else (-1, -1))
+            # Spans are read per sentence. Joining the tags first let an IOB1
+            # entity at the end of one sentence run into an I- tag at the start
+            # of the next ("Paris" + "London" became one LOC span).
+            base = len(tags)
+            for first, last, label in bio_tags_to_spans(sentence.tags):
+                span_tags.append((base + first, base + last, label))
             tags.extend(sentence.tags)
             cursor += len(rendered)
 
@@ -402,7 +430,7 @@ class CoNLLImporter(BaseTextImporter):
 
         text = "".join(pieces)
         spans: List[ImportedSpan] = []
-        for first, last, label in bio_tags_to_spans(tags):
+        for first, last, label in span_tags:
             start = offsets[first][0]
             end = offsets[last][1]
             if start < 0 or end < 0:

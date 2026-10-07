@@ -25,6 +25,14 @@ _SOLO_MODE_MANAGER: Optional['SoloModeManager'] = None
 _SOLO_MODE_LOCK = threading.Lock()
 
 
+# Phases in which the background labelling loop runs.
+_LABELING_PHASES = (
+    SoloPhase.EDGE_CASE_LABELING, SoloPhase.PROMPT_VALIDATION,
+    SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION,
+    SoloPhase.AUTONOMOUS_LABELING,
+)
+
+
 @dataclass
 class PromptVersion:
     """A versioned prompt for LLM labeling."""
@@ -1428,8 +1436,15 @@ class SoloModeManager:
                 label: str = ""
 
             response = endpoint.query(full_prompt, LabelOnly)
+            if isinstance(response, str):
+                # OpenAI, Anthropic and vLLM return the reply text; it used to
+                # fall through to None, so every candidate scored 0.
+                from potato.ai.ai_endpoint import parse_llm_json
+                parsed = parse_llm_json(response)
+                response = parsed if 'label' in parsed else {
+                    'label': str(parsed.get('response', ''))}
             if isinstance(response, dict):
-                return response.get('label', '').strip() or None
+                return str(response.get('label', '')).strip() or None
             elif hasattr(response, 'label'):
                 return response.label
             return None
@@ -1878,8 +1893,11 @@ class SoloModeManager:
         with self._lock:
             if instance_id not in self.predictions:
                 self.predictions[instance_id] = {}
+            previous = self.predictions[instance_id].get(schema_name)
             self.predictions[instance_id][schema_name] = prediction
             self.llm_labeled_ids.add(instance_id)
+            if previous is not None and previous is not prediction:
+                self._retract_comparison(instance_id, schema_name, previous)
 
             # Track confidence history for cartography
             if instance_id not in self.confidence_history:
@@ -1887,6 +1905,32 @@ class SoloModeManager:
             self.confidence_history[instance_id].append(
                 (prediction.prompt_version, prediction.confidence_score)
             )
+
+    def _retract_comparison(self, instance_id: str, schema_name: str,
+                            previous: LLMPrediction) -> None:
+        """Take a replaced prediction's comparison out of every count.
+
+        One (instance, schema) is one comparison. A re-annotated prediction
+        arrives without the human label, so it was compared again (here or on
+        the human's next save) and the item counted twice towards the gate's
+        minimum sample, with both its old and new verdicts in the rate.
+        """
+        if previous.human_label is None or previous.agrees_with_human is None:
+            return
+        metrics = self.agreement_metrics
+        metrics.total_compared = max(0, metrics.total_compared - 1)
+        if previous.agrees_with_human:
+            metrics.agreements = max(0, metrics.agreements - 1)
+        else:
+            metrics.disagreements = max(0, metrics.disagreements - 1)
+        metrics.update_rate()
+        stats = self._per_version_agreement.get(previous.prompt_version)
+        if stats:
+            stats['compared'] = max(0, stats['compared'] - 1)
+            if previous.agrees_with_human:
+                stats['agreements'] = max(0, stats['agreements'] - 1)
+        self.validation_tracker.retract_comparison(instance_id, schema_name)
+        self._refresh_disagreement(instance_id)
 
     def get_llm_prediction(
         self,
@@ -2526,9 +2570,12 @@ class SoloModeManager:
             if metrics.agreement_rate < threshold:
                 return False
 
-            # Already in or past autonomous labeling phase
+            # Only the human-annotation phases hand over. From a review or
+            # disagreement page the human finishes that first, and past
+            # autonomous labelling there is nothing to hand over.
             current_phase = self.phase_controller.get_current_phase()
-            if current_phase.value >= SoloPhase.AUTONOMOUS_LABELING.value:
+            if current_phase not in (SoloPhase.PARALLEL_ANNOTATION,
+                                     SoloPhase.ACTIVE_ANNOTATION):
                 return False
 
             # Advance atomically. The phase graph forbids a direct
@@ -2719,10 +2766,15 @@ class SoloModeManager:
                     self._stop_labeling.wait(2)
                     continue
 
-                # Check if we've hit the max parallel labels
+                # Check if we've hit the max parallel labels. The cap keeps
+                # the LLM from running ahead of the human; once the LLM has
+                # taken over there is no human to stay level with, and the
+                # cap stalled autonomous labelling short of the dataset.
+                autonomous = (self.phase_controller.get_current_phase()
+                              == SoloPhase.AUTONOMOUS_LABELING)
                 with self._lock:
                     current_count = len(self.llm_labeled_ids - self.human_labeled_ids)
-                    if current_count >= max_labels:
+                    if not autonomous and current_count >= max_labels:
                         logger.debug(f"Max parallel labels reached ({current_count})")
                         time.sleep(10)
                         continue
@@ -2798,12 +2850,16 @@ class SoloModeManager:
             lf_results, remaining = self.labeling_function_manager.apply_batch(
                 instances
             )
+            schema_of = {inst['instance_id']: inst.get('schema_name')
+                         for inst in instances}
+            schemas = self.app_config.get('annotation_schemes', [])
+            default_schema = (
+                schemas[0].get('name', 'default') if schemas else 'default'
+            )
             for result in lf_results:
-                # Record as LLM prediction with labeling_function source
-                schemas = self.app_config.get('annotation_schemes', [])
-                schema_name = (
-                    schemas[0].get('name', 'default') if schemas else 'default'
-                )
+                # Record as LLM prediction with labeling_function source, under
+                # the schema the instance was queued for.
+                schema_name = schema_of.get(result.instance_id) or default_schema
                 prediction = LLMPrediction(
                     instance_id=result.instance_id,
                     schema_name=schema_name,
@@ -2817,6 +2873,9 @@ class SoloModeManager:
                 self.set_llm_prediction(
                     result.instance_id, schema_name, prediction
                 )
+                # Same as an LLM label: compare against a human label the
+                # item already has, or the agreement metrics never see it.
+                self._retroactive_compare(result.instance_id, schema_name)
                 labeled += 1
 
         # Label remaining with LLM
@@ -3078,9 +3137,12 @@ class SoloModeManager:
 
             logger.info("Loaded Solo Mode state")
 
-            # Auto-start background labeling if already in an annotation phase
+            # Auto-start background labeling in every phase whose entry
+            # starts it (see advance_to_phase), plus AUTONOMOUS_LABELING: the
+            # move on to FINAL_VALIDATION happens inside the loop, so a restart
+            # there without the loop left the run stalled.
             current_phase = self.phase_controller.get_current_phase()
-            if current_phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            if current_phase in _LABELING_PHASES:
                 self.start_background_labeling()
 
             return True

@@ -45,6 +45,33 @@ def _get_manager():
     return CodingAgentRunnerManager.get_instance()
 
 
+def _owned_session(session_id):
+    """The session if the caller started it or is an admin, else None.
+
+    Another user's session reads as missing, so its id cannot be probed.
+    """
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if runner is None:
+        return None
+    if manager.get_session_owner(session_id) == flask_session.get("username"):
+        return runner
+    try:
+        from .server_utils.rbac import Permission, get_rbac_manager
+        if get_rbac_manager().check(Permission.VIEW_ADMIN_DASHBOARD, request, flask_session):
+            return runner
+    except Exception:
+        pass
+    return None
+
+
+def _path_part(value) -> str:
+    """A request value made safe to use as one directory-name component."""
+    import re
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", str(value or ""))
+    return cleaned.lstrip(".") or "_"
+
+
 def _get_config():
     from .server_utils.config_module import config
     return config
@@ -59,7 +86,10 @@ def start_session():
     data = request.get_json() or {}
     task_description = data.get("task_description", "")
     instance_id = data.get("instance_id", "")
-    user_id = data.get("user_id", request.cookies.get("user_id", "anonymous"))
+    # The session's user, never a value from the request: the body field and
+    # cookie were the caller's claim, which let one annotator attribute a
+    # sandbox run to another.
+    user_id = flask_session["username"]
 
     if not task_description:
         return jsonify({"error": "task_description is required"}), 400
@@ -82,7 +112,7 @@ def start_session():
     task_dir = config.get("task_dir", ".")
     trace_dir = os.path.join(
         task_dir, "live_coding_sessions",
-        f"{user_id}_{instance_id}_{int(time.time())}",
+        f"{_path_part(user_id)}_{_path_part(instance_id)}_{int(time.time())}",
     )
 
     manager = _get_manager()
@@ -104,8 +134,7 @@ def start_session():
 @_login_required
 def stream_events(session_id):
     """SSE event stream for a coding agent session."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
 
@@ -152,8 +181,7 @@ def stream_events(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/pause/<session_id>", methods=["POST"])
 @_login_required
 def pause_session(session_id):
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     runner.pause()
@@ -163,8 +191,7 @@ def pause_session(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/resume/<session_id>", methods=["POST"])
 @_login_required
 def resume_session(session_id):
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     runner.resume()
@@ -174,8 +201,7 @@ def resume_session(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/instruct/<session_id>", methods=["POST"])
 @_login_required
 def instruct_session(session_id):
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
 
@@ -192,8 +218,7 @@ def instruct_session(session_id):
 @_login_required
 def get_checkpoints(session_id):
     """List all checkpoints for a session."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     return jsonify({"checkpoints": runner.get_checkpoints()})
@@ -203,8 +228,7 @@ def get_checkpoints(session_id):
 @_login_required
 def rollback_session(session_id):
     """Rollback to a specific step."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
 
@@ -225,8 +249,7 @@ def rollback_session(session_id):
 @_login_required
 def get_diff(session_id, step):
     """Get diff from a step to current state."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     diff = runner.get_diff_since_step(step)
@@ -237,8 +260,7 @@ def get_diff(session_id, step):
 @_login_required
 def replay_session(session_id):
     """Replay from a step with optional new instructions or edited actions."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
 
@@ -270,8 +292,7 @@ def replay_session(session_id):
 @_login_required
 def get_branches(session_id):
     """List all branches for a session."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     return jsonify({"branches": runner.get_branches()})
@@ -281,8 +302,7 @@ def get_branches(session_id):
 @_login_required
 def switch_branch(session_id):
     """Switch to a different branch."""
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
 
@@ -302,8 +322,7 @@ def switch_branch(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/stop/<session_id>", methods=["POST"])
 @_login_required
 def stop_session(session_id):
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     runner.stop()
@@ -316,8 +335,7 @@ def stop_session(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/state/<session_id>")
 @_login_required
 def get_state(session_id):
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     return jsonify(runner.get_state_summary())
@@ -326,8 +344,7 @@ def get_state(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/trace/<session_id>")
 @_login_required
 def get_trace(session_id):
-    manager = _get_manager()
-    runner = manager.get_session(session_id)
+    runner = _owned_session(session_id)
     if not runner:
         return jsonify({"error": "Session not found"}), 404
     return jsonify(runner.get_trace())
@@ -336,8 +353,16 @@ def get_trace(session_id):
 @live_coding_agent_bp.route("/api/live_coding_agent/sessions")
 @_login_required
 def list_sessions():
-    manager = _get_manager()
-    return jsonify({"sessions": manager.list_sessions()})
+    sessions = _get_manager().list_sessions()
+    me = flask_session.get("username")
+    try:
+        from .server_utils.rbac import Permission, get_rbac_manager
+        is_admin = get_rbac_manager().check(Permission.VIEW_ADMIN_DASHBOARD, request, flask_session)
+    except Exception:
+        is_admin = False
+    if not is_admin:
+        sessions = [x for x in sessions if x.get("user_id") == me]
+    return jsonify({"sessions": sessions})
 
 
 def _sse_event(event_type: str, data: dict) -> str:

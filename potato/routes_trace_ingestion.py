@@ -69,8 +69,10 @@ def _inject_trace(trace: dict):
 
         ism = get_item_state_manager()
 
-        # Save trace data to disk
-        task_dir = current_app.config.get("task_dir", ".")
+        # Save trace data to disk. The potato config holds task_dir; Flask's
+        # app.config does not, which wrote traces under the working directory.
+        from potato.server_utils.config_module import config as potato_config
+        task_dir = potato_config.get("task_dir") or current_app.config.get("task_dir", ".")
         traces_dir = os.path.join(task_dir, "ingested_traces")
         os.makedirs(traces_dir, exist_ok=True)
 
@@ -86,6 +88,8 @@ def _inject_trace(trace: dict):
             **trace,
         }
         ism.add_item(trace_id, item_data)
+        from potato.server_utils.runtime_items import record_runtime_item
+        record_runtime_item(potato_config, trace_id, item_data, "trace_ingestion")
 
         _stats["processed"] += 1
 

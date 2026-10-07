@@ -125,9 +125,11 @@ def _is_port_available(port: int) -> bool:
     """
     Check if a port is available for binding.
 
-    The probe must bind exactly the way the server under test binds, or it answers a
+    The probe must refuse any port the server under test could not bind, or it answers a
     different question than the one being asked. FlaskTestServer's werkzeug server
-    listens on ``0.0.0.0`` without ``SO_REUSEADDR``; this probe used to set
+    listens on ``127.0.0.1`` without ``SO_REUSEADDR``. Binding the wildcard here is
+    stricter: it fails when anything holds the port on loopback or on every
+    interface (a stale server from before the loopback change). This probe used to set
     ``SO_REUSEADDR`` and bind ``localhost``, which succeeds even when another process
     already holds ``0.0.0.0:port``. find_free_port() then handed out a busy port, the
     server failed to start with "Port N is in use by another program", and the test

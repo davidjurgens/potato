@@ -68,6 +68,12 @@ Potato picks the best available transport for the provider.
 On the hosts with a disk that does not last, the [backup](deploy-backups.md)
 holds the same data and can be downloaded even when the server is down.
 
+A study that stores annotator state in MySQL is always pulled over HTTPS, on
+every provider. SFTP and `docker cp` would copy an output directory with no
+annotators in it; the archive writes each one out of the database as
+`annotation_output/<user>/user_state.json`. The pull stops with an error when
+the deployment's URL or admin key is missing.
+
 The HTTPS route uses `GET /admin/api/data/archive`, authenticated with the admin
 API key that `potato deploy` generated and stored in `.potato/secrets.json`. It
 needs no shell, which is why it works on Render and anything serverless — the

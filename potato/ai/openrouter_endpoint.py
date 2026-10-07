@@ -54,7 +54,7 @@ class OpenRouterEndpoint(BaseAIEndpoint):
             raise AIEndpointRequestError(f"OpenRouter error {r.status_code}: {r.text}")
         return r.json()
 
-    def query(self, prompt: str, output_format: dict) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to OpenRouter and return the response.
 
@@ -70,7 +70,8 @@ class OpenRouterEndpoint(BaseAIEndpoint):
         """
         try:
             messages = [{"role": "user", "content": prompt}]
-            schema = output_format.model_json_schema()
+            schema = (output_format.model_json_schema()
+                      if hasattr(output_format, "model_json_schema") else None)
 
             body = {
                 "model": self.model or DEFAULT_MODEL,
@@ -81,7 +82,8 @@ class OpenRouterEndpoint(BaseAIEndpoint):
 
             # Handle structured output based on model support. A model that
             # does not support it gets the raw prompt.
-            if self.supports_structured_output():
+            structured = schema is not None and self.supports_structured_output()
+            if structured:
                 body["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
@@ -93,7 +95,7 @@ class OpenRouterEndpoint(BaseAIEndpoint):
 
             data = self._post(body)
             self._warn_if_truncated(data["choices"][0].get("finish_reason"))
-            if self.supports_structured_output():
+            if structured:
                 return self.parseStringToJson(data["choices"][0]["message"]["content"])
             return data["choices"][0]["message"]["content"]
         except Exception as e:

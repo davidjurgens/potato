@@ -713,6 +713,8 @@ def _write_project(parsed, result, source: str,
     data_path = os.path.join(parsed.output_dir, data_rel)
 
     if not parsed.config_only:
+        from potato.importers._common import assert_unique_ids
+        assert_unique_ids(image.instance_id for image in result.images)
         with open(data_path, "w") as f:
             for image in result.images:
                 row = {

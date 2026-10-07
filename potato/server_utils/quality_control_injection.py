@@ -82,14 +82,14 @@ def inject_quality_control_item_if_needed(username, user_state,
         return user_state.assign_instance_at_index(item, insert_index)
 
     if qc_manager.should_inject_attention_check(username):
-        attention_item = qc_manager.get_attention_check_item(username)
+        attention_item = qc_manager.get_attention_check_item(username, exclude=seen_qc_ids)
         if attention_item and inject_item(attention_item):
             logger.info("Injected attention check %s for user %s",
                         attention_item.get("id"), username)
             return True
 
     if qc_manager.should_inject_gold_standard(username):
-        gold_item = qc_manager.get_gold_standard_item(username)
+        gold_item = qc_manager.get_gold_standard_item(username, exclude=seen_qc_ids)
         if gold_item and inject_item(gold_item):
             logger.info("Injected gold standard %s for user %s",
                         gold_item.get("id"), username)

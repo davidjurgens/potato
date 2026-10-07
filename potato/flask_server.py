@@ -553,6 +553,8 @@ def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> l
             - invert: If True, return items that DON'T match (optional)
             - rule: majority (default), any, or all -- how several
               annotators decide
+            - database: the earlier task's ``database`` block, when it
+              stored annotator state in MySQL
         id_key: Key in items containing the instance ID
 
     Returns:
@@ -583,7 +585,10 @@ def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> l
         filter_values = set(filter_value)
 
     # Load prior annotations
-    annotations = load_annotations_from_dir(annotation_dir)
+    # The earlier task's state is in MySQL when the filter names its database.
+    prior_db = filter_config.get("database")
+    annotations = load_annotations_from_dir(
+        annotation_dir, {"database": prior_db} if isinstance(prior_db, dict) else None)
     logger.debug(f"Loaded prior annotations for {len(annotations)} instances")
 
     return filter_loaded_items(items, annotations, schema_name, filter_values,
@@ -667,21 +672,16 @@ def load_instance_data(config: dict):
         if fmt in ["json", "jsonl"]:
             # Handle JSON and JSONL formats
             # Try parsing as a JSON array first, fall back to JSON Lines
-            with open(data_fname, "rt", encoding=encoding) as f:
-                raw = f.read()
+            # The same parser the data_sources and data_directory paths use,
+            # so a file loads identically whichever key names it.
+            from potato.data_sources.parsing import read_text, parse_json_records
+            raw = read_text(data_fname, encoding)
 
-            items = None
             if fmt == "json":
-                try:
-                    parsed = json.loads(raw)
-                    if isinstance(parsed, list):
-                        items = parsed
-                        logger.debug(f"Parsed {data_fname} as JSON array with {len(items)} items")
-                except json.JSONDecodeError:
-                    pass  # Fall through to JSON Lines parsing
-
-            if items is None:
-                # Parse as JSON Lines (one JSON object per line)
+                items = parse_json_records(raw, data_fname, json_array=True)
+            else:
+                # One JSON object per line; a line holding an array is not an
+                # item, so do not expand it here.
                 items = []
                 for line_no, line in enumerate(raw.splitlines()):
                     line = line.strip()
@@ -707,6 +707,8 @@ def load_instance_data(config: dict):
                 if id_key not in item:
                     raise KeyError(f"ID key '{id_key}' not found in item {item_no+1}")
 
+                if item[id_key] is None or str(item[id_key]).strip() == "":
+                    raise ValueError(f"Empty ID key '{id_key}' in item {item_no+1} in {data_fname}")
                 instance_id = str(item[id_key]) # Ensure ID is string
 
                 # Check for duplicate IDs
@@ -756,35 +758,31 @@ def load_instance_data(config: dict):
 
             line_no = len(items)
         else:
+            # Every cell verbatim, as a string. pandas' type guessing turned
+            # id 007 into 7, the text "NA" into "nan", and an id column with
+            # one blank cell into "1.0", "2.0", "nan"; its CSV quoting rules,
+            # applied to TSV, merged rows after a cell starting with '"'.
+            from potato.data_sources.parsing import read_text, parse_delimited
             sep = "," if fmt == "csv" else "\t"
+            items = parse_delimited(read_text(data_fname, encoding), sep, data_fname)
 
-            # Validate required columns exist
-            df = pd.read_csv(data_fname, sep=sep, encoding=encoding)
-            if id_key not in df.columns:
+            if items and id_key not in items[0]:
                 raise KeyError(f"ID column '{id_key}' not found in file {data_fname}")
-            if text_key not in df.columns:
+            if items and text_key not in items[0]:
                 logger.warning(f"Text column '{text_key}' not found in file {data_fname}")
 
-            # Convert ID column to string to ensure consistent typing
-            df[id_key] = df[id_key].astype(str)
+            seen_ids = set()
+            for row_no, item in enumerate(items, 2):
+                instance_id = item[id_key]
+                if instance_id.strip() == "":
+                    raise ValueError(f"Empty ID in column '{id_key}' at row {row_no} of {data_fname}")
+                if instance_id in seen_ids:
+                    raise ValueError(f"Duplicate instance IDs found in {data_fname}: ['{instance_id}']")
+                seen_ids.add(instance_id)
 
-            # Check for duplicate IDs in the dataframe
-            if df[id_key].duplicated().any():
-                dupes = df[id_key][df[id_key].duplicated()].tolist()
-                raise ValueError(f"Duplicate instance IDs found in {data_fname}: {dupes}")
-
-            # Check for duplicate IDs with existing items
-            existing_dupes = [id for id in df[id_key] if ism.has_item(id)]
+            existing_dupes = [i for i in seen_ids if ism.has_item(i)]
             if existing_dupes:
-                raise ValueError(f"Instance IDs in {data_fname} conflict with existing IDs: {existing_dupes}")
-
-            # Load data with proper type conversion
-            df = df.astype({id_key: str})
-            if text_key in df.columns:
-                df = df.astype({text_key: str})
-
-            # Convert to list of dicts for filtering
-            items = df.to_dict('records')
+                raise ValueError(f"Instance IDs in {data_fname} conflict with existing IDs: {sorted(existing_dupes)}")
 
             # Apply filter_by_prior_annotation if configured
             if filter_config:
@@ -793,8 +791,7 @@ def load_instance_data(config: dict):
 
             # Add items to state manager
             for item in items:
-                instance_id = item[id_key]
-                ism.add_item(instance_id, item)
+                ism.add_item(item[id_key], item)
 
             line_no = len(items)
 
@@ -1149,22 +1146,35 @@ def load_user_data(config: dict):
     user_data_dir = config['output_annotation_dir']
     usm = get_user_state_manager()
 
-    # Check if the output directory exists
-    if not os.path.exists(user_data_dir):
-        os.makedirs(user_data_dir)
-        logger.info("Created output directory: %s" % user_data_dir)
-        return
+    if getattr(usm, "use_database", False):
+        # Annotators live in the database, not the output directory. Nothing
+        # loaded them at boot before, so a restart started with no annotators
+        # and the per-item cap counted nobody.
+        from potato.database import MysqlUserState
+        from potato.server_utils.stored_states import import_file_states_into_mysql
+        import_file_states_into_mysql(user_data_dir, usm)
+        for user_id in MysqlUserState.stored_user_ids(usm.db_manager):
+            try:
+                usm.load_user_state_from_db(user_id)
+            except Exception as e:
+                logger.error("Could not load %s's state from the database: %s", user_id, e)
+    else:
+        # Check if the output directory exists
+        if not os.path.exists(user_data_dir):
+            os.makedirs(user_data_dir)
+            logger.info("Created output directory: %s" % user_data_dir)
+            return
 
-    # For each user's directory, load in their state
-    user_dirs = [d for d in os.listdir(user_data_dir) if os.path.isdir(os.path.join(user_data_dir, d))]
+        # For each user's directory, load in their state
+        user_dirs = [d for d in os.listdir(user_data_dir) if os.path.isdir(os.path.join(user_data_dir, d))]
 
-    for user_dir in user_dirs:
-        try:
-            usm.load_user_state(os.path.join(user_data_dir, user_dir))
-        except ValueError as e:
-            # Skip directories that don't have valid user state files
-            logger.warning("Skipping invalid user directory %s: %s" % (user_dir, str(e)))
-            continue
+        for user_dir in user_dirs:
+            try:
+                usm.load_user_state(os.path.join(user_data_dir, user_dir))
+            except ValueError as e:
+                # Skip directories that don't have valid user state files
+                logger.warning("Skipping invalid user directory %s: %s" % (user_dir, str(e)))
+                continue
 
     # Rebuild instance_annotators from loaded user state so that
     # adjudication build_queue() (and other code that relies on
@@ -1174,10 +1184,10 @@ def load_user_data(config: dict):
     for user_id in usm.get_user_ids():
         user_state = usm.get_user_state(user_id)
         if user_state:
-            for instance_id in user_state.instance_id_to_label_to_value:
-                if ism.has_item(instance_id):
-                    ism.register_annotator(instance_id, user_id)
-            for instance_id in user_state.instance_id_to_span_to_value:
+            # Every kind of answer makes the user an annotator of the item:
+            # an item with only span links or events counted nobody, and the
+            # per-item cap was exceeded after a restart.
+            for instance_id in user_state.get_annotated_instance_ids():
                 if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
             # Rebuild the per-item assignee index too. It backs the per-item
@@ -1775,10 +1785,48 @@ def _restore_backup_before_state_loads(config: dict) -> None:
     restore_on_boot(config)
 
 
+def _restore_ibws_rounds(config: dict) -> None:
+    """Bring the IBWS manager back to the round the study had reached.
+
+    Rounds live in memory and every boot starts again at round 1. Tuples are
+    generated deterministically from the seed and the stored answers, so the
+    rounds are replayed: while the current round is fully annotated, score it
+    and generate the next. The tuples themselves are already back (they are
+    journalled as runtime items), so only the manager's state is rebuilt.
+    """
+    from potato.ibws_manager import get_ibws_manager
+    mgr = get_ibws_manager()
+    if mgr is None:
+        return
+    bws_schema = next((s.get("name") for s in config.get("annotation_schemes", [])
+                       if isinstance(s, dict) and s.get("annotation_type") == "bws"), None)
+    if not bws_schema:
+        return
+    ism, usm = get_item_state_manager(), get_user_state_manager()
+    id_key = config["item_properties"]["id_key"]
+    replayed = 0
+    while not mgr.is_completed() and mgr.check_round_complete(ism, bws_schema):
+        new_tuples = mgr.advance_round(ism, usm, bws_schema)
+        if not new_tuples:
+            break
+        replayed += 1
+        for t in new_tuples:
+            if not ism.has_item(str(t[id_key])):
+                ism.add_item(str(t[id_key]), t)
+    if replayed:
+        _render_displayed_text(config["item_properties"]["text_key"])
+        logger.info("IBWS: restored to round %d", mgr.current_round)
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
     load_instance_data(config)
+    # Items added while an earlier run was up (trace webhook, MCP add_items).
+    # Before annotator state loads, or its queue is pruned of them.
+    from potato.server_utils.runtime_items import load_runtime_items
+    if load_runtime_items(config, get_item_state_manager()):
+        _render_displayed_text(config["item_properties"]["text_key"])
     # Segment long chain-of-thought reasoning into per-step lists (feeds the
     # cot_trace display + process_reward schema). Must run after items load so
     # every static item is segmented before assignment/rendering.
@@ -1793,6 +1841,7 @@ def load_all_data(config: dict):
     except Exception as exc:
         logger.warning("Overlap sampling skipped due to error: %s", exc)
     load_user_data(config)
+    _restore_ibws_rounds(config)
     load_phase_data(config)
     load_highlights_data(config)
     load_training_data(config)
@@ -2440,6 +2489,21 @@ def load_phase_data(config: dict) -> None:
                 # annotation schemes for the training phase layout.
                 if phase_type in [UserPhase.TRAINING, UserPhase.ANNOTATION]:
                     phase_labeling_schemes = config.get('annotation_schemes', [])
+                    # training.annotation_schemes names the subset of the main
+                    # schemes the practice questions use. It was documented and
+                    # never read, so training always showed every scheme.
+                    wanted = (config.get('training') or {}).get('annotation_schemes')
+                    if phase_type == UserPhase.TRAINING and wanted:
+                        wanted = [wanted] if isinstance(wanted, str) else list(wanted)
+                        known = {s.get('name') for s in phase_labeling_schemes if isinstance(s, dict)}
+                        missing = [w for w in wanted if w not in known]
+                        if missing:
+                            from potato.server_utils.config_module import ConfigValidationError
+                            raise ConfigValidationError(
+                                f"training.annotation_schemes names {missing}, which are not "
+                                "in annotation_schemes")
+                        phase_labeling_schemes = [s for s in phase_labeling_schemes
+                                                  if isinstance(s, dict) and s.get('name') in wanted]
                     logger.debug(f"Phase {phase_name} using main annotation schemes")
                 else:
                     # Other phases (prestudy, poststudy, etc.)
@@ -2492,6 +2556,12 @@ def load_phase_data(config: dict) -> None:
                     for _survey_scheme in phase_labeling_schemes:
                         if isinstance(_survey_scheme, dict):
                             _survey_scheme.setdefault("humanize_labels", False)
+
+            # Each phase page's own questions, so a page's required answers can
+            # be checked on the server before the participant moves past it.
+            if phase_type not in (UserPhase.TRAINING, UserPhase.ANNOTATION):
+                config.setdefault('_phase_page_schemes', {})[phase_name] = [
+                    s for s in phase_labeling_schemes if isinstance(s, dict)]
 
             # Remember this phase's questions for cross-phase display_logic
             # validation after all phases have loaded (see below).
@@ -2721,6 +2791,11 @@ def _compute_instance_text_is_media_path(annotation_schemes, item_data, displaye
     return _looks_like_media_path(display)
 
 
+def _instance_dom_text_or_empty(text):
+    from potato.server_utils.span_text import instance_dom_text
+    return instance_dom_text(text) if isinstance(text, str) else ""
+
+
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface.
 
@@ -2830,16 +2905,10 @@ def get_displayed_text(text):
             text = "<br/><br/>".join(formatted_items)
         return text
 
-    # Normalize text for consistent positioning (matches client-side normalization)
-    # Remove control characters but preserve all Unicode (fixes issue #114)
-    text = re.sub(r'[\x00-\x1F\x7F]', lambda m: m.group() if m.group() == '\n' else '', text)
-    text = re.sub(r'[ \t]+', ' ', text)  # Normalize horizontal whitespace only
-    text = text.strip()
-
-    if config.get("highlight_linebreaks", False):
-        text = text.replace("\n", "<br/>")
-
-    return text
+    # Normalize text for consistent positioning. Shared with the exporter and
+    # /api/spans through span_text, which is what span offsets are measured on.
+    from potato.server_utils.span_text import normalize_display_text
+    return normalize_display_text(text, config.get("highlight_linebreaks", False))
 
 # Core functions used by routes.py
 
@@ -3008,7 +3077,7 @@ def _training_page_context(user_state):
         "show_instance_text": True,
         "instance_text_heading": "Training Question",
         "instance": text,
-        "instance_plain_text": text,
+        "instance_plain_text": _instance_dom_text_or_empty(text),
         "instance_image": training_image,
         "instance_id": instance_id,
         "training_current_question": min(training_state.get_current_question_index() + 1,
@@ -3585,10 +3654,11 @@ def render_page_with_annotations(username: str):
     # The data-original-text attribute must contain plain text (no HTML span tags)
     # while the DOM content contains the rendered HTML with span highlights
     # Strip HTML tags to get actual plain text for position calculations
-    import re as re_module
-    original_plain_text = re_module.sub(r'<[^>]+>', '', text)
-    # Also normalize whitespace
-    original_plain_text = re_module.sub(r'\s+', ' ', original_plain_text).strip()
+    # The text the browser holds once the instance is sanitized and rendered:
+    # tags contribute nothing and entities one character. That is what the
+    # offset walk in span-core measures, so it is the offset basis.
+    from potato.server_utils.span_text import instance_dom_text
+    original_plain_text = instance_dom_text(text)
 
     # text_as_image: the annotator sees a picture of the instance instead of the
     # words, so the page must not carry the text anywhere. Blanking `text` and
@@ -3660,8 +3730,11 @@ def render_page_with_annotations(username: str):
         span_annotations = _span_annotations_from_pre_annotations(
             pre_annotation_data, config)
     if span_annotations is not None and len(span_annotations) > 0:
-        # Mark up the instance text where the annotated spans were
-        text = render_span_annotations(text, span_annotations)
+        # Mark up the instance text where the annotated spans were. Offsets
+        # count rendered characters, so the markup is placed in the sanitized
+        # HTML by mapping each offset past tags and entities.
+        from potato.server_utils.html_sanitizer import sanitize_html as _sanitize
+        text = render_span_annotations(str(_sanitize(text)), span_annotations, markup=True)
 
     # If the admin has specified that certain keywords need to be highlighted,
     # post-process the selected instance so that it now also has colored span

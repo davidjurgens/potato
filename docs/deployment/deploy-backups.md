@@ -26,6 +26,10 @@ second copy of the data.
   as raw files: the live database runs in WAL mode while the server writes to
   it, and a copy of the file could be missing recent work or be corrupt.
 
+- **On a MySQL study**, every annotator's state, written out of the database as
+  `user_state.json` and `annotation_history.jsonl` under `_databases/mysql/`.
+  On MySQL the output directory has no `user_state.json` files to copy.
+
 A copy is made every `--backup-minutes` (default 5). Only files that changed
 since the last copy are uploaded.
 
@@ -43,6 +47,9 @@ says which happened:
 ```
 RESTORED 214 file(s) from the s3://my-bucket/potato/pilot backup into an empty task.
 ```
+
+On a MySQL study the restore also needs the database to be empty. The restored
+annotators are then imported into the database.
 
 Without the restore, a backup only goes one way: after a restart the server
 starts empty, an annotator who returns gets a new `user_state.json`, and the

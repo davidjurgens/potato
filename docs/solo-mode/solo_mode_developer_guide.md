@@ -542,8 +542,12 @@ print(manager.get_all_llm_predictions())
 
 ### API Status Endpoint
 
+The status endpoint needs a logged-in session, so log in first and reuse the
+cookie:
+
 ```bash
-curl http://localhost:8000/solo/api/status | jq
+curl -c jar -d "email=$USER_NAME&pass=$PASSWORD" http://localhost:8000/auth
+curl -b jar http://localhost:8000/solo/api/status | jq
 ```
 
 ---
@@ -552,7 +556,7 @@ curl http://localhost:8000/solo/api/status | jq
 
 1. **LLM Batch Size**: Increase `llm_labeling_batch` for better throughput, decrease for lower latency.
 
-2. **Parallel Labels Limit**: `max_parallel_labels` prevents LLM from getting too far ahead of human.
+2. **Parallel Labels Limit**: `max_parallel_labels` prevents LLM from getting too far ahead of human. It does not apply during autonomous labelling.
 
 3. **Uncertainty Strategy**: `direct_confidence` is fastest, `sampling_diversity` is slowest but most accurate.
 

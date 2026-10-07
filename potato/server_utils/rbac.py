@@ -38,6 +38,7 @@ class Permission:
     VIEW_ADMIN_DASHBOARD = "view_admin_dashboard"
     MANAGE_ASSIGNMENT = "manage_assignment"
     MANAGE_CROWDSOURCING = "manage_crowdsourcing"
+    MANAGE_USERS = "manage_users"
     ADJUDICATE = "adjudicate"
     EXPORT_DATA = "export_data"
     ANNOTATE = "annotate"
@@ -47,6 +48,7 @@ class Permission:
             VIEW_ADMIN_DASHBOARD,
             MANAGE_ASSIGNMENT,
             MANAGE_CROWDSOURCING,
+            MANAGE_USERS,
             ADJUDICATE,
             EXPORT_DATA,
             ANNOTATE,
@@ -154,7 +156,14 @@ class RBACManager:
     # Superuser (shared admin key) bypass
     # ------------------------------------------------------------------
     def _debug_enabled(self):
-        return bool(self.config.get("debug", False))
+        # The debug admin bypass applies only on a loopback bind, the same rule
+        # as admin_key.debug_grants_admin. Checking the bare flag here undid
+        # that rule: every admin route falls back to this check, so debug on
+        # 0.0.0.0 (or behind gunicorn) gave anonymous callers full admin.
+        if not self.config.get("debug", False):
+            return False
+        from potato.server_utils.admin_key import is_loopback_bind
+        return is_loopback_bind(self.config)
 
     def _extract_api_key(self, request, session):
         api_key = None

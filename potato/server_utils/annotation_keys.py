@@ -65,6 +65,20 @@ def split_annotation_key(key: str) -> Optional[Tuple[str, str]]:
     """
     if not isinstance(key, str):
         return None
+    # A configured schema name is the authority on where the schema ends. The
+    # browser joins schema and label with one colon, so a schema named
+    # "q1:topic" or a label containing ":::" cannot be split by the separator
+    # alone: "q1:topic:pos" read as schema "q1", and "rad:a:::b" as schema
+    # "rad:a". The longest configured name that the key starts with wins.
+    known = _configured_schema_names()
+    best = None
+    for name in known:
+        for sep in (":::", ":"):
+            if key.startswith(name + sep) and (best is None or len(name) > len(best[0])):
+                best = (name, key[len(name) + len(sep):])
+                break
+    if best is not None:
+        return best
     if ":::" in key:
         schema, _, label = key.partition(":::")
         return schema, label
@@ -72,6 +86,32 @@ def split_annotation_key(key: str) -> Optional[Tuple[str, str]]:
         schema, _, label = key.partition(":")
         return schema, label
     return None
+
+
+def _configured_schema_names() -> List[str]:
+    """Every schema name the loaded config declares, in any scheme list.
+
+    Imported lazily: with no config loaded (bare unit tests, tools) this is
+    empty and the separator rules apply.
+    """
+    try:
+        from potato.server_utils.config_module import config
+    except Exception:  # pragma: no cover
+        return []
+    names = set()
+    lists = [config.get("annotation_schemes") or [], config.get("_surveyflow_schemes") or []]
+    try:  # per-cohort scheme lists may declare inline schemes of their own
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        resolver = get_cohort_scheme_resolver()
+        lists += list(getattr(resolver, "_cohort_schemes", {}).values())
+        lists += list(getattr(resolver, "_scheme_sets", {}).values())
+    except Exception:
+        pass
+    for schemes in lists:
+        for scheme in schemes if isinstance(schemes, list) else []:
+            if isinstance(scheme, dict) and isinstance(scheme.get("name"), str):
+                names.add(scheme["name"])
+    return sorted(names)
 
 
 def is_selection_marker(value: Any) -> bool:

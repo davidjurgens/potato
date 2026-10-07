@@ -11,6 +11,13 @@ json, or jsonl.
 Each document needs, at minimum, a unique identifier and the body of the
 document.
 
+CSV and TSV cells are loaded exactly as written, as text. An id of `007` stays
+`007`, and the text `NA` or `None` stays `NA` or `None`. CSV uses standard
+double-quote quoting, so a cell can contain commas and line breaks. TSV has no
+quoting: a `"` in a TSV cell is part of the text, and a cell cannot contain a
+tab or a line break. An empty id, or the same id twice, stops the server with
+an error naming the row.
+
 You can find example data files
 [here](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/). We
 currently support four different document formats:

@@ -198,9 +198,10 @@ class TestSpanRendering(unittest.TestCase):
 
         result = render_span_annotations(text, spans)
 
-        self.assertEqual(result.count("span-highlight"), 2)
-        self.assertIn('data-label="happy"', result)
-        self.assertIn('data-label="sad"', result)
+        # Crossing spans cannot nest, so one of them is split in two; what
+        # matters is that every character carries exactly the spans covering it.
+        self.assertEqual(_labels_per_char(result),
+                         [{"happy"}] * 4 + [{"happy", "sad"}] * 3 + [{"sad"}] * 4)
 
     def test_render_nested_spans(self):
         """Test rendering nested spans correctly."""
@@ -264,12 +265,36 @@ class TestSpanRendering(unittest.TestCase):
 
         result = render_span_annotations(text, spans)
 
-        self.assertEqual(result.count('class="span-highlight"'), 2)
+        self.assertEqual(_labels_per_char(result),
+                         [{"A"}] * 2 + [{"A", "B"}] + [{"B"}] * 2 + [set()] * 2)
         # Annotation IDs include the label name
         self.assertIn('data-annotation-id="span_0_3_A"', result)
         self.assertIn('data-annotation-id="span_2_5_B"', result)
         self.assertIn('data-label="A"', result)
         self.assertIn('data-label="B"', result)
+
+
+def _labels_per_char(markup):
+    """For each character of rendered text, the labels of the spans around it."""
+    from html.parser import HTMLParser
+
+    class Walk(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.open, self.chars = [], []
+
+        def handle_starttag(self, tag, attrs):
+            self.open.append(dict(attrs).get("data-label"))
+
+        def handle_endtag(self, tag):
+            self.open.pop()
+
+        def handle_data(self, data):
+            self.chars += [{l for l in self.open if l}] * len(data)
+
+    walker = Walk()
+    walker.feed(markup)
+    return walker.chars
 
 
 class TestSpanOverlapDetection(unittest.TestCase):

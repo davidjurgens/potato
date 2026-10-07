@@ -369,9 +369,41 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
         }}
 
         // On init: if hidden input has a server-restored value, check matching boxes
+        function splitKnownValues(stored, values) {{
+            // Split a comma-joined answer back into option values. A plain
+            // split(',') breaks any option whose own text has a comma in it
+            // ("Paris, France"), so match the known values first.
+            var known = values.filter(function (v) {{ return v; }})
+                .sort(function (a, b) {{ return b.length - a.length; }});
+            var out = [], pos = 0;
+            while (pos <= stored.length - 1) {{
+                while (stored.charAt(pos) === ' ') pos++;
+                var match = null;
+                for (var i = 0; i < known.length; i++) {{
+                    var v = known[i], end = pos + v.length;
+                    if (stored.substr(pos, v.length) === v && (end === stored.length || stored.charAt(end) === ',')) {{
+                        match = v; break;
+                    }}
+                }}
+                if (match === null) {{
+                    var next = stored.indexOf(',', pos);
+                    var stop = next < 0 ? stored.length : next;
+                    var piece = stored.slice(pos, stop).trim();
+                    if (piece) out.push(piece);
+                    pos = stop + 1;
+                }} else {{
+                    out.push(match);
+                    pos += match.length + 1;
+                }}
+            }}
+            return out;
+        }}
+
         var serverVal = hiddenInput.getAttribute('value') || hiddenInput.value;
         if (serverVal && serverVal.trim()) {{
-            var labels = serverVal.split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean);
+            var allValues = Array.prototype.map.call(
+                tree.querySelectorAll('.hier-checkbox'), function (cb) {{ return cb.value; }});
+            var labels = splitKnownValues(serverVal, allValues);
             tree.querySelectorAll('.hier-checkbox').forEach(function(cb) {{
                 cb.checked = labels.indexOf(cb.value) >= 0;
             }});

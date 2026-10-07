@@ -270,68 +270,32 @@ class URLSource(DataSource):
         data: bytes,
         content_type: str
     ) -> List[Dict[str, Any]]:
-        """Parse content based on content type or URL extension."""
-        text = data.decode('utf-8')
+        """Parse content based on content type or URL extension.
 
-        # Determine format from content type or URL
+        Uses the shared parser, so CSV/TSV cells are verbatim, TSV has no
+        quoting, and a malformed JSON line is an error naming the line.
+        """
+        from potato.data_sources.parsing import format_for, parse_records
+        text = data.decode('utf-8-sig')
+
         url_path = urlparse(self._url).path.lower()
-
-        if any(ct in content_type for ct in ['json', 'ndjson', 'jsonlines']):
-            return self._parse_json(text)
-        elif url_path.endswith('.json') or url_path.endswith('.jsonl'):
-            return self._parse_json(text)
-        elif 'csv' in content_type or url_path.endswith('.csv'):
-            return self._parse_csv(text, ',')
-        elif 'tab-separated' in content_type or url_path.endswith('.tsv'):
-            return self._parse_csv(text, '\t')
-        else:
-            # Try JSON first, fall back to JSONL
+        fmt = format_for(url_path)
+        if fmt is None:
+            if any(ct in content_type for ct in ['json', 'ndjson', 'jsonlines']):
+                fmt = 'jsonl'
+            elif 'tab-separated' in content_type:
+                fmt = 'tsv'
+            elif 'csv' in content_type:
+                fmt = 'csv'
+        if fmt is None:
             try:
-                return self._parse_json(text)
-            except json.JSONDecodeError:
+                return parse_records(text, 'jsonl', self._url)
+            except ValueError as e:
                 raise ValueError(
                     f"Could not parse content. "
                     f"Content-Type: {content_type}, URL: {self._url}"
-                )
-
-    def _parse_json(self, text: str) -> List[Dict[str, Any]]:
-        """Parse JSON or JSONL content."""
-        # Try as JSON array first
-        try:
-            data = json.loads(text)
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return [data]
-            else:
-                raise ValueError(f"Unexpected JSON type: {type(data)}")
-        except json.JSONDecodeError:
-            pass
-
-        # Parse as JSONL
-        items = []
-        for line_no, line in enumerate(text.split('\n'), 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                item = json.loads(line)
-                if isinstance(item, list):
-                    items.extend(item)
-                else:
-                    items.append(item)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Invalid JSON at line {line_no}: {e}")
-
-        return items
-
-    def _parse_csv(self, text: str, delimiter: str) -> List[Dict[str, Any]]:
-        """Parse CSV/TSV content."""
-        import csv
-        from io import StringIO
-
-        reader = csv.DictReader(StringIO(text), delimiter=delimiter)
-        return [dict(row) for row in reader]
+                ) from e
+        return parse_records(text, fmt, self._url)
 
     def read_items(
         self,

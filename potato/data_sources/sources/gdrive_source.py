@@ -252,53 +252,20 @@ class GoogleDriveSource(DataSource):
             content = self._fetch_public_file(file_id)
 
         # Decode and parse
-        text = content.decode('utf-8')
+        text = content.decode('utf-8-sig')
         return self._parse_content(text)
 
     def _parse_content(self, text: str) -> List[Dict[str, Any]]:
-        """Parse file content."""
-        # Try JSON array first
-        try:
-            data = json.loads(text)
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return [data]
-        except json.JSONDecodeError:
-            pass
+        """Parse file content: JSON, then JSON Lines, then CSV.
 
-        # Try JSONL
-        items = []
-        lines = text.strip().split('\n')
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                item = json.loads(line)
-                if isinstance(item, list):
-                    items.extend(item)
-                else:
-                    items.append(item)
-            except json.JSONDecodeError:
-                pass
-
-        if items:
-            return items
-
-        # Try CSV
-        import csv
-        from io import StringIO
-
-        try:
-            reader = csv.DictReader(StringIO(text))
-            items = [dict(row) for row in reader]
-            if items:
-                return items
-        except Exception:
-            pass
-
-        raise ValueError("Could not parse file content as JSON, JSONL, or CSV")
+        Uses the shared parser, so cells are verbatim and a malformed JSON
+        line is an error rather than a silently dropped row.
+        """
+        from potato.data_sources.parsing import parse_records
+        records = parse_records(text, None, f"Google Drive file {self._file_id}")
+        if not records:
+            raise ValueError("Could not parse file content as JSON, JSONL, or CSV")
+        return records
 
     def read_items(
         self,

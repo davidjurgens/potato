@@ -207,7 +207,7 @@ def render_env_file(env: Dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def https_fallback(record, dest: str, console):
+def https_fallback(record, dest: str, console, reason: Optional[str] = None):
     """Pull over the admin archive endpoint, or None when that is not possible."""
     from potato.deploy.pull import pull_over_https
 
@@ -217,8 +217,23 @@ def https_fallback(record, dest: str, console):
     admin_key = SecretStore(config_path).get(record.name, "admin_api_key")
     if not admin_key:
         return None
-    console("No usable SSH key; falling back to the admin archive over HTTPS.")
+    console(reason or "No usable SSH key; falling back to the admin archive over HTTPS.")
     return pull_over_https(record.url, admin_key, dest, console=console)
+
+
+def _uses_mysql(record) -> bool:
+    """Whether the deployed config stores annotator state in MySQL."""
+    config_path = (record.spec or {}).get("config_path")
+    if not config_path or not os.path.isfile(config_path):
+        return False
+    try:
+        import yaml
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+    except Exception:
+        return False
+    from potato.server_utils.stored_states import uses_mysql
+    return uses_mysql(config)
 
 
 def record_app_dir(record) -> str:
@@ -669,6 +684,19 @@ class VMProvider(Provider):
         harsh a consequence for deleting a dotfile — the admin key is in the
         same store, and the archive endpoint needs nothing else.
         """
+        if _uses_mysql(record):
+            # Annotator state is in the database, not in the output directory
+            # SFTP would copy. The archive endpoint writes it out.
+            fallback = https_fallback(record, dest, self.console,
+                                      reason="This study keeps annotator state in "
+                                             "MySQL; pulling the admin archive, "
+                                             "which includes it.")
+            if fallback is not None:
+                return fallback
+            raise ProviderError(
+                "This study keeps annotator state in MySQL, which only the admin "
+                "archive endpoint includes, and the deployment's URL or admin key "
+                "is not available. Back the database up with mysqldump instead.")
         try:
             session = self._session(record)
         except ProviderError as exc:

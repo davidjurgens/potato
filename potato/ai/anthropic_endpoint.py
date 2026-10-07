@@ -6,7 +6,8 @@ Integration with Anthropic's Claude API for LLM inference.
 
 from typing import Dict, List
 import anthropic
-from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
+from .ai_endpoint import (BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities,
+                          json_schema_instruction)
 
 # Claude 3.5 Sonnet stood here until 2026-09-05. It is retired, so the
 # default failed outright, and it was also unpriced: the spend cap binds
@@ -72,12 +73,15 @@ class AnthropicEndpoint(BaseAIEndpoint):
         """Get the default keyword prompt for Anthropic."""
         return DEFAULT_KEYWORD_PROMPT
 
-    def query(self, prompt: str) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to Anthropic Claude and return the response.
 
         Args:
             prompt: The prompt to send to the model
+            output_format: Pydantic model for a JSON reply, or None for free
+                text. The Messages API has no schema parameter, so the schema
+                goes in the prompt and the caller parses the text.
 
         Returns:
             The model's response as a string
@@ -90,7 +94,8 @@ class AnthropicEndpoint(BaseAIEndpoint):
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user",
+                           "content": prompt + json_schema_instruction(output_format)}]
             )
             self._warn_if_truncated(response.stop_reason)
             return response.content[0].text

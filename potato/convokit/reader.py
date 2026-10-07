@@ -713,7 +713,10 @@ def read_corpus(
 
         if convo_id not in seen_conversation_set:
             if max_conversations is not None and len(seen_conversation_set) >= max_conversations:
-                break
+                # Skip, don't stop: utterances.jsonl is not guaranteed to be
+                # grouped by conversation, and stopping at the first new
+                # conversation dropped later turns of ones already admitted.
+                continue
             seen_conversation_set.add(convo_id)
             seen_conversations.append(convo_id)
 

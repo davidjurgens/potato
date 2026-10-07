@@ -128,16 +128,26 @@ def test_check_allows_role_admin_without_key():
 
 
 def test_debug_mode_is_superuser():
-    m = RBACManager({"debug": True})
+    m = RBACManager({"debug": True, "host": "127.0.0.1"})
     req = _FakeRequest({})
     assert m.is_admin_superuser(req, {})
+
+
+def test_debug_on_a_public_bind_is_not_superuser():
+    """The bypass is for a server only the developer can reach. On 0.0.0.0
+    it handed every admin route to anonymous callers."""
+    m = RBACManager({"debug": True, "host": "0.0.0.0"})
+    req = _FakeRequest({})
+    assert not m.is_admin_superuser(req, {})
+    assert not m.check(Permission.VIEW_ADMIN_DASHBOARD, req, {})
+    assert not RBACManager({"debug": True}).check(Permission.VIEW_ADMIN_DASHBOARD, req, {})
 
 
 def test_debug_grants_admin_dashboard_but_not_adjudicate():
     """Debug mode opens the admin-dashboard tier for any logged-in user, but
     must NOT auto-confer the adjudicator role (which was gated separately
     before RBAC by the adjudicator_users allow-list)."""
-    m = RBACManager({"debug": True})
+    m = RBACManager({"debug": True, "host": "127.0.0.1"})
     req = _FakeRequest({})
     session = {"username": "random_annotator"}
     # Admin-dashboard tier: still open under debug (pre-RBAC behavior).

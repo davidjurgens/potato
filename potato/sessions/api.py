@@ -61,19 +61,7 @@ def _api_guard(f):
     return wrapper
 
 
-def _same_origin_required(f):
-    """CSRF guard for state-changing routes (solo-mode pattern)."""
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        origin = request.headers.get("Origin")
-        referer = request.headers.get("Referer")
-        host = request.host_url.rstrip("/")
-        if origin and not origin.startswith(host):
-            return jsonify({"error": "Cross-origin request rejected"}), 403
-        if referer and not referer.startswith(host):
-            return jsonify({"error": "Cross-origin request rejected"}), 403
-        return f(*args, **kwargs)
-    return wrapper
+from potato.server_utils.origin_check import same_origin_required as _same_origin_required
 
 
 # ---------------------------------------------------------------------------

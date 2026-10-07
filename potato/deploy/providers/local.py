@@ -334,6 +334,21 @@ class LocalProvider(Provider):
         yields a corrupt or stale database — a silent, total loss that surfaces
         weeks later.
         """
+        from potato.deploy.providers.vm_base import _uses_mysql, https_fallback
+        if _uses_mysql(record):
+            # docker cp would copy an output directory with no annotators in
+            # it; the archive endpoint writes them out of the database.
+            fallback = https_fallback(record, dest, self.console,
+                                      reason="This study keeps annotator state in "
+                                             "MySQL; pulling the admin archive, "
+                                             "which includes it.")
+            if fallback is not None:
+                return fallback
+            raise ProviderError(
+                "This study keeps annotator state in MySQL, which only the admin "
+                "archive endpoint includes, and the deployment's URL or admin key "
+                "is not available. Back the database up with mysqldump instead.")
+
         container = record.provider_ref.get("container")
         if not container:
             raise ProviderError("no container recorded for this deployment")

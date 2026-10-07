@@ -18,6 +18,10 @@ from queue import Queue, Empty
 logger = logging.getLogger(__name__)
 
 
+# Re-exported: the solo labeller's callers import it from here.
+from potato.ai.ai_endpoint import normalize_confidence  # noqa: E402
+
+
 @dataclass
 class LabelingResult:
     """Result of labeling a single instance."""
@@ -392,7 +396,7 @@ Respond with JSON:
                 response_data = response
 
             label = response_data.get('label', '')
-            confidence = float(response_data.get('confidence', 50)) / 100.0
+            confidence = normalize_confidence(response_data.get('confidence', 50))
             reasoning = response_data.get('reasoning', '')
 
             # Validate label
@@ -406,6 +410,10 @@ Respond with JSON:
                 except (ValueError, TypeError):
                     raw = []
                 spans_out = []
+                # Where to look for the next copy of each snippet, so a name
+                # the model lists twice lands on its second occurrence rather
+                # than on the first one again.
+                search_from: Dict[str, int] = {}
                 if isinstance(raw, list):
                     for sp in raw:
                         if not isinstance(sp, dict):
@@ -414,12 +422,17 @@ Respond with JSON:
                         lbl = str(sp.get('label', ''))
                         if not snippet:
                             continue
-                        idx = text.find(snippet)
+                        if valid_labels and lbl not in valid_labels:
+                            # A label outside the schema is not an answer the
+                            # annotator could have given; drop the span rather
+                            # than store it.
+                            lbl = self._fuzzy_match_label(lbl, valid_labels)
+                            if lbl is None:
+                                continue
+                        idx = text.find(snippet, search_from.get(snippet, 0))
                         if idx < 0:
                             continue
-                        if valid_labels and lbl not in valid_labels:
-                            m = self._fuzzy_match_label(lbl, valid_labels)
-                            lbl = m if m else lbl
+                        search_from[snippet] = idx + len(snippet)
                         spans_out.append({
                             'start': idx, 'end': idx + len(snippet),
                             'text': snippet, 'label': lbl,
@@ -613,23 +626,25 @@ Respond with JSON:
         return rule_text.strip(), ""
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON from response."""
+        """Parse a reply into a dict with the shared parser.
+
+        It handles prose before the JSON, ``<think>`` blocks and fences, which
+        the private parser this replaced did not: those replies came back as
+        ``{'label': <the whole reply>}`` and failed label validation.
+        """
+        from potato.ai.ai_endpoint import parse_llm_json
+
         content = response.strip()
-
-        if '```json' in content:
-            match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
-            if match:
-                content = match.group(1).strip()
-        elif '```' in content:
-            match = re.search(r'```\s*([\s\S]*?)\s*```', content)
-            if match:
-                content = match.group(1).strip()
-
         try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            # Try to extract just the label
+            parsed = parse_llm_json(content)
+        except ValueError:
+            return {'label': ''}
+        if not isinstance(parsed, dict):
             return {'label': content}
+        if set(parsed) == {'response'}:
+            # No JSON in the reply: treat the bare text as the label.
+            return {'label': str(parsed['response']).strip()}
+        return parsed
 
     def get_stats(self) -> Dict[str, Any]:
         """Get labeling statistics."""

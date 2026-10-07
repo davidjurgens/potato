@@ -75,6 +75,11 @@ def _skip(name: str) -> bool:
     return name in EXCLUDED_NAMES or name.endswith(EXCLUDED_SUFFIXES)
 
 
+def _archive_base(output_dir: str) -> str:
+    """The top-level folder name the output directory gets inside an archive."""
+    return os.path.basename(os.path.normpath(output_dir)) or "annotation_output"
+
+
 def collect_entries(output_dir: str, task_dir: str) -> List[Tuple[str, str]]:
     """(archive_name, absolute_path) for every real file to include.
 
@@ -83,7 +88,7 @@ def collect_entries(output_dir: str, task_dir: str) -> List[Tuple[str, str]]:
     """
     entries: List[Tuple[str, str]] = []
     if os.path.isdir(output_dir):
-        base = os.path.basename(os.path.normpath(output_dir)) or "annotation_output"
+        base = _archive_base(output_dir)
         for dirpath, dirnames, filenames in os.walk(output_dir):
             dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
             for filename in sorted(filenames):
@@ -128,17 +133,36 @@ def archive_manifest(output_dir: str, task_dir: str) -> Dict:
     }
 
 
-def build_archive(output_dir: str, task_dir: str, destination) -> Dict:
+def build_archive(output_dir: str, task_dir: str, destination,
+                  config: Optional[Dict] = None) -> Dict:
     """Write a gzipped tar of the collected data to an open binary file object.
 
     Returns a summary. Databases are snapshotted into a temporary directory
     first, so what lands in the archive is a consistent copy rather than a file
     being written to.
+
+    On a MySQL study (``config`` has a ``database`` block) each annotator is
+    written out of the database in the file backend's layout, so a pull gets
+    their work rather than an output directory with no annotators in it. The
+    database copy replaces any ``user_state.json`` file of the same name.
     """
     written: List[str] = []
     skipped: List[str] = []
 
     with tempfile.TemporaryDirectory(prefix="potato-archive-") as staging:
+        from_database: List[Tuple[str, str]] = []
+        from potato.server_utils.stored_states import dump_mysql_states, uses_mysql
+        if uses_mysql(config):
+            states_root = os.path.join(staging, "mysql_states")
+            dump_mysql_states(config, states_root)
+            base = _archive_base(output_dir)
+            for dirpath, _dirnames, filenames in os.walk(states_root):
+                for filename in sorted(filenames):
+                    absolute = os.path.join(dirpath, filename)
+                    relative = os.path.relpath(absolute, states_root)
+                    from_database.append((os.path.join(base, relative), absolute))
+        replaced = {name for name, _path in from_database}
+
         snapshots = []
         for database in DATABASES:
             source = os.path.join(task_dir, database)
@@ -155,7 +179,12 @@ def build_archive(output_dir: str, task_dir: str, destination) -> Dict:
                 skipped.append(f"{database} (snapshot failed: {exc})")
 
         with tarfile.open(fileobj=destination, mode="w|gz") as archive:
+            for name, path in from_database:
+                archive.add(path, arcname=name)
+                written.append(name)
             for name, path in collect_entries(output_dir, task_dir):
+                if name in replaced:
+                    continue
                 try:
                     archive.add(path, arcname=name)
                     written.append(name)
@@ -170,7 +199,8 @@ def build_archive(output_dir: str, task_dir: str, destination) -> Dict:
 
 
 def stream_archive(output_dir: str, task_dir: str,
-                   chunk_size: int = 1024 * 256) -> Iterator[bytes]:
+                   chunk_size: int = 1024 * 256,
+                   config: Optional[Dict] = None) -> Iterator[bytes]:
     """Yield the archive in chunks.
 
     Built to a spooled temporary file rather than assembled in memory: a study
@@ -179,7 +209,7 @@ def stream_archive(output_dir: str, task_dir: str,
     """
     spool = tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024)
     try:
-        build_archive(output_dir, task_dir, spool)
+        build_archive(output_dir, task_dir, spool, config=config)
         spool.seek(0)
         while True:
             chunk = spool.read(chunk_size)

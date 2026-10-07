@@ -467,8 +467,14 @@ class MACEManager:
         Returns:
             The annotation value as a string, or None if not found.
         """
-        # Known falsy values that indicate "not selected"
-        _FALSY = (False, "false", "False", 0, "0", "", None)
+        # Whether an option was chosen is decided by the shared reader. The
+        # private copy this replaced read a stored "0" as unchecked, but radio
+        # and likert store {Label(s, "0"): "0"}, so every answer of "0" was
+        # missing from the fit.
+        from potato.server_utils.annotation_values import selected_labels
+
+        def chosen(name, value):
+            return bool(selected_labels({name: value}))
 
         if schema_type == "multiselect" and binary_option:
             # Look for the specific option's Label
@@ -476,7 +482,7 @@ class MACEManager:
                 if (label.get_schema() == schema_name
                         and label.get_name() == binary_option):
                     # Convert to binary: "1" for checked, "0" for unchecked
-                    if value not in _FALSY:
+                    if chosen(label.get_name(), value):
                         return "1"
                     return "0"
             # The server clears unchecked options rather than storing False,
@@ -496,7 +502,7 @@ class MACEManager:
                     continue
                 if label.get_name() in _NOT_A_CHOICE:
                     continue
-                if value not in _FALSY:
+                if chosen(label.get_name(), value):
                     return label.get_name()
             return None
 

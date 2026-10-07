@@ -1234,6 +1234,12 @@ label_requirement:
 
 When `required: true` is set, annotators must complete all fields in the schema before they can proceed to the next instance. This is particularly useful for ensuring data quality in multi-rate and other complex annotation tasks.
 
+With `required_label`, the annotator must choose one of the listed options to
+continue. On a consent, instructions, prestudy or poststudy page the server
+checks this too: a participant who chose "I disagree" on a consent question
+that requires "I agree" is kept on the consent page (HTTP 400), however the
+request was sent.
+
 ### Multiple Schemas
 
 Combine different annotation types in a single task:

@@ -67,6 +67,8 @@ class BratImporter(BaseTextImporter):
 
         result = TextImportResult()
         seen_labels: Dict[str, None] = {}
+        root = path if path.is_dir() else path.parent
+        ids = _instance_ids(ann_files, root)
 
         for ann_path in ann_files:
             txt_path = ann_path.with_suffix(".txt")
@@ -76,8 +78,18 @@ class BratImporter(BaseTextImporter):
                     f"refer to text we do not have; skipped")
                 continue
 
-            text = txt_path.read_text(encoding="utf-8")
+            # brat offsets count every character in the file as written, \r
+            # included. Reading with universal newlines dropped the \r first,
+            # which shifted each span one character left per line before it.
+            # So: read verbatim, resolve offsets there, then normalise line
+            # endings (the browser does the same to the text it measures) and
+            # move the offsets with them.
+            with txt_path.open(encoding="utf-8", newline="") as handle:
+                text = handle.read()
             document = self._parse_pair(ann_path, text, result.warnings)
+            document.instance_id = ids[ann_path]
+            if "\r" in text:
+                _normalise_line_endings(document)
             for span in document.spans:
                 seen_labels.setdefault(span.label, None)
             result.documents.append(document)
@@ -204,3 +216,50 @@ class BratImporter(BaseTextImporter):
             except ValueError:
                 return []
         return fragments
+
+
+def _instance_ids(ann_files: List[Path], root: Path) -> Dict[Path, str]:
+    """An id per document: the file stem, qualified by its folder when two collide.
+
+    ``train/doc1.ann`` and ``dev/doc1.ann`` both have stem ``doc1``, and two
+    items with one id stop the generated project from starting.
+    """
+    from collections import Counter
+    from potato.importers._common import safe_instance_id
+
+    stems = Counter(p.stem for p in ann_files)
+    ids = {}
+    for p in ann_files:
+        if stems[p.stem] == 1:
+            ids[p] = p.stem
+        else:
+            try:
+                rel = p.relative_to(root).with_suffix("")
+            except ValueError:
+                rel = p.with_suffix("")
+            ids[p] = safe_instance_id(rel.as_posix())
+    return ids
+
+
+def _normalise_line_endings(document) -> None:
+    """Rewrite ``\r\n`` and lone ``\r`` as ``\n`` and move every offset to match."""
+    raw = document.text
+    # shift[i] = characters removed before raw position i
+    shift = [0] * (len(raw) + 1)
+    removed = 0
+    for i, ch in enumerate(raw):
+        shift[i] = removed
+        if ch == "\r" and raw[i + 1:i + 2] == "\n":
+            removed += 1
+    shift[len(raw)] = removed
+
+    def moved(pos: int) -> int:
+        return pos - shift[min(max(pos, 0), len(raw))]
+
+    for span in document.spans:
+        span.start, span.end = moved(span.start), moved(span.end)
+        span.text = span.text.replace("\r\n", "\n").replace("\r", "\n")
+        for part in span.additional_parts:
+            part["start"], part["end"] = moved(part["start"]), moved(part["end"])
+            part["text"] = part["text"].replace("\r\n", "\n").replace("\r", "\n")
+    document.text = raw.replace("\r\n", "\n").replace("\r", "\n")

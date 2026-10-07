@@ -39,6 +39,7 @@ Key Features:
 from __future__ import annotations
 
 import json
+import re
 import logging
 import traceback
 import datetime
@@ -168,6 +169,63 @@ def _has_annotated_all_assigned(user_state) -> bool:
     except Exception:
         return False
     return assigned.issubset(annotated)
+
+
+def _qc_blocked(username) -> bool:
+    """Whether attention checks have blocked this user. False when QC is off."""
+    try:
+        from potato.quality_control import get_quality_control_manager
+        qc_manager = get_quality_control_manager()
+        return bool(qc_manager is not None and qc_manager.is_user_blocked(username))
+    except Exception:
+        logger.error("Could not read the quality-control block state for %s", username,
+                     exc_info=True)
+        return False
+
+
+def _unmet_required_labels(user_state) -> list:
+    """Questions on the current phase page whose required answer was not given.
+
+    A consent question declares ``label_requirement.required_label`` (for
+    example "I agree"). The page enforced it in the browser only, and the
+    route advanced on any POST, so a participant who answered "I disagree"
+    reached the annotation phase with one crafted request.
+    """
+    phase, page = user_state.get_current_phase_and_page()
+    schemes = (config.get("_phase_page_schemes") or {}).get(page) or []
+    if not schemes:
+        return []
+    stored = (getattr(user_state, "phase_to_page_to_label_to_value", {}) or {}).get(phase, {}).get(page, {}) or {}
+    selected = {}
+    for label, value in stored.items():
+        if value in (None, False, "", "false", "off"):
+            continue
+        chosen = selected.setdefault(label.get_schema(), set())
+        chosen.add(label.get_name())
+        # A phase question can also be posted as {"age_consent": "I agree"},
+        # with the answer in the value.
+        if isinstance(value, str):
+            chosen.add(value)
+    unmet = []
+    for scheme in schemes:
+        required = (scheme.get("label_requirement") or {}).get("required_label")
+        if not required:
+            continue
+        required = {required} if isinstance(required, str) else set(required)
+        if not (selected.get(scheme.get("name"), set()) & required):
+            unmet.append(scheme.get("name"))
+    return unmet
+
+
+def _refuse_unmet_phase_page(username, user_state):
+    """The response that keeps a participant on a page with an unmet
+    required answer, or None when the page may be left."""
+    unmet = _unmet_required_labels(user_state)
+    if not unmet:
+        return None
+    logger.warning("%s tried to leave %s without the required answer to %s",
+                   username, user_state.get_current_phase_and_page()[1], unmet)
+    return get_current_page_html(config, username), 400
 
 
 def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
@@ -302,8 +360,12 @@ def _caller_presented_admin_key() -> bool:
     return _hmac.compare_digest(str(supplied), str(expected))
 
 
-def validate_admin_api_key(provided_key: str) -> bool:
+def validate_admin_api_key(provided_key: str, permission: str = None) -> bool:
     """Authorize an admin request.
+
+    ``permission`` names what the route does. It defaults to reading the
+    dashboard; routes that change accounts or settings pass a stronger one, so
+    a role that may only look at the dashboard cannot reset passwords.
 
     Backward compatible: a valid shared admin API key (or debug mode) always
     passes. Additionally, a logged-in user holding the RBAC
@@ -318,7 +380,7 @@ def validate_admin_api_key(provided_key: str) -> bool:
     try:
         from potato.server_utils.rbac import get_rbac_manager, Permission
         return get_rbac_manager().check(
-            Permission.VIEW_ADMIN_DASHBOARD, request, session
+            permission or Permission.VIEW_ADMIN_DASHBOARD, request, session
         )
     except Exception:
         return False
@@ -513,6 +575,11 @@ def home():
                                                          mturk_assignment_id=identity.extra.get('assignmentId'),
                                                          mturk_hit_id=identity.extra.get('hitId'))
                     logger.debug(f"Auto-registered URL-direct user {username}: {result}")
+                    if result != "Success":
+                        logger.warning("Refused URL-direct login for %r: %s", username, result)
+                        return render_template(
+                            "home.html", login_error=result,
+                            title=config.get("annotation_task_name", "Annotation Platform")), 403
 
                 # Set session
                 session['username'] = username
@@ -682,7 +749,12 @@ def auth():
             user_authenticator = UserAuthenticator.get_instance()
             if not user_authenticator.is_valid_username(user_id):
                 logger.info(f"Auto-registering new user in passwordless mode: {user_id}")
-                user_authenticator.add_user(user_id, None)
+                result = user_authenticator.add_user(user_id, None)
+                if result != "Success":
+                    return render_template("home.html",
+                                          login_error=result,
+                                          title=config.get("annotation_task_name", "Annotation Platform"),
+                                          require_password=require_password)
 
         # Authenticate the user against the configured backend
         if UserAuthenticator.authenticate(user_id, password):
@@ -985,9 +1057,17 @@ def oauth_callback(provider):
                                  oauth_providers=authenticator.get_login_providers())
 
     # Register the user in the OAuth backend
-    authenticator.add_user(user_id, None,
-                          oauth_provider=provider,
-                          oauth_profile=profile)
+    is_new = not authenticator.is_valid_username(user_id)
+    result = authenticator.add_user(user_id, None,
+                                    oauth_provider=provider,
+                                    oauth_profile=profile)
+    if is_new and result != "Success":
+        logger.warning("Refused OAuth sign-in for %r: %s", user_id, result)
+        return render_template("home.html",
+                             login_error="Your account could not be created on this task.",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers()), 403
 
     # Create Flask session
     session.clear()
@@ -1263,8 +1343,17 @@ def _username_owns_annotations(username: str) -> bool:
     """True when this username already has an annotation directory on disk.
 
     Used only to refuse a registration that would adopt it. Deliberately
-    narrow: the existence of the state file, nothing about its contents.
+    narrow: the existence of the stored state, nothing about its contents.
+    On the MySQL backend the state is a database row, not a file.
     """
+    usm = get_user_state_manager()
+    if getattr(usm, "use_database", False) and username:
+        # An error here refuses the registration rather than allowing it.
+        try:
+            return usm._mysql_user_state_cls.has_stored_state(username, usm.db_manager)
+        except Exception:
+            logger.exception("Could not check the database for '%s'", username)
+            return True
     output_dir = config.get("output_annotation_dir")
     if not output_dir or not username:
         return False
@@ -1416,6 +1505,10 @@ def consent():
         # The form should require that the user consent to the study
         logger.debug(f'POST -> CONSENT: {request.form}')
 
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
+
         # Now that the user has consented, advance the state
         # and have the home page redirect to the appropriate next phase
         usm = get_user_state_manager()
@@ -1453,6 +1546,9 @@ def instructions():
 
         # Now that the user has read the instructions, advance the state
         # and have the home page redirect to the appropriate next phase
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
@@ -1599,9 +1695,14 @@ def training():
             # Check if the answer is correct
             is_correct = check_training_answer(annotation_data, correct_answers)
 
-            # Track category performance for category-based assignment
+            # Track category performance for category-based assignment, from
+            # the FIRST attempt at each question. Recording every attempt
+            # counted a retried question twice, so wrong-then-right qualified
+            # an annotator that right-first-time did not.
             instance_categories = get_training_instance_categories(instance_id)
-            if instance_categories:
+            first_attempt = not training_state.completed_questions.get(
+                instance_id, {}).get('attempts', 0)
+            if instance_categories and first_attempt:
                 training_state.record_category_answer(instance_categories, is_correct)
 
             if is_correct:
@@ -1610,9 +1711,12 @@ def training():
                 training_state.add_answer(instance_id, True, training_state.get_mistakes_for_question(instance_id) + 1)
                 training_state.clear_feedback()
 
-                # Check if user has passed based on min_correct
+                # Pass early once min_correct is reached, unless every question
+                # must be answered correctly: that cannot be decided before the
+                # last one has been asked.
                 min_correct = passing_criteria.get('min_correct', len(training_state.training_instances))
-                if training_state.get_correct_answer_count() >= min_correct:
+                if (not passing_criteria.get('require_all_correct', False)
+                        and training_state.get_correct_answer_count() >= min_correct):
                     # User has passed training
                     training_state.set_passed(True)
                     logger.info(f'User {username} passed training with {training_state.get_correct_answer_count()} correct answers')
@@ -1644,42 +1748,8 @@ def training():
                     return redirect(url_for("home"))
                 else:
                     # All questions completed
-                    require_all = passing_criteria.get('require_all_correct', False)
-                    if require_all and training_state.get_correct_answer_count() < total_questions \
-                            and training_config.get('failure_action') == 'repeat_training':
-                        _restart_training(user_state, training_state)
-                        training_state.set_feedback(
-                            True, "You did not answer every question correctly. "
-                            "The training starts again.", False, "warning")
-                        return redirect(url_for("home"))
-                    if require_all and training_state.get_correct_answer_count() < total_questions:
-                        # User didn't get all correct
-                        training_state.set_failed(True)
-                        user_state.set_current_phase_and_page((UserPhase.DONE, None))
-                        return render_template("training_failed.html",
-                                             message="You did not answer all training questions correctly.",
-                                             correct_count=training_state.get_correct_answer_count(),
-                                             total_questions=total_questions,
-                                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                             username=username)
-                    else:
-                        # Training completed successfully
-                        training_state.set_passed(True)
-                        logger.info(f'User {username} completed training successfully')
-
-                        # Calculate category qualifications based on training performance
-                        cat_config = config.get('category_assignment', {})
-                        if cat_config.get('enabled', False):
-                            qual_config = cat_config.get('qualification', {})
-                            threshold = qual_config.get('threshold', 0.7)
-                            min_questions = qual_config.get('min_questions', 1)
-                            qualified = user_state.calculate_and_set_qualifications(threshold, min_questions)
-                            if qualified:
-                                logger.info(f'User {username} qualified for categories: {qualified}')
-
-                        usm = get_user_state_manager()
-                        usm.advance_phase(username)
-                        return redirect(url_for("home"))
+                    return _finish_training(username, user_state, training_state,
+                                            passing_criteria, training_config, total_questions)
             else:
                 logger.info(f'User {username} answered training question {instance_id} incorrectly')
                 # Record the mistake
@@ -1709,11 +1779,16 @@ def training():
                                          annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
                                          username=username)
 
-                # Get explanation for incorrect answer
-                explanation = get_training_explanation(instance_id)
+                # Get explanation for incorrect answer. `feedback.show_explanations`
+                # and `feedback.allow_retry` are the documented spellings; they
+                # were validated and then never read.
+                feedback_config = training_config.get('feedback') or {}
+                explanation = (get_training_explanation(instance_id)
+                               if feedback_config.get('show_explanations', True) else "")
 
                 # Check if user should be allowed to retry
-                allow_retry = training_config.get('allow_retry', True)
+                allow_retry = training_config.get('allow_retry',
+                                                  feedback_config.get('allow_retry', True))
 
                 if allow_retry:
                     # Same question again; the previous answer stays on the page so the
@@ -1744,29 +1819,9 @@ def training():
                             return redirect(url_for("home"))
                         else:
                             # No more questions - check if passed
-                            min_correct = passing_criteria.get('min_correct', total_questions)
-                            if training_state.get_correct_answer_count() >= min_correct:
-                                training_state.set_passed(True)
-                                usm = get_user_state_manager()
-                                usm.advance_phase(username)
-                                return redirect(url_for("home"))
-                            elif failure_action == 'repeat_training':
-                                # Documented as "repeat the training"; it used
-                                # to end the task exactly as move_to_done does.
-                                _restart_training(user_state, training_state)
-                                training_state.set_feedback(
-                                    True, "You did not get enough answers right. "
-                                    "The training starts again.", False, "warning")
-                                return redirect(url_for("home"))
-                            else:
-                                training_state.set_failed(True)
-                                user_state.set_current_phase_and_page((UserPhase.DONE, None))
-                                return render_template("training_failed.html",
-                                                     message="You did not meet the minimum correct answers requirement.",
-                                                     correct_count=training_state.get_correct_answer_count(),
-                                                     min_correct=min_correct,
-                                                     annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                                     username=username)
+                            return _finish_training(username, user_state, training_state,
+                                                    passing_criteria, training_config,
+                                                    total_questions)
 
         except Exception as e:
             logger.error(f'Error processing training annotation: {e}')
@@ -1821,6 +1876,9 @@ def prestudy():
         logger.debug(f'POST -> PRESTUDY: {request.form}')
 
         # Advance the state and redirect to the appropriate next phase
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
@@ -1882,8 +1940,11 @@ def _ibws_check_and_advance(user_state) -> bool:
 
     # Add new tuples to ISM
     id_key = config["item_properties"]["id_key"]
+    from potato.server_utils.runtime_items import record_runtime_item
     for t in new_tuples:
         ism.add_item(str(t[id_key]), t)
+        # Kept so a restart does not prune this round from annotators' queues.
+        record_runtime_item(config, str(t[id_key]), t, "ibws")
 
     # Re-render displayed text for new items
     from potato.flask_server import _render_displayed_text  # noqa: cross-import
@@ -1966,6 +2027,9 @@ def annotate():
                 return training()
             elif action == 'next_instance':
                 # Treat as "submit current phase page" - advance to next phase
+                refused = _refuse_unmet_phase_page(username, user_state)
+                if refused is not None:
+                    return refused
                 logger.info(f"Leaked next_instance from phase {cur_phase}, advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
@@ -1979,6 +2043,16 @@ def annotate():
         # For non-nav POSTs (phase form submissions) and GETs, delegate to home()
         # so POST data is preserved for phase processing
         return home()
+
+    # A user blocked by attention checks gets no more work. The block used to
+    # be only an overlay in the page: reloading handed out the next item and
+    # its saves were stored. They go to the end of the task, where a crowd
+    # participant gets the platform's failure code.
+    if _qc_blocked(username):
+        logger.info("%s is blocked by attention checks; ending their task", username)
+        user_state.advance_to_phase(UserPhase.DONE, None)
+        get_user_state_manager().save_user_state(user_state)
+        return redirect(url_for("done"))
 
     # Device routing: phones/tablets get the touch surface (/pocket) when the
     # task supports it; either way, record the device class so admins can see
@@ -2124,6 +2198,21 @@ def annotate():
         block_response = _check_required_or_block(user_state, current_id)
         if block_response is not None:
             return block_response
+
+        # Leaving an attention check without answering it fails it.
+        try:
+            from potato.quality_control import get_quality_control_manager
+            qc_manager = get_quality_control_manager()
+            if qc_manager is not None and current_id:
+                skipped = qc_manager.record_skipped_attention_check(username, current_id)
+                if skipped is not None:
+                    logger.warning("%s moved past attention check %s without answering",
+                                   username, current_id)
+                    if skipped.get("blocked"):
+                        _reclaim_blocked_user_assignments(username, user_state,
+                                                          current_instance_id=current_id)
+        except Exception:
+            logger.error("Could not grade a skipped attention check", exc_info=True)
 
         moved_forward = move_to_next_instance(username)
         if not moved_forward and user_state.is_at_end_index():
@@ -2959,6 +3048,10 @@ def admin_api_test_reset_state():
     """
     if not config.get('debug', False):
         return jsonify({'error': 'This endpoint is only available in debug mode'}), 403
+    # Wipes every annotator's state: debug alone is not enough when the port is
+    # reachable from other machines.
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({'error': 'Admin authentication required'}), 403
 
     try:
         from potato.user_state_management import clear_user_state_manager, init_user_state_manager
@@ -3099,6 +3192,9 @@ def admin_api_config():
         return jsonify(response_data)
 
     elif request.method == "POST":
+        # Changing assignment settings needs more than dashboard access.
+        if not validate_admin_api_key(api_key, permission="manage_assignment"):
+            return jsonify({"error": "The manage_assignment permission is required"}), 403
         # Update configuration
         config_updates = request.get_json()
         if not config_updates:
@@ -3123,7 +3219,7 @@ def admin_api_set_user_instances(username):
         flask.Response: JSON response with updated user info
     """
     api_key = request.headers.get('X-API-Key')
-    if not validate_admin_api_key(api_key):
+    if not validate_admin_api_key(api_key, permission="manage_assignment"):
         return jsonify({"error": "Admin authentication required"}), 403
 
     data = request.get_json()
@@ -3202,7 +3298,7 @@ def admin_api_reclaim_instance():
         username (str): The user to reclaim from
     """
     api_key = request.headers.get('X-API-Key')
-    if not validate_admin_api_key(api_key):
+    if not validate_admin_api_key(api_key, permission="manage_assignment"):
         return jsonify({"error": "Admin authentication required"}), 403
 
     data = request.get_json()
@@ -5085,9 +5181,14 @@ def get_annotations():
         # label_annotations is keyed by Label objects (schema, name) ->
         # value; that is not JSON-serializable. Flatten to
         # {schema: [selected label names]} (skip falsy/unset values).
+        # A value of 0 is an answer (a slider at its minimum), so it is kept;
+        # only an unset or unticked entry is skipped. `label_values` carries
+        # the stored values beside the names: a text, number or slider answer
+        # IS its value, and the names alone could not show it.
         serializable_label_annotations = {}
+        label_values = {}
         for lbl, value in (label_annotations or {}).items():
-            if value in (False, None, "", 0):
+            if value is False or value is None or value == "":
                 continue
             schema = getattr(lbl, "schema", None)
             name = getattr(lbl, "name", None)
@@ -5098,6 +5199,7 @@ def get_annotations():
                 continue
             serializable_label_annotations.setdefault(
                 schema, []).append(name)
+            label_values.setdefault(schema, {})[name] = value
 
         # Convert span annotations to serializable format
         serializable_span_annotations = {}
@@ -5107,6 +5209,7 @@ def get_annotations():
         # Combine annotations
         annotations = {
             "label_annotations": serializable_label_annotations,
+            "label_values": label_values,
             "span_annotations": serializable_span_annotations
         }
 
@@ -5717,14 +5820,13 @@ def get_span_data(instance_id):
         original_text = item_data.get(text_key, instance.get_text()) if isinstance(item_data, dict) else instance.get_text()
         logger.debug(f"Original text (raw, text_key={text_key}): {str(original_text)[:100]}...")
 
-        # IMPORTANT: Normalize text the same way as flask_server.py template rendering
-        # This ensures span offsets calculated on normalized text match the API response
-        # 1. Strip HTML tags
-        import re as re_module
-        original_text = str(original_text)
-        normalized_text = re_module.sub(r'<[^>]+>', '', original_text)
-        # 2. Normalize whitespace (multiple spaces/newlines -> single space)
-        normalized_text = re_module.sub(r'\s+', ' ', normalized_text).strip()
+        # The text span offsets index: what the browser holds after the
+        # display normalizes and sanitizes it (span_text.instance_dom_text).
+        # A regex tag strip ate `< y and y >` in `x < y and y > z` and left
+        # `&amp;` five characters wide.
+        from potato.server_utils.span_text import instance_dom_text
+        displayed = get_displayed_text(original_text)
+        normalized_text = instance_dom_text(displayed if isinstance(displayed, str) else str(displayed))
         logger.debug(f"Normalized text: {normalized_text[:100]}...")
 
         # text_as_image: the response carries the text twice, as `text` and in
@@ -5808,12 +5910,12 @@ def get_span_data(instance_id):
                 )
             elif isinstance(field_data, list):
                 field_text = concatenate_dialogue_text(field_data)
-                field_text = re_module.sub(r'<[^>]+>', '', field_text)
-                field_text = re_module.sub(r'\s+', ' ', field_text).strip()
+                field_text = re.sub(r'<[^>]+>', '', field_text)
+                field_text = re.sub(r'\s+', ' ', field_text).strip()
             else:
                 field_text = str(field_data)
-                field_text = re_module.sub(r'<[^>]+>', '', field_text)
-                field_text = re_module.sub(r'\s+', ' ', field_text).strip()
+                field_text = re.sub(r'<[^>]+>', '', field_text)
+                field_text = re.sub(r'\s+', ' ', field_text).strip()
             span_source_text = field_text
 
         span_entry = {
@@ -5854,7 +5956,10 @@ def get_span_data(instance_id):
 
     response_data = {
         'instance_id': instance_id,
-        'text': normalized_text,  # Use normalized text matching template rendering
+        'text': normalized_text,
+        # `text` is exactly the rendered text the offsets index; the client
+        # uses it verbatim instead of stripping and collapsing it again.
+        'text_basis': 'dom',
         'spans': span_data
     }
 
@@ -5910,6 +6015,16 @@ def update_instance():
         # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
         # They should be routed by the current user phase instead of assignment checks.
         is_phase_page_update = instance_id == "__phase_page__"
+
+        # A user already blocked by attention checks stores no more annotations.
+        # The save that crosses the threshold is still taken and answered with
+        # status "blocked" below; it is the ones after it that are refused.
+        if not is_phase_page_update and _qc_blocked(username):
+            from potato.quality_control import get_quality_control_manager as _qc_manager
+            return jsonify({
+                "status": "blocked",
+                "message": _qc_manager().qc_config.attention_block_message,
+            }), 403
 
         # machine_annotators.require_declaration: refuse dataset writes from a
         # participant who is neither a declared machine nor a listed person.
@@ -6058,22 +6173,32 @@ def update_instance():
             # Pre-clear stale labels before re-writing. The client sends the COMPLETE
             # current state for these schemas, so any label not in the incoming set
             # should be removed.
+            # A multiselect with every box unticked sends no key at all, so it
+            # is named in `cleared_schemas`; without that the last box to be
+            # unticked could never be removed.
+            cleared = request.json.get("cleared_schemas") or []
+            cleared = {c for c in cleared if isinstance(c, str)} if isinstance(cleared, list) else set()
             _preclear_exclusive_schemas(
                 user_state, username, instance_id,
-                _incoming_schema_names(annotations), complete_set=True)
+                _incoming_schema_names(annotations) | cleared, complete_set=True)
 
             for key, value in annotations.items():
-                if ":::" in key:
-                    # Use ::: separator for image/audio/video annotation data
-                    # e.g., "video_segments:::_data" -> schema="video_segments", label="_data"
-                    schema_name, label_name = key.split(":::", 1)
-                    label = Label(schema_name, label_name)
-                elif ":" in key:
-                    # Legacy format with single colon
-                    schema_name, label_name = key.split(":", 1)
-                    label = Label(schema_name, label_name)
-                else:
+                # "schema:label" from the page, "schema:::label" for the
+                # image/audio/video "_data" blobs; split_annotation_key reads
+                # both and uses the configured schema names to find where the
+                # schema ends.
+                parsed = split_annotation_key(key)
+                if parsed is None:
                     logger.warning(f"Skipping annotation with no separator: {key}")
+                    continue
+                schema_name, label_name = parsed
+                label = Label(schema_name, label_name)
+
+                # An emptied text box or number field posts "". That is the
+                # absence of an answer: storing it made the item count as
+                # annotated with nothing in it.
+                if value == "" or value is None:
+                    user_state.remove_label_annotation(instance_id, label)
                     continue
 
                 # Get old value for comparison. Go through the accessor rather than
@@ -6111,6 +6236,20 @@ def update_instance():
             span_annotations = request.json.get("span_annotations", [])
             for span_data in span_annotations:
                 if isinstance(span_data, dict) and "schema" in span_data:
+                    # Skip an entry that names no span: a display overlay (AI
+                    # keyword highlights) read off the page carries schema and
+                    # offsets of null. It used to raise here, after the labels
+                    # were applied but before the save, so the request 500'd
+                    # and the annotator could not move on.
+                    try:
+                        int(span_data.get("start")), int(span_data.get("end"))
+                        bad = not span_data.get("schema") or not span_data.get("name")
+                    except (TypeError, ValueError):
+                        bad = True
+                    if bad:
+                        logger.warning("Ignoring span entry without schema, label or "
+                                       "offsets on %s: %r", instance_id, span_data)
+                        continue
                     _warn_if_span_exceeds_text(instance_id, span_data)
                     # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
                     # etc). Previously dropped here, so PDF anchor geometry never
@@ -6324,11 +6463,20 @@ def update_instance():
                         if instance_id in user_state.instance_id_to_span_to_value:
                             # Find the span to delete by matching properties
                             spans_to_delete = []
+                            requested_id = sv.get("span_id") or sv.get("id")
                             for existing_span in user_state.instance_id_to_span_to_value[instance_id].keys():
-                                if (existing_span.get_schema() == span.get_schema() and
-                                    existing_span.get_name() == span.get_name() and
-                                    existing_span.get_start() == span.get_start() and
-                                    existing_span.get_end() == span.get_end()):
+                                if requested_id:
+                                    # The id names one span. Matching on label and
+                                    # offsets also removed same-shaped spans in
+                                    # other fields of a multi-field page.
+                                    if existing_span.get_id() == requested_id:
+                                        spans_to_delete.append(existing_span)
+                                elif (existing_span.get_schema() == span.get_schema() and
+                                      existing_span.get_name() == span.get_name() and
+                                      existing_span.get_start() == span.get_start() and
+                                      existing_span.get_end() == span.get_end() and
+                                      (sv.get("target_field") is None or
+                                       existing_span.get_target_field() == sv.get("target_field"))):
                                     spans_to_delete.append(existing_span)
 
                             for span_to_delete in spans_to_delete:
@@ -6434,7 +6582,11 @@ def update_instance():
             if _bd is not None and hasattr(_bd, "record_final_annotations"):
                 _bd.record_final_annotations(final_by_schema)
 
-        if qc_manager:
+        # Consent, survey and other phase pages are not items: grading them
+        # as attention checks or gold, counting them toward check frequency,
+        # or pooling two people's "I agree" into an auto-promoted gold item
+        # (which every later participant was then scored against) is wrong.
+        if qc_manager and not is_phase_page_update:
             # How long the annotator had the item on screen, as measured by the
             # client. This used to be derived from `client_timestamp`, which is
             # the moment the request was *sent* -- so the subtraction measured
@@ -6549,8 +6701,12 @@ def update_instance():
         if user_state.annotation_history:
             user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
 
-        # Register annotator with item state manager for tracking
-        get_item_state_manager().register_annotator(instance_id, username)
+        # Register annotator with item state manager for tracking. A save that
+        # left nothing on the item (every answer cleared) takes it back.
+        if user_state.has_annotated(instance_id):
+            get_item_state_manager().register_annotator(instance_id, username)
+        else:
+            get_item_state_manager().unregister_annotator(instance_id, username)
 
         # Save state
         get_user_state_manager().save_user_state(user_state)
@@ -6719,6 +6875,9 @@ def poststudy():
         logger.debug(f'POSTSTUDY: POST: {request.form}')
 
         # Advance the state and move to the appropriate next phase
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
@@ -6852,16 +7011,65 @@ def _configured_annotator_cap():
     return "unlimited" if cap < 0 else cap
 
 
-def _restart_training(user_state, training_state):
-    """Send an annotator back to the first training question with a clean slate.
+def _finish_training(username, user_state, training_state, passing_criteria,
+                     training_config, total_questions):
+    """Decide the outcome once the last training question has been answered.
 
-    Keeps the question list and the mistake limits; clears answers, counts and
-    the fail flag. Mistake-limit failures (max_mistakes) still end the task.
+    One decision for every way of reaching the end. The path through a
+    correct last answer used to skip `min_correct`, so with three questions
+    and `min_correct: 3`, wrong-right-right passed while right-right-wrong
+    did not.
+    """
+    correct = training_state.get_correct_answer_count()
+    min_correct = passing_criteria.get('min_correct', total_questions)
+    require_all = passing_criteria.get('require_all_correct', False)
+    if correct >= min_correct and (not require_all or correct >= total_questions):
+        training_state.set_passed(True)
+        logger.info(f'User {username} completed training with {correct} correct')
+        cat_config = config.get('category_assignment', {})
+        if cat_config.get('enabled', False):
+            qual_config = cat_config.get('qualification', {})
+            qualified = user_state.calculate_and_set_qualifications(
+                qual_config.get('threshold', 0.7), qual_config.get('min_questions', 1))
+            if qualified:
+                logger.info(f'User {username} qualified for categories: {qualified}')
+        get_user_state_manager().advance_phase(username)
+        return redirect(url_for("home"))
+
+    max_attempts = passing_criteria.get('max_attempts')
+    attempts_left = not max_attempts or training_state.rounds_started < max_attempts
+    if training_config.get('failure_action') == 'repeat_training' and attempts_left:
+        _restart_training(user_state, training_state)
+        training_state.set_feedback(
+            True, "You did not answer enough questions correctly. "
+            "The training starts again.", False, "warning")
+        return redirect(url_for("home"))
+
+    training_state.set_failed(True)
+    user_state.set_current_phase_and_page((UserPhase.DONE, None))
+    message = ("You did not answer all training questions correctly." if require_all
+               else "You did not meet the minimum correct answers requirement.")
+    return render_template("training_failed.html",
+                           message=message,
+                           correct_count=correct,
+                           total_questions=total_questions,
+                           min_correct=min_correct,
+                           annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                           username=username)
+
+
+def _restart_training(user_state, training_state):
+    """Send an annotator back to the first training question.
+
+    Clears answers, correct counts, category scores and the fail flag. Mistake
+    counts carry over: `max_mistakes` ends the task whatever `failure_action`
+    says, and resetting it each round meant a retaking annotator could never
+    reach it.
     """
     training_state.completed_questions = {}
     training_state.total_correct = 0
     training_state.total_attempts = 0
-    training_state.total_mistakes = 0
+    training_state.rounds_started += 1
     training_state.category_scores = {}
     training_state.passed = False
     training_state.failed = False
@@ -6905,8 +7113,28 @@ def done():
     # rendered body is discarded and the reload lands here. Deciding it from
     # the persisted state rather than from a response body is what makes it
     # actually reach the annotator.
+    login_config = config.get('login', {})
+    login_type = login_config.get('type', 'standard')
+
+    from potato.crowdsourcing import CompletionOutcome, ParticipantIdentity, get_crowd_provider
+    provider = get_crowd_provider()
+    if provider is None and login_type in ['url_direct', 'prolific']:
+        from potato.crowdsourcing import init_crowd_provider
+        provider = init_crowd_provider(config)
+
     training_state = user_state.get_training_state()
-    if training_state is not None and training_state.is_failed():
+    training_failed = training_state is not None and training_state.is_failed()
+
+    # Outside a crowd platform there is no code to hand out, so a blocked
+    # user is told why the task ended rather than shown the completion page.
+    if provider is None and _qc_blocked(username):
+        from potato.quality_control import get_quality_control_manager as _qc_manager
+        return render_template(
+            "error.html",
+            message=_qc_manager().qc_config.attention_block_message,
+            url_prefix=request.script_root), 403
+
+    if training_failed and provider is None:
         logger.info(
             "%s reached DONE by failing training; showing the qualification "
             "page rather than the completion page.", username)
@@ -6922,15 +7150,6 @@ def done():
 
     # Get completion code from config
     completion_code = config.get("completion_code", "")
-
-    login_config = config.get('login', {})
-    login_type = login_config.get('type', 'standard')
-
-    from potato.crowdsourcing import CompletionOutcome, ParticipantIdentity, get_crowd_provider
-    provider = get_crowd_provider()
-    if provider is None and login_type in ['url_direct', 'prolific']:
-        from potato.crowdsourcing import init_crowd_provider
-        provider = init_crowd_provider(config)
 
     # Legacy template variables are still passed alongside `action` so that
     # customized done.html templates keep working for one release.
@@ -6966,7 +7185,10 @@ def done():
 
         # Participants blocked by attention checks get the provider's
         # failure/screen-out completion code instead of the success code
-        outcome = CompletionOutcome.COMPLETED
+        # Failing the training gate is a screen-out: the platform's
+        # screen-out code, never the success code.
+        outcome = (CompletionOutcome.SCREENED_OUT if training_failed
+                   else CompletionOutcome.COMPLETED)
         try:
             from potato.quality_control import get_quality_control_manager
             qc_manager = get_quality_control_manager()
@@ -9557,7 +9779,7 @@ def admin_reset_password():
     Requires X-API-Key header. Takes JSON body with username and new_password.
     """
     api_key = request.headers.get('X-API-Key')
-    if not validate_admin_api_key(api_key):
+    if not validate_admin_api_key(api_key, permission="manage_users"):
         return jsonify({"error": "Unauthorized - valid API key required"}), 403
 
     data = request.get_json()
@@ -9588,7 +9810,7 @@ def admin_create_reset_token():
     Returns the reset link and token.
     """
     api_key = request.headers.get('X-API-Key')
-    if not validate_admin_api_key(api_key):
+    if not validate_admin_api_key(api_key, permission="manage_users"):
         return jsonify({"error": "Unauthorized - valid API key required"}), 403
 
     data = request.get_json()
@@ -11302,7 +11524,7 @@ def admin_api_data_archive():
     filename = archive_filename(task_name)
 
     logger.info("Serving a data archive of %s to an admin API caller", output_dir)
-    response = Response(stream_archive(output_dir, task_dir),
+    response = Response(stream_archive(output_dir, task_dir, config=config),
                         mimetype="application/gzip")
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     # The content is generated per request and must never be cached by a proxy:

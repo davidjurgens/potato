@@ -112,6 +112,7 @@ data_files:
 | `value` | string or list | Value(s) to filter for |
 | `invert` | boolean | If true, return items that DON'T match (default: false) |
 | `rule` | string | With several annotators per item: `majority` (default) matches when more than half of the annotators who answered chose a filter value, `any` when one did, `all` when every one did |
+| `database` | dict | The prior task's `database` block, when it stored annotator state in MySQL. The annotators are read from that database instead of `annotation_dir` |
 
 Every annotator's answer is read. For a multiselect, an annotator counts
 toward a value when they ticked it, whatever else they ticked.

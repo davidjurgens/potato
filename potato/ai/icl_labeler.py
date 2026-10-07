@@ -23,6 +23,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple, Set
 
+from potato.ai.ai_endpoint import normalize_confidence, parse_llm_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -573,14 +575,16 @@ class ICLLabeler:
 
             # Parse response
             if isinstance(response, str):
-                response_data = json.loads(response)
+                # Fenced or prose-wrapped JSON is common from local models and
+                # from Anthropic's text endpoint; json.loads rejected all of it.
+                response_data = parse_llm_json(response)
             elif hasattr(response, 'model_dump'):
                 response_data = response.model_dump()
             else:
                 response_data = response
 
             predicted_label = response_data.get('label', '')
-            confidence = float(response_data.get('confidence', 0.5))
+            confidence = normalize_confidence(response_data.get('confidence', 0.5))
             reasoning = response_data.get('reasoning', '')
 
             # Validate label against schema

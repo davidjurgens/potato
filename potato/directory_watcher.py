@@ -31,12 +31,6 @@ import glob
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
-try:
-    import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-
 if TYPE_CHECKING:
     from potato.item_state_management import ItemStateManager
 
@@ -445,6 +439,22 @@ class DirectoryWatcher:
                     continue
 
                 instance_id = str(instance_data[self.id_key])
+
+                # The same id twice: data_files refuses the file at boot.
+                # Here the server is already running, so keep the first row
+                # and say so. Overwriting silently replaced the item a user
+                # may already have annotated with an unrelated row.
+                if instance_id in new_instance_ids:
+                    logger.error(
+                        f"Duplicate instance ID '{instance_id}' in {file_path}; "
+                        f"keeping the first row and ignoring this one")
+                    continue
+                owner = self._instance_to_file.get(instance_id)
+                if self._item_state_manager.has_item(instance_id) and owner != file_path:
+                    logger.error(
+                        f"Duplicate instance ID '{instance_id}' in {file_path}: already "
+                        f"loaded from {owner or 'another data source'}; keeping the first")
+                    continue
                 new_instance_ids.add(instance_id)
 
                 # Check if text_key is missing (warning only)
@@ -453,7 +463,12 @@ class DirectoryWatcher:
 
                 # Add or update the instance
                 if self._item_state_manager.has_item(instance_id):
-                    # Update existing instance
+                    if self._text_change_would_orphan_annotations(instance_id, instance_data):
+                        logger.error(
+                            f"Not updating the text of '{instance_id}' from {file_path}: it "
+                            f"has already been annotated, and span offsets point into the "
+                            f"old text. Give the edited item a new id instead.")
+                        continue
                     if self._item_state_manager.update_item(instance_id, instance_data):
                         updated_count += 1
                         logger.debug(f"Updated instance: {instance_id}")
@@ -485,6 +500,16 @@ class DirectoryWatcher:
                 )
 
         return added_count, updated_count
+
+    def _text_change_would_orphan_annotations(self, instance_id: str, new_data: dict) -> bool:
+        """True when an edit changes the text of an item someone has annotated."""
+        index = getattr(self._item_state_manager, "instance_annotators", None)
+        annotators = index.get(instance_id) if isinstance(index, dict) else None
+        if not annotators:
+            return False
+        item = self._item_state_manager.get_item(instance_id)
+        old_data = item.get_data() if item is not None else {}
+        return old_data.get(self.text_key) != new_data.get(self.text_key)
 
     def _parse_file(self, file_path: str) -> List[dict]:
         """
@@ -530,8 +555,8 @@ class DirectoryWatcher:
         Returns:
             List[dict]: List of parsed instance dictionaries
         """
-        with open(file_path, 'rt', encoding=self.encoding) as f:
-            whole = f.read()
+        from potato.data_sources.parsing import read_text
+        whole = read_text(file_path, self.encoding)
 
         stripped = whole.strip()
         if stripped.startswith('['):
@@ -578,29 +603,14 @@ class DirectoryWatcher:
             List[dict]: List of row dictionaries
 
         Raises:
-            ImportError: If pandas is not available
             ValueError: If required columns are missing
         """
-        if not HAS_PANDAS:
-            raise ImportError(
-                "pandas is required for CSV/TSV file support. "
-                "Install it with: pip install pandas"
-            )
-
-        df = pd.read_csv(file_path, sep=separator, encoding=self.encoding)
-
-        # Validate ID column exists
-        if self.id_key not in df.columns:
+        # Cells verbatim, as data_files reads them (see data_sources.parsing).
+        from potato.data_sources.parsing import read_text, parse_delimited
+        rows = parse_delimited(read_text(file_path, self.encoding), separator, file_path)
+        if rows and self.id_key not in rows[0]:
             raise ValueError(f"ID column '{self.id_key}' not found in {file_path}")
-
-        # Convert ID column to string
-        df[self.id_key] = df[self.id_key].astype(str)
-
-        # Convert text column to string if present
-        if self.text_key in df.columns:
-            df[self.text_key] = df[self.text_key].astype(str)
-
-        return df.to_dict('records')
+        return rows
 
 
 def init_directory_watcher(config: dict) -> Optional[DirectoryWatcher]:

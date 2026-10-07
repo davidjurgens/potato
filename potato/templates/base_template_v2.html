@@ -368,19 +368,19 @@
                         {{ display_html | safe }}
                         <!-- Hidden element for legacy JS compatibility -->
                         <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom">{{instance | sanitize_html}}</div>
                         </div>
                         {% elif has_video_annotation | default(false) %}
                         {% if instance_text_is_media_path | default(false) %}
                         <!-- Item text is just the media path: hide it (the video player is the content).
                              Keep the node in the DOM so the JS media-URL fallback can still read it. -->
                         <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom">{{instance | sanitize_html}}</div>
                         </div>
                         {% else %}
                         <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
                         <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
                                 <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
                             </div>
                         </div>
@@ -390,12 +390,12 @@
                         <!-- Item text is just the media path: hide it (the waveform player is the content).
                              Keep the node in the DOM so the JS media-URL fallback can still read it. -->
                         <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom">{{instance | sanitize_html}}</div>
                         </div>
                         {% else %}
                         <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
                         <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
                                 <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
                             </div>
                         </div>
@@ -404,7 +404,7 @@
                         <!-- For image annotation, hide this section - the image is loaded directly into the annotation canvas -->
                         <!-- Store the image URL in a hidden element for JavaScript to access -->
                         <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% else %}
                         {# Training shows its practice question here too. Gated on a
@@ -416,7 +416,7 @@
                                 <h5 class="instance-text-heading">{{ _heading }}</h5>
                                 {% endif %}
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
-                                    <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{% if instance_image | default('') %}{# text_as_image: the server rendered the instance to a PNG and blanked `instance`, so nothing here can be copied. The markup is built in server_utils/text_to_image.py from a base64 payload, never from annotation content, so `safe` is correct -- sanitize_html would strip the data: URI. #}{{ instance_image | safe }}{% else %}{{instance | sanitize_html}}{% endif %}
+                                    <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{% if instance_image | default('') %}{# text_as_image: the server rendered the instance to a PNG and blanked `instance`, so nothing here can be copied. The markup is built in server_utils/text_to_image.py from a base64 payload, never from annotation content, so `safe` is correct -- sanitize_html would strip the data: URI. #}{{ instance_image | safe }}{% else %}{{instance | sanitize_html}}{% endif %}
                                         <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
                                         </div>
                                     </div>

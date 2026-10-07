@@ -27,7 +27,11 @@ EXAMPLE_CONFIG = "examples/classification/single-choice/config.yaml"
 
 
 class _FakeApp:
-    """Minimal stand-in — configure_session only sets two attributes."""
+    """Minimal stand-in: configure_session sets two attributes and the
+    session-cookie entries of ``config``."""
+
+    def __init__(self):
+        self.config = {}
 
 
 # =====================================================================

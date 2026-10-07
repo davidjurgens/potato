@@ -318,7 +318,7 @@ class TrainingManager:
             self.config.get("task_dir", "."),
             self.config.get("output_annotation_dir", "annotation_output"))
         annotations = load_annotations_from_output_dir(
-            output_dir, self.config.get("annotation_schemes", []))
+            output_dir, self.config.get("annotation_schemes", []), self.config)
 
         return types.SimpleNamespace(
             config=self.config, annotations=annotations, items=items,

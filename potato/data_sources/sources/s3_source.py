@@ -175,7 +175,7 @@ class S3Source(DataSource):
             )
 
             # Decode and parse
-            text = content.decode('utf-8')
+            text = content.decode('utf-8-sig')
             return self._parse_content(text, content_type)
 
         except client.exceptions.NoSuchKey:
@@ -192,97 +192,26 @@ class S3Source(DataSource):
         text: str,
         content_type: str = ""
     ) -> List[Dict[str, Any]]:
-        """Parse file content based on content type or key extension."""
-        key_lower = self._key.lower()
+        """Parse file content based on content type or key extension.
 
-        # Determine format
-        is_json = 'json' in content_type or key_lower.endswith('.json')
-        is_jsonl = 'ndjson' in content_type or key_lower.endswith('.jsonl')
-        is_csv = 'csv' in content_type or key_lower.endswith('.csv')
-        is_tsv = 'tab' in content_type or key_lower.endswith('.tsv')
-
-        # Try JSON array first
-        if is_json or is_jsonl:
-            try:
-                data = json.loads(text)
-                if isinstance(data, list):
-                    return data
-                elif isinstance(data, dict):
-                    return [data]
-            except json.JSONDecodeError:
-                pass
-
-        # Try JSONL
-        if is_jsonl or is_json:
-            items = []
-            for line in text.strip().split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line)
-                    if isinstance(item, list):
-                        items.extend(item)
-                    else:
-                        items.append(item)
-                except json.JSONDecodeError:
-                    pass
-
-            if items:
-                return items
-
-        # Try CSV/TSV
-        if is_csv or is_tsv:
-            import csv
-            from io import StringIO
-
-            delimiter = '\t' if is_tsv else ','
-            reader = csv.DictReader(StringIO(text), delimiter=delimiter)
-            return [dict(row) for row in reader]
-
-        # Auto-detect: try JSON, then JSONL, then CSV
-        try:
-            data = json.loads(text)
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return [data]
-        except json.JSONDecodeError:
-            pass
-
-        # Try JSONL
-        items = []
-        for line in text.strip().split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                item = json.loads(line)
-                if isinstance(item, list):
-                    items.extend(item)
-                else:
-                    items.append(item)
-            except json.JSONDecodeError:
-                pass
-
-        if items:
-            return items
-
-        # Try CSV as last resort
-        import csv
-        from io import StringIO
-
-        try:
-            reader = csv.DictReader(StringIO(text))
-            items = [dict(row) for row in reader]
-            if items:
-                return items
-        except Exception:
-            pass
-
-        raise ValueError(
-            f"Could not parse content from s3://{self._bucket}/{self._key}"
-        )
+        Uses the shared parser, so CSV/TSV cells are verbatim, TSV has no
+        quoting, and a malformed JSON line is an error naming the line.
+        """
+        from potato.data_sources.parsing import format_for, parse_records
+        fmt = format_for(self._key)
+        if fmt is None:
+            if 'ndjson' in content_type or 'json' in content_type:
+                fmt = 'jsonl'
+            elif 'tab-separated' in content_type:
+                fmt = 'tsv'
+            elif 'csv' in content_type:
+                fmt = 'csv'
+        records = parse_records(text, fmt, f"s3://{self._bucket}/{self._key}")
+        if not records and fmt is None:
+            raise ValueError(
+                f"Could not parse content from s3://{self._bucket}/{self._key}"
+            )
+        return records
 
     def read_items(
         self,

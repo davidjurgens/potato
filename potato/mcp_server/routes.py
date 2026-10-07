@@ -367,6 +367,9 @@ def tool_add_items(record, payload):
         if not isinstance(item, dict) or id_key not in item:
             return _refuse(f"every item needs a {id_key!r} field", 400)
         ism.add_item(str(item[id_key]), item)
+        # Journalled so the item is still there after a restart.
+        from potato.server_utils.runtime_items import record_runtime_item
+        record_runtime_item(config, str(item[id_key]), item, f"mcp:{record.name}")
         added.append(str(item[id_key]))
 
     audit("items_added", agent=record.name, count=len(added))
@@ -609,14 +612,21 @@ def tool_export_data(record, payload):
 
     from potato.export.cli import build_export_context
 
-    output = payload.get("output") or os.path.join(
-        config.get("output_annotation_dir", "."), "exports", fmt
-    )
+    # The agent may name a folder, but only one under the study's exports
+    # directory: a free path let a token write anywhere the server can.
+    exports_root = os.path.realpath(os.path.join(
+        config.get("output_annotation_dir", "."), "exports"))
+    requested = payload.get("output") or fmt
+    output = os.path.realpath(os.path.join(exports_root, str(requested)))
+    if output != exports_root and not output.startswith(exports_root + os.sep):
+        return _refuse("output must be a folder inside the study's exports "
+                       "directory", 400, exports_dir=exports_root)
     os.makedirs(output, exist_ok=True)
     context = build_export_context(config_file)
     result = export_registry.export(fmt, context, output, payload.get("options") or {})
     audit("exported", agent=record.name, format=fmt, output=output)
-    return jsonify({"format": fmt, "output": output, "result": result})
+    ok = getattr(result, "success", result.get("success", True) if isinstance(result, dict) else True)
+    return jsonify({"format": fmt, "output": output, "result": result}), (200 if ok else 500)
 
 
 # -------------------------------------------------------------- destructive --

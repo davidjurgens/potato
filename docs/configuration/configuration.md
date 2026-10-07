@@ -201,8 +201,23 @@ customjs: null  # Path to custom JavaScript file
 customjs_hostname: null  # Hostname for custom JS
 site_dir: default  # or path to custom template directory
 alert_time_each_instance: 10  # Seconds before alert (very high = disabled)
-debug: false  # Enable debug mode (bypasses admin authentication)
+debug: false  # Debug mode. On a loopback host (127.0.0.1) it also skips admin authentication
 ```
+
+### Session cookie
+
+```yaml
+session_cookie_samesite: Lax   # Lax, Strict or None
+session_cookie_secure: false   # true once the server is reached over HTTPS
+```
+
+The session cookie is `SameSite=Lax` by default, so the browser does not send
+it with a form posted from another site. Crowd deployments (`crowdsourcing.provider`
+or `login.type: url_direct`/`prolific`) keep the browser's default instead,
+because the platform shows the task inside its own page and a Lax cookie is not
+sent from inside another site's frame. If the task runs in a frame and sessions
+are lost, set `session_cookie_samesite: None` with `session_cookie_secure: true`
+and serve over HTTPS.
 
 ### Admin Dashboard Authentication
 
@@ -570,14 +585,11 @@ database:
   password: ${POTATO_DB_PASSWORD}  # Use environment variable for security
   charset: utf8mb4
   pool_size: 10
-  max_overflow: 20
-  pool_timeout: 30
-  pool_recycle: 3600
 ```
 
 ### Database Configuration Options
 
-- **`type`**: Database type (`mysql` or `file` for file-based storage)
+- **`type`**: `mysql`. Leave the block out to store state in files.
 - **`host`**: Database server hostname
 - **`port`**: Database server port (default: 3306)
 - **`database`**: Database name
@@ -585,9 +597,53 @@ database:
 - **`password`**: Database password (use environment variables for security)
 - **`charset`**: Character encoding (default: utf8mb4)
 - **`pool_size`**: Connection pool size (default: 10)
-- **`max_overflow`**: Maximum overflow connections (default: 20)
-- **`pool_timeout`**: Connection timeout in seconds (default: 30)
-- **`pool_recycle`**: Connection recycle time in seconds (default: 3600)
+
+### Where annotator state goes
+
+Each annotator's state is stored as one JSON document in the
+`user_state_documents` table. It is the same document the file backend writes
+to `annotation_output/<user>/user_state.json`, so every kind of answer is kept,
+including spans, links, events, training progress and survey answers. The
+annotation history goes in `annotation_history_log`, one row per action. Potato
+creates both tables on first start and loads every stored annotator at boot.
+
+The data items themselves, exports and the rest of the output directory are
+still files. Only annotator state moves to the database.
+
+The admin and MCP exports, `potato export`, paper mode, auto-export
+(`export_annotation_format`) and model training read annotator state from the
+database. When `potato export` runs on another machine, it connects with the
+config's `database` block, so that machine needs the driver and network access
+to the database. `${VAR}` references in `password` are expanded as they are at
+startup.
+
+The other tools that handle saved state work with the database too:
+
+- `potato repair-annotations` reads each state from the database and writes
+  the repair back. With a backup, the old document goes to
+  `annotation_output/<user>/user_state.json.bak`.
+- The admin data archive, and so `potato deploy pull`, writes each annotator
+  out of the database as `annotation_output/<user>/user_state.json` and
+  `annotation_history.jsonl`, the layout the file backend uses. A pull from a
+  VM or a local container goes through that archive rather than SSH or
+  `docker cp`, so it needs the deployment's URL and admin key.
+- The `backup` and `huggingface_backup` mirrors write the same files under
+  `_databases/mysql/` on each cycle. Restore on boot runs only when the
+  database is empty, and the restored annotators are imported into it.
+- `filter_by_prior_annotation` reads an earlier task in MySQL when the filter
+  carries that task's `database` block.
+
+At startup Potato imports every `annotation_output/<user>/user_state.json`
+whose user is not in the database yet, with its history. That covers a file
+study switched to MySQL and a project made by `potato import --seed-user`. When
+both exist, the database copy wins, and the files are left where they are.
+
+The backup mirrors are not a substitute for backing up the database itself
+with your usual MySQL tooling, such as `mysqldump`.
+
+Older releases defined tables named `user_states`, `label_annotations` and so
+on. They could not be created on MySQL 8 with utf8mb4, so no database holds data
+in them and there is nothing to migrate. Potato no longer creates them.
 
 ### Environment Variables
 

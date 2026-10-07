@@ -13,6 +13,7 @@ from potato.data_sources.base import DataSource, SourceConfig, SourceType
 from potato.data_sources.credentials import CredentialManager
 from potato.data_sources.cache_manager import CacheManager
 from potato.data_sources.partial_reader import PartialReader, PartialLoadingConfig
+from potato.data_sources.parsing import SourceDataError
 
 if TYPE_CHECKING:
     from potato.item_state_management import ItemStateManager
@@ -294,6 +295,11 @@ class DataSourceManager:
                     count = self._load_from_source(source, is_initial=True)
                     total_loaded += count
                     logger.info(f"Loaded {count} items from {source_id}")
+                except SourceDataError:
+                    # Malformed rows and duplicate ids stop the boot, as they
+                    # do for data_files: a study that silently loads short is
+                    # worse than one that refuses to start.
+                    raise
                 except Exception as e:
                     logger.error(f"Failed to load from {source_id}: {e}")
 
@@ -357,21 +363,30 @@ class DataSourceManager:
                 )
                 return loaded
 
-        # Check if source is complete
-        if self.partial_reader:
-            state = self.partial_reader.get_state(source_id)
-            if state and state.is_complete:
+        partial = self.partial_reader is not None and self.partial_reader.config.enabled
+        state = self.partial_reader.get_state(source_id) if partial else None
+
+        if not partial:
+            start, count = 0, None  # Load all
+        elif is_initial:
+            # The item pool is empty at boot, so the first read starts from
+            # the top and re-reads everything an earlier run had loaded.
+            # Resuming at the saved position dropped those rows from the pool
+            # on every restart, annotated or not.
+            start = 0
+            if count is None:
+                if state is not None and state.is_complete:
+                    count = None
+                else:
+                    already = self.partial_reader.get_start_position(source_id)
+                    count = max(self.partial_reader.get_load_count(source_id, True), already)
+        else:
+            if state is not None and state.is_complete:
                 logger.debug(f"Source {source_id} is already complete")
                 return 0
-
-        # Determine how many items to load and from what position
-        if self.partial_reader and self.partial_reader.config.enabled:
             start = self.partial_reader.get_start_position(source_id)
             if count is None:
-                count = self.partial_reader.get_load_count(source_id, is_initial)
-        else:
-            start = 0
-            count = None  # Load all
+                count = self.partial_reader.get_load_count(source_id, False)
 
         # Check if source supports partial reading
         if start > 0 and not source.supports_partial_reading():
@@ -381,30 +396,37 @@ class DataSourceManager:
             )
             return 0
 
-        # Load items
+        # Load items. The position advances by records READ, not items added:
+        # a row with no id or a duplicate is still a row, and counting only
+        # the added ones re-read rows and marked a source complete early.
         items_loaded = 0
-        is_complete = False
+        records_read = 0
+        for item in source.read_items(start=start, count=count):
+            records_read += 1
+            outcome = self.ingest_item(item, source_id)
+            if outcome == "added":
+                items_loaded += 1
+            elif outcome == "duplicate":
+                message = (f"Duplicate instance ID '{item.get(self._id_key)}' in "
+                           f"source {source_id}")
+                if is_initial:
+                    raise SourceDataError(message)
+                logger.error(message + "; keeping the first")
+            elif is_initial:
+                raise SourceDataError(
+                    f"Item {start + records_read} in source {source_id} has no "
+                    f"'{self._id_key}'")
 
-        try:
-            for item in source.read_items(start=start, count=count):
-                if self.ingest_item(item, source_id) == "added":
-                    items_loaded += 1
+        is_complete = count is None or records_read < count
 
-            # Check if we loaded fewer items than requested (source exhausted)
-            if count is not None and items_loaded < count:
-                is_complete = True
-
-        except StopIteration:
-            is_complete = True
-
-        # Update partial reader state
-        if self.partial_reader:
-            total_estimate = source.get_total_count()
+        if partial:
             self.partial_reader.update_state(
                 source_id=source_id,
                 items_added=items_loaded,
+                line_number=start + records_read,
                 is_complete=is_complete,
-                total_estimate=total_estimate
+                total_estimate=source.get_total_count(),
+                replace=is_initial,
             )
 
         return items_loaded
@@ -441,7 +463,19 @@ class DataSourceManager:
 
         # Cheap unlocked pre-filter; add_item re-checks under its own lock.
         if self._item_state_manager.has_item(instance_id):
-            logger.debug(f"Skipping duplicate ID: {instance_id}")
+            # A live source re-reads its overlap window on purpose, so the
+            # same row arriving twice is routine. A different row under an
+            # id already in the pool is not: keep the first and say so.
+            existing = self._item_state_manager.get_item(instance_id)
+            old = dict(existing.get_data()) if existing is not None else {}
+            old.pop("displayed_text", None)
+            new = {k: v for k, v in item.items() if k != "displayed_text"}
+            if old and old != new:
+                logger.error(
+                    f"Instance ID '{instance_id}' from {source_id or 'a source'} is already "
+                    f"in the pool with different content; keeping the first")
+            else:
+                logger.debug(f"Skipping duplicate ID: {instance_id}")
             return "duplicate"
 
         self._prepare_displayed_text(item)

@@ -407,6 +407,18 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Days before a persisted session expires",
         type="integer", default=2, category=SERVER,
     ),
+    "session_cookie_samesite": _D(
+        "SameSite attribute of the session cookie: Lax, Strict or None. Unset "
+        "means Lax, except on crowd deployments, where the browser default is "
+        "kept so a task embedded in the platform's frame keeps its session. "
+        "None requires session_cookie_secure",
+        type="string", example="Lax", category=SERVER,
+    ),
+    "session_cookie_secure": _D(
+        "Send the session cookie over HTTPS only. Turn on when the server is "
+        "reached over HTTPS",
+        type="boolean", default=False, category=SERVER,
+    ),
     "customjs": _D(
         "Enable custom JavaScript injection", type="boolean", category=SERVER,
     ),

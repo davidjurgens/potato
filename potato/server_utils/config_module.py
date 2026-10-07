@@ -114,6 +114,8 @@ KNOWN_CONFIG_KEYS = {
     "site_file": None,
     "persist_sessions": None,
     "session_lifetime_days": None,
+    "session_cookie_samesite": None,
+    "session_cookie_secure": None,
     "base_html_template": None,
 
     # === Quality control ===
@@ -883,7 +885,7 @@ def validate_ui_language_config(config_data):
 
     from potato.server_utils.i18n import (
         available_language_codes,
-        is_valid_language_code,
+        resolve_language_code,
     )
 
     value = config_data["ui_language"]
@@ -896,13 +898,12 @@ def validate_ui_language_config(config_data):
         )
 
     if isinstance(value, str):
-        code = value.strip()
-        if not is_valid_language_code(code) or code not in available_language_codes():
+        if resolve_language_code(value) is None:
             _warn_unknown(value)
     elif isinstance(value, dict):
         base = value.get("_base")
         if base is not None:
-            if not isinstance(base, str) or base.strip() not in available_language_codes():
+            if resolve_language_code(base) is None:
                 _warn_unknown(base)
     else:
         logger.warning(
@@ -1039,6 +1040,7 @@ _OPTIONAL_BOOL_FIELDS = {
     "customjs": "whether custom JS is enabled",
     "watch_data_directory": "whether to watch data directory for changes",
     "persist_sessions": "whether to persist sessions across restarts",
+    "session_cookie_secure": "whether the session cookie is sent over HTTPS only",
 }
 
 _VALID_ASSIGNMENT_STRATEGIES = [
@@ -5918,6 +5920,19 @@ def validate_training_config(config_data: Dict[str, Any], project_dir: str, conf
         if 'allow_retry' in feedback:
             if not isinstance(feedback['allow_retry'], bool):
                 raise ConfigValidationError("training.feedback.allow_retry must be a boolean")
+
+    # The training block's own keys are checked against the allowlist, but
+    # nothing looked inside these two, so a misspelt `min_corect` was ignored
+    # without a word.
+    for block, allowed in (
+            ('passing_criteria', {'min_correct', 'require_all_correct', 'max_mistakes',
+                                  'max_mistakes_per_question', 'max_attempts'}),
+            ('feedback', {'show_explanations', 'allow_retry'})):
+        section = training_config.get(block)
+        if isinstance(section, dict):
+            for key in sorted(set(section) - allowed):
+                logger.warning("Unknown key training.%s.%s is ignored (known: %s)",
+                               block, key, ", ".join(sorted(allowed)))
 
     # Validate failure action
     if 'failure_action' in training_config:

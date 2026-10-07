@@ -2181,6 +2181,9 @@
           "200": {
             "description": "Success"
           },
+          "401": {
+            "description": "Authentication required"
+          },
           "403": {
             "description": "Only available when the server runs with debug: true"
           }
@@ -2190,7 +2193,8 @@
           "core"
         ],
         "x-potato-auth": [
-          "inline:debug_only"
+          "inline:debug_only",
+          "inline:admin_api_key"
         ]
       }
     },
@@ -4833,7 +4837,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -4864,7 +4869,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -4895,7 +4901,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -4926,7 +4933,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5005,7 +5013,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5021,12 +5030,13 @@
             "description": "Authentication required"
           }
         },
-        "summary": "List all active live agent sessions (admin use).",
+        "summary": "List live agent sessions: all of them for an admin, otherwise the caller's own.",
         "tags": [
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5079,7 +5089,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5110,7 +5121,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5141,7 +5153,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5172,7 +5185,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -5203,7 +5217,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5234,7 +5249,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5273,7 +5289,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5303,7 +5320,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5333,7 +5351,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5364,7 +5383,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5394,7 +5414,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5425,7 +5446,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5445,7 +5467,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5497,7 +5520,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5527,7 +5551,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5558,7 +5583,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5589,7 +5615,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -5619,7 +5646,8 @@
           "live_coding_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -10003,11 +10031,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get full confusion analysis with enriched patterns and heatmap data.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10059,11 +10093,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get disagreement explorer data with scatter plots and label breakdowns.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10073,11 +10113,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get temporal disagreement trend data.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10087,11 +10133,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get all disagreements and their status.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10101,11 +10153,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get edge case status.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10115,11 +10173,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Export all Solo Mode data.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "admin_required"
         ]
       }
     },
@@ -10129,11 +10196,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get all labeling functions and their stats.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10164,11 +10237,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get labeling function statistics.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10251,11 +10330,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get all LLM predictions.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10265,11 +10350,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get prompt version history.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10279,11 +10370,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get before/after accuracy report for re-annotated instances.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10293,11 +10390,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get refinement loop status and cycle history.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10330,11 +10433,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the full log of refinement cycles (validated framework only).",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10344,11 +10453,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get refinement candidates awaiting admin approval.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10404,11 +10519,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "List available refinement strategies and their metadata.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10460,11 +10581,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get all edge case rules and their status.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10518,11 +10645,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get aggregated edge case rule categories.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10553,11 +10686,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Return 2D-projected rule embeddings for D3 scatter plot visualization.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },
@@ -10588,11 +10727,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get comprehensive Solo Mode status.",
         "tags": [
           "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
         ]
       }
     },

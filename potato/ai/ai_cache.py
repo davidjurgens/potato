@@ -74,6 +74,23 @@ def _resolve_item(instance_id):
     return ism.items()[instance_id]
 
 
+def _is_error_result(result) -> bool:
+    """True for a failed generation, which must never be cached.
+
+    A cached failure is served after the provider recovers, for good: the
+    warm-up and prefetch paths used to cache whatever came back.
+    """
+    if result is None:
+        return True
+    if isinstance(result, dict):
+        return "error" in result
+    if isinstance(result, str):
+        return (result.startswith("Unable to generate")
+                or result.startswith("Error:")
+                or "error" in result.lower()[:50])
+    return False
+
+
 def _get_instance_text(instance_id) -> str:
     """Get the text content from an instance using the configured text_key."""
     item = _resolve_item(instance_id)
@@ -709,11 +726,51 @@ class AiCacheManager:
         except Exception as e:
             logger.error(f"Error saving cache to disk: {e}")
 
+    def _fingerprint(self, key) -> str:
+        """Hash of everything besides the key that decides the answer.
+
+        The stored key was ``(instance_id, annotation_id, assistant)`` alone,
+        on disk across restarts. After a change of model, of prompt, of the
+        scheme's labels, or of the item's data, the old answer was still
+        served; and inserting a scheme ahead of another moved one scheme's
+        suggestions onto the other, because ``annotation_id`` is a position.
+        """
+        import hashlib
+
+        instance_id, annotation_id, assistant = key
+        parts = {"assistant": assistant}
+        for name, endpoint in (("text", getattr(self, "ai_endpoint", None)),
+                               ("visual", getattr(self, "visual_endpoint", None))):
+            if endpoint is not None:
+                parts[name] = [type(endpoint).__name__,
+                               getattr(endpoint, "model", None)]
+        try:
+            scheme = config["annotation_schemes"][annotation_id]
+            parts["scheme"] = scheme
+            prompts = get_ai_prompt() or {}
+            parts["prompt"] = (prompts.get(scheme.get("annotation_type"), {})
+                               .get(assistant))
+        except (IndexError, KeyError, TypeError, AttributeError):
+            parts["scheme"] = None
+        try:
+            parts["item"] = _resolve_item(instance_id).get_data()
+        except Exception:  # noqa: BLE001 -- an unknown item still gets a key
+            parts["item"] = None
+        blob = json.dumps(parts, sort_keys=True, default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+    def _storage_key(self, key) -> str:
+        """The on-disk key: the request plus its fingerprint."""
+        return f"{key}#{self._fingerprint(key)}"
+
     def add_to_cache(self, key, value):
-        """inserts a key-value into the disk cache."""
+        """inserts a key-value into the disk cache. Failures are not cached."""
+        if _is_error_result(value):
+            logger.warning("Not caching failed AI result for %s", key)
+            return
         with self.lock:
             if self.disk_cache_enabled:
-                self.save_cache_to_disk(key, value)
+                self.save_cache_to_disk(self._storage_key(key), value)
 
     def get_from_cache(self, key):
         """Tries to retrieve the item from disk cache."""
@@ -722,7 +779,7 @@ class AiCacheManager:
             if self.disk_cache_enabled and self.disk_persistence_path and os.path.exists(self.disk_persistence_path):
                 try:
                     disk_data = self.load_disk_cache_data(self.disk_persistence_path)
-                    key_str = str(key)
+                    key_str = self._storage_key(key)
                     if key_str in disk_data:
                         return disk_data[key_str]
                 except Exception as e:
@@ -1651,7 +1708,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         cached_value = self.get_from_cache(key)
         if cached_value is not None:
             logger.debug(f"Cache hit for key: {key}")
-            return cached_value
+            # Checked against the scheme as it is now, as a fresh answer is.
+            return validate_suggested_choice(
+                cached_value, _get_scheme_field(annotation_id, "labels", []))
 
         with self.lock:
             if key in self.in_progress:
@@ -1662,12 +1721,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         try:
             result = future.result(timeout=60)
             # Don't cache error responses
-            is_error_response = (
-                isinstance(result, str) and
-                (result.startswith("Unable to generate") or
-                 result.startswith("Error:") or
-                 "error" in result.lower()[:50])
-            )
+            is_error_response = _is_error_result(result)
             if self.disk_cache_enabled and not is_error_response:
                 self.add_to_cache(key, result)
             elif is_error_response:

@@ -33,12 +33,13 @@ import json
 import os
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set, Union
+from typing import List, Dict, Any, Mapping, Optional, Set, Union
 
 logger = logging.getLogger(__name__)
 
 
-def load_annotations_from_dir(annotation_dir: str) -> Dict[str, Dict[str, Dict[str, Set[str]]]]:
+def load_annotations_from_dir(annotation_dir: str, config: Optional[Mapping] = None
+                              ) -> Dict[str, Dict[str, Dict[str, Set[str]]]]:
     """
     Load every annotator's answers from an annotation output directory.
 
@@ -52,30 +53,17 @@ def load_annotations_from_dir(annotation_dir: str) -> Dict[str, Dict[str, Dict[s
     """
     from potato.server_utils.answer_collapse import collapse_entries
 
-    annotations: Dict[str, Dict[str, Dict[str, Set[str]]]] = {}
-    annotation_path = Path(annotation_dir)
+    from potato.server_utils.stored_states import iter_stored_states, uses_mysql
 
-    if not annotation_path.exists():
+    annotations: Dict[str, Dict[str, Dict[str, Set[str]]]] = {}
+
+    if not uses_mysql(config) and not Path(annotation_dir).exists():
         logger.warning(f"Annotation directory does not exist: {annotation_dir}")
         return annotations
 
-    # Look for user_state.json files in user subdirectories
-    for user_dir in sorted(annotation_path.iterdir()):
-        if not user_dir.is_dir():
-            continue
-
-        state_file = user_dir / "user_state.json"
-        if not state_file.exists():
-            continue
-
-        try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                user_state = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            logger.warning(f"Failed to load {state_file}: {e}")
-            continue
-
-        user_id = str(user_state.get("user_id") or user_dir.name)
+    for name, user_state in iter_stored_states(annotation_dir, config,
+                                               skip_unreadable=True):
+        user_id = str(user_state.get("user_id") or name)
         instance_labels = user_state.get("instance_id_to_label_to_value", {})
 
         for instance_id, label_list in instance_labels.items():

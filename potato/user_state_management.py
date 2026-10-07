@@ -103,6 +103,10 @@ class TrainingState:
         # Maps category name -> {'correct': int, 'total': int}
         self.category_scores: Dict[str, Dict[str, int]] = {}
 
+        # How many times this annotator has started the training: 1, plus
+        # one per repeat_training restart. passing_criteria.max_attempts caps it.
+        self.rounds_started = 1
+
     def add_answer(self, instance_id: str, is_correct: bool, attempts: int, explanation: str = "") -> None:
         """Add a training answer and update statistics."""
         # Track previous state for this question
@@ -364,7 +368,8 @@ class TrainingState:
             'allow_retry': self.allow_retry,
             'max_mistakes': self.max_mistakes,
             'max_mistakes_per_question': self.max_mistakes_per_question,
-            'category_scores': self.category_scores
+            'category_scores': self.category_scores,
+            'rounds_started': self.rounds_started,
         }
 
     @classmethod
@@ -386,6 +391,7 @@ class TrainingState:
         training_state.max_mistakes = data.get('max_mistakes', -1)
         training_state.max_mistakes_per_question = data.get('max_mistakes_per_question', -1)
         training_state.category_scores = data.get('category_scores', {})
+        training_state.rounds_started = int(data.get('rounds_started', 1) or 1)
         return training_state
 
 # The MySQL backend is imported only when a config asks for it (see
@@ -681,7 +687,7 @@ class UserStateManager:
             # Create appropriate user state based on configuration
             if self.use_database and self.db_manager:
                 logger.debug(f"Creating MysqlUserState for user: {user_id} (quota={quota})")
-                user_state = self._mysql_user_state_cls(user_id, self.db_manager, quota)
+                user_state = self._mysql_user_state_cls(user_id, quota, db_manager=self.db_manager)
             else:
                 logger.debug(f"Creating InMemoryUserState for user: {user_id} (quota={quota})")
                 user_state = InMemoryUserState(user_id, quota)
@@ -789,25 +795,28 @@ class UserStateManager:
         Gets a user from the user state manager or None if the user does not exist (thread-safe).'''
         with self._state_lock:
             if user_id not in self.user_to_annotation_state:
-                if self.use_database and self.db_manager:
-                    # Try to load from database
-                    try:
-                        user_state = self._mysql_user_state_cls(user_id, self.db_manager, self.max_annotations_per_user)
-                        self.user_to_annotation_state[user_id] = user_state
-                        return user_state
-                    except Exception as e:
-                        logger.warning(f"Failed to load user state from database for {user_id}: {e}")
-                else:
-                    # Try to load the user state from disk if it exists
-                    try:
+                # Load a stored state if there is one. An unknown user is
+                # None: the database path used to create a row for any name
+                # asked about, so admin lookups never 404'd.
+                try:
+                    user_state = None
+                    if self.use_database and self.db_manager:
+                        user_state = self._mysql_user_state_cls.load_from_db(
+                            user_id, self.db_manager)
+                    else:
+                        from potato.server_utils.usernames import user_dir as _user_dir
                         output_annotation_dir = self.config["output_annotation_dir"]
-                        user_dir = os.path.join(output_annotation_dir, user_id)
+                        user_dir = _user_dir(output_annotation_dir, user_id)
                         if os.path.exists(user_dir):
                             user_state = InMemoryUserState.load(user_dir)
-                            self.user_to_annotation_state[user_id] = user_state
-                            return user_state
-                    except Exception as e:
-                        logger.warning(f"Failed to load user state for {user_id}: {e}")
+                    # On a case-insensitive file system "Alice" opens alice's
+                    # directory; that is not Alice's state.
+                    if user_state is not None and user_state.get_user_id() == user_id:
+                        self._prepare_loaded_state(user_state)
+                        self.user_to_annotation_state[user_id] = user_state
+                        return user_state
+                except Exception as e:
+                    logger.warning(f"Failed to load user state for {user_id}: {e}")
 
             return self.user_to_annotation_state.get(user_id)
 
@@ -1070,8 +1079,10 @@ class UserStateManager:
         output_annotation_dir = self.config["output_annotation_dir"]
         username = user_state.get_user_id()
 
-        # NB: Do some kind of sanitizing on the username to improve security
-        user_dir = os.path.join(output_annotation_dir, username)
+        # Refuses a name that would land outside the output directory or in
+        # another user's directory (usernames.py).
+        from potato.server_utils.usernames import user_dir as _user_dir
+        user_dir = _user_dir(output_annotation_dir, username)
 
         # Save the user state
         user_state.save(user_dir)
@@ -1132,7 +1143,7 @@ class UserStateManager:
         phase_responses = (
             load_phase_responses_from_output_dir(
                 output_dir, display_logic_schemes=dl_schemes,
-                single_select_schemas=ss_schemas)
+                single_select_schemas=ss_schemas, config=self.config)
             if self.config.get("export_include_phase_data", False)
             else []
         )
@@ -1169,16 +1180,26 @@ class UserStateManager:
         # Figure out where this user's data would be stored on disk
         output_annotation_dir = self.config["output_annotation_dir"]
 
-        # TODO: make the user state type configurable between in-memory and DB-backed.
         user_state = InMemoryUserState.load(user_dir)
+        return self._register_loaded_state(user_state)
+
+    def load_user_state_from_db(self, user_id: str) -> Optional[UserState]:
+        '''Loads one annotator's state from the MySQL backend at boot.'''
+        user_state = self._mysql_user_state_cls.load_from_db(user_id, self.db_manager)
+        return self._register_loaded_state(user_state) if user_state is not None else None
+
+    def _prepare_loaded_state(self, user_state: UserState) -> None:
+        '''What every loaded state needs, whichever path loaded it.'''
         user_state.prune_missing_assigned_instances()
         self._apply_single_select_schemas(user_state)
-
         # Re-stamp on load in case the declaration changed since the state was
         # written. stamp_user_state keeps the original recorded_at when nothing
         # else moved, so the timestamp does not drift on every restart.
         from potato.annotator_origin import stamp_user_state
         stamp_user_state(user_state, self._machine_annotator_roster)
+
+    def _register_loaded_state(self, user_state: UserState) -> UserState:
+        self._prepare_loaded_state(user_state)
 
         if user_state.get_user_id() in self.user_to_annotation_state:
             logger.warning(f'User "{user_state.get_user_id()}" already exists in the user state manager, but is being overwritten by load_state()')
@@ -2403,7 +2424,25 @@ class InMemoryUserState(UserState):
         ]
         for lbl in stale:
             del container[lbl]
+        self._drop_empty_label_container(instance_id)
         return len(stale)
+
+    def remove_label_annotation(self, instance_id: str, label: "Label") -> bool:
+        """Remove one stored label, as a cleared text box or number asks.
+        Returns whether there was one."""
+        container = self._label_container(instance_id, create=False)
+        if not container or label not in container:
+            return False
+        del container[label]
+        self._drop_empty_label_container(instance_id)
+        return True
+
+    def _drop_empty_label_container(self, instance_id: str) -> None:
+        # An empty dict still makes has_annotated() true, so an item whose
+        # answers were all cleared kept counting as done.
+        if (self.current_phase_and_page[0] == UserPhase.ANNOTATION
+                and not self.instance_id_to_label_to_value.get(instance_id, True)):
+            del self.instance_id_to_label_to_value[instance_id]
 
     def add_span_annotation(self, instance_id: str, label: SpanAnnotation, value: any) -> None:
         '''Adds a set of span annotations to the instance or if the user is not
@@ -3165,6 +3204,10 @@ class InMemoryUserState(UserState):
 
         d['training_state'] = self.training_state.to_dict()
 
+        # Pending ICL verification items: without them, an answer given after
+        # a restart is not recognised as a verification and never scored.
+        d['icl_verification_tasks'] = dict(getattr(self, 'icl_verification_tasks', {}) or {})
+
         # Category qualification data
         d['qualified_categories'] = list(self.qualified_categories)
         d['category_qualification_scores'] = self.category_qualification_scores
@@ -3290,6 +3333,19 @@ class InMemoryUserState(UserState):
         with open(state_file, 'rt', encoding='utf-8') as f:
             j = json.load(f)
 
+        user_state = InMemoryUserState.from_json_dict(j)
+        user_state._load_history(user_dir)
+        user_state._after_history_loaded()
+        return user_state
+
+    @classmethod
+    def from_json_dict(cls, j: dict, **init_kwargs) -> "InMemoryUserState":
+        '''Build a state from the dict to_json() produced, without its history.
+
+        Shared by the file backend and the MySQL backend, which store the same
+        document in different places. ``init_kwargs`` go to the constructor of
+        ``cls`` after the user id and quota.
+        '''
         def to_label(d: dict[str,str]) -> Label:
             return Label(d['schema'], d['name'])
 
@@ -3315,7 +3371,7 @@ class InMemoryUserState(UserState):
         # state files written by older Potatoes are the same shape of problem.
         # An absent key means the user has done nothing yet, which is exactly
         # what a fresh UserState represents.
-        user_state = InMemoryUserState(j['user_id'], j.get('max_assignments', -1))
+        user_state = cls(j['user_id'], j.get('max_assignments', -1), **init_kwargs)
 
         user_state.instance_id_ordering = j.get('instance_id_ordering', [])
         user_state.assigned_instance_ids = set(user_state.instance_id_ordering)
@@ -3413,8 +3469,14 @@ class InMemoryUserState(UserState):
         except Exception:
             pass
 
-        user_state._load_history(user_dir)
+        user_state.icl_verification_tasks = dict(j.get('icl_verification_tasks', {}) or {})
 
         return user_state
+
+    def _after_history_loaded(self) -> None:
+        # performance_metrics is derived from the history and was never
+        # saved, so it read 0 actions after every restart.
+        if self.annotation_history:
+            self._update_performance_metrics()
 
 

@@ -8,7 +8,7 @@ visual AI inference. Supports LLaVA, Llama 3.2 Vision, BakLLaVA, and Qwen-VL mod
 import base64
 import json
 import logging
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -115,7 +115,7 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
         """Get the default vision model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard text query (falls back to text-only mode).
 
@@ -131,7 +131,8 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
                 model=self.model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
-                format=output_format.model_json_schema(),
+                format=(output_format.model_json_schema()
+                        if hasattr(output_format, "model_json_schema") else None),
                 think=False,
             )
 

@@ -81,6 +81,8 @@ def build_config(schema_name: str, result: TextImportResult,
 
 def write_data_file(path: Path, result: TextImportResult,
                     schema_name: str) -> None:
+    from potato.importers._common import assert_unique_ids
+    assert_unique_ids(d.instance_id for d in result.documents)
     with path.open("w", encoding="utf-8") as handle:
         for document in result.documents:
             row: Dict[str, object] = {

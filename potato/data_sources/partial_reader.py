@@ -242,7 +242,8 @@ class PartialReader:
         file_position: Optional[int] = None,
         line_number: Optional[int] = None,
         is_complete: bool = False,
-        total_estimate: Optional[int] = None
+        total_estimate: Optional[int] = None,
+        replace: bool = False
     ) -> PartialReadState:
         """
         Update the state after loading items.
@@ -254,6 +255,8 @@ class PartialReader:
             line_number: New line number (for line-based sources)
             is_complete: Whether all data has been loaded
             total_estimate: Updated total estimate
+            replace: The batch was a fresh read from the start (a boot), so
+                its counts replace the stored ones instead of adding to them
 
         Returns:
             Updated PartialReadState
@@ -262,7 +265,10 @@ class PartialReader:
 
         with self._lock:
             state = self.get_or_create_state(source_id)
-            state.items_loaded += items_added
+            if replace:
+                state.items_loaded = items_added
+            else:
+                state.items_loaded += items_added
             state.last_loaded_at = time.time()
 
             if file_position is not None:
@@ -349,13 +355,17 @@ class PartialReader:
             source_id: The source identifier
 
         Returns:
-            Number of items already loaded (start position for next batch)
+            Number of records already read (start position for next batch).
+            This is a count of records consumed, not items added: rows with
+            no id or a duplicate id are skipped but still occupy a position.
         """
         with self._lock:
             state = self._states.get(source_id)
-            if state:
-                return state.items_loaded
-            return 0
+            if not state:
+                return 0
+            # State files written before the read position was tracked hold
+            # only items_loaded; that was the old (approximate) position.
+            return state.line_number or state.items_loaded
 
     def reset_state(self, source_id: str) -> None:
         """

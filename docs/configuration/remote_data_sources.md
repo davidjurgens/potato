@@ -216,7 +216,7 @@ Polling is cursor-based, not `OFFSET`-based. Offsets are wrong for a table being
 
 **Prefer a monotonic column** — an auto-incrementing `id BIGSERIAL`, or an insert sequence. A wall-clock column like `created_at` is only best-effort: a transaction that began before a poll can commit after it with an earlier timestamp, and the cursor will already have moved past it.
 
-If you must use a timestamp, set `overlap_seconds` (2 is usually plenty). It rewinds the cursor slightly on every read, so boundary rows are fetched again — and re-fetched rows are dropped by ID deduplication, so the only cost is a little bandwidth.
+If you must use a timestamp, set `overlap_seconds` (2 is usually plenty). Each poll first fetches the rows from `overlap_seconds` before the cursor up to the cursor, then reads forward from the cursor. Rows fetched twice are dropped by ID deduplication, so the only cost is a little bandwidth. The overlap pass never moves the cursor, so a window holding more rows than `batch_size` still pages through to the end.
 
 The `(cursor, tiebreaker)` pair also matters. With `cursor_column` alone, three rows sharing one timestamp and a batch size of two would leave the third permanently unread. Potato always orders by both and remembers both.
 
@@ -301,6 +301,20 @@ partial_loading:
   batch_size: 500              # Items to load per increment
   auto_load_threshold: 0.8     # Auto-load when 80% annotated
 ```
+
+The read position counts rows read, not items added, so a row with no ID or a
+repeated ID does not make Potato re-read rows or think the source has ended.
+On a restart every row that earlier runs had loaded is read again, so the item
+pool comes back whole, and loading continues from there.
+
+### Bad rows and repeated IDs
+
+A file source parses exactly like `data_files`: CSV and TSV cells are kept as
+written, a UTF-8 byte order mark is ignored, and a malformed JSON line is an
+error naming the line. At startup, a row with no ID and an ID that appears in
+two sources both stop the server, as they do for `data_files`. Rows loaded
+later (by `load_more` or auto-loading) are skipped with a logged error and the
+first row with that ID is kept.
 
 ### Caching
 

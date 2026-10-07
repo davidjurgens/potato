@@ -7,7 +7,7 @@ analysis using the image content block format.
 
 import base64
 import logging
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -86,7 +86,7 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
         """Get the default Anthropic model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard text query without images.
 
@@ -99,6 +99,15 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
         """
         try:
             # Add JSON instruction to prompt
+            if output_format is None or not hasattr(output_format, "model_json_schema"):
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                self._warn_if_truncated(response.stop_reason)
+                return response.content[0].text
+
             json_prompt = f"""{prompt}
 
 Please respond with valid JSON matching this schema:

@@ -445,6 +445,8 @@ class DatabaseSource(DataSource):
 
             id_index = columns.index(self._id_column) if self._id_column in columns else 0
             cursor_index = columns.index(cursor_col) if cursor_col in columns else None
+            tiebreak_col = self._tiebreak_column()
+            tiebreak_index = columns.index(tiebreak_col) if tiebreak_col in columns else id_index
 
             for row in result:
                 # Read the cursor from the RAW row, before _row_to_dict
@@ -458,6 +460,11 @@ class DatabaseSource(DataSource):
                     item=item,
                     cursor_value=raw_cursor,
                     row_id=str(row[id_index]),
+                    # Raw, and from the tie-breaker column: binding str(id)
+                    # compares text against an integer column, and binding
+                    # the id when tiebreaker_column names another column
+                    # resumes at the wrong row.
+                    tiebreak_value=row[tiebreak_index],
                 )
 
     def _assert_cursor_column_present(self, engine, cursor_col: str) -> None:

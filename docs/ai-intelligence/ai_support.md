@@ -189,7 +189,7 @@ ai_support:
 | `ai_config.include.all` | boolean | No | Enable AI for all annotation schemes (default: false) |
 | `ai_config.include.special_include` | object | No | Per-page, per-annotation customization |
 | `cache_config.disk_cache.enabled` | boolean | No | Enable disk caching (default: false) |
-| `cache_config.disk_cache.path` | string | No* | Path to cache file (required if caching enabled) |
+| `cache_config.disk_cache.path` | string | No* | Path to cache file (required if caching enabled). Entries are keyed on the item, the scheme, the assistant, the model, the prompt and the item's data, so changing any of them asks the model again. Failed requests are never cached |
 | `cache_config.prefetch.warm_up_page_count` | integer | No | Pre-generate hints for first N instances on startup |
 | `cache_config.prefetch.on_next` | integer | No | Prefetch N instances ahead when navigating forward |
 | `cache_config.prefetch.on_prev` | integer | No | Prefetch N instances when navigating backward |

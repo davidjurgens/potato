@@ -216,11 +216,42 @@ def _generate_ranking_layout_internal(annotation_scheme):
          * no such pass, so a ranking answered on a survey page was rendered
          * back in the config order while the input held the real answer.
          */
+        function splitKnownValues(stored, values) {{
+            // Split a comma-joined answer back into option values. A plain
+            // split(',') breaks any option whose own text has a comma in it
+            // ("Paris, France"), so match the known values first.
+            var known = values.filter(function (v) {{ return v; }})
+                .sort(function (a, b) {{ return b.length - a.length; }});
+            var out = [], pos = 0;
+            while (pos <= stored.length - 1) {{
+                while (stored.charAt(pos) === ' ') pos++;
+                var match = null;
+                for (var i = 0; i < known.length; i++) {{
+                    var v = known[i], end = pos + v.length;
+                    if (stored.substr(pos, v.length) === v && (end === stored.length || stored.charAt(end) === ',')) {{
+                        match = v; break;
+                    }}
+                }}
+                if (match === null) {{
+                    var next = stored.indexOf(',', pos);
+                    var stop = next < 0 ? stored.length : next;
+                    var piece = stored.slice(pos, stop).trim();
+                    if (piece) out.push(piece);
+                    pos = stop + 1;
+                }} else {{
+                    out.push(match);
+                    pos += match.length + 1;
+                }}
+            }}
+            return out;
+        }}
+
         (function applyStoredOrder() {{
             var stored = hiddenInput.value;
             if (!stored) return;
             var items = Array.prototype.slice.call(list.querySelectorAll('.ranking-item'));
-            stored.split(',').forEach(function (value) {{
+            var values = items.map(function (it) {{ return it.getAttribute('data-value'); }});
+            splitKnownValues(stored, values).forEach(function (value) {{
                 var item = items.filter(function (it) {{
                     return it.getAttribute('data-value') === value;
                 }})[0];

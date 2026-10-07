@@ -94,6 +94,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `persist_sessions` |  | boolean | `False` | Keep annotator sessions across a server restart |  |
 | `port` |  | integer | `8000` | Port to listen on. The -p flag overrides this |  |
 | `server` |  | object |  | Nested port/host/debug block, an alternative to the top-level keys | `debug`, `host`, `port` |
+| `session_cookie_samesite` |  | string |  | SameSite attribute of the session cookie: Lax, Strict or None. Unset means Lax, except on crowd deployments, where the browser default is kept so a task embedded in the platform's frame keeps its session. None requires session_cookie_secure |  |
+| `session_cookie_secure` |  | boolean | `False` | Send the session cookie over HTTPS only. Turn on when the server is reached over HTTPS |  |
 | `session_lifetime_days` |  | integer | `2` | Days before a persisted session expires |  |
 | `session_timeout_minutes` |  | integer | `480` | How long a signed-in session may sit idle before the server clears it. The clock restarts on every request, so it bounds inactivity, not the length of a shift |  |
 | `site_dir` |  | string |  | Directory holding the HTML templates for this task |  |

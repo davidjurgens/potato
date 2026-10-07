@@ -83,7 +83,8 @@ Each file can contain multiple instances. The `id_key` and `text_key` from `item
 2. New files are parsed and their instances are added
 3. Modified files are re-parsed:
    - New instances are added
-   - Existing instances are updated (annotations are preserved)
+   - Existing instances from the same file are updated, unless someone has
+     annotated them and the text changed (see Instance Updates)
 4. Removed files: instances remain in the system (to preserve any annotations)
 5. The search index is rebuilt, so items that arrived after startup are
    findable through `/admin/api/search` and the curation catalog
@@ -155,15 +156,25 @@ watch_data_directory: true
 
 When a file is modified while watching is enabled:
 
-- **New instances** (new IDs) are added to the annotation queue
-- **Existing instances** (same IDs) are updated with new data, but annotations are preserved
-- **Removed instances** (IDs no longer in file) remain in the system to preserve annotations
+- **New instances** (new IDs) are added to the annotation queue.
+- **Existing instances** (same IDs, same file) are updated with the new data.
+  If someone has already annotated the item and its text changed, the update
+  is refused and an error is logged: span offsets point into the old text, so
+  replacing it would move every highlight. Give the edited item a new ID.
+- **Removed instances** (IDs no longer in the file) stay in the system, so
+  their annotations are kept.
 
-This means annotators won't lose their work if you update a data file.
+An ID that appears twice keeps its first row. This covers an ID repeated
+inside one file and an ID that another file (or `data_files`) already loaded.
+The later row is ignored and an error is logged that names both files.
+`data_files` refuses to start on the same input; the watcher runs while
+annotators are working, so it keeps going instead.
 
 ## Error Handling
 
 - Files that fail to parse are logged and skipped (other files still load)
+- CSV and TSV cells are read as written, the same way `data_files` reads them
+  (see [Data Formats](data_format.md))
 - Missing `id_key` in an instance: that instance is skipped with a warning
 - Missing `text_key` in an instance: instance loads with a warning
 - Directory permissions errors are logged

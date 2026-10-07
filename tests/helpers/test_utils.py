@@ -109,7 +109,7 @@ def create_test_config(
         "persist_sessions": kwargs.get("persist_sessions", False),
         "debug": kwargs.get("debug", False),
         "port": kwargs.get("port", 8000),
-        "host": kwargs.get("host", "0.0.0.0"),
+        "host": kwargs.get("host", "127.0.0.1"),
         "secret_key": kwargs.get("secret_key", "test-secret-key"),
         "session_lifetime_days": kwargs.get("session_lifetime_days", 1),
         "user_config": kwargs.get("user_config", default_user_config),

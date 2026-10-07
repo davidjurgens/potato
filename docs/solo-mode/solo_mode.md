@@ -55,7 +55,7 @@ solo_mode:
   # Thresholds
   thresholds:
     end_human_annotation_agreement: 0.90    # Required agreement rate to stop human annotation
-    minimum_validation_sample: 50           # Minimum comparisons before ending
+    minimum_validation_sample: 50           # Minimum compared items before ending (an item re-labelled under a new prompt still counts once)
     confidence_low: 0.5                     # Low confidence threshold
     confidence_high: 0.8                    # High confidence threshold
     periodic_review_interval: 100           # Review LLM labels every N instances
@@ -136,9 +136,15 @@ not every path visits every phase.
 - Send the prompt back for revision if the rules point at a larger problem
 
 ### 11. Autonomous Labeling
-- Agreement threshold reached
-- LLM completes remaining instances
+- Starts when agreement reaches `end_human_annotation_agreement` over at least
+  `minimum_validation_sample` compared items. The check runs after every human
+  label and on every load of the annotate page, so the hand-over happens even
+  if the human still has items queued. From then on the annotate page sends
+  the human to the status page.
+- The LLM labels the remaining instances. `max_parallel_labels` does not apply
+  in this phase, because there is no human left to stay level with.
 - Human monitors progress
+- A server restart in this phase resumes labelling where it stopped.
 
 ### 12. Final Validation
 - Validate sample of LLM-only labels
@@ -207,7 +213,11 @@ instance_selection:
 
 ## API Endpoints
 
-Solo Mode provides API endpoints for monitoring and control:
+Solo Mode provides API endpoints for monitoring and control. Every endpoint
+needs a logged-in session; an anonymous request gets 401. `GET /solo/api/export`
+needs admin access instead: the `X-API-Key` header with `admin_api_key`, or a
+role that can view the admin dashboard. It returns every annotation and the
+full prompt history.
 
 ### Status
 ```
@@ -239,7 +249,11 @@ POST /solo/api/optimize-prompt
 ```
 GET /solo/api/export
 ```
-Exports all annotations and predictions.
+Exports all annotations and predictions. Admin only.
+
+```bash
+curl -H "X-API-Key: $ADMIN_KEY" http://localhost:8000/solo/api/export
+```
 
 ## Best Practices
 

@@ -249,12 +249,20 @@ class BaseAIEndpoint(ABC):
         pass
 
     @abstractmethod
-    def query(self, prompt: str, output_format: Type[BaseModel]):
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None):
         """
         Send a query to the AI model and return the response.
 
+        Every endpoint takes the same two arguments. Callers pass a pydantic
+        model when they want JSON back and omit it (or pass None) for free
+        text, and the same call has to work whichever provider is configured.
+        Endpoints used to disagree: Anthropic's took only the prompt and the
+        others required the schema, so each provider broke a different set of
+        features with a TypeError that callers caught and logged.
+
         Args:
             prompt: The prompt to send to the model
+            output_format: Pydantic model the reply should match, or None
 
         Returns:
             The model's response as a string
@@ -404,7 +412,8 @@ class BaseAIEndpoint(ABC):
             "reply is cut off and may parse into the wrong shape. Raise "
             "ai_config.max_tokens.", self.max_tokens, where)
 
-    def parseStringToJson(self, response_content: str) -> str:
+    @staticmethod
+    def parseStringToJson(response_content: str) -> str:
         """
         Parse structured output from any LLM response, with robust fallbacks.
 
@@ -500,7 +509,7 @@ class BaseAIEndpoint(ABC):
 
         # Strategy 4: Salvage truncated JSON
         # Extract complete "key": "value" and "key": number pairs
-        salvaged = self._salvage_key_value_pairs(content_str)
+        salvaged = BaseAIEndpoint._salvage_key_value_pairs(content_str)
         if salvaged:
             logger.warning(
                 f"Salvaged {len(salvaged)} fields from truncated/malformed response"
@@ -511,7 +520,7 @@ class BaseAIEndpoint(ABC):
         # Some models (especially larger ones) produce XML like:
         # <label>joy</label><confidence>90</confidence>
         # or <response><label>joy</label></response>
-        xml_result = self._parse_xml_to_dict(content_str)
+        xml_result = BaseAIEndpoint._parse_xml_to_dict(content_str)
         if xml_result:
             logger.info(
                 f"Parsed {len(xml_result)} fields from XML-style response"
@@ -856,3 +865,48 @@ for _type, _module, _class, _hint in [
 ]:
     AIEndpointFactory.register_lazy_endpoint(_type, _module, _class, _hint)
 del _type, _module, _class, _hint
+
+
+def parse_llm_json(response_content):
+    """Parse a model reply into a dict: fences, prose, <think> blocks, XML."""
+    return BaseAIEndpoint.parseStringToJson(response_content)
+
+
+def json_schema_instruction(output_format) -> str:
+    """Prompt suffix asking for JSON that matches ``output_format``.
+
+    For providers without a constrained-decoding parameter. Empty when there
+    is no schema, so free-text calls are left as they are.
+    """
+    if output_format is None or not hasattr(output_format, "model_json_schema"):
+        return ""
+    try:
+        schema = json.dumps(output_format.model_json_schema())
+    except Exception:  # noqa: BLE001
+        return ""
+    return ("\n\nRespond with only a JSON object matching this JSON schema, "
+            "with no other text:\n" + schema)
+
+
+def normalize_confidence(raw, default: float = 0.5) -> float:
+    """A model's confidence as a probability in [0, 1].
+
+    The prompt asks for 0-100, but models also answer on the 0-1 scale.
+    Dividing every reply by 100 read ``0.92`` as 0.0092, so every such item
+    looked like the least certain one in the pool. A value in [0, 1] is taken
+    as a probability, one in (1, 100] as a percentage, and anything else is
+    clamped.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if value != value:  # NaN
+        return default
+    if value <= 0:
+        return 0.0
+    if value <= 1:
+        return value
+    if value <= 100:
+        return value / 100.0
+    return 1.0

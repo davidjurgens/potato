@@ -219,6 +219,14 @@ class UnifiedPositioningStrategy {
     }
 
     getCanonicalText() {
+        // The server writes the exact rendered text and marks it: use it as
+        // is. Stripping or collapsing it again made it shorter than the
+        // offsets the walk below counts whenever the text held an entity, a
+        // literal "<", or a space next to a line break.
+        if (this.container.getAttribute('data-offset-basis') === 'dom' &&
+                this.container.hasAttribute('data-original-text')) {
+            return this.container.getAttribute('data-original-text');
+        }
         if (this.container.hasAttribute('data-original-text')) {
             const originalText = this.container.getAttribute('data-original-text');
             const cleanText = originalText.replace(/<[^>]*>/g, '').trim();
@@ -1676,8 +1684,13 @@ class SpanManager {
             if (this.annotations && this.annotations.text && textContent) {
                 const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
                 if (!hasFieldStrategies) {
-                    const plainText = this.annotations.text.replace(/<[^>]*>/g, '').trim();
-                    textContent.setAttribute('data-original-text', plainText);
+                    if (this.annotations.text_basis === 'dom') {
+                        textContent.setAttribute('data-original-text', this.annotations.text);
+                        textContent.setAttribute('data-offset-basis', 'dom');
+                    } else {
+                        const plainText = this.annotations.text.replace(/<[^>]*>/g, '').trim();
+                        textContent.setAttribute('data-original-text', plainText);
+                    }
                 }
             }
 
@@ -2373,6 +2386,10 @@ class SpanManager {
                 type: "span",
                 schema: span.schema || this.currentSchema,
                 state: [{
+                    // The id picks this span out; without it every span with
+                    // the same label and offsets in another field was deleted too.
+                    id: span.id,
+                    target_field: span.target_field || null,
                     name: span.label,
                     start: span.start,
                     end: span.end,

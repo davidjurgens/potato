@@ -145,6 +145,14 @@ class AgentRunnerManager:
                     return runner
         return None
 
+    def get_session_owner(self, session_id: str) -> Optional[str]:
+        """The user who started a session, or None if there is no such session."""
+        with self._lock:
+            for key, runner in self._sessions.items():
+                if runner.session_id == session_id:
+                    return self._session_meta.get(key, {}).get("user_id")
+        return None
+
     def get_session_by_key(self, user_id: str, instance_id: str) -> Optional[AgentRunner]:
         """Get a session by user_id and instance_id."""
         session_key = f"{user_id}:{instance_id}"

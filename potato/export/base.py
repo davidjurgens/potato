@@ -127,7 +127,17 @@ class ExportContext:
                 return None
             return document_dom_text(payload, resolve_display_options(field_config))
         if isinstance(value, str):
-            return value
+            if field_config:
+                # An instance_display field renders through its own display.
+                return value
+            # The default display: offsets index the text the browser holds
+            # after normalizing and sanitizing it, not the data-file string.
+            # Slicing the raw string shifted every span that followed a
+            # doubled space, an entity or a tag.
+            from potato.server_utils.span_text import (
+                instance_dom_text, normalize_display_text)
+            return instance_dom_text(normalize_display_text(
+                value, bool(self.config.get("highlight_linebreaks", False))))
         if not isinstance(value, list):
             return None
 

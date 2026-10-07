@@ -95,6 +95,18 @@ cannot time that answer. The check is skipped for that one response and a line
 naming the annotator and the item goes to the log, rather than the answer
 passing quietly.
 7. Warnings and blocks are triggered at configured thresholds
+8. Once a warning or block has been shown for a failed check, that failure
+   stands: answering the same check again does not change it. An answer changed
+   before any verdict was shown (a misclick corrected on the same page) still
+   counts
+9. Moving past a check without answering it fails it
+10. A blocked annotator gets no more items. Reloading the annotation page ends
+    their task, and further saves are refused with HTTP 403. On a crowd
+    platform the end page carries the platform's failure code; elsewhere it
+    shows the block message. A block cannot be lifted by re-answering
+
+Consent, instruction and survey pages are never graded as attention checks or
+gold items, and their answers are not considered for auto-promotion.
 
 Attention-check and gold results are written to
 `<output_annotation_dir>/quality_control_results.json` as they are recorded, and

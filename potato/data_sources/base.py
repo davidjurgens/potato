@@ -42,12 +42,17 @@ class LiveRow:
             ``.isoformat()`` on datetimes, so by the time a value reaches
             ``item`` the native type is gone -- and re-binding an ISO string
             against, say, a PostgreSQL ``timestamptz`` is not reliable.
-        row_id: The stringified id_key value. Used as the tie-breaker so rows
-            that share a cursor value (identical timestamps) are not skipped.
+        row_id: The stringified id_key value.
+        tiebreak_value: The RAW value of the tie-breaker column (the id column
+            unless ``tiebreaker_column`` names another). Rows sharing a cursor
+            value are ordered by it, and it is what the next read binds, so it
+            must be that column's value in that column's type. When None the
+            worker falls back to ``row_id``.
     """
     item: Dict[str, Any]
     cursor_value: Any
     row_id: str
+    tiebreak_value: Any = None
 
 
 @dataclass

@@ -126,15 +126,23 @@ Returns all annotations (labels and spans) for a specific instance.
 ```json
 {
   "label_annotations": {
-    "sentiment": {
-      "positive": "1"
-    }
+    "sentiment": ["positive"],
+    "rating": ["slider"]
+  },
+  "label_values": {
+    "sentiment": {"positive": "positive"},
+    "rating": {"slider": 0}
   },
   "span_annotations": {
     "entities:ANIMAL:16:19": "true"
   }
 }
 ```
+
+`label_annotations` lists the stored label names per schema. `label_values`
+gives the value stored under each one, which is the answer itself for text,
+number and slider schemas. A value of `0` is an answer and is included; empty
+and unticked entries are not.
 
 ### Submit Annotation
 ```http
@@ -167,8 +175,17 @@ Submit or update annotations for an instance.
 ```
 
 Each key in `annotations` names a schema and a label in one flat string:
-`schema:::label`, or `schema:label`. Both are read; the browser sends the
-three-colon form, and a label whose own name contains a colon needs it.
+`schema:::label`, or `schema:label`. Both are read. When a key starts with a
+configured schema name, that name decides where the label begins, so a schema
+called `q1:topic` or a label containing `:::` is read correctly.
+
+An empty string as a value clears that label: an emptied text box or number
+field is not an answer. A multiselect with every box unticked sends no key for
+its schema, so name it in `cleared_schemas` to clear it:
+
+```json
+{"instance_id": "item_001", "annotations": {}, "cleared_schemas": ["topics"]}
+```
 
 The value is the answer for that label, not a container. This nests the label
 under the schema and so names no label at all:

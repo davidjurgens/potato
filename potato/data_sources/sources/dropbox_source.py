@@ -196,53 +196,21 @@ class DropboxSource(DataSource):
             content = self._fetch_authenticated_file(self._path)
 
         # Decode and parse
-        text = content.decode('utf-8')
+        text = content.decode('utf-8-sig')
         return self._parse_content(text)
 
     def _parse_content(self, text: str) -> List[Dict[str, Any]]:
-        """Parse file content."""
-        # Try JSON array first
-        try:
-            data = json.loads(text)
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return [data]
-        except json.JSONDecodeError:
-            pass
+        """Parse file content by extension, or detect JSON, JSON Lines, CSV.
 
-        # Try JSONL
-        items = []
-        lines = text.strip().split('\n')
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                item = json.loads(line)
-                if isinstance(item, list):
-                    items.extend(item)
-                else:
-                    items.append(item)
-            except json.JSONDecodeError:
-                pass
-
-        if items:
-            return items
-
-        # Try CSV
-        import csv
-        from io import StringIO
-
-        try:
-            reader = csv.DictReader(StringIO(text))
-            items = [dict(row) for row in reader]
-            if items:
-                return items
-        except Exception:
-            pass
-
-        raise ValueError("Could not parse file content as JSON, JSONL, or CSV")
+        Uses the shared parser, so cells are verbatim and a malformed JSON
+        line is an error rather than a silently dropped row.
+        """
+        from potato.data_sources.parsing import format_for, parse_records
+        name = self._path or self._url or "Dropbox file"
+        records = parse_records(text, format_for(name.split("?")[0]), name)
+        if not records:
+            raise ValueError("Could not parse file content as JSON, JSONL, or CSV")
+        return records
 
     def read_items(
         self,

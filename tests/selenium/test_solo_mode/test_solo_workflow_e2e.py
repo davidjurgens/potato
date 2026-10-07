@@ -24,6 +24,16 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from tests.selenium.test_solo_mode.test_base_solo import BaseSoloModeSeleniumTest
 
 
+
+def _authed_get(base_url, username, path):
+    """GET a solo read API as a logged-in user; they refuse anonymous calls."""
+    session = requests.Session()
+    try:
+        session.post(f"{base_url}/auth", data={"email": username, "pass": ""})
+        return session.get(f"{base_url}{path}")
+    finally:
+        session.close()
+
 @pytest.mark.selenium
 class TestSetupToPromptWorkflow(BaseSoloModeSeleniumTest):
     """Test the setup → prompt editing workflow."""
@@ -104,9 +114,7 @@ class TestSetupToPromptWorkflow(BaseSoloModeSeleniumTest):
             time.sleep(0.5)
 
             # Verify prompt API has the text
-            resp = requests.get(
-                f"{self.server.base_url}/solo/api/prompts"
-            )
+            resp = _authed_get(self.server.base_url, self.test_user, "/solo/api/prompts")
             if resp.status_code == 200:
                 data = resp.json()
                 # At least verify prompt version exists
@@ -237,9 +245,7 @@ class TestAnnotationFlow(BaseSoloModeSeleniumTest):
         self._advance_to_annotation_via_api()
 
         # Get count before
-        status_before = requests.get(
-            f"{self.server.base_url}/solo/api/status"
-        ).json()
+        status_before = _authed_get(self.server.base_url, self.test_user, "/solo/api/status").json()
         count_before = status_before['annotation_stats']['human_labeled']
 
         # Submit annotation via API (faster than browser)
@@ -255,9 +261,7 @@ class TestAnnotationFlow(BaseSoloModeSeleniumTest):
         session.close()
 
         # Get count after
-        status_after = requests.get(
-            f"{self.server.base_url}/solo/api/status"
-        ).json()
+        status_after = _authed_get(self.server.base_url, self.test_user, "/solo/api/status").json()
         count_after = status_after['annotation_stats']['human_labeled']
 
         assert count_after >= count_before
@@ -303,9 +307,7 @@ class TestAnnotationFlow(BaseSoloModeSeleniumTest):
         session.close()
 
         # Verify count
-        status = requests.get(
-            f"{self.server.base_url}/solo/api/status"
-        ).json()
+        status = _authed_get(self.server.base_url, self.test_user, "/solo/api/status").json()
         assert status['annotation_stats']['human_labeled'] >= 3
 
 

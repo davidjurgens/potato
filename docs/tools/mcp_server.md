@@ -158,6 +158,14 @@ The token is shown once. Only its SHA-256 digest is stored, in
 | `export_data` | export_data | |
 | `delete_annotations` | manage_assignment | yes |
 
+`export_data` writes under `<output_annotation_dir>/exports/`. Its `output`
+argument names a folder inside that directory (default: the format name); a
+path that leads outside it is refused. A failed export answers HTTP 500.
+
+Items added with `add_items` are recorded in
+`<output_annotation_dir>/runtime_items.jsonl` and loaded again after a restart,
+like items that arrive through trace ingestion.
+
 ### The six checks a call must pass
 
 In order, each failing closed with a reason the agent can act on:

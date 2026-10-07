@@ -4989,6 +4989,18 @@
       "description": "Backend debug logging. Note that only the phase pages (consent, instructions, surveys) read this key; the annotation page asks the logging module, which is driven by debug_log/verbose/debug",
       "type": "boolean"
     },
+    "session_cookie_samesite": {
+      "description": "SameSite attribute of the session cookie: Lax, Strict or None. Unset means Lax, except on crowd deployments, where the browser default is kept so a task embedded in the platform's frame keeps its session. None requires session_cookie_secure",
+      "examples": [
+        "Lax"
+      ],
+      "type": "string"
+    },
+    "session_cookie_secure": {
+      "default": false,
+      "description": "Send the session cookie over HTTPS only. Turn on when the server is reached over HTTPS",
+      "type": "boolean"
+    },
     "session_lifetime_days": {
       "default": 2,
       "description": "Days before a persisted session expires",

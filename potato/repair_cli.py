@@ -131,14 +131,17 @@ def repair_user_state(state: dict, single_select: set) -> Tuple[dict, List[dict]
 
 
 def repair_output_dir(output_dir: str, single_select: set, apply: bool = False,
-                      backup: bool = True) -> Dict[str, Any]:
+                      backup: bool = True, config: Optional[dict] = None) -> Dict[str, Any]:
     """Repair every ``user_state.json`` under ``output_dir``.
 
     Args:
         output_dir: The task's annotation output directory.
         single_select: Schema names that may hold at most one label.
         apply: Write the changes. When False (the default) nothing is modified.
-        backup: Write ``user_state.json.bak`` before overwriting.
+        backup: Write ``user_state.json.bak`` before overwriting. On MySQL it
+            is written to ``<output_dir>/<user>/`` too.
+        config: Read for its ``database`` block. A MySQL study's states are
+            read from and written back to the database.
 
     Returns:
         A summary dict with per-user reports and counts.
@@ -154,18 +157,15 @@ def repair_output_dir(output_dir: str, single_select: set, apply: bool = False,
         "applied": apply,
     }
 
-    if not os.path.isdir(output_dir):
+    from potato.server_utils.stored_states import (iter_stored_states, uses_mysql,
+                                                   write_stored_state)
+    if not uses_mysql(config) and not os.path.isdir(output_dir):
         logger.error(f"Output directory not found: {output_dir}")
         return summary
 
-    for user_dir in sorted(os.listdir(output_dir)):
-        state_file = os.path.join(output_dir, user_dir, "user_state.json")
-        if not os.path.exists(state_file):
-            continue
+    for user_dir, state in list(iter_stored_states(output_dir, config)):
         summary["users_scanned"] += 1
-
-        with open(state_file, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        original = json.dumps(state)
 
         state, reports = repair_user_state(state, single_select)
         if not reports:
@@ -182,14 +182,17 @@ def repair_output_dir(output_dir: str, single_select: set, apply: bool = False,
         summary["reports"].extend(reports)
 
         if apply:
-            if backup:
+            if backup and not uses_mysql(config):
+                state_file = os.path.join(output_dir, user_dir, "user_state.json")
                 shutil.copy2(state_file, state_file + ".bak")
-            # Same atomic temp-file + replace dance UserState.save() uses, so an
-            # interrupted repair cannot leave a truncated state file behind.
-            tmp = state_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(state, f)
-            os.replace(tmp, state_file)
+            elif backup:
+                from potato.server_utils.usernames import user_dir as _user_dir
+                backup_dir = _user_dir(output_dir, user_dir)
+                os.makedirs(backup_dir, exist_ok=True)
+                with open(os.path.join(backup_dir, "user_state.json.bak"), "w",
+                          encoding="utf-8") as f:
+                    f.write(original)
+            write_stored_state(output_dir, user_dir, state, config)
 
     return summary
 
@@ -253,6 +256,7 @@ def run_repair(args) -> int:
         output_dir, single_select,
         apply=getattr(args, "apply", False),
         backup=not getattr(args, "no_backup", False),
+        config=config,
     )
     print_summary(summary)
     return 0

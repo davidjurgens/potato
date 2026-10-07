@@ -104,7 +104,7 @@ python -m potato.preview_cli config.yaml --format html > preview.html
 | Annotation types | `potato/server_utils/schemas/` | One module per type, plus `registry.py` |
 | Display types | `potato/server_utils/displays/` | How an item is shown, separate from how it is annotated |
 | AI endpoints | `potato/ai/` | Model backends for label suggestions |
-| Frontend | `potato/static/`, `potato/templates/` | `annotation.js`, `span-manager.js`, Jinja templates |
+| Frontend | `potato/static/`, `potato/templates/` | `annotation.js`, `span-core.js`, Jinja templates |
 
 Two things to know before you add anything:
 

@@ -7,7 +7,7 @@ for visual analysis and annotation assistance.
 
 import base64
 import logging
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -179,7 +179,7 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
         """Get the default OpenAI vision model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard text query without images.
 

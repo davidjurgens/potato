@@ -8,7 +8,7 @@
     "version": "4"
   },
   "annotation.js": {
-    "sha256": "e01267e2c178c5ff",
+    "sha256": "6cdae19395da0648",
     "version": "46"
   },
   "annotation_critique.js": {
@@ -360,7 +360,7 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "0566af062a101d13",
+    "sha256": "bf9984bbf6e3247f",
     "version": "22"
   },
   "span-link-manager.js": {

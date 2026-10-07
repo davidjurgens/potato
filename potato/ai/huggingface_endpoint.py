@@ -32,7 +32,7 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
         """Get the default Hugging Face model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: dict) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to Hugging Face and return the response.
 
@@ -46,11 +46,9 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
             AIEndpointRequestError: If the request fails
         """
         try:
-            response = self.client.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format= {
+            kwargs = {}
+            if output_format is not None and hasattr(output_format, "model_json_schema"):
+                kwargs["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": "output_format",
@@ -58,6 +56,11 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
                         "strict": True,
                     }
                 }
+            response = self.client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                **kwargs,
             )
             self._warn_if_truncated(
                 self._stop_reason(response.choices[0], "finish_reason"))

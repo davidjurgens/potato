@@ -35,7 +35,7 @@ class GeminiEndpoint(BaseAIEndpoint):
         """Get the default Gemini model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, prompt_format: dict) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to Gemini and return the response.
 
@@ -58,9 +58,9 @@ class GeminiEndpoint(BaseAIEndpoint):
                 'max_output_tokens': self.max_tokens,
                 'temperature': self.temperature,
             }
-            if prompt_format is not None and hasattr(prompt_format, "model_json_schema"):
+            if output_format is not None and hasattr(output_format, "model_json_schema"):
                 config['response_mime_type'] = 'application/json'
-                config['response_json_schema'] = prompt_format.model_json_schema()
+                config['response_json_schema'] = output_format.model_json_schema()
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,

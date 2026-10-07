@@ -51,6 +51,9 @@ class AttentionCheckResult:
     # Failed on speed rather than on content, so the admin page can tell the
     # two apart when explaining a block.
     too_fast: bool = False
+    # The participant was shown a warning or block for this failure. From
+    # then on the failure stands: the verdict told them the answer was wrong.
+    notified: bool = False
 
 
 @dataclass
@@ -135,6 +138,9 @@ class QualityControlManager:
         self.attention_items: List[Dict] = []
         self.attention_expected: Dict[str, Dict[str, Any]] = {}  # item_id -> expected_answer
         self.attention_results: Dict[str, List[AttentionCheckResult]] = defaultdict(list)  # user_id -> results
+        # Users who crossed the block threshold. Kept apart from the results
+        # so a block cannot be undone by re-answering the check that caused it.
+        self.blocked_users: Set[str] = set()
         self.user_items_since_attention: Dict[str, int] = defaultdict(int)  # user_id -> count
         self.user_items_since_gold: Dict[str, int] = defaultdict(int)  # user_id -> count
         # Items already counted per user, so re-saving one item (every Next
@@ -237,6 +243,7 @@ class QualityControlManager:
                 },
                 "promoted_gold_items": list(self.promoted_gold_items),
                 "promoted_gold_labels": dict(self.promoted_gold_labels),
+                "blocked_users": sorted(self.blocked_users),
             }
 
         try:
@@ -301,10 +308,17 @@ class QualityControlManager:
                     self.item_annotations[item_id].update(by_user)
 
             for gold_item in (payload.get("promoted_gold_items") or []):
-                if isinstance(gold_item, dict) and gold_item.get("id"):
+                if isinstance(gold_item, dict) and gold_item.get("id") \
+                        and gold_item.get("id") != "__phase_page__":
                     self.promoted_gold_items.append(gold_item)
 
+            self.blocked_users.update(str(u) for u in payload.get("blocked_users") or [])
+
             for item_id, label in (payload.get("promoted_gold_labels") or {}).items():
+                # Earlier runs promoted consent and survey pages, which share
+                # this sentinel id. They are not items.
+                if item_id == "__phase_page__":
+                    continue
                 if isinstance(label, dict):
                     self.promoted_gold_labels[item_id] = label
                     # is_gold_standard() reads gold_labels, so a promoted item
@@ -327,6 +341,7 @@ class QualityControlManager:
             "timestamp": result.timestamp.isoformat() if result.timestamp else None,
             "response_time_seconds": result.response_time_seconds,
             "too_fast": result.too_fast,
+            "notified": result.notified,
         }
 
     @staticmethod
@@ -363,6 +378,7 @@ class QualityControlManager:
             timestamp=self._parse_timestamp(record.get("timestamp")),
             response_time_seconds=record.get("response_time_seconds"),
             too_fast=bool(record.get("too_fast")),
+            notified=bool(record.get("notified")),
         )
 
     def _gold_result_from_dict(
@@ -649,27 +665,35 @@ class QualityControlManager:
 
         return False
 
-    def get_attention_check_item(self, user_id: str) -> Optional[Dict]:
+    def get_attention_check_item(self, user_id: str, exclude=None) -> Optional[Dict]:
         """
         Get a random attention check item for a user.
 
         Args:
             user_id: The user ID
+            exclude: Item ids that cannot be given, such as checks already in
+                the user's queue. Picking one of those used to reset the
+                counter and then be refused, so the check was lost and the
+                next one was N items away.
 
         Returns:
             An attention check item dict, or None if none available
         """
         if not self.attention_items:
             return None
+        exclude = set(exclude or ())
 
         with self._lock:
             # Get items this user hasn't seen yet
             seen_ids = {r.item_id for r in self.attention_results.get(user_id, [])}
-            available = [item for item in self.attention_items if item['id'] not in seen_ids]
+            available = [item for item in self.attention_items
+                         if item['id'] not in seen_ids and item['id'] not in exclude]
 
             if not available:
-                # Recycle items if all have been seen
-                available = self.attention_items
+                # Recycle answered items, but never one already queued
+                available = [item for item in self.attention_items if item['id'] not in exclude]
+            if not available:
+                return None
 
             selected = random.choice(available)
             # Reset counter
@@ -755,7 +779,13 @@ class QualityControlManager:
                         else min(response_time_seconds,
                                  prior.response_time_seconds))
 
-            passed = answer_ok and not too_fast
+            # Once the participant has been told a check failed, the failure
+            # stands. Re-answering after the warning is not evidence of
+            # attention, and letting it count turned a block back off. A
+            # change of answer before any verdict was shown (a misclick
+            # corrected on the same page) still counts.
+            failed_and_told = prior is not None and not prior.passed and prior.notified
+            passed = answer_ok and not too_fast and not failed_and_told
             result = AttentionCheckResult(
                 item_id=item_id,
                 user_id=user_id,
@@ -779,11 +809,18 @@ class QualityControlManager:
         response_data = {"passed": passed}
 
         if failures >= self.qc_config.attention_block_threshold:
+            with self._lock:
+                self.blocked_users.add(user_id)
+                result.notified = True
+            self._save_results()
             response_data["blocked"] = True
             response_data["message"] = self.qc_config.attention_block_message
             if previous_failures < self.qc_config.attention_block_threshold:
                 self.logger.warning(f"User {user_id} blocked after {failures} attention check failures")
         elif failures >= self.qc_config.attention_warn_threshold and not passed:
+            with self._lock:
+                result.notified = True
+            self._save_results()
             response_data["warning"] = True
             response_data["message"] = self.qc_config.attention_warn_message
             if previous_failures < self.qc_config.attention_warn_threshold:
@@ -800,8 +837,25 @@ class QualityControlManager:
         if not self.qc_config.attention_checks_enabled:
             return False
         with self._lock:
+            if user_id in self.blocked_users:
+                return True
             failures = len([r for r in self.attention_results.get(user_id, []) if not r.passed])
         return failures >= self.qc_config.attention_block_threshold
+
+    def record_skipped_attention_check(self, user_id: str, item_id: str) -> Optional[Dict[str, Any]]:
+        """Grade an attention check the user moved past without answering.
+
+        Skipping one recorded nothing, so a participant could press Next past
+        every check and finish with no failures and the success code. An
+        unanswered check is a failed one. Returns the result dict, or None
+        when the item is not a check or already has a result.
+        """
+        if item_id not in self.attention_expected:
+            return None
+        with self._lock:
+            if any(r.item_id == item_id for r in self.attention_results.get(user_id, [])):
+                return None
+        return self.validate_attention_response(user_id, item_id, {})
 
     def get_attention_check_stats(self, user_id: str) -> Dict[str, Any]:
         """Get attention check statistics for a user."""
@@ -893,27 +947,33 @@ class QualityControlManager:
 
         return False
 
-    def get_gold_standard_item(self, user_id: str) -> Optional[Dict]:
+    def get_gold_standard_item(self, user_id: str, exclude=None) -> Optional[Dict]:
         """
         Get a gold standard item for a user.
 
         Args:
             user_id: The user ID
+            exclude: Item ids that cannot be given (already in the user's
+                queue); see get_attention_check_item.
 
         Returns:
             A gold standard item dict, or None if none available
         """
         if not self.gold_items:
             return None
+        exclude = set(exclude or ())
 
         with self._lock:
             # Get items this user hasn't seen yet
             seen_ids = {r.item_id for r in self.gold_results.get(user_id, [])}
-            available = [item for item in self.gold_items if item['id'] not in seen_ids]
+            available = [item for item in self.gold_items
+                         if item['id'] not in seen_ids and item['id'] not in exclude]
 
             if not available:
-                # Recycle items if all have been seen
-                available = self.gold_items
+                # Recycle answered items, but never one already queued
+                available = [item for item in self.gold_items if item['id'] not in exclude]
+            if not available:
+                return None
 
             self.user_items_since_gold[user_id] = 0
             return random.choice(available)

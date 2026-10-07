@@ -15,6 +15,9 @@ What travels:
   to ``<task_dir>/.potato-backup/`` and mirrored under ``_databases/``. The
   live files run in WAL mode with a writer attached, so copying them directly
   yields a database missing recent work.
+* on a MySQL study, every annotator's state written out of the database in
+  the file backend's layout, under ``.potato-backup/mysql/``. The output
+  directory holds no annotators there, so without it the backup held none.
 
 Configuration::
 
@@ -55,6 +58,8 @@ DEFAULT_SCHEDULE_MINUTES = 5
 SNAPSHOT_DIRNAME = ".potato-backup"
 #: Remote subdirectory holding the snapshots, on every sink.
 REMOTE_DB_DIR = "_databases"
+#: Subdirectory of the snapshot dir holding a MySQL study's annotators.
+MYSQL_SNAPSHOT_DIRNAME = "mysql"
 #: Remote subdirectory holding deploy bundles; never restored as data.
 REMOTE_BUNDLE_DIR = "_bundle"
 
@@ -171,6 +176,16 @@ def snapshot_databases(config: Dict[str, Any]) -> List[str]:
                 os.remove(partial)
             except OSError:
                 pass
+
+    from potato.server_utils.stored_states import dump_mysql_states, uses_mysql
+    if uses_mysql(config):
+        try:
+            count = dump_mysql_states(
+                config, os.path.join(staging, MYSQL_SNAPSHOT_DIRNAME))
+            written.append(os.path.join(staging, MYSQL_SNAPSHOT_DIRNAME))
+            logger.debug("Backup: wrote %d annotator(s) out of MySQL", count)
+        except Exception as exc:
+            logger.error("Could not write the MySQL annotators for backup: %s", exc)
     return written
 
 
@@ -187,6 +202,18 @@ def output_is_empty(config: Dict[str, Any]) -> bool:
     version never restored anything.
     """
     root = output_dir(config)
+    from potato.server_utils.stored_states import has_stored_state, uses_mysql
+    if uses_mysql(config):
+        # A MySQL study never writes user_state.json, so judged by files alone
+        # it was empty on every boot, and each restart restored the backup
+        # over the live output directory, user_config.json included.
+        try:
+            if has_stored_state(root, config):
+                return False
+        except Exception as exc:
+            logger.error("Backup restore skipped: could not check the database "
+                         "for stored annotators: %s", exc)
+            return False
     if not os.path.isdir(root):
         return True
     for _dirpath, _dirnames, filenames in os.walk(root):
@@ -231,6 +258,7 @@ def restore_on_boot(config: Dict[str, Any]) -> bool:
             continue
         if restored:
             _install_restored_databases(config)
+            _install_restored_mysql_states(config)
             logger.warning(
                 "RESTORED %d file(s) from the %s backup into an empty task. "
                 "This is expected after a restart on a host without a "
@@ -253,6 +281,33 @@ def _install_restored_databases(config: Dict[str, Any]) -> None:
             continue
         shutil.copy2(os.path.join(staging, name), live)
         logger.info("Restored %s from backup", name)
+
+
+def _install_restored_mysql_states(config: Dict[str, Any]) -> None:
+    """Put restored MySQL annotators where the boot import reads them.
+
+    load_user_data() imports every ``<output>/<user>/user_state.json`` the
+    database lacks. Restore only runs against an empty database, so the
+    database's copy replaces any file of the same name that came back with the
+    output directory: that file is older.
+    """
+    from potato.server_utils.stored_states import uses_mysql
+    source = os.path.join(snapshot_dir(config), MYSQL_SNAPSHOT_DIRNAME)
+    if not uses_mysql(config) or not os.path.isdir(source):
+        return
+    for name in sorted(os.listdir(source)):
+        restored = os.path.join(source, name)
+        if not os.path.isdir(restored):
+            continue
+        target = safe_join(output_dir(config), [name])
+        if target is None:
+            logger.warning("Skipping restored annotator outside the task: %s", name)
+            continue
+        os.makedirs(target, exist_ok=True)
+        for filename in os.listdir(restored):
+            shutil.copy2(os.path.join(restored, filename),
+                         os.path.join(target, filename))
+        logger.info("Restored %s's state from the MySQL backup", name)
 
 
 def start_backups(config: Dict[str, Any]) -> List[Any]:

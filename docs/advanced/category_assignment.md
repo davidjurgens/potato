@@ -177,6 +177,10 @@ If threshold is 0.7 (70%) and min_questions is 2:
 
 User would only receive "Economics" instances.
 
+Each question counts once, by the annotator's first answer to it. With
+`allow_retry`, a question answered wrong and then right counts as one question
+answered wrong.
+
 ## Use Cases
 
 ### Expert Routing

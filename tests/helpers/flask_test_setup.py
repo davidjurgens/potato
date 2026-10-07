@@ -210,7 +210,7 @@ class FlaskTestServer:
 
             # Update port to match the actual port being used
             config_data['port'] = self.port
-            config_data['host'] = '0.0.0.0'
+            config_data['host'] = '127.0.0.1'
 
             # Inject a known admin API key if not already set
             if 'admin_api_key' not in config_data:
@@ -243,7 +243,7 @@ class FlaskTestServer:
                 if 'port' not in config:
                     config['port'] = self.port
                 if 'host' not in config:
-                    config['host'] = '0.0.0.0'
+                    config['host'] = '127.0.0.1'
                 if 'session_lifetime_days' not in config:
                     config['session_lifetime_days'] = 2
                 if 'secret_key' not in config:
@@ -269,7 +269,7 @@ class FlaskTestServer:
                     config_data['random_seed'] = 1234
                 config_data['require_password'] = False
                 config_data['port'] = self.port
-                config_data['host'] = '0.0.0.0'
+                config_data['host'] = '127.0.0.1'
                 if 'session_lifetime_days' not in config_data:
                     config_data['session_lifetime_days'] = 2
                 if 'secret_key' not in config_data:
@@ -414,7 +414,7 @@ class FlaskTestServer:
                 simple_config = {
                     "debug": self.debug,
                     "port": self.port,
-                    "host": "0.0.0.0",
+                    "host": "127.0.0.1",
                     "task_dir": config_dir,
                     "output_annotation_dir": os.path.join(config_dir, "output"),
                     "data_files": [],
@@ -506,7 +506,7 @@ class FlaskTestServer:
                 if 'require_password' not in config:
                     config['require_password'] = False
                 config['port'] = self.port
-                config['host'] = '0.0.0.0'
+                config['host'] = '127.0.0.1'
                 config['session_lifetime_days'] = 2
                 config['secret_key'] = 'test-secret-key'
 
@@ -1093,7 +1093,9 @@ class FlaskTestServer:
 
                 # Use make_server instead of app.run() for proper shutdown support
                 from werkzeug.serving import make_server
-                self._wsgi_server = make_server('0.0.0.0', self.port, app, threaded=True)
+                # Loopback only: a test server is for this machine, and the
+                # debug admin bypass applies only on a loopback bind.
+                self._wsgi_server = make_server('127.0.0.1', self.port, app, threaded=True)
                 self._wsgi_server.serve_forever()
             except Exception as e:
                 print(f"Error starting server: {e}")

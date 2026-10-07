@@ -25,7 +25,9 @@ Bundled catalogs ship for 10 languages:
 | `de` | German | `ru` | Russian |
 | `ar` | Arabic (RTL) | `ko` | Korean |
 
-An unknown code logs a warning and falls back to English -- it never crashes the server. The catalogs live in `potato/i18n/<code>.yaml`; they are machine-assisted and community-improvable, so corrections and new languages via pull request are welcome.
+Codes are case-insensitive and may use an underscore, so `ES`, `pt-BR` and
+`zh_CN` all work. A regional code with no catalog of its own uses its language's
+catalog: `pt-BR` renders in `pt`. An unknown code logs a warning and falls back to English -- it never crashes the server. The catalogs live in `potato/i18n/<code>.yaml`; they are machine-assisted and community-improvable, so corrections and new languages via pull request are welcome.
 
 ### Start from a bundled language and override a few strings
 

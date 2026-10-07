@@ -48,6 +48,12 @@ Each `user_state.json` contains the complete annotation state for that user:
 }
 ```
 
+Span offsets count characters of the text as the annotator saw it on the page:
+an entity such as `&amp;` is one character, HTML tags count for nothing, and
+runs of spaces and tabs are one space. Exporters that include a span's words
+read them from that same text, so the words match the offsets even when the
+data file holds markup or doubled spaces.
+
 > **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Auto-Export

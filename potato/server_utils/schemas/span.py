@@ -457,13 +457,15 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     return safe_generate_layout(annotation_scheme, _generate_span_layout_internal, horizontal)
 
 
-def render_span_annotations(text, span_annotations, target_field=None):
+def render_span_annotations(text, span_annotations, target_field=None, markup=False):
     """
     Render span annotations into HTML with boundary-based algorithm.
     Supports discontinuous spans with additional_parts.
 
     Args:
-        text (str): The original text to annotate
+        text (str): The original text to annotate. With ``markup=True`` it is
+            sanitized HTML and span offsets count its rendered characters
+            (see span_text.dom_to_markup_offsets); otherwise it is plain text.
         span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects,
                          or field-keyed dict: {field_key: [span_list]}
         target_field (str, optional): Filter spans to only those targeting this field
@@ -481,13 +483,13 @@ def render_span_annotations(text, span_annotations, target_field=None):
             # Field-keyed format - extract spans for target_field
             if target_field:
                 field_spans = span_annotations.get(target_field, [])
-                return render_span_annotations(text, field_spans, target_field=None)
+                return render_span_annotations(text, field_spans, target_field=None, markup=markup)
             else:
                 # No target field specified, flatten all spans
                 all_spans = []
                 for field_spans in span_annotations.values():
                     all_spans.extend(field_spans)
-                return render_span_annotations(text, all_spans, target_field=None)
+                return render_span_annotations(text, all_spans, target_field=None, markup=markup)
 
         # Regular dict format: span_id -> span_data
         sorted_spans = sorted(
@@ -567,63 +569,84 @@ def render_span_annotations(text, span_annotations, target_field=None):
             boundaries.append((part['start'], 'start', span_id, part_data))
             boundaries.append((part['end'], 'end', span_id, part_data))
 
-    # Sort boundaries by position
-    boundaries.sort(key=lambda x: x[0])
+    # Where a text offset falls in the string being marked up. Plain text maps
+    # one to one; sanitized HTML skips tags and counts an entity as the one
+    # character it shows.
+    if markup:
+        from potato.server_utils.span_text import dom_to_markup_offsets
+        open_at, close_at = dom_to_markup_offsets(text)
+        n_chars = len(open_at) - 1
 
-    # Build the rendered text
+        def to_markup(pos, boundary_type):
+            pos = max(0, min(int(pos), n_chars))
+            return open_at[pos] if boundary_type == 'start' else close_at[pos]
+    else:
+        def to_markup(pos, boundary_type):
+            return pos
+
+    # Sort boundaries by position; at one position, close before opening so
+    # adjacent spans do not nest.
+    boundaries.sort(key=lambda x: (x[0], 0 if x[1] == 'end' else 1))
+
+    def open_tag(span_id, span_data):
+        color = get_span_color(span_data['schema'], span_data['name'])
+        if not color:
+            color = "(128, 128, 128)"  # Default gray
+        color_parts = color.strip("()").split(", ")
+        r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
+        hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
+        target_attr = (f' data-target-field="{escape_html_content(span_data.get("target_field", ""))}"'
+                       if span_data.get("target_field") else "")
+        is_discontinuous = span_data.get('_is_discontinuous_part', False) or len(span_data.get('additional_parts', [])) > 0
+        discontinuous_class = ' discontinuous-part' if is_discontinuous else ''
+        discontinuous_attr = ' data-discontinuous="true"' if is_discontinuous else ""
+        kb_id = span_data.get('kb_id', '')
+        kb_source = span_data.get('kb_source', '')
+        kb_label = span_data.get('kb_label', '')
+        kb_attr = ""
+        kb_class = ""
+        if kb_id:
+            kb_attr = f' data-kb-id="{escape_html_content(kb_id)}" data-kb-source="{escape_html_content(kb_source)}"'
+            if kb_label:
+                kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
+            kb_class = ' has-entity-link'
+        return (f'<span class="span-highlight{discontinuous_class}{kb_class}" '
+                f'data-annotation-id="{escape_html_content(str(span_id))}" '
+                f'data-label="{escape_html_content(str(span_data["name"]))}" '
+                f'schema="{escape_html_content(str(span_data["schema"]))}"'
+                f'{target_attr}{discontinuous_attr}{kb_attr} style="background-color: {hex_color};">')
+
+    # Build the rendered text. A span that ends while spans opened after it
+    # are still open (PER 0-10, ORG 6-16: they cross) cannot close without
+    # closing those too, so they are closed and reopened after it. Closing
+    # "the innermost" instead rendered a crossing pair as one span inside the
+    # other. Nested and disjoint spans still render as one element each.
     result = ""
-    current_pos = 0
-    active_spans = []
+    current = 0
+    stack = []  # (span_id, span_data), in opening order
 
     for pos, boundary_type, span_id, span_data in boundaries:
-        # Add text before this boundary
-        if pos > current_pos:
-            result += text[current_pos:pos]
-
+        at = to_markup(pos, boundary_type)
+        if at > current:
+            result += text[current:at]
+            current = at
         if boundary_type == 'start':
-            # Start a new span
-            active_spans.append(span_id)
-            # Get color for this span
-            color = get_span_color(span_data['schema'], span_data['name'])
-            if not color:
-                color = "(128, 128, 128)"  # Default gray
-            # Convert RGB to hex with alpha
-            color_parts = color.strip("()").split(", ")
-            r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
-            hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
-
-            # Add target_field attribute if present
-            target_attr = f' data-target-field="{span_data.get("target_field", "")}"' if span_data.get("target_field") else ""
-
-            # Check if this is a discontinuous span part
-            is_discontinuous = span_data.get('_is_discontinuous_part', False) or len(span_data.get('additional_parts', [])) > 0
-            discontinuous_class = ' discontinuous-part' if is_discontinuous else ''
-            discontinuous_attr = ' data-discontinuous="true"' if is_discontinuous else ""
-
-            # Add KB entity linking attributes
-            kb_id = span_data.get('kb_id', '')
-            kb_source = span_data.get('kb_source', '')
-            kb_label = span_data.get('kb_label', '')
-            kb_attr = ""
-            kb_class = ""
-            if kb_id:
-                kb_attr = f' data-kb-id="{escape_html_content(kb_id)}" data-kb-source="{escape_html_content(kb_source)}"'
-                if kb_label:
-                    kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
-                kb_class = ' has-entity-link'
-
-            result += f'<span class="span-highlight{discontinuous_class}{kb_class}" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}"{target_attr}{discontinuous_attr}{kb_attr} style="background-color: {hex_color};">'
-        elif boundary_type == 'end':
-            # End the span
-            result += "</span>"
-            # Remove from active spans
-            active_spans = [s for s in active_spans if s != span_id]
-
-        current_pos = pos
+            stack.append((span_id, span_data))
+            result += open_tag(span_id, span_data)
+            continue
+        part = span_data.get('_is_discontinuous_part', False)
+        k = next((i for i in range(len(stack) - 1, -1, -1)
+                  if stack[i][0] == span_id
+                  and stack[i][1].get('_is_discontinuous_part', False) == part), None)
+        if k is None:
+            continue
+        result += "</span>" * (len(stack) - k)
+        del stack[k]
+        result += "".join(open_tag(sid, sdata) for sid, sdata in stack[k:])
 
     # Add remaining text
-    if current_pos < len(text):
-        result += text[current_pos:]
+    if current < len(text):
+        result += text[current:]
 
     return result
 

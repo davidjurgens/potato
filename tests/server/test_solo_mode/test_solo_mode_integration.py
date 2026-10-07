@@ -27,6 +27,9 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+SOLO_ADMIN_KEY = "solo-integration-test-admin-key"
+
+
 def _create_integration_test_config(test_dir):
     """Create Solo Mode config with 20 instances, low thresholds, all features."""
     data_dir = os.path.join(test_dir, "data")
@@ -113,6 +116,7 @@ def _create_integration_test_config(test_dir):
             ],
         }],
         'user_config': {'allow_no_password': True},
+        'admin_api_key': SOLO_ADMIN_KEY,
         'output': {
             'annotation_output_format': 'json',
             'annotation_output_dir': 'annotations',
@@ -210,7 +214,7 @@ class TestEndToEndWorkflow:
         )
         assert resp.status_code == 200  # redirects (followed) or 200
 
-        prompts = requests.get(
+        prompts = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/prompts"
         ).json()
         assert prompts['current_version'] >= 1
@@ -220,7 +224,7 @@ class TestEndToEndWorkflow:
         self, solo_integration_server, authed_session
     ):
         """Updating prompt increments the version."""
-        before = requests.get(
+        before = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/prompts"
         ).json()
 
@@ -229,13 +233,13 @@ class TestEndToEndWorkflow:
             data={'action': 'update', 'prompt': 'Updated prompt text v2'},
         )
 
-        after = requests.get(
+        after = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/prompts"
         ).json()
         assert after['current_version'] > before['current_version']
 
     def test_advance_to_parallel_annotation(
-        self, solo_integration_server, manager
+        self, solo_integration_server, manager, authed_session
     ):
         """Phase can be advanced to PARALLEL_ANNOTATION."""
         from potato.solo_mode.phase_controller import SoloPhase
@@ -243,7 +247,7 @@ class TestEndToEndWorkflow:
         manager.advance_to_phase(SoloPhase.PROMPT_REVIEW, force=True)
         manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION, force=True)
 
-        status = requests.get(
+        status = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/status"
         ).json()
         assert 'PARALLEL_ANNOTATION' in status['phase_name']
@@ -269,7 +273,7 @@ class TestEndToEndWorkflow:
                 data={'instance_id': iid, 'annotation': 'positive'},
             )
 
-        stats = requests.get(
+        stats = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/status"
         ).json()
         assert stats['annotation_stats']['human_labeled'] >= 5
@@ -298,11 +302,11 @@ class TestEndToEndWorkflow:
         metrics = manager.get_agreement_metrics()
         assert metrics.disagreements > 0
 
-    def test_export_contains_all_sections(self, solo_integration_server):
+    def test_export_contains_all_sections(self, authed_session, solo_integration_server):
         """Export endpoint returns annotations, predictions, prompt_history."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/export"
-        ).json()
+        , headers={"X-API-Key": SOLO_ADMIN_KEY}).json()
 
         assert 'phase' in data
         assert 'annotations' in data
@@ -310,11 +314,11 @@ class TestEndToEndWorkflow:
         assert 'prompt_history' in data
         assert 'agreement_metrics' in data
 
-    def test_export_has_predictions(self, solo_integration_server):
+    def test_export_has_predictions(self, authed_session, solo_integration_server):
         """Export contains injected LLM predictions."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/export"
-        ).json()
+        , headers={"X-API-Key": SOLO_ADMIN_KEY}).json()
         assert len(data['llm_predictions']) > 0
 
 
@@ -392,17 +396,17 @@ class TestAnalysisFeatureIntegration:
     """Test confusion analysis and disagreement explorer via API."""
 
     def test_confusion_analysis_returns_structure(
-        self, solo_integration_server, manager
+        self, solo_integration_server, manager, authed_session
     ):
         """Confusion analysis returns expected fields."""
         # Ensure there are some comparisons
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/confusion-analysis"
         ).json()
         assert 'enabled' in data or 'patterns' in data
 
     def test_confusion_analysis_with_disagreements(
-        self, solo_integration_server, manager
+        self, solo_integration_server, manager, authed_session
     ):
         """Create disagreements and verify patterns are generated."""
         from potato.solo_mode.phase_controller import SoloPhase
@@ -416,37 +420,37 @@ class TestAnalysisFeatureIntegration:
             # Record human label that disagrees
             manager.record_human_label(iid, 'sentiment', 'negative', 'test_user')
 
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/confusion-analysis"
         ).json()
         if data.get('enabled'):
             assert 'patterns' in data
 
     def test_disagreement_explorer_returns_structure(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Disagreement explorer returns scatter data."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/disagreement-explorer"
         ).json()
         # Should have scatter_points or error
         assert isinstance(data, dict)
 
     def test_disagreement_explorer_with_label_filter(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Disagreement explorer accepts label filter."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/disagreement-explorer",
             params={'label': 'positive'},
         ).json()
         assert isinstance(data, dict)
 
     def test_disagreement_timeline_returns_buckets(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Timeline endpoint returns bucketed data."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/disagreement-timeline",
             params={'bucket_size': 5},
         ).json()
@@ -456,9 +460,9 @@ class TestAnalysisFeatureIntegration:
 class TestLabelingFunctionIntegration:
     """Test labeling function endpoints via API."""
 
-    def test_labeling_functions_status(self, solo_integration_server):
+    def test_labeling_functions_status(self, authed_session, solo_integration_server):
         """Labeling function stats endpoint returns expected structure."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/labeling-functions/stats"
         ).json()
         assert 'enabled' in data
@@ -483,9 +487,9 @@ class TestLabelingFunctionIntegration:
         data = resp.json()
         assert 'success' in data
 
-    def test_list_labeling_functions(self, solo_integration_server):
+    def test_list_labeling_functions(self, authed_session, solo_integration_server):
         """List labeling functions endpoint."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/labeling-functions"
         ).json()
         assert 'enabled' in data
@@ -495,10 +499,10 @@ class TestRefinementLoopIntegration:
     """Test refinement loop endpoints."""
 
     def test_refinement_status_returns_structure(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Refinement status returns enabled flag and cycle info."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/refinement-status"
         ).json()
         assert 'enabled' in data
@@ -532,25 +536,25 @@ class TestRefinementLoopIntegration:
 class TestEdgeCaseRuleIntegration:
     """Test edge case rule endpoints."""
 
-    def test_rules_endpoint_returns_structure(self, solo_integration_server):
+    def test_rules_endpoint_returns_structure(self, authed_session, solo_integration_server):
         """Rules endpoint returns rules and stats."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/rules"
         ).json()
         assert 'rules' in data
         assert 'stats' in data
 
-    def test_rules_categories_endpoint(self, solo_integration_server):
+    def test_rules_categories_endpoint(self, authed_session, solo_integration_server):
         """Categories endpoint returns list."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/rules/categories"
         ).json()
         assert 'categories' in data
         assert isinstance(data['categories'], list)
 
-    def test_rules_viz_data_returns_arrays(self, solo_integration_server):
+    def test_rules_viz_data_returns_arrays(self, authed_session, solo_integration_server):
         """Viz data endpoint returns points and clusters arrays."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/rules/viz-data"
         ).json()
         assert 'points' in data

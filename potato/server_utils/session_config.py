@@ -52,7 +52,47 @@ def configure_session(app, config: dict) -> None:
     lifetime_days = config.get("session_lifetime_days", DEFAULT_SESSION_LIFETIME_DAYS)
     app.permanent_session_lifetime = timedelta(days=lifetime_days)
 
+    configure_cookie_flags(app, config)
+
     scope_session_cookie_to_prefix(app)
+
+
+_SAMESITE_VALUES = {"lax": "Lax", "strict": "Strict", "none": "None"}
+
+
+def _is_crowd_deployment(config: dict) -> bool:
+    crowd = config.get("crowdsourcing") or {}
+    login_type = (config.get("login") or {}).get("type", "standard")
+    return bool(isinstance(crowd, dict) and crowd.get("provider")) or \
+        login_type in ("url_direct", "prolific")
+
+
+def configure_cookie_flags(app, config: dict) -> None:
+    """Set the session cookie's SameSite and Secure attributes.
+
+    SameSite=Lax keeps the browser from sending the session cookie with a POST
+    from another site, which is what a cross-site request forgery needs. It is
+    the default unless the deployment is a crowd study: a platform such as
+    MTurk shows the task inside its own page, and a Lax cookie is not sent from
+    inside another site's frame. Crowd deployments keep the browser default
+    unless ``session_cookie_samesite`` says otherwise; ``None`` there needs
+    ``session_cookie_secure`` and HTTPS.
+    """
+    configured = config.get("session_cookie_samesite")
+    if configured is not None:
+        value = _SAMESITE_VALUES.get(str(configured).strip().lower())
+        if value is None:
+            raise ValueError("session_cookie_samesite must be Lax, Strict or None, "
+                             f"not {configured!r}")
+        app.config["SESSION_COOKIE_SAMESITE"] = value
+    elif not _is_crowd_deployment(config):
+        app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+    secure = bool(config.get("session_cookie_secure", False))
+    if app.config.get("SESSION_COOKIE_SAMESITE") == "None" and not secure:
+        raise ValueError("session_cookie_samesite: None requires "
+                         "session_cookie_secure: true (browsers drop the cookie otherwise)")
+    app.config["SESSION_COOKIE_SECURE"] = secure
 
 
 def scope_session_cookie_to_prefix(app) -> None:

@@ -74,8 +74,11 @@ class HuggingFaceSink:
                       every=schedule_minutes)
         self._schedulers.append(CommitScheduler(folder_path=output_dir(self.config),
                                                 **common))
+        # Snapshots are written to a .partial file and renamed; a commit that
+        # caught one mid-write would upload half a file.
         self._schedulers.append(CommitScheduler(folder_path=snapshot_dir(self.config),
-                                                path_in_repo=REMOTE_DB_DIR, **common))
+                                                path_in_repo=REMOTE_DB_DIR,
+                                                ignore_patterns=["*.partial"], **common))
         logger.info("Backup: %s -> %s every %s minute(s)",
                     output_dir(self.config), self.describe(), schedule_minutes)
         return True

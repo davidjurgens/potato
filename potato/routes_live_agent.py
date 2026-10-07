@@ -55,14 +55,45 @@ def _login_required(f):
     return decorated
 
 
+def _task_dir() -> str:
+    """The study's task_dir. Flask's app.config never holds it; the potato
+    config does, and reading the former put screenshots under the cwd."""
+    from potato.server_utils.config_module import config
+    return os.path.abspath(config.get("task_dir") or current_app.config.get("task_dir", "."))
+
+
+def _path_part(value) -> str:
+    """A request value made safe to use as one directory-name component."""
+    import re
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", str(value or ""))
+    return cleaned.lstrip(".") or "_"
+
+
 def _get_manager() -> AgentRunnerManager:
     """Get the AgentRunnerManager singleton."""
     return AgentRunnerManager.get_instance()
 
 
+def _is_admin() -> bool:
+    try:
+        from potato.server_utils.rbac import Permission, get_rbac_manager
+        return get_rbac_manager().check(Permission.VIEW_ADMIN_DASHBOARD, request, flask_session)
+    except Exception:
+        return False
+
+
 def _get_runner(session_id: str):
-    """Get an AgentRunner by session_id, or return (None, error_response)."""
-    runner = _get_manager().get_session(session_id)
+    """Get an AgentRunner by session_id, or return (None, error_response).
+
+    Only the annotator who started a session, or an admin, may see or drive
+    it. Another user's session answers 404, the same as one that does not
+    exist, so session ids cannot be probed.
+    """
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if runner and manager.get_session_owner(session_id) != flask_session.get("username") \
+            and not _is_admin():
+        runner = None
     if not runner:
         return None, (jsonify({"error": f"Unknown session: {session_id}"}), 404)
     return runner, None
@@ -94,17 +125,21 @@ def start_session():
     if not start_url:
         return jsonify({"error": "start_url is required"}), 400
 
-    # Build config from server config + request overrides
-    server_config = current_app.config.get("live_agent", {})
-    override_config = data.get("config", {})
-    merged = {**server_config, **override_config}
-    agent_config = AgentConfig.from_config(merged)
+    # Agent settings come from the server config only. A request-supplied
+    # `config` could point ai_config.base_url at another host, and the server's
+    # own API key would be sent there. The viewer never sends one.
+    from potato.server_utils.config_module import config as potato_config
+    server_config = potato_config.get("live_agent") or current_app.config.get("live_agent", {}) or {}
+    if not isinstance(server_config, dict):
+        server_config = {}
+    if "config" in data:
+        logger.warning("Ignoring client-supplied live_agent config from %s", user_id)
+    agent_config = AgentConfig.from_config(server_config)
 
     # Screenshot directory — must be absolute so both the agent runner
     # (which saves files) and Flask's send_file (which serves them) agree
-    task_dir = current_app.config.get("task_dir", ".")
-    task_dir = os.path.abspath(task_dir)
-    session_key = f"{user_id}_{instance_id}_{int(time.time())}"
+    task_dir = _task_dir()
+    session_key = f"{_path_part(user_id)}_{_path_part(instance_id)}_{int(time.time())}"
     screenshot_dir = os.path.join(
         task_dir, "live_sessions", session_key, "screenshots"
     )
@@ -341,7 +376,7 @@ def get_saved_screenshot(session_dir, step):
     """
     from flask import abort
 
-    task_dir = os.path.abspath(current_app.config.get("task_dir", "."))
+    task_dir = _task_dir()
     base = os.path.realpath(os.path.join(task_dir, "live_sessions"))
     target = os.path.realpath(
         os.path.join(base, session_dir, "screenshots", f"step_{step:03d}.png")
@@ -368,9 +403,12 @@ def get_state(session_id):
 @live_agent_bp.route("/api/live_agent/sessions")
 @_login_required
 def list_sessions():
-    """List all active live agent sessions (admin use)."""
-    manager = _get_manager()
-    return jsonify({"sessions": manager.list_sessions()})
+    """List live agent sessions: all of them for an admin, otherwise the caller's own."""
+    sessions = _get_manager().list_sessions()
+    if not _is_admin():
+        me = flask_session.get("username")
+        sessions = [s for s in sessions if s.get("user_id") == me]
+    return jsonify({"sessions": sessions})
 
 
 def _sse_format(event_type: str, data: dict) -> str:

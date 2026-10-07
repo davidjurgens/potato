@@ -363,21 +363,26 @@ class TestRoutes:
                 "PRAGMA integrity_check").fetchone()[0] == "ok"
             connection.close()
 
-    def test_debug_mode_opens_the_archive_to_anyone(self, client):
+    def test_debug_mode_opens_the_archive_on_loopback_only(self, client):
         """Stated because it is load-bearing, not because it is desirable.
 
-        `validate_admin_api_key` short-circuits on `debug`, so a debug server
-        serves the whole study's data to an unauthenticated request. Preflight
-        blocks `debug: true` for any public deploy for this reason.
+        Debug on a loopback bind serves the whole study's data to an
+        unauthenticated request. On any other bind the admin key is still
+        required. Preflight also blocks `debug: true` for any public deploy.
         """
         from potato.server_utils.config_module import config
 
-        original = config.get("debug", False)
+        original = (config.get("debug", False), config.get("host"))
         config["debug"] = True
         try:
+            config["host"] = "127.0.0.1"
             assert client.get("/admin/api/data/manifest").status_code == 200
+            config["host"] = "0.0.0.0"
+            assert client.get("/admin/api/data/manifest").status_code in (401, 403)
         finally:
-            config["debug"] = original
+            config["debug"], config["host"] = original
+            if original[1] is None:
+                config.pop("host", None)
 
     def test_preflight_blocks_a_debug_deploy(self, tmp_path):
         """Which is what keeps the above from mattering in practice."""

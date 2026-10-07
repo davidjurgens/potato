@@ -354,14 +354,21 @@ class LiveCursorStore:
             entry = self._state.get(source_id)
         if not entry:
             return None, None
-        return CursorCodec.decode(entry.get("cursor")), entry.get("tiebreaker")
+        tiebreaker = entry.get("tiebreaker")
+        if isinstance(tiebreaker, dict):
+            tiebreaker = CursorCodec.decode(tiebreaker)
+        # A bare value is a state file written before the tie-breaker kept
+        # its type; it was always the stringified id.
+        return CursorCodec.decode(entry.get("cursor")), tiebreaker
 
     def set(self, source_id: str, value: Any, tiebreaker: Optional[str]) -> None:
         """Persist the cursor position for a source."""
         with self._lock:
             self._state[source_id] = {
                 "cursor": CursorCodec.encode(value),
-                "tiebreaker": tiebreaker,
+                # Typed like the cursor, so an integer id is re-bound as an
+                # integer after a restart.
+                "tiebreaker": CursorCodec.encode(tiebreaker),
                 "updated_at": time.time(),
             }
             self._save_locked()
@@ -374,9 +381,13 @@ class LiveCursorStore:
                 self._save_locked()
 
     def all(self) -> Dict[str, Dict[str, Any]]:
-        """Snapshot of the whole state map."""
+        """Snapshot of the whole state map, tie-breakers decoded."""
         with self._lock:
-            return dict(self._state)
+            snapshot = {k: dict(v) for k, v in self._state.items()}
+        for entry in snapshot.values():
+            if isinstance(entry.get("tiebreaker"), dict):
+                entry["tiebreaker"] = CursorCodec.decode(entry["tiebreaker"])
+        return snapshot
 
 
 # =============================================================================
@@ -578,8 +589,13 @@ class LiveIngestionWorker:
 
         total_added = 0
         try:
+            first = True
             while True:
-                added, fetched = self._fetch_and_ingest(persist_cursor=False)
+                # The overlap window is re-read once, on the first batch; the
+                # later batches page forward from the true cursor.
+                added, fetched = self._fetch_and_ingest(persist_cursor=False,
+                                                        reread_overlap=first)
+                first = False
                 total_added += added
                 if fetched < self._config.batch_size:
                     break
@@ -598,7 +614,8 @@ class LiveIngestionWorker:
                 self._cursor_store.set(self.source_id, self._cursor, self._tiebreaker)
                 with self._metrics_lock:
                     self._metrics.last_cursor = str(self._cursor)
-                    self._metrics.last_cursor_tiebreak = self._tiebreaker
+                    self._metrics.last_cursor_tiebreak = (
+                        None if self._tiebreaker is None else str(self._tiebreaker))
 
         return total_added
 
@@ -611,6 +628,15 @@ class LiveIngestionWorker:
         except TypeError:
             # Mixed types cannot be ordered; keep the stored value, which is
             # the conservative choice (re-fetch rather than skip).
+            return True
+
+    def _row_is_past_cursor(self, value: Any) -> bool:
+        """True when ``value`` sorts strictly after the live cursor."""
+        if self._cursor is None:
+            return True
+        try:
+            return self._cursor < value
+        except TypeError:
             return True
 
     def poll_once(self) -> Dict[str, int]:
@@ -681,7 +707,54 @@ class LiveIngestionWorker:
         # An opaque cursor cannot be rewound arithmetically.
         return cursor
 
-    def _fetch_and_ingest(self, persist_cursor: bool = True) -> Tuple[int, int]:
+    def _reread_overlap_window(self) -> Tuple[int, int, int, int]:
+        """
+        Re-read the rows between ``cursor - overlap_seconds`` and the cursor.
+
+        This is what overlap is for: a row whose transaction committed after
+        the last poll but carries an earlier timestamp. The window is paged
+        with its own local position and never moves the real cursor.
+
+        It used to be done by rewinding the paging cursor itself. When the
+        window held ``batch_size`` rows or more, every batch re-read the same
+        rows, the cursor stepped back to where it was, and ``prime()`` looped
+        forever, so the server never finished starting.
+
+        Returns:
+            ``(items_added, rows_fetched, duplicates, invalid)``
+        """
+        start = self._effective_cursor()
+        if start is None or start == self._cursor:
+            return 0, 0, 0, 0
+        added = fetched = duplicates = invalid = 0
+        position, tiebreak = start, None
+        while True:
+            batch = 0
+            last = None
+            for row in self._source.read_since(cursor=position, tiebreaker=tiebreak,
+                                                limit=self._config.batch_size):
+                batch += 1
+                last = row
+                if self._row_is_past_cursor(row.cursor_value):
+                    # Past the real cursor: that is the forward read's job.
+                    batch = -1
+                    break
+                fetched += 1
+                outcome = self._ingest(row.item)
+                if outcome == "added":
+                    added += 1
+                elif outcome == "duplicate":
+                    duplicates += 1
+                else:
+                    invalid += 1
+            if batch < self._config.batch_size or last is None:
+                break
+            position = last.cursor_value
+            tiebreak = last.tiebreak_value if last.tiebreak_value is not None else last.row_id
+        return added, fetched, duplicates, invalid
+
+    def _fetch_and_ingest(self, persist_cursor: bool = True,
+                          reread_overlap: bool = True) -> Tuple[int, int]:
         """
         Fetch one batch and feed it to the item pool.
 
@@ -689,9 +762,12 @@ class LiveIngestionWorker:
             persist_cursor: Write the advanced cursor to disk. ``prime()``
                 passes False and flushes once at the end, so a mid-replay
                 crash cannot leave a cursor behind the rows already ingested.
+            reread_overlap: Re-read the ``overlap_seconds`` window first.
 
         Returns:
-            ``(items_added, rows_fetched)``
+            ``(items_added, rows_fetched)``, where ``rows_fetched`` counts the
+            forward read only: it is what tells ``prime()`` whether the source
+            has more.
         """
         rows_fetched = 0
         items_added = 0
@@ -700,9 +776,17 @@ class LiveIngestionWorker:
         last_cursor = None
         last_tiebreak = None
 
-        # No lock is held here -- this is the network I/O.
+        overlap_added = overlap_fetched = 0
+        if reread_overlap:
+            overlap_added, overlap_fetched, overlap_dupes, overlap_invalid = \
+                self._reread_overlap_window()
+            duplicates += overlap_dupes
+            invalid += overlap_invalid
+
+        # No lock is held here -- this is the network I/O. Keyset paging from
+        # the true cursor, so every batch moves forward.
         rows = self._source.read_since(
-            cursor=self._effective_cursor(),
+            cursor=self._cursor,
             tiebreaker=self._tiebreaker,
             limit=self._config.batch_size,
         )
@@ -721,7 +805,8 @@ class LiveIngestionWorker:
             # is the maximum, and when LIMIT truncated the batch it is exactly
             # where the next read must resume.
             last_cursor = row.cursor_value
-            last_tiebreak = row.row_id
+            last_tiebreak = (row.tiebreak_value if row.tiebreak_value is not None
+                             else row.row_id)
 
             if self._reached_item_limit():
                 break
@@ -729,8 +814,8 @@ class LiveIngestionWorker:
         now = time.time()
         with self._metrics_lock:
             self._metrics.polls_total += 1
-            self._metrics.rows_fetched += rows_fetched
-            self._metrics.items_added += items_added
+            self._metrics.rows_fetched += rows_fetched + overlap_fetched
+            self._metrics.items_added += items_added + overlap_added
             self._metrics.duplicates_skipped += duplicates
             self._metrics.invalid_rows_skipped += invalid
             self._metrics.last_poll_at = now
@@ -747,9 +832,10 @@ class LiveIngestionWorker:
                 self._cursor_store.set(self.source_id, last_cursor, last_tiebreak)
                 with self._metrics_lock:
                     self._metrics.last_cursor = str(last_cursor)
-                    self._metrics.last_cursor_tiebreak = last_tiebreak
+                    self._metrics.last_cursor_tiebreak = (
+                        None if last_tiebreak is None else str(last_tiebreak))
 
-        return items_added, rows_fetched
+        return items_added + overlap_added, rows_fetched
 
     # -- background loop ---------------------------------------------------
 

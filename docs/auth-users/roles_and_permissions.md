@@ -21,10 +21,16 @@ compatible.
 | Permission | Grants access to |
 |------------|------------------|
 | `view_admin_dashboard` | The `/admin` dashboard and its read APIs |
-| `manage_assignment` | Assignment settings and destructive admin operations |
+| `manage_assignment` | Changing assignment settings (`POST /admin/api/config`), setting a user's items, and reclaiming items |
+| `manage_users` | Resetting passwords and creating password-reset links |
+| `manage_crowdsourcing` | The crowd-platform panel: publishing studies, approving submissions, paying bonuses |
 | `adjudicate` | The `/adjudicate` interface and adjudication APIs |
 | `export_data` | Export endpoints |
 | `annotate` | The annotation interface |
+
+`view_admin_dashboard` is read access. A role that holds only it can open the
+dashboard but cannot change settings or accounts, so a "viewer" role cannot
+reset someone else's password and sign in as them.
 
 ## Built-in roles
 
@@ -84,7 +90,9 @@ A user's roles are the union of:
    map (otherwise it stays a pure quota label, e.g. `novice`/`expert`)
 
 A user's permissions are the union of the permissions of all their roles. The
-shared `admin_api_key` (and `debug: true`) bypasses all checks.
+shared `admin_api_key` bypasses all checks. So does `debug: true`, but only when
+the server is bound to a loopback address (`127.0.0.1`, `localhost`); on
+`0.0.0.0` or behind gunicorn the admin key is still required.
 
 ## How it's enforced
 
@@ -96,7 +104,8 @@ duplicated `admin_required` decorators across the codebase. This means:
   through the same permission model.
 - A logged-in user with an admin-capable role reaches admin endpoints **without**
   needing the shared key.
-- Requests with a valid shared key (or in debug mode) always pass.
+- Requests with a valid shared key always pass, and so do requests to a debug
+  server bound to loopback.
 
 ## Backward compatibility
 

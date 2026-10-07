@@ -116,6 +116,16 @@ class LocalFileSource(DataSource):
 
         return errors
 
+    def _read_all(self) -> List[Any]:
+        """Every record in the file, parsed the way ``data_files`` parses it."""
+        from potato.data_sources.parsing import format_for, parse_records, read_text
+
+        path = self._resolve_path()
+        fmt = format_for(path)
+        if fmt is None:
+            raise ValueError(f"Unsupported file format: {os.path.splitext(path)[1].lower()}")
+        return parse_records(read_text(path), fmt, path)
+
     def read_items(
         self,
         start: int = 0,
@@ -124,6 +134,14 @@ class LocalFileSource(DataSource):
         """
         Read items from the file.
 
+        ``start`` and ``count`` index records, not lines: a JSON Lines line
+        holding an array contributes one record per element, and a quoted CSV
+        cell may span lines.
+
+        A malformed line raises ``SourceDataError`` naming it, as ``data_files``
+        does. It used to be logged and skipped, so a file with one bad line
+        loaded short with nothing but a warning to show for it.
+
         Args:
             start: Index of first item to read (0-based)
             count: Maximum number of items to read
@@ -131,118 +149,10 @@ class LocalFileSource(DataSource):
         Yields:
             Item dictionaries
         """
-        path = self._resolve_path()
-        ext = os.path.splitext(path)[1].lower()
-
-        if ext in ('.json', '.jsonl'):
-            yield from self._read_json_items(path, start, count)
-        elif ext == '.csv':
-            yield from self._read_csv_items(path, start, count, delimiter=',')
-        elif ext == '.tsv':
-            yield from self._read_csv_items(path, start, count, delimiter='\t')
-        else:
-            raise ValueError(f"Unsupported file format: {ext}")
-
-    def _read_json_items(
-        self,
-        path: str,
-        start: int,
-        count: Optional[int]
-    ) -> Iterator[Dict[str, Any]]:
-        """Read items from JSON/JSONL file."""
-        ext = os.path.splitext(path)[1].lower()
-
-        with open(path, 'r', encoding='utf-8') as f:
-            if ext == '.json':
-                # Try to parse as JSON array first
-                content = f.read()
-                try:
-                    data = json.loads(content)
-                    if isinstance(data, list):
-                        # JSON array
-                        items = data
-                    elif isinstance(data, dict):
-                        # Single object
-                        items = [data]
-                    else:
-                        raise ValueError(f"Unexpected JSON type: {type(data)}")
-
-                    # Apply start/count
-                    items = items[start:]
-                    if count is not None:
-                        items = items[:count]
-
-                    yield from items
-                    return
-
-                except json.JSONDecodeError:
-                    # Fall back to JSONL parsing
-                    pass
-
-            # Reset file position for JSONL parsing
-            f.seek(0)
-
-            items_yielded = 0
-            current_line = 0
-
-            for line_no, line in enumerate(f):
-                line = line.strip()
-                if not line:
-                    continue
-
-                # Skip lines before start
-                if current_line < start:
-                    current_line += 1
-                    continue
-
-                # Check count limit
-                if count is not None and items_yielded >= count:
-                    break
-
-                try:
-                    item = json.loads(line)
-                    if isinstance(item, list):
-                        # Line contains array - expand
-                        for sub_item in item:
-                            if count is not None and items_yielded >= count:
-                                break
-                            yield sub_item
-                            items_yielded += 1
-                    else:
-                        yield item
-                        items_yielded += 1
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Invalid JSON at line {line_no + 1}: {e}")
-
-                current_line += 1
-
-    def _read_csv_items(
-        self,
-        path: str,
-        start: int,
-        count: Optional[int],
-        delimiter: str
-    ) -> Iterator[Dict[str, Any]]:
-        """Read items from CSV/TSV file."""
-        with open(path, 'r', encoding='utf-8', newline='') as f:
-            reader = csv.DictReader(f, delimiter=delimiter)
-
-            items_yielded = 0
-            current_row = 0
-
-            for row in reader:
-                # Skip rows before start
-                if current_row < start:
-                    current_row += 1
-                    continue
-
-                # Check count limit
-                if count is not None and items_yielded >= count:
-                    break
-
-                yield dict(row)
-                items_yielded += 1
-                current_row += 1
+        records = self._read_all()
+        self._total_count = len(records)
+        end = None if count is None else start + count
+        yield from records[start:end]
 
     def get_total_count(self) -> Optional[int]:
         """Get total number of items in the file."""
@@ -253,35 +163,8 @@ class LocalFileSource(DataSource):
             return None
 
         try:
-            path = self._resolve_path()
-            ext = os.path.splitext(path)[1].lower()
-
-            count = 0
-            if ext in ('.json', '.jsonl'):
-                with open(path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    try:
-                        data = json.loads(content)
-                        if isinstance(data, list):
-                            count = len(data)
-                        else:
-                            count = 1
-                    except json.JSONDecodeError:
-                        # JSONL - count non-empty lines
-                        for line in content.split('\n'):
-                            if line.strip():
-                                count += 1
-
-            elif ext in ('.csv', '.tsv'):
-                delimiter = ',' if ext == '.csv' else '\t'
-                with open(path, 'r', encoding='utf-8', newline='') as f:
-                    reader = csv.reader(f, delimiter=delimiter)
-                    next(reader, None)  # Skip header
-                    count = sum(1 for _ in reader)
-
-            self._total_count = count
-            return count
-
+            self._total_count = len(self._read_all())
+            return self._total_count
         except Exception as e:
             logger.error(f"Error counting items: {e}")
             return None

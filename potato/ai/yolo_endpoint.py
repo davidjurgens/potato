@@ -87,7 +87,7 @@ class YOLOEndpoint(BaseVisualAIEndpoint):
         """Get the default YOLO model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard query method - not typically used for YOLO.
 

@@ -3324,6 +3324,19 @@ class ItemStateManager:
                 except Exception as exc:
                     self.logger.debug("Adjudication auto-route skipped: %s", exc)
 
+    def unregister_annotator(self, instance_id: str, user_id: str):
+        """Undo register_annotator for a user who has cleared every answer on
+        an item, so the item counts them no longer and can be offered again
+        once it is below its cap."""
+        annotators = self.instance_annotators.get(instance_id)
+        if not annotators or user_id not in annotators:
+            return
+        annotators.discard(user_id)
+        if instance_id in self.completed_instance_ids and not self._item_is_saturated(instance_id):
+            self.completed_instance_ids.discard(instance_id)
+            if instance_id not in self.remaining_instance_ids:
+                self.remaining_instance_ids.append(instance_id)
+
     def update_annotation_count(self, instance_id: str, delta=1):
         """
         Update the annotation count for an instance.

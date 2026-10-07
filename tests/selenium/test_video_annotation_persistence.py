@@ -175,7 +175,8 @@ site_dir: default
         # Reset server state via admin API
         # This ensures each test starts with fresh user/item state
         try:
-            response = requests.post(f"{self.server.base_url}/admin/api/test/reset_state")
+            response = requests.post(f"{self.server.base_url}/admin/api/test/reset_state",
+                                     headers={"X-API-Key": self.server.admin_api_key})
             if response.status_code == 200:
                 print("[TEST] Server state reset successfully")
             else:

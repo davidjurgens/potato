@@ -27,6 +27,7 @@ class CodingAgentRunnerManager:
     def __init__(self, max_sessions: int = 10, session_ttl: int = 3600):
         self._sessions: Dict[str, CodingAgentRunner] = {}
         self._session_keys: Dict[str, str] = {}  # user:instance -> session_id
+        self._owners: Dict[str, str] = {}  # session_id -> user who started it
         self._max_sessions = max_sessions
         self._session_ttl = session_ttl
         self._cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
@@ -126,12 +127,17 @@ class CodingAgentRunnerManager:
 
         self._sessions[session_id] = runner
         self._session_keys[key] = session_id
+        self._owners[session_id] = user_id
 
         logger.info(f"Created coding agent session {session_id} for {key}")
         return runner
 
     def get_session(self, session_id: str) -> Optional[CodingAgentRunner]:
         return self._sessions.get(session_id)
+
+    def get_session_owner(self, session_id: str) -> Optional[str]:
+        """The user who started a session, or None."""
+        return self._owners.get(session_id) if session_id in self._sessions else None
 
     def get_session_by_key(self, user_id: str, instance_id: str) -> Optional[CodingAgentRunner]:
         key = f"{user_id}:{instance_id}"
@@ -142,6 +148,7 @@ class CodingAgentRunnerManager:
 
     def remove_session(self, session_id: str) -> None:
         runner = self._sessions.pop(session_id, None)
+        self._owners.pop(session_id, None)
         if runner:
             runner.cleanup()
             # Remove from keys
@@ -150,7 +157,8 @@ class CodingAgentRunnerManager:
             }
 
     def list_sessions(self) -> List[Dict]:
-        return [r.get_state_summary() for r in self._sessions.values()]
+        return [{**r.get_state_summary(), "user_id": self._owners.get(sid)}
+                for sid, r in self._sessions.items()]
 
     def _evict_oldest(self):
         """Remove the oldest completed/error session."""

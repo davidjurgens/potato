@@ -57,7 +57,7 @@ class OpenAIEndpoint(BaseAIEndpoint):
         """Get the default OpenAI model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: dict) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to OpenAI and return the response.
 

@@ -41,22 +41,7 @@ def _enabled_required(f):
     return wrapper
 
 
-def _same_origin_required(f):
-    """Reject cross-origin state changes.
-
-    Mirrors the guard on the solo-mode POST routes: starting a training run is
-    a side effect worth spending CPU on, so it should not be triggerable from
-    another site with an admin's cookie.
-    """
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        origin = request.headers.get("Origin")
-        if origin:
-            host = request.headers.get("Host", "")
-            if host and host not in origin:
-                return jsonify({"error": "Cross-origin request refused"}), 403
-        return f(*args, **kwargs)
-    return wrapper
+from potato.server_utils.origin_check import same_origin_required as _same_origin_required
 
 
 def _manager():

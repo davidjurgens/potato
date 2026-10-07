@@ -108,118 +108,40 @@ class DatabaseManager:
             return False
 
     def create_tables(self):
-        """Create all required database tables if they don't exist."""
+        """Create the tables annotator state is stored in, if they don't exist.
+
+        Each table is looked for first. ``CREATE TABLE IF NOT EXISTS`` on an
+        existing table raises warning 1050, and the pool raises on warnings,
+        so the second boot against any database failed.
+        """
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("SELECT table_name FROM information_schema.tables "
+                           "WHERE table_schema = DATABASE()")
+            existing = {row[0].lower() for row in cursor.fetchall()}
 
-            # Create user_states table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS user_states (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL UNIQUE,
-                    current_phase VARCHAR(50) NOT NULL,
-                    current_page VARCHAR(255),
-                    current_instance_index INT DEFAULT -1,
-                    max_assignments INT DEFAULT -1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_user_id (user_id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            # One document per annotator: the same JSON the file backend
+            # writes to user_state.json.
+            if "user_state_documents" not in existing:
+                cursor.execute("""
+                CREATE TABLE user_state_documents (
+                    user_id VARCHAR(255) NOT NULL PRIMARY KEY,
+                    state_json LONGTEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
             """)
 
-            # Create user_instance_assignments table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS user_instance_assignments (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
+            # Append-only annotation history, the counterpart of
+            # annotation_history.jsonl.
+            if "annotation_history_log" not in existing:
+                cursor.execute("""
+                CREATE TABLE annotation_history_log (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
                     user_id VARCHAR(255) NOT NULL,
-                    instance_id VARCHAR(255) NOT NULL,
-                    assignment_order INT NOT NULL,
-                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE KEY unique_user_instance (user_id, instance_id),
-                    INDEX idx_user_order (user_id, assignment_order),
-                    FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """)
-
-            # Create label_annotations table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS label_annotations (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    instance_id VARCHAR(255) NOT NULL,
-                    schema_name VARCHAR(255) NOT NULL,
-                    label_name VARCHAR(255) NOT NULL,
-                    label_value TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY unique_annotation (user_id, instance_id, schema_name, label_name),
-                    INDEX idx_user_instance (user_id, instance_id),
-                    FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """)
-
-            # Create span_annotations table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS span_annotations (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    instance_id VARCHAR(255) NOT NULL,
-                    schema_name VARCHAR(255) NOT NULL,
-                    span_name VARCHAR(255) NOT NULL,
-                    span_title VARCHAR(255),
-                    start_pos INT NOT NULL,
-                    end_pos INT NOT NULL,
-                    kb_id VARCHAR(255) DEFAULT NULL,
-                    kb_source VARCHAR(255) DEFAULT NULL,
-                    kb_label VARCHAR(512) DEFAULT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_user_instance (user_id, instance_id),
-                    FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """)
-
-            # Create phase_annotations table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS phase_annotations (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    phase_name VARCHAR(50) NOT NULL,
-                    page_name VARCHAR(255) NOT NULL,
-                    schema_name VARCHAR(255) NOT NULL,
-                    label_name VARCHAR(255) NOT NULL,
-                    label_value TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY unique_phase_annotation (user_id, phase_name, page_name, schema_name, label_name),
-                    FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """)
-
-            # Create behavioral_data table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS behavioral_data (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    instance_id VARCHAR(255) NOT NULL,
-                    data_key VARCHAR(255) NOT NULL,
-                    data_value TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_user_instance (user_id, instance_id),
-                    FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """)
-
-            # Create ai_hints table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ai_hints (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    instance_id VARCHAR(255) NOT NULL,
-                    hint_text TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE KEY unique_hint (user_id, instance_id),
-                    FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                    seq INT NOT NULL,
+                    action_json LONGTEXT NOT NULL,
+                    UNIQUE KEY unique_user_seq (user_id, seq)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
             """)
 
             conn.commit()
@@ -231,18 +153,14 @@ class DatabaseManager:
             cursor = conn.cursor()
 
             # Drop tables in reverse dependency order
-            tables = [
-                'ai_hints',
-                'behavioral_data',
-                'phase_annotations',
-                'span_annotations',
-                'label_annotations',
-                'user_instance_assignments',
-                'user_states'
-            ]
+            tables = ['annotation_history_log', 'user_state_documents']
 
+            cursor.execute("SELECT table_name FROM information_schema.tables "
+                           "WHERE table_schema = DATABASE()")
+            existing = {row[0].lower() for row in cursor.fetchall()}
             for table in tables:
-                cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                if table in existing:
+                    cursor.execute(f"DROP TABLE {table}")
 
             conn.commit()
             logger.info("Database tables dropped successfully")

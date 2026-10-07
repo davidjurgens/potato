@@ -83,3 +83,21 @@ def safe_instance_id(text: str) -> str:
     importer.
     """
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(text)).strip("_") or "item"
+
+
+def assert_unique_ids(ids) -> None:
+    """Refuse to write a data file the server would refuse to load.
+
+    The server rejects a data file that repeats an id, so an importer that
+    derives ids from file names (two ``doc1`` files in different folders)
+    used to report success and leave a project that would not start.
+    """
+    from collections import Counter
+
+    repeated = sorted(i for i, n in Counter(ids).items() if n > 1)
+    if repeated:
+        shown = ", ".join(repr(i) for i in repeated[:5])
+        more = f" and {len(repeated) - 5} more" if len(repeated) > 5 else ""
+        raise ValueError(
+            f"{len(repeated)} instance id(s) occur more than once: {shown}{more}. "
+            f"Rename the source files so their names are unique.")

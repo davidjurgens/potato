@@ -1877,7 +1877,7 @@ python -m potato.preview_cli config.yaml --format html > preview.html
 | Annotation types | `potato/server_utils/schemas/` | One module per type, plus `registry.py` |
 | Display types | `potato/server_utils/displays/` | How an item is shown, separate from how it is annotated |
 | AI endpoints | `potato/ai/` | Model backends for label suggestions |
-| Frontend | `potato/static/`, `potato/templates/` | `annotation.js`, `span-manager.js`, Jinja templates |
+| Frontend | `potato/static/`, `potato/templates/` | `annotation.js`, `span-core.js`, Jinja templates |
 
 Two things to know before you add anything:
 
@@ -3229,8 +3229,23 @@ customjs: null  # Path to custom JavaScript file
 customjs_hostname: null  # Hostname for custom JS
 site_dir: default  # or path to custom template directory
 alert_time_each_instance: 10  # Seconds before alert (very high = disabled)
-debug: false  # Enable debug mode (bypasses admin authentication)
+debug: false  # Debug mode. On a loopback host (127.0.0.1) it also skips admin authentication
 ```
+
+### Session cookie
+
+```yaml
+session_cookie_samesite: Lax   # Lax, Strict or None
+session_cookie_secure: false   # true once the server is reached over HTTPS
+```
+
+The session cookie is `SameSite=Lax` by default, so the browser does not send
+it with a form posted from another site. Crowd deployments (`crowdsourcing.provider`
+or `login.type: url_direct`/`prolific`) keep the browser's default instead,
+because the platform shows the task inside its own page and a Lax cookie is not
+sent from inside another site's frame. If the task runs in a frame and sessions
+are lost, set `session_cookie_samesite: None` with `session_cookie_secure: true`
+and serve over HTTPS.
 
 ### Admin Dashboard Authentication
 
@@ -3598,14 +3613,11 @@ database:
   password: ${POTATO_DB_PASSWORD}  # Use environment variable for security
   charset: utf8mb4
   pool_size: 10
-  max_overflow: 20
-  pool_timeout: 30
-  pool_recycle: 3600
 ```
 
 ### Database Configuration Options
 
-- **`type`**: Database type (`mysql` or `file` for file-based storage)
+- **`type`**: `mysql`. Leave the block out to store state in files.
 - **`host`**: Database server hostname
 - **`port`**: Database server port (default: 3306)
 - **`database`**: Database name
@@ -3613,9 +3625,53 @@ database:
 - **`password`**: Database password (use environment variables for security)
 - **`charset`**: Character encoding (default: utf8mb4)
 - **`pool_size`**: Connection pool size (default: 10)
-- **`max_overflow`**: Maximum overflow connections (default: 20)
-- **`pool_timeout`**: Connection timeout in seconds (default: 30)
-- **`pool_recycle`**: Connection recycle time in seconds (default: 3600)
+
+### Where annotator state goes
+
+Each annotator's state is stored as one JSON document in the
+`user_state_documents` table. It is the same document the file backend writes
+to `annotation_output/<user>/user_state.json`, so every kind of answer is kept,
+including spans, links, events, training progress and survey answers. The
+annotation history goes in `annotation_history_log`, one row per action. Potato
+creates both tables on first start and loads every stored annotator at boot.
+
+The data items themselves, exports and the rest of the output directory are
+still files. Only annotator state moves to the database.
+
+The admin and MCP exports, `potato export`, paper mode, auto-export
+(`export_annotation_format`) and model training read annotator state from the
+database. When `potato export` runs on another machine, it connects with the
+config's `database` block, so that machine needs the driver and network access
+to the database. `${VAR}` references in `password` are expanded as they are at
+startup.
+
+The other tools that handle saved state work with the database too:
+
+- `potato repair-annotations` reads each state from the database and writes
+  the repair back. With a backup, the old document goes to
+  `annotation_output/<user>/user_state.json.bak`.
+- The admin data archive, and so `potato deploy pull`, writes each annotator
+  out of the database as `annotation_output/<user>/user_state.json` and
+  `annotation_history.jsonl`, the layout the file backend uses. A pull from a
+  VM or a local container goes through that archive rather than SSH or
+  `docker cp`, so it needs the deployment's URL and admin key.
+- The `backup` and `huggingface_backup` mirrors write the same files under
+  `_databases/mysql/` on each cycle. Restore on boot runs only when the
+  database is empty, and the restored annotators are imported into it.
+- `filter_by_prior_annotation` reads an earlier task in MySQL when the filter
+  carries that task's `database` block.
+
+At startup Potato imports every `annotation_output/<user>/user_state.json`
+whose user is not in the database yet, with its history. That covers a file
+study switched to MySQL and a project made by `potato import --seed-user`. When
+both exist, the database copy wins, and the files are left where they are.
+
+The backup mirrors are not a substitute for backing up the database itself
+with your usual MySQL tooling, such as `mysqldump`.
+
+Older releases defined tables named `user_states`, `label_annotations` and so
+on. They could not be created on MySQL 8 with utf8mb4, so no database holds data
+in them and there is nothing to migrate. Potato no longer creates them.
 
 ### Environment Variables
 
@@ -4276,6 +4332,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `persist_sessions` |  | boolean | `False` | Keep annotator sessions across a server restart |  |
 | `port` |  | integer | `8000` | Port to listen on. The -p flag overrides this |  |
 | `server` |  | object |  | Nested port/host/debug block, an alternative to the top-level keys | `debug`, `host`, `port` |
+| `session_cookie_samesite` |  | string |  | SameSite attribute of the session cookie: Lax, Strict or None. Unset means Lax, except on crowd deployments, where the browser default is kept so a task embedded in the platform's frame keeps its session. None requires session_cookie_secure |  |
+| `session_cookie_secure` |  | boolean | `False` | Send the session cookie over HTTPS only. Turn on when the server is reached over HTTPS |  |
 | `session_lifetime_days` |  | integer | `2` | Days before a persisted session expires |  |
 | `session_timeout_minutes` |  | integer | `480` | How long a signed-in session may sit idle before the server clears it. The clock restarts on every request, so it bounds inactivity, not the length of a shift |  |
 | `site_dir` |  | string |  | Directory holding the HTML templates for this task |  |
@@ -4596,6 +4654,13 @@ json, or jsonl.
 Each document needs, at minimum, a unique identifier and the body of the
 document.
 
+CSV and TSV cells are loaded exactly as written, as text. An id of `007` stays
+`007`, and the text `NA` or `None` stays `NA` or `None`. CSV uses standard
+double-quote quoting, so a cell can contain commas and line breaks. TSV has no
+quoting: a `"` in a TSV cell is part of the text, and a cell cannot contain a
+tab or a line break. An empty id, or the same id twice, stops the server with
+an error naming the row.
+
 You can find example data files
 [here](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/). We
 currently support four different document formats:
@@ -4889,7 +4954,8 @@ Each file can contain multiple instances. The `id_key` and `text_key` from `item
 2. New files are parsed and their instances are added
 3. Modified files are re-parsed:
    - New instances are added
-   - Existing instances are updated (annotations are preserved)
+   - Existing instances from the same file are updated, unless someone has
+     annotated them and the text changed (see Instance Updates)
 4. Removed files: instances remain in the system (to preserve any annotations)
 5. The search index is rebuilt, so items that arrived after startup are
    findable through `/admin/api/search` and the curation catalog
@@ -4961,15 +5027,25 @@ watch_data_directory: true
 
 When a file is modified while watching is enabled:
 
-- **New instances** (new IDs) are added to the annotation queue
-- **Existing instances** (same IDs) are updated with new data, but annotations are preserved
-- **Removed instances** (IDs no longer in file) remain in the system to preserve annotations
+- **New instances** (new IDs) are added to the annotation queue.
+- **Existing instances** (same IDs, same file) are updated with the new data.
+  If someone has already annotated the item and its text changed, the update
+  is refused and an error is logged: span offsets point into the old text, so
+  replacing it would move every highlight. Give the edited item a new ID.
+- **Removed instances** (IDs no longer in the file) stay in the system, so
+  their annotations are kept.
 
-This means annotators won't lose their work if you update a data file.
+An ID that appears twice keeps its first row. This covers an ID repeated
+inside one file and an ID that another file (or `data_files`) already loaded.
+The later row is ignored and an error is logged that names both files.
+`data_files` refuses to start on the same input; the watcher runs while
+annotators are working, so it keeps going instead.
 
 ## Error Handling
 
 - Files that fail to parse are logged and skipped (other files still load)
+- CSV and TSV cells are read as written, the same way `data_files` reads them
+  (see [Data Formats](data_format.md))
 - Missing `id_key` in an instance: that instance is skipped with a warning
 - Missing `text_key` in an instance: instance loads with a warning
 - Directory permissions errors are logged
@@ -5217,7 +5293,7 @@ Polling is cursor-based, not `OFFSET`-based. Offsets are wrong for a table being
 
 **Prefer a monotonic column** — an auto-incrementing `id BIGSERIAL`, or an insert sequence. A wall-clock column like `created_at` is only best-effort: a transaction that began before a poll can commit after it with an earlier timestamp, and the cursor will already have moved past it.
 
-If you must use a timestamp, set `overlap_seconds` (2 is usually plenty). It rewinds the cursor slightly on every read, so boundary rows are fetched again — and re-fetched rows are dropped by ID deduplication, so the only cost is a little bandwidth.
+If you must use a timestamp, set `overlap_seconds` (2 is usually plenty). Each poll first fetches the rows from `overlap_seconds` before the cursor up to the cursor, then reads forward from the cursor. Rows fetched twice are dropped by ID deduplication, so the only cost is a little bandwidth. The overlap pass never moves the cursor, so a window holding more rows than `batch_size` still pages through to the end.
 
 The `(cursor, tiebreaker)` pair also matters. With `cursor_column` alone, three rows sharing one timestamp and a batch size of two would leave the third permanently unread. Potato always orders by both and remembers both.
 
@@ -5302,6 +5378,20 @@ partial_loading:
   batch_size: 500              # Items to load per increment
   auto_load_threshold: 0.8     # Auto-load when 80% annotated
 ```
+
+The read position counts rows read, not items added, so a row with no ID or a
+repeated ID does not make Potato re-read rows or think the source has ended.
+On a restart every row that earlier runs had loaded is read again, so the item
+pool comes back whole, and loading continues from there.
+
+### Bad rows and repeated IDs
+
+A file source parses exactly like `data_files`: CSV and TSV cells are kept as
+written, a UTF-8 byte order mark is ignored, and a malformed JSON line is an
+error naming the line. At startup, a row with no ID and an ID that appears in
+two sources both stop the server, as they do for `data_files`. Rows loaded
+later (by `load_more` or auto-loading) are skipped with a logged error and the
+first row with that ID is kept.
 
 ### Caching
 
@@ -7366,7 +7456,9 @@ Bundled catalogs ship for 10 languages:
 | `de` | German | `ru` | Russian |
 | `ar` | Arabic (RTL) | `ko` | Korean |
 
-An unknown code logs a warning and falls back to English -- it never crashes the server. The catalogs live in `potato/i18n/<code>.yaml`; they are machine-assisted and community-improvable, so corrections and new languages via pull request are welcome.
+Codes are case-insensitive and may use an underscore, so `ES`, `pt-BR` and
+`zh_CN` all work. A regional code with no catalog of its own uses its language's
+catalog: `pt-BR` renders in `pt`. An unknown code logs a warning and falls back to English -- it never crashes the server. The catalogs live in `potato/i18n/<code>.yaml`; they are machine-assisted and community-improvable, so corrections and new languages via pull request are welcome.
 
 ### Start from a bundled language and override a few strings
 
@@ -8969,6 +9061,12 @@ label_requirement:
 ```
 
 When `required: true` is set, annotators must complete all fields in the schema before they can proceed to the next instance. This is particularly useful for ensuring data quality in multi-rate and other complex annotation tasks.
+
+With `required_label`, the annotator must choose one of the listed options to
+continue. On a consent, instructions, prestudy or poststudy page the server
+checks this too: a participant who chose "I disagree" on a consent question
+that requires "I agree" is kept on the consent page (HTTP 400), however the
+request was sent.
 
 ### Multiple Schemas
 
@@ -21275,12 +21373,21 @@ training:
 | `enabled` | boolean | Yes | false | Whether to enable the training phase |
 | `data_file` | string | Yes* | - | Path to training data file (required if enabled) |
 | `annotation_schemes` | list | No | All schemes | Which annotation schemes to use in training |
-| `passing_criteria.min_correct` | integer | No | 3 | Minimum correct answers required to pass |
-| `passing_criteria.require_all_correct` | boolean | No | false | Whether all questions must be correct |
-| `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited) |
+| `passing_criteria.min_correct` | integer | No | number of questions | Minimum correct answers required to pass. Checked once the last question is answered, or earlier as soon as it is reached unless `require_all_correct` is set |
+| `passing_criteria.require_all_correct` | boolean | No | false | Whether all questions must be correct. Every question is asked before this is decided |
+| `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited). Counted across retakes |
 | `passing_criteria.max_mistakes_per_question` | integer | No | -1 | Maximum mistakes per question before failure (-1 = unlimited) |
-| `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers |
+| `passing_criteria.max_attempts` | integer | No | unlimited | How many times the training may be taken with `failure_action: repeat_training`. After the last attempt a failing annotator's task ends |
+| `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers. `feedback.allow_retry` is read when this is not set |
+| `feedback.show_explanations` | boolean | No | true | Whether an incorrect answer's feedback includes the question's explanation |
 | `failure_action` | string | No | "move_to_done" | Action when user fails: "move_to_done" ends the task; "repeat_training" starts the training again from the first question. Exceeding `max_mistakes` or `max_mistakes_per_question` ends the task either way. |
+
+Unknown keys under `passing_criteria` and `feedback` are reported in the log at
+startup.
+
+On a crowd platform, an annotator who fails training reaches the end page with
+the platform's screen-out code (`screened_out_code`, or `failed_code` when that
+is not set), never the success code.
 
 ### Training Strategies
 
@@ -21694,6 +21801,18 @@ cannot time that answer. The check is skipped for that one response and a line
 naming the annotator and the item goes to the log, rather than the answer
 passing quietly.
 7. Warnings and blocks are triggered at configured thresholds
+8. Once a warning or block has been shown for a failed check, that failure
+   stands: answering the same check again does not change it. An answer changed
+   before any verdict was shown (a misclick corrected on the same page) still
+   counts
+9. Moving past a check without answering it fails it
+10. A blocked annotator gets no more items. Reloading the annotation page ends
+    their task, and further saves are refused with HTTP 403. On a crowd
+    platform the end page carries the platform's failure code; elsewhere it
+    shows the block message. A block cannot be lifted by re-answering
+
+Consent, instruction and survey pages are never graded as attention checks or
+gold items, and their answers are not considered for auto-promotion.
 
 Attention-check and gold results are written to
 `<output_annotation_dir>/quality_control_results.json` as they are recorded, and
@@ -22570,6 +22689,7 @@ data_files:
 | `value` | string or list | Value(s) to filter for |
 | `invert` | boolean | If true, return items that DON'T match (default: false) |
 | `rule` | string | With several annotators per item: `majority` (default) matches when more than half of the annotators who answered chose a filter value, `any` when one did, `all` when every one did |
+| `database` | dict | The prior task's `database` block, when it stored annotator state in MySQL. The annotators are read from that database instead of `annotation_dir` |
 
 Every annotator's answer is read. For a multiselect, an annotator counts
 toward a value when they ticked it, whatever else they ticked.
@@ -28896,7 +29016,7 @@ solo_mode:
   # Thresholds
   thresholds:
     end_human_annotation_agreement: 0.90    # Required agreement rate to stop human annotation
-    minimum_validation_sample: 50           # Minimum comparisons before ending
+    minimum_validation_sample: 50           # Minimum compared items before ending (an item re-labelled under a new prompt still counts once)
     confidence_low: 0.5                     # Low confidence threshold
     confidence_high: 0.8                    # High confidence threshold
     periodic_review_interval: 100           # Review LLM labels every N instances
@@ -28977,9 +29097,15 @@ not every path visits every phase.
 - Send the prompt back for revision if the rules point at a larger problem
 
 ### 11. Autonomous Labeling
-- Agreement threshold reached
-- LLM completes remaining instances
+- Starts when agreement reaches `end_human_annotation_agreement` over at least
+  `minimum_validation_sample` compared items. The check runs after every human
+  label and on every load of the annotate page, so the hand-over happens even
+  if the human still has items queued. From then on the annotate page sends
+  the human to the status page.
+- The LLM labels the remaining instances. `max_parallel_labels` does not apply
+  in this phase, because there is no human left to stay level with.
 - Human monitors progress
+- A server restart in this phase resumes labelling where it stopped.
 
 ### 12. Final Validation
 - Validate sample of LLM-only labels
@@ -29048,7 +29174,11 @@ instance_selection:
 
 ## API Endpoints
 
-Solo Mode provides API endpoints for monitoring and control:
+Solo Mode provides API endpoints for monitoring and control. Every endpoint
+needs a logged-in session; an anonymous request gets 401. `GET /solo/api/export`
+needs admin access instead: the `X-API-Key` header with `admin_api_key`, or a
+role that can view the admin dashboard. It returns every annotation and the
+full prompt history.
 
 ### Status
 ```
@@ -29080,7 +29210,11 @@ POST /solo/api/optimize-prompt
 ```
 GET /solo/api/export
 ```
-Exports all annotations and predictions.
+Exports all annotations and predictions. Admin only.
+
+```bash
+curl -H "X-API-Key: $ADMIN_KEY" http://localhost:8000/solo/api/export
+```
 
 ## Best Practices
 
@@ -30269,8 +30403,12 @@ print(manager.get_all_llm_predictions())
 
 ### API Status Endpoint
 
+The status endpoint needs a logged-in session, so log in first and reuse the
+cookie:
+
 ```bash
-curl http://localhost:8000/solo/api/status | jq
+curl -c jar -d "email=$USER_NAME&pass=$PASSWORD" http://localhost:8000/auth
+curl -b jar http://localhost:8000/solo/api/status | jq
 ```
 
 ---
@@ -30279,7 +30417,7 @@ curl http://localhost:8000/solo/api/status | jq
 
 1. **LLM Batch Size**: Increase `llm_labeling_batch` for better throughput, decrease for lower latency.
 
-2. **Parallel Labels Limit**: `max_parallel_labels` prevents LLM from getting too far ahead of human.
+2. **Parallel Labels Limit**: `max_parallel_labels` prevents LLM from getting too far ahead of human. It does not apply during autonomous labelling.
 
 3. **Uncertainty Strategy**: `direct_confidence` is fastest, `sampling_diversity` is slowest but most accurate.
 
@@ -30653,7 +30791,7 @@ ai_support:
 | `ai_config.include.all` | boolean | No | Enable AI for all annotation schemes (default: false) |
 | `ai_config.include.special_include` | object | No | Per-page, per-annotation customization |
 | `cache_config.disk_cache.enabled` | boolean | No | Enable disk caching (default: false) |
-| `cache_config.disk_cache.path` | string | No* | Path to cache file (required if caching enabled) |
+| `cache_config.disk_cache.path` | string | No* | Path to cache file (required if caching enabled). Entries are keyed on the item, the scheme, the assistant, the model, the prompt and the item's data, so changing any of them asks the model again. Failed requests are never cached |
 | `cache_config.prefetch.warm_up_page_count` | integer | No | Pre-generate hints for first N instances on startup |
 | `cache_config.prefetch.on_next` | integer | No | Prefetch N instances ahead when navigating forward |
 | `cache_config.prefetch.on_prev` | integer | No | Prefetch N instances when navigating backward |
@@ -36255,6 +36393,10 @@ If threshold is 0.7 (70%) and min_questions is 2:
 | Sports | 1 | 1 | 100% | No (below min_questions) |
 
 User would only receive "Economics" instances.
+
+Each question counts once, by the annotator's first answer to it. With
+`allow_retry`, a question answered wrong and then right counts as one question
+answered wrong.
 
 ## Use Cases
 
@@ -42579,6 +42721,13 @@ your account\".
 After creating an account, you can log in with the email and password
 used in the account creation step. Passwords are stored with per-user salted PBKDF2 hashing for security.
 
+Each account's work is stored in a folder named after its username, so some
+names are refused, at registration and at every other sign-in route: names with
+`/` or `\`, names starting with a dot, names with control characters, and names
+over 200 characters. A name that differs from an existing account only by
+letter case or Unicode normalisation (`Alice` beside `alice`) is also refused,
+because macOS and Windows treat the two as one folder.
+
 If a user forgets their password, administrators can reset it via the CLI or API. See [Password Management](password_management.md) for details on password reset, shared credential files, and database-backed authentication.
 
 ### Set up authorized users
@@ -42664,10 +42813,16 @@ compatible.
 | Permission | Grants access to |
 |------------|------------------|
 | `view_admin_dashboard` | The `/admin` dashboard and its read APIs |
-| `manage_assignment` | Assignment settings and destructive admin operations |
+| `manage_assignment` | Changing assignment settings (`POST /admin/api/config`), setting a user's items, and reclaiming items |
+| `manage_users` | Resetting passwords and creating password-reset links |
+| `manage_crowdsourcing` | The crowd-platform panel: publishing studies, approving submissions, paying bonuses |
 | `adjudicate` | The `/adjudicate` interface and adjudication APIs |
 | `export_data` | Export endpoints |
 | `annotate` | The annotation interface |
+
+`view_admin_dashboard` is read access. A role that holds only it can open the
+dashboard but cannot change settings or accounts, so a "viewer" role cannot
+reset someone else's password and sign in as them.
 
 ## Built-in roles
 
@@ -42727,7 +42882,9 @@ A user's roles are the union of:
    map (otherwise it stays a pure quota label, e.g. `novice`/`expert`)
 
 A user's permissions are the union of the permissions of all their roles. The
-shared `admin_api_key` (and `debug: true`) bypasses all checks.
+shared `admin_api_key` bypasses all checks. So does `debug: true`, but only when
+the server is bound to a loopback address (`127.0.0.1`, `localhost`); on
+`0.0.0.0` or behind gunicorn the admin key is still required.
 
 ## How it's enforced
 
@@ -42739,7 +42896,8 @@ duplicated `admin_required` decorators across the codebase. This means:
   through the same permission model.
 - A logged-in user with an admin-capable role reaches admin endpoints **without**
   needing the shared key.
-- Requests with a valid shared key (or in debug mode) always pass.
+- Requests with a valid shared key always pass, and so do requests to a debug
+  server bound to loopback.
 
 ## Backward compatibility
 
@@ -46195,6 +46353,12 @@ Each `user_state.json` contains the complete annotation state for that user:
 }
 ```
 
+Span offsets count characters of the text as the annotator saw it on the page:
+an entity such as `&amp;` is one character, HTML tags count for nothing, and
+runs of spaces and tabs are one space. Exporters that include a span's words
+read them from that same text, so the words match the offsets even when the
+data file holds markup or doubled spaces.
+
 > **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Auto-Export
@@ -49131,6 +49295,14 @@ The token is shown once. Only its SHA-256 digest is stored, in
 | `submit_annotation` | annotate | |
 | `export_data` | export_data | |
 | `delete_annotations` | manage_assignment | yes |
+
+`export_data` writes under `<output_annotation_dir>/exports/`. Its `output`
+argument names a folder inside that directory (default: the format name); a
+path that leads outside it is refused. A failed export answers HTTP 500.
+
+Items added with `add_items` are recorded in
+`<output_annotation_dir>/runtime_items.jsonl` and loaded again after a restart,
+like items that arrive through trace ingestion.
 
 ### The six checks a call must pass
 
@@ -55122,6 +55294,10 @@ second copy of the data.
   as raw files: the live database runs in WAL mode while the server writes to
   it, and a copy of the file could be missing recent work or be corrupt.
 
+- **On a MySQL study**, every annotator's state, written out of the database as
+  `user_state.json` and `annotation_history.jsonl` under `_databases/mysql/`.
+  On MySQL the output directory has no `user_state.json` files to copy.
+
 A copy is made every `--backup-minutes` (default 5). Only files that changed
 since the last copy are uploaded.
 
@@ -55139,6 +55315,9 @@ says which happened:
 ```
 RESTORED 214 file(s) from the s3://my-bucket/potato/pilot backup into an empty task.
 ```
+
+On a MySQL study the restore also needs the database to be empty. The restored
+annotators are then imported into the database.
 
 Without the restore, a backup only goes one way: after a restart the server
 starts empty, an annotator who returns gets a new `user_state.json`, and the
@@ -55400,6 +55579,12 @@ Potato picks the best available transport for the provider.
 
 On the hosts with a disk that does not last, the [backup](deploy-backups.md)
 holds the same data and can be downloaded even when the server is down.
+
+A study that stores annotator state in MySQL is always pulled over HTTPS, on
+every provider. SFTP and `docker cp` would copy an output directory with no
+annotators in it; the archive writes each one out of the database as
+`annotation_output/<user>/user_state.json`. The pull stops with an error when
+the deployment's URL or admin key is missing.
 
 The HTTPS route uses `GET /admin/api/data/archive`, authenticated with the admin
 API key that `potato deploy` generated and stored in `.potato/secrets.json`. It
@@ -56142,15 +56327,23 @@ Returns all annotations (labels and spans) for a specific instance.
 ```json
 {
   "label_annotations": {
-    "sentiment": {
-      "positive": "1"
-    }
+    "sentiment": ["positive"],
+    "rating": ["slider"]
+  },
+  "label_values": {
+    "sentiment": {"positive": "positive"},
+    "rating": {"slider": 0}
   },
   "span_annotations": {
     "entities:ANIMAL:16:19": "true"
   }
 }
 ```
+
+`label_annotations` lists the stored label names per schema. `label_values`
+gives the value stored under each one, which is the answer itself for text,
+number and slider schemas. A value of `0` is an answer and is included; empty
+and unticked entries are not.
 
 ### Submit Annotation
 ```http
@@ -56183,8 +56376,17 @@ Submit or update annotations for an instance.
 ```
 
 Each key in `annotations` names a schema and a label in one flat string:
-`schema:::label`, or `schema:label`. Both are read; the browser sends the
-three-colon form, and a label whose own name contains a colon needs it.
+`schema:::label`, or `schema:label`. Both are read. When a key starts with a
+configured schema name, that name decides where the label begins, so a schema
+called `q1:topic` or a label containing `:::` is read correctly.
+
+An empty string as a value clears that label: an emptied text box or number
+field is not an answer. A multiselect with every box unticked sends no key for
+its schema, so name it in `cleared_schemas` to clear it:
+
+```json
+{"instance_id": "item_001", "annotations": {}, "cleared_schemas": ["topics"]}
+```
 
 The value is the answer for that label, not a container. This nests the label
 under the schema and so names no label at all:
@@ -57514,7 +57716,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **163 top-level config keys**, **61 annotation types**, and
+It currently covers **165 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

@@ -222,21 +222,13 @@ def collect_project(config_path: str) -> ProjectData:
         total_items=_count_data_items(config, base_dir),
     )
 
-    if not os.path.isdir(output_dir):
+    from potato.server_utils.stored_states import iter_stored_states, uses_mysql
+    if not uses_mysql(config) and not os.path.isdir(output_dir):
         logger.warning("Output directory %s does not exist; no annotations found",
                        output_dir)
         return project
 
-    for entry in sorted(os.listdir(output_dir)):
-        state_path = os.path.join(output_dir, entry, "user_state.json")
-        if not os.path.isfile(state_path):
-            continue
-        try:
-            with open(state_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            logger.warning("Skipping unreadable state file %s", state_path)
-            continue
+    for entry, state in iter_stored_states(output_dir, config, skip_unreadable=True):
         username = state.get("user_id", entry)
         records = _extract_records(username, state, scheme_types)
         if records:

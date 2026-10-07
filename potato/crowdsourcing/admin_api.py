@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 crowd_admin_bp = Blueprint('crowd_admin', __name__, url_prefix='/admin/api/crowd')
 
 
+@crowd_admin_bp.before_request
+def _refuse_cross_origin_writes():
+    """These routes publish studies and pay people. A page on another site
+    must not be able to trigger them with the admin's cookie, so a write whose
+    Origin or Referer names another site is refused."""
+    from potato.server_utils.origin_check import is_same_origin
+    if request.method not in ('GET', 'HEAD', 'OPTIONS') and not is_same_origin():
+        return jsonify({'error': 'Cross-origin request rejected'}), 403
+    return None
+
+
 def _config():
     from potato.server_utils.config_module import config
     return config

@@ -48,7 +48,7 @@ class OllamaEndpoint(BaseAIEndpoint):
         """Get the default Ollama model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> str:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> str:
         """
         Send a query to Ollama and return the response.
 
@@ -81,7 +81,8 @@ class OllamaEndpoint(BaseAIEndpoint):
                 model=self.model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
-                format=output_format.model_json_schema(),
+                format=(output_format.model_json_schema()
+                        if hasattr(output_format, "model_json_schema") else None),
                 think=think,
             )
 
