@@ -89,7 +89,20 @@ def _verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(expected_hash, actual_hash)
 
 
-_TIMING_DUMMY_HASH = _hash_password_with_salt(secrets.token_hex(8))
+_timing_dummy_hash = None
+
+
+def _timing_dummy() -> str:
+    """A hash to verify against for unknown users, made on first use.
+
+    Computing it at import cost every process 100k PBKDF2 iterations, CLI
+    tools included, and broke the import under Pyodide, whose hashlib has
+    no pbkdf2_hmac.
+    """
+    global _timing_dummy_hash
+    if _timing_dummy_hash is None:
+        _timing_dummy_hash = _hash_password_with_salt(secrets.token_hex(8))
+    return _timing_dummy_hash
 
 
 class AuthBackend(ABC):
@@ -145,7 +158,7 @@ class InMemoryAuthBackend(AuthBackend):
             # Spend the same hashing time as a wrong password, so response
             # time does not reveal which usernames exist.
             if password:
-                _verify_password(password, _TIMING_DUMMY_HASH)
+                _verify_password(password, _timing_dummy())
             return False
         if password is None:  # Passwordless login
             return True
@@ -292,7 +305,7 @@ class DatabaseAuthBackend(AuthBackend):
         )
         if not row:
             if password:
-                _verify_password(password, _TIMING_DUMMY_HASH)
+                _verify_password(password, _timing_dummy())
             return False
         if password is None:  # Passwordless login
             return True
@@ -655,7 +668,7 @@ class UserAuthenticator:
                 and not authenticator.auth_backend.is_valid_username(username)):
             logger.warning(f"Authentication failed: user '{username}' does not exist")
             if password and authenticator.require_password:
-                _verify_password(password, _TIMING_DUMMY_HASH)
+                _verify_password(password, _timing_dummy())
             return False
 
         if not authenticator.require_password:

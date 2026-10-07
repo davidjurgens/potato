@@ -196,3 +196,26 @@ class TestCLI:
                          "--backup", "hf"])
         assert code == cli.EXIT_ERROR
         assert "--hf-backup-repo" in capsys.readouterr().out
+
+    def test_dry_run_without_a_repo_name_stays_off_the_network(
+            self, repo, capsys, monkeypatch):
+        # It called whoami-v2 to name the dataset, so a dry run reached
+        # HuggingFace and a bad token ended in an HfHubHTTPError traceback.
+        def no_network(*_args, **_kwargs):
+            raise AssertionError("a dry run asked HuggingFace who the token is")
+        monkeypatch.setattr(cli, "default_hf_repo", no_network)
+        code = cli.main(["button", config_of(repo), "--target", "render",
+                         "--backup", "hf", "--hf-token", "x", "--dry-run"])
+        assert code == cli.EXIT_OK
+        assert "<hf-account>/" in capsys.readouterr().out
+
+    def test_a_rejected_token_is_an_error_not_a_traceback(
+            self, repo, capsys, monkeypatch):
+        def rejected(*_args, **_kwargs):
+            raise RuntimeError("401 Client Error: Unauthorized")
+        monkeypatch.setattr(cli, "default_hf_repo", rejected)
+        code = cli.main(["button", config_of(repo), "--target", "render",
+                         "--backup", "hf", "--hf-token", "x"])
+        assert code == cli.EXIT_ERROR
+        assert "could not ask HuggingFace" in capsys.readouterr().out
+        assert not (repo / "render.yaml").exists()

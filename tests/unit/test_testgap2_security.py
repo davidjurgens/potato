@@ -256,3 +256,32 @@ def test_an_unknown_username_costs_a_password_hash():
     with patch.object(auth, "_verify_password", wraps=auth._verify_password) as verify:
         assert not backend.authenticate("nobody", "guess")
     assert verify.called
+
+
+def test_importing_authentication_hashes_nothing():
+    """The unknown-user dummy hash is made on first use, not at import.
+
+    Made at import, it cost every process 100k PBKDF2 iterations and broke
+    the import under Pyodide, whose hashlib has no pbkdf2_hmac.
+    """
+    import subprocess
+    import sys
+    code = (
+        "import hashlib\n"
+        "del hashlib.pbkdf2_hmac\n"
+        "import potato.authentication as auth\n"
+        "assert auth._timing_dummy_hash is None\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_the_dummy_hash_is_made_once_and_verified_against():
+    import potato.authentication as auth
+    backend = auth.InMemoryAuthBackend()
+    assert not backend.authenticate("nobody", "guess")
+    first = auth._timing_dummy_hash
+    assert first is not None
+    assert not backend.authenticate("nobody", "again")
+    assert auth._timing_dummy_hash == first

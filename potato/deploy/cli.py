@@ -680,7 +680,18 @@ def cmd_button(args) -> int:
                 raise BackupOptionsError(
                     "name the backup dataset with --hf-backup-repo <owner>/<name> "
                     "(or pass --hf-token so its owner can be looked up)")
-            backup.hf_repo = default_hf_repo(backup.hf_token, name)
+            # A dry run stays off the network, as `up --dry-run` does.
+            if args.dry_run:
+                backup.hf_repo = f"<hf-account>/{name}-annotations"
+            else:
+                try:
+                    backup.hf_repo = default_hf_repo(backup.hf_token, name)
+                except BackupOptionsError:
+                    raise
+                except Exception as exc:
+                    raise BackupOptionsError(
+                        "could not ask HuggingFace who the token belongs to: "
+                        f"{exc}")
         result = buttons.generate(args.config_file, args.target, backup, name=name,
                                   image=args.image, template_url=args.template_url,
                                   region=args.region)

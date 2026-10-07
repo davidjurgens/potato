@@ -1790,6 +1790,30 @@ class AdminDashboard:
 
                     df = pd.DataFrame(reliability_data)
 
+                    if len({str(r["annotation"]) for r in reliability_data}) < 2:
+                        # One value throughout: expected disagreement is 0, so
+                        # alpha and both kappas are 0/0. simpledorff raised
+                        # "float division by zero" and the schema came back as
+                        # an error, where /admin/iaa reports the same data as
+                        # undefined with percent agreement 1.0.
+                        metrics["by_schema"][schema_name] = {
+                            "krippendorff_alpha": None,
+                            "cohen_kappa": None,
+                            "fleiss_kappa": None,
+                            "percent_agreement": 1.0,
+                            "metric_type": metric_name,
+                            "items_evaluated": len(valid_items),
+                            "total_annotations": len(reliability_data),
+                            "interpretation": "Undefined",
+                            "note": (
+                                "every annotator gave the same answer on every "
+                                "item, so chance agreement is 1 and kappa and "
+                                "alpha are undefined. Perfect agreement, not a "
+                                "failed computation; percent_agreement shows it."
+                            ),
+                        }
+                        continue
+
                     # `calculate_krippendorffs_alpha` takes an
                     # experiment-by-annotator TABLE and one metric. The
                     # function that takes a long dataframe and the three column
@@ -1852,7 +1876,7 @@ class AdminDashboard:
             alphas = [
                 m["krippendorff_alpha"]
                 for m in metrics["by_schema"].values()
-                if "krippendorff_alpha" in m
+                if m.get("krippendorff_alpha") is not None
             ]
             if alphas:
                 avg_alpha = sum(alphas) / len(alphas)

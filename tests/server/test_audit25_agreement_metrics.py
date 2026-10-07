@@ -55,7 +55,7 @@ EXPECTED_ELIGIBILITY_ALPHA = 0.6471   # nominal
 EXPECTED_CERTAINTY_ALPHA = 0.8649     # interval
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def agreement_server():
     schemes = [
         {
@@ -226,3 +226,56 @@ class TestAgreementMetricsProduceNumbers:
         """
         by_schema = _agreement(agreement_server)["by_schema"]
         assert by_schema["eligibility"]["total_annotations"] == 16
+
+
+@pytest.fixture(scope="class")
+def unanimous_server():
+    """Two annotators, one radio item, the same label from both."""
+    schemes = [{
+        "annotation_type": "radio",
+        "name": "sarcasm",
+        "description": "Is this sarcastic?",
+        "labels": ["yes", "no"],
+    }]
+    with TestConfigManager("audit25_unanimous", schemes, num_instances=1,
+                           num_annotators_per_item=2) as cfg:
+        server = FlaskTestServer(port=9048, config_file=cfg.config_path,
+                                 debug=True)
+        if not server.start():
+            pytest.fail("Failed to start server")
+        for annotator in ("u1", "u2"):
+            session = requests.Session()
+            session.post(f"{server.base_url}/register",
+                         data={"email": f"{annotator}@lab.org", "pass": "pw"})
+            session.post(f"{server.base_url}/auth",
+                         data={"email": f"{annotator}@lab.org", "pass": "pw"})
+            session.get(f"{server.base_url}/annotate")
+            response = session.post(
+                f"{server.base_url}/updateinstance",
+                json={"instance_id": "1",
+                      "annotations": {"sarcasm:::yes": "true"}})
+            assert response.status_code == 200, response.text
+        time.sleep(0.2)
+        yield server
+        server.stop()
+
+
+class TestUnanimousAgreementIsUndefined:
+    """One label throughout makes expected disagreement 0, so alpha is 0/0.
+
+    simpledorff raised "float division by zero" and the schema came back as
+    {"error": ..., "items_count": 1} with a 200, while /admin/iaa reported the
+    same data as undefined with percent agreement 1.0.
+    """
+
+    def test_reported_as_undefined_not_as_an_error(self, unanimous_server):
+        sarcasm = _agreement(unanimous_server)["by_schema"]["sarcasm"]
+        assert "error" not in sarcasm, sarcasm
+        assert sarcasm["krippendorff_alpha"] is None
+        assert sarcasm["cohen_kappa"] is None
+        assert sarcasm["fleiss_kappa"] is None
+        assert sarcasm["percent_agreement"] == 1.0
+        assert "chance agreement is 1" in sarcasm["note"]
+
+    def test_overall_skips_the_undefined_schema(self, unanimous_server):
+        assert _agreement(unanimous_server)["overall"] == {}
