@@ -189,62 +189,67 @@ class BwsScorer:
         return scores
 
     def plackett_luce(self) -> Dict[str, Dict[str, Any]]:
-        """Plackett-Luce model via choix.
+        """Best-worst Plackett-Luce (MaxDiff) model, fitted by maximum likelihood.
 
-        Converts BWS to partial rankings:
-        Each annotation yields top-1 (best) selections, processed via ilsr_top1.
+        Each judgment over a tuple S is two Plackett-Luce choices: best is
+        drawn from S with probability softmax(u) and worst from the rest with
+        probability softmax(-u). Scores are the fitted utilities u, on a log
+        scale like Bradley-Terry's, with a small L2 penalty (0.01) so items
+        that always win or always lose stay finite.
+
+        This used to build the same 2k-3 pairwise comparisons as
+        ``bradley_terry`` and fit them with the same routine, so the two
+        methods returned identical numbers. Needs scipy, not choix.
         """
-        try:
-            import choix
-        except ImportError:
-            raise ImportError(
-                "Plackett-Luce scoring requires the 'choix' package. "
-                "Install it with: pip install choix"
-            )
+        import numpy as np
+        from scipy.optimize import minimize
+        from scipy.special import logsumexp
 
         n_items = len(self.item_ids)
-        # Use pairwise comparisons to approximate partial rankings
-        # Best > middle items, middle items > worst
-        comparisons = []
-
+        judgments = []
         for ann in self.annotations:
             resolved = self._resolve_annotation(ann)
             if not resolved:
                 continue
-
             best_id, worst_id, all_ids = resolved
-            best_idx = self.item_id_to_idx.get(best_id)
-            worst_idx = self.item_id_to_idx.get(worst_id)
-
-            if best_idx is None or worst_idx is None:
+            members = [self.item_id_to_idx.get(iid) for iid in all_ids]
+            members = [m for m in dict.fromkeys(members) if m is not None]
+            best = self.item_id_to_idx.get(best_id)
+            worst = self.item_id_to_idx.get(worst_id)
+            if best is None or worst is None or best == worst:
                 continue
+            if best not in members or worst not in members or len(members) < 2:
+                continue
+            rest = [m for m in members if m != best]
+            judgments.append((np.array(members), best, np.array(rest), worst))
 
-            middle_ids = [
-                iid for iid in all_ids if iid != best_id and iid != worst_id
-            ]
-
-            # Best beats all middle items
-            for iid in middle_ids:
-                idx = self.item_id_to_idx.get(iid)
-                if idx is not None:
-                    comparisons.append((best_idx, idx))
-
-            # All middle items beat worst
-            for iid in middle_ids:
-                idx = self.item_id_to_idx.get(iid)
-                if idx is not None:
-                    comparisons.append((idx, worst_idx))
-
-            # Best beats worst
-            comparisons.append((best_idx, worst_idx))
-
-        if not comparisons:
+        if not judgments:
             return {
                 iid: {"score": 0.0, "text": self.item_texts.get(iid, "")}
                 for iid in self.item_ids
             }
 
-        params = choix.ilsr_pairwise(n_items, comparisons, alpha=0.01)
+        penalty = 0.01
+
+        def objective(u):
+            nll = penalty * float(u @ u)
+            grad = 2 * penalty * u
+            for members, best, rest, worst in judgments:
+                # best ~ softmax(u) over the tuple
+                p = np.exp(u[members] - logsumexp(u[members]))
+                nll -= u[best] - logsumexp(u[members])
+                grad[members] += p
+                grad[best] -= 1.0
+                # worst ~ softmax(-u) over the tuple minus best
+                q = np.exp(-u[rest] - logsumexp(-u[rest]))
+                nll -= -u[worst] - logsumexp(-u[rest])
+                grad[rest] -= q
+                grad[worst] += 1.0
+            return nll, grad
+
+        result = minimize(objective, np.zeros(n_items), jac=True,
+                          method="L-BFGS-B")
+        params = result.x - result.x.mean()
 
         scores = {}
         for iid in self.item_ids:

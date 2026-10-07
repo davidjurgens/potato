@@ -54,8 +54,10 @@ class TestNominal:
     def test_fleiss_kappa_unanimous(self):
         # 4 items, 3 raters, all agree on category 'a'
         items = [{"a": 3}, {"a": 3}, {"a": 3}, {"a": 3}]
-        # Marginal probability is 1.0 → degenerate; convention: 1.0 when observed agreement is 1.0.
-        assert nominal.fleiss_kappa(items) == 1.0
+        # Chance agreement is 1.0, so kappa is 0/0: undefined, not perfect
+        # (statsmodels gives NaN too). percent agreement carries the 1.0.
+        assert math.isnan(nominal.fleiss_kappa(items))
+        assert nominal.mean_pairwise_agreement([{"u1": "a", "u2": "a", "u3": "a"}] * 4) == 1.0
 
     def test_fleiss_kappa_mixed(self):
         # 4 items, 3 raters: 3a, 3b, 2a/1b, 1a/2b → some agreement above chance

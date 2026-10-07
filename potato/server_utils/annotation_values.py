@@ -334,6 +334,21 @@ def _as_canonical(obj: dict) -> dict:
         canonical["rle"] = obj.get("rle") or {}
         return canonical
 
+    if obj_type in ("keypoint_set", "cuboid_2d", "freeform"):
+        # The generic branches below give a keypoint set no bbox (so OKS has
+        # zero area and drops the visibility flags) and a cuboid's
+        # {front, back} or a freeform's fabric path no geometry at all: each
+        # scored 0 against an identical copy. cv_utils already reads all
+        # three client shapes; a 1x1 "image" keeps them normalized.
+        from potato.export.cv_utils import normalize_annotation_object
+
+        full = normalize_annotation_object(obj, 1.0, 1.0)
+        if full:
+            for key in ("bbox", "points", "visibility", "front", "back"):
+                if full.get(key) is not None:
+                    canonical[key] = full[key]
+        return canonical
+
     if obj_type == "ellipse" and isinstance(coords, dict):
         # Give the distance functions the polygon they expect. Without image
         # dimensions the approximation stays in normalized space, which is fine:

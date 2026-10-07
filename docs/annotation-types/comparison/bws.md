@@ -164,12 +164,15 @@ Fits a Bradley-Terry model via `choix.ilsr_pairwise()`. Produces log-scale stren
 
 ### 3. Plackett-Luce
 
-Converts BWS to partial rankings:
-- [best] > [middle items] > [worst]
+Fits the best-worst (MaxDiff) form of the Plackett-Luce model by maximum
+likelihood. Each judgment is two choices: the best item is picked from the
+tuple with probability proportional to exp(u), and the worst from the
+remaining items with probability proportional to exp(-u). Scores are the
+fitted utilities u on a log scale, centred on 0. Unlike Bradley-Terry, this
+uses the order of the two choices rather than reducing each judgment to
+pairwise wins.
 
-Fits a Plackett-Luce model. Most statistically sophisticated option.
-
-**Requires:** `pip install choix`
+**Requires:** scipy, which Potato already installs.
 
 ## Scoring via CLI
 

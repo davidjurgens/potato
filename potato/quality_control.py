@@ -137,6 +137,9 @@ class QualityControlManager:
         self.attention_results: Dict[str, List[AttentionCheckResult]] = defaultdict(list)  # user_id -> results
         self.user_items_since_attention: Dict[str, int] = defaultdict(int)  # user_id -> count
         self.user_items_since_gold: Dict[str, int] = defaultdict(int)  # user_id -> count
+        # Items already counted per user, so re-saving one item (every Next
+        # click saves) does not advance the attention/gold cadence again.
+        self.user_counted_items: Dict[str, Set[str]] = defaultdict(set)
         #: (user_id, instance_id) -> monotonic clock reading when the SERVER
         #: handed the item over. `min_response_time` used to be checked against
         #: `response_time_seconds` out of the request body, which is a number
@@ -222,6 +225,8 @@ class QualityControlManager:
                 },
                 "items_since_attention": dict(self.user_items_since_attention),
                 "items_since_gold": dict(self.user_items_since_gold),
+                "counted_items": {u: sorted(items)
+                                  for u, items in self.user_counted_items.items()},
                 # Auto-promotion state. Empty unless gold_standards.auto_promote
                 # is on, but without it a restart un-golds every item the study
                 # had promoted and throws away the partial agreement behind the
@@ -286,6 +291,10 @@ class QualityControlManager:
                     self.user_items_since_gold[user_id] = int(count)
                 except (TypeError, ValueError):
                     continue
+
+            for user_id, items in (payload.get("counted_items") or {}).items():
+                if isinstance(items, list):
+                    self.user_counted_items[user_id].update(str(i) for i in items)
 
             for item_id, by_user in (payload.get("item_annotations") or {}).items():
                 if isinstance(by_user, dict):
@@ -667,9 +676,18 @@ class QualityControlManager:
             self.user_items_since_attention[user_id] = 0
             return selected
 
-    def record_regular_item(self, user_id: str) -> None:
-        """Record that a user annotated a regular (non-attention-check) item."""
+    def record_regular_item(self, user_id: str, item_id: Optional[str] = None) -> None:
+        """Record that a user annotated a regular (non-attention-check) item.
+
+        Counted once per item when ``item_id`` is given. This runs on every
+        save, and with two saves per item ``frequency: N`` fired about every
+        N/2 items.
+        """
         with self._lock:
+            if item_id is not None:
+                if item_id in self.user_counted_items[user_id]:
+                    return
+                self.user_counted_items[user_id].add(item_id)
             self.user_items_since_attention[user_id] = self.user_items_since_attention.get(user_id, 0) + 1
             self.user_items_since_gold[user_id] = self.user_items_since_gold.get(user_id, 0) + 1
         self._save_results()
@@ -925,6 +943,13 @@ class QualityControlManager:
         """
         if item_id not in self.gold_labels:
             return None
+        # An auto-promoted item's gold IS its source annotators' consensus,
+        # so grading them on it scores them against themselves: two
+        # annotators who agreed read 3/3 gold accuracy with no independent
+        # gold at all.
+        if any(item.get("id") == item_id and user_id in (item.get("source_annotators") or [])
+               for item in self.promoted_gold_items):
+            return None
 
         gold = self.gold_labels[item_id]
         correct = self._compare_responses(gold, response)
@@ -1133,6 +1158,7 @@ class QualityControlManager:
                 schema_responses[schema].append(value)
 
         # Check agreement for each schema
+        ratios = []
         for schema, values in schema_responses.items():
             # A schema only one annotator answered is not unanimous, it is
             # unopposed. Without this a partially-answered item promotes on a
@@ -1144,10 +1170,15 @@ class QualityControlManager:
             # Calculate agreement ratio
             from collections import Counter
             value_counts = Counter(str(v).lower() for v in values)
-            most_common_value, most_common_count = value_counts.most_common(1)[0]
+            ranked = value_counts.most_common(2)
+            most_common_value, most_common_count = ranked[0]
             agreement_ratio = most_common_count / len(values)
+            ratios.append(agreement_ratio)
 
-            if agreement_ratio >= self.qc_config.gold_auto_promote_agreement:
+            # A tie has no consensus. With agreement_threshold 0.5 a 1-1 split
+            # passed ">=" and promoted whichever label was counted first.
+            tied = len(ranked) > 1 and ranked[1][1] == most_common_count
+            if not tied and agreement_ratio >= self.qc_config.gold_auto_promote_agreement:
                 # Find the original value (not lowercased)
                 for v in values:
                     if str(v).lower() == most_common_value:
@@ -1170,7 +1201,8 @@ class QualityControlManager:
             "item_id": item_id,
             "consensus_label": consensus_label,
             "annotator_count": len(annotations),
-            "agreement": 1.0  # At this point we have consensus
+            # The weakest schema's majority share; 1.0 only when unanimous.
+            "agreement": min(ratios) if ratios else None,
         }
 
     def _promote_to_gold(

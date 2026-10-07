@@ -88,19 +88,44 @@ def save_prediction(config: Dict[str, Any], pred) -> None:
     _save_json(predictions_path(config), data)
 
 
-def latest_prompt_version(config: Dict[str, Any]) -> Optional[str]:
+def _schema_of_key(key: str) -> str:
+    return key.partition("::")[2]
+
+
+def latest_prompt_version(config: Dict[str, Any],
+                          schema: Optional[str] = None) -> Optional[str]:
+    """The most-populated version: the "current" working set.
+
+    Pass ``schema`` for that schema's version. The version hash includes the
+    schema name, so every schema has versions of its own, and the single
+    most-populated version overall described one schema and left every other
+    one reading "no overlap".
+    """
     data = load_predictions(config)
+    if schema is not None:
+        data = {v: {k: p for k, p in preds.items() if _schema_of_key(k) == schema}
+                for v, preds in data.items()}
+        data = {v: preds for v, preds in data.items() if preds}
     if not data:
         return None
-    # Most-populated version is the "current" working set.
     return max(data.keys(), key=lambda v: len(data[v]))
 
 
 def record_comparison(config: Dict[str, Any], instance_id: str, schema: str,
-                      human_label: Any, judge_label: Any, prompt_version: str) -> None:
-    """Append a human↔judge comparison to the running log (inline capture)."""
+                      human_label: Any, judge_label: Any, prompt_version: str,
+                      username: Optional[str] = None) -> None:
+    """Record a human↔judge comparison in the running log (inline capture).
+
+    One entry per (instance, schema, annotator): a re-save replaces it. This
+    runs on every save, and appending counted one item saved four times as
+    four agreements.
+    """
     log = _load_json(comparisons_path(config), [])
+    log = [c for c in log
+           if (c.get("instance_id"), c.get("schema"), c.get("username"))
+           != (instance_id, schema, username)]
     log.append({
+        "username": username,
         "instance_id": instance_id,
         "schema": schema,
         "human_label": str(human_label),
@@ -120,7 +145,8 @@ def running_agreement(config: Dict[str, Any], schema: Optional[str] = None) -> D
     agree = sum(1 for c in log if c.get("agrees"))
     pairs = {s: [] for s in {c["schema"] for c in log}}
     for c in log:
-        pairs[c["schema"]].append((c["instance_id"], c["human_label"], c["judge_label"], None, ""))
+        unit = f'{c["instance_id"]}::{c.get("username") or ""}'
+        pairs[c["schema"]].append((unit, c["human_label"], c["judge_label"], None, ""))
     kappa = None
     if schema and pairs.get(schema):
         res = compute_alignment_from_pairs({schema: pairs[schema]}).get(schema, {})
@@ -151,7 +177,12 @@ def majority_human_label(instance_id: str, schema_name: str, users: List[str]) -
             votes.append(lab)
     if not votes:
         return None
-    return Counter(votes).most_common(1)[0][0]
+    ranked = Counter(votes).most_common(2)
+    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+        # A tie has no majority. Picking one made the "gold" the label of
+        # whichever user registered first.
+        return None
+    return ranked[0][0]
 
 
 # ----- agreement computation (pure core) ----------------------------------
@@ -183,10 +214,11 @@ def compute_alignment_from_pairs(
         confusion: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         disagreements = []
         rows = []
-        for inst, h, j, conf, reason in pairs:
+        for index, (inst, h, j, conf, reason) in enumerate(pairs):
             confusion[str(h)][str(j)] += 1
-            rows.append({"unit": inst, "annotator": "human", "annotation": str(h)})
-            rows.append({"unit": inst, "annotator": "judge", "annotation": str(j)})
+            # Each pair is its own unit; a repeated instance id would merge.
+            rows.append({"unit": index, "annotator": "human", "annotation": str(h)})
+            rows.append({"unit": index, "annotator": "judge", "annotation": str(j)})
             if str(h) != str(j):
                 disagreements.append({
                     "instance_id": inst, "human_label": str(h), "judge_label": str(j),
@@ -239,21 +271,21 @@ def gather_pairs(config: Dict[str, Any], users: List[str], schema_names: List[st
                  prompt_version: Optional[str]) -> Dict[str, List[Tuple]]:
     """Build (instance, human_gold, judge_label, conf, reasoning) pairs."""
     preds = load_predictions(config)
-    version = prompt_version or latest_prompt_version(config)
-    version_preds = preds.get(version, {}) if version else {}
 
     pairs_by_schema: Dict[str, List[Tuple]] = {s: [] for s in schema_names}
-    for key, pred in version_preds.items():
-        instance_id, _, schema = key.partition("::")
-        if schema not in pairs_by_schema:
-            continue
-        gold = majority_human_label(instance_id, schema, users)
-        if gold is None:
-            continue
-        pairs_by_schema[schema].append((
-            instance_id, gold, pred.get("predicted_label"),
-            pred.get("confidence"), pred.get("reasoning", ""),
-        ))
+    for schema_name in schema_names:
+        version = prompt_version or latest_prompt_version(config, schema_name)
+        for key, pred in (preds.get(version, {}) if version else {}).items():
+            instance_id, _, schema = key.partition("::")
+            if schema != schema_name:
+                continue
+            gold = majority_human_label(instance_id, schema, users)
+            if gold is None:
+                continue
+            pairs_by_schema[schema].append((
+                instance_id, gold, pred.get("predicted_label"),
+                pred.get("confidence"), pred.get("reasoning", ""),
+            ))
     return pairs_by_schema
 
 
@@ -447,28 +479,51 @@ def compute_judge_alignment(config: Dict[str, Any], users: List[str],
     """Full report: per-schema alignment for a prompt version + version list."""
     schemas = [s.get("name") for s in judge_scoped_schemas(config)]
     version = prompt_version or latest_prompt_version(config)
-    pairs = gather_pairs(config, users, schemas, version)
+    # prompt_version, not `version`: without an explicit one each schema
+    # resolves its own latest version.
+    pairs = gather_pairs(config, users, schemas, prompt_version)
     per_schema = compute_alignment_from_pairs(pairs)
 
     preds = load_predictions(config)
+    # Creation order. Versions are named "v_" + a hash, so sorting by name
+    # put them in hash order and "improving" or "declining" was a coin toss.
+    # save_prediction appends new versions, and JSON keeps that order.
     versions = []
     for v in preds.keys():
-        v_pairs = gather_pairs(config, users, schemas, v)
+        v_schemas = [s for s in schemas
+                     if any(_schema_of_key(k) == s for k in preds[v])]
+        v_pairs = gather_pairs(config, users, v_schemas, v)
         v_report = compute_alignment_from_pairs(v_pairs)
-        kappas = [r["kappa"] for r in v_report.values() if r.get("kappa") is not None]
+        kappa_by_schema = {s: r["kappa"] for s, r in v_report.items()
+                           if r.get("kappa") is not None}
+        kappas = list(kappa_by_schema.values())
         versions.append({
             "prompt_version": v,
+            "schemas": v_schemas,
             "n_predictions": len(preds[v]),
             "mean_kappa": round(sum(kappas) / len(kappas), 3) if kappas else None,
+            "kappa_by_schema": kappa_by_schema,
         })
 
-    sorted_versions = sorted(versions, key=lambda x: x["prompt_version"])
+    # One trend per schema: a version belongs to one schema, and a single
+    # line through every version mixed different schemas' kappas.
+    trends = {}
+    for schema in schemas:
+        series = [{"mean_kappa": v["kappa_by_schema"][schema]}
+                  for v in versions if schema in v["kappa_by_schema"]]
+        trend = _kappa_trend(series)
+        if trend:
+            trends[schema] = dict(trend, schema=schema)
+    headline = max(trends.values(), key=lambda t: len(t["series"]), default=None)
 
     return {
         "prompt_version": version,
+        "prompt_version_by_schema": {
+            s: prompt_version or latest_prompt_version(config, s) for s in schemas},
         "per_schema": per_schema,
-        "prompt_versions": sorted_versions,
-        "kappa_trend": _kappa_trend(sorted_versions),
+        "prompt_versions": versions,
+        "kappa_trend": headline,
+        "kappa_trends": trends,
     }
 
 

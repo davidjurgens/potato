@@ -41,7 +41,11 @@ def cohen_kappa(labels_a: Sequence, labels_b: Sequence) -> float:
         return float("nan")
     try:
         from sklearn.metrics import cohen_kappa_score
-        return float(cohen_kappa_score(list(labels_a), list(labels_b)))
+        # One label throughout makes chance agreement 1 and kappa 0/0;
+        # sklearn returns NaN for it and warns, and NaN is the answer.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return float(cohen_kappa_score(list(labels_a), list(labels_b)))
     except ImportError:  # pragma: no cover
         pass
 
@@ -51,7 +55,7 @@ def cohen_kappa(labels_a: Sequence, labels_b: Sequence) -> float:
     counts_b = Counter(labels_b)
     pe = sum(counts_a[c] * counts_b[c] for c in set(counts_a) | set(counts_b)) / (n * n)
     if isclose(pe, 1.0):
-        return 1.0 if isclose(po, 1.0) else 0.0
+        return float("nan")  # chance agreement 1: undefined, not perfect
     return (po - pe) / (1 - pe)
 
 
@@ -61,9 +65,8 @@ def fleiss_kappa(per_item_label_counts: List[Dict[str, int]]) -> float:
 
     Args:
         per_item_label_counts: one dict per item mapping label -> number of
-            annotators who chose it. Each item dict must sum to the same N
-            (the number of annotators rating that item). Items where N < 2
-            are skipped.
+            annotators who chose it. Items may have different numbers of
+            annotators; items with fewer than 2 are skipped.
 
     Returns:
         Fleiss' kappa as a float, or NaN if undefined.
@@ -73,36 +76,27 @@ def fleiss_kappa(per_item_label_counts: List[Dict[str, int]]) -> float:
     if not rated:
         return float("nan")
 
-    ns = [sum(d.values()) for d in rated]
-    if len(set(ns)) != 1:
-        # Variable-N Fleiss' kappa is rare in practice; restrict to majority N.
-        from statistics import mode
-        majority_n = mode(ns)
-        rated = [d for d, n in zip(rated, ns) if n == majority_n]
-        ns = [majority_n] * len(rated)
-        if not rated:
-            return float("nan")
-
-    n = ns[0]
+    # Items may have different numbers of raters. Each item's agreement is
+    # over its own pairs, and the marginals pool every rating. With equal N
+    # this is Fleiss' formula exactly. Keeping only the items whose N was the
+    # statistics.mode used to drop the rest, and on a tied mode the input
+    # order decided which half survived: -0.333 one way, 0.250 reversed.
     categories = sorted({c for d in rated for c in d})
-    if n < 2 or not categories:
+    if not categories:
         return float("nan")
-
-    n_items = len(rated)
-    # Per-item agreement P_i
     p_is = []
     for d in rated:
-        total = sum(d.get(c, 0) ** 2 for c in categories)
-        p_is.append((total - n) / (n * (n - 1)))
-    p_bar = sum(p_is) / n_items
-    # Marginal proportions per category
-    p_js = []
-    for c in categories:
-        s = sum(d.get(c, 0) for d in rated)
-        p_js.append(s / (n_items * n))
+        n_i = sum(d.values())
+        p_is.append(sum(v * (v - 1) for v in d.values()) / (n_i * (n_i - 1)))
+    p_bar = sum(p_is) / len(rated)
+    total = sum(sum(d.values()) for d in rated)
+    p_js = [sum(d.get(c, 0) for d in rated) / total for c in categories]
     p_e = sum(p * p for p in p_js)
     if isclose(p_e, 1.0):
-        return 1.0 if isclose(p_bar, 1.0) else 0.0
+        # Every rating is one label, so chance agreement is 1 and kappa is
+        # 0/0. Undefined, not perfect: mean_pairwise_agreement carries the
+        # raw 1.0, and the dispatcher attaches a note saying why.
+        return float("nan")
     return (p_bar - p_e) / (1 - p_e)
 
 

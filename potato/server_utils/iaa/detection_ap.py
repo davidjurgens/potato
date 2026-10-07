@@ -74,7 +74,8 @@ def _iou(a: Dict[str, Any], b: Dict[str, Any]) -> float:
         obj_a, obj_b = canonical_object(a), canonical_object(b)
         if obj_a is None or obj_b is None:
             return 0.0
-        return float(similarity(obj_a, obj_b))
+        # b is the ground truth: COCO scales OKS by the truth's area.
+        return float(similarity(obj_a, obj_b, reference="b"))
     except Exception:
         return 0.0
 
@@ -99,8 +100,12 @@ def detection_pr_curve(
     if n_truth == 0:
         return [], []
 
-    ranked = sorted(predictions, key=lambda p: _confidence_of(p[1]),
-                    reverse=True)
+    # Instance id breaks ties. Ordered by confidence alone, tied predictions
+    # -- every prediction of a detector that reports no confidences -- kept
+    # dict order, and the AP of the same detections was 0.505 one way round
+    # and 0.2525 the other. One point per prediction, as COCO records it.
+    ranked = sorted(predictions,
+                    key=lambda p: (-_confidence_of(p[1]), str(p[0])))
     claimed: Dict[str, set] = {iid: set() for iid in ground_truth}
 
     true_positives = 0

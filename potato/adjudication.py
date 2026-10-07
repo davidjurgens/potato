@@ -98,7 +98,7 @@ class AdjudicationItem:
     span_annotations: Dict[str, List[Dict]]  # user_id -> [span_dict, ...]
     behavioral_data: Dict[str, Dict]  # user_id -> {total_time_ms, ...}
     agreement_scores: Dict[str, float]  # schema_name -> agreement score
-    overall_agreement: float
+    overall_agreement: Optional[float]  # None: no schema could be scored
     num_annotators: int
     status: str = "pending"  # pending, in_progress, completed, skipped
     assigned_adjudicator: Optional[str] = None
@@ -392,9 +392,11 @@ class AdjudicationManager:
                 )
                 overall = self._compute_overall_agreement(agreement_scores)
 
-                # Filter by agreement threshold
+                # Filter by agreement threshold. An item with no score is
+                # queued: nothing shows its annotators agreed.
                 if not self.adj_config.show_all_items:
-                    if overall >= self.adj_config.agreement_threshold:
+                    if (overall is not None
+                            and overall >= self.adj_config.agreement_threshold):
                         continue
 
                 # Preserve existing status if already in queue
@@ -491,7 +493,8 @@ class AdjudicationManager:
             agreement_scores = self._compute_agreement(item_annotations, scheme_names)
             overall = self._compute_overall_agreement(agreement_scores)
             if not self.adj_config.show_all_items:
-                if overall >= self.adj_config.agreement_threshold:
+                if (overall is not None
+                        and overall >= self.adj_config.agreement_threshold):
                     return False
 
             existing = self.queue.get(instance_id_str)
@@ -646,16 +649,20 @@ class AdjudicationManager:
 
         return sum(scores) / len(scores) if scores else None
 
-    def _compute_overall_agreement(self, agreement_scores: Dict[str, float]) -> float:
+    def _compute_overall_agreement(self, agreement_scores: Dict[str, float]
+                                   ) -> Optional[float]:
         """
-        Overall agreement as the mean of the schemas that HAVE a score.
+        Overall agreement as the mean of the schemas that HAVE a score, or
+        None when none does.
 
         Schemas omitted by ``_compute_agreement`` (no defined notion of
         agreement) are absent from this dict and so are excluded here rather
-        than silently counted as perfect.
+        than silently counted as perfect. An item with no scored schema at all
+        (span-only, or every schema answered once) used to score 1.0, which
+        passed the threshold, so it never reached the queue.
         """
         if not agreement_scores:
-            return 1.0
+            return None
         return sum(agreement_scores.values()) / len(agreement_scores)
 
     def get_queue(
@@ -682,10 +689,11 @@ class AdjudicationManager:
             if filter_status:
                 items = [i for i in items if i.status == filter_status]
 
-            # Sort: pending first, then by agreement (lowest first)
+            # Sort: pending first, then by agreement (lowest first), with
+            # unscored items ahead of every scored one
             items.sort(key=lambda x: (
                 0 if x.status == "pending" else 1 if x.status == "in_progress" else 2,
-                x.overall_agreement,
+                -1.0 if x.overall_agreement is None else x.overall_agreement,
             ))
 
             return items
@@ -876,11 +884,9 @@ class AdjudicationManager:
                 1 for i in self.queue.values() if i.status == "in_progress"
             )
 
-            avg_agreement = 0.0
-            if self.queue:
-                avg_agreement = sum(
-                    i.overall_agreement for i in self.queue.values()
-                ) / len(self.queue)
+            scored = [i.overall_agreement for i in self.queue.values()
+                      if i.overall_agreement is not None]
+            avg_agreement = sum(scored) / len(scored) if scored else None
 
             # Per-adjudicator stats
             adjudicator_stats = defaultdict(lambda: {"completed": 0, "total_time_ms": 0})
@@ -983,42 +989,51 @@ class AdjudicationManager:
 
         return results
 
-    def _get_consensus_label(self, item: AdjudicationItem) -> Optional[str]:
+    @staticmethod
+    def _label_string(val: Any) -> str:
+        """One comparable string for a stored answer."""
+        if isinstance(val, dict):
+            # Multiselect: the selected options, sorted
+            selected = sorted(
+                k for k, v in val.items()
+                if v is True or v == "true" or v == 1
+            )
+            return ", ".join(selected) if selected else str(val)
+        return str(val)
+
+    def _consensus_schema(self, item: AdjudicationItem) -> Optional[str]:
+        """The schema consensus is taken on: the first, in sorted order, that
+        anyone answered. Sorted, so every annotator is compared on the same
+        schema whatever order their answers were stored in."""
+        names = {name for ua in item.annotations.values()
+                 for name, val in ua.items() if val is not None}
+        return min(names) if names else None
+
+    def _get_consensus_label(self, item: AdjudicationItem,
+                             schema_name: Optional[str] = None) -> Optional[str]:
         """
-        Get the majority/consensus label for an item across the first schema.
+        The strict majority label on one schema, or None when there is none.
 
-        Args:
-            item: The AdjudicationItem
-
-        Returns:
-            The most common label value as a string, or None
+        A tied vote has no consensus. ``Counter.most_common`` used to break
+        the tie by insertion order, which follows set iteration, so with two
+        disagreeing annotators -- the usual queue item -- the "consensus" was
+        whoever iterated first, and flipped with the hash seed.
         """
         if not item.annotations:
             return None
-
-        # Use the first schema that has values
-        for user_annots in item.annotations.values():
-            for schema_name in user_annots:
-                # Collect all values for this schema
-                values = []
-                for ua in item.annotations.values():
-                    val = ua.get(schema_name)
-                    if val is not None:
-                        if isinstance(val, dict):
-                            # Multiselect: use frozenset representation
-                            selected = sorted(
-                                k for k, v in val.items()
-                                if v is True or v == "true" or v == 1
-                            )
-                            values.append(", ".join(selected) if selected else str(val))
-                        else:
-                            values.append(str(val))
-
-                if values:
-                    counter = Counter(values)
-                    return counter.most_common(1)[0][0]
-
-        return None
+        if schema_name is None:
+            schema_name = self._consensus_schema(item)
+        if schema_name is None:
+            return None
+        values = [self._label_string(ua[schema_name])
+                  for ua in item.annotations.values()
+                  if ua.get(schema_name) is not None]
+        if not values:
+            return None
+        ranked = Counter(values).most_common(2)
+        if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+            return None
+        return ranked[0][0]
 
     # ------------------------------------------------------------------
     # Phase 3: Behavioral signal analysis
@@ -1144,26 +1159,16 @@ class AdjudicationManager:
             if user_id not in item.annotations:
                 continue
 
-            consensus = self._get_consensus_label(item)
+            schema_name = self._consensus_schema(item)
+            consensus = self._get_consensus_label(item, schema_name)
             if consensus is None:
                 continue
-
-            user_annots = item.annotations[user_id]
-            # Check the first schema
-            for schema_name, val in user_annots.items():
-                if isinstance(val, dict):
-                    selected = sorted(
-                        k for k, v in val.items()
-                        if v is True or v == "true" or v == 1
-                    )
-                    user_label = ", ".join(selected) if selected else str(val)
-                else:
-                    user_label = str(val)
-
-                if user_label == consensus:
-                    agree_count += 1
-                total_count += 1
-                break  # Only check first schema
+            val = item.annotations[user_id].get(schema_name)
+            if val is None:
+                continue
+            if self._label_string(val) == consensus:
+                agree_count += 1
+            total_count += 1
 
         if total_count < 3:
             return None

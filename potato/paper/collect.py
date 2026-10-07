@@ -29,6 +29,10 @@ class LabelRecord:
     instance_id: str
     schema: str
     value: str
+    # Which sub-answer of a multi-part answer this is: "best" or "worst" for
+    # BWS, empty otherwise. Without it the two picks shared one unit, and
+    # whichever was stored last stood in for the whole answer.
+    part: str = ""
 
 
 @dataclass
@@ -114,8 +118,9 @@ def _extract_records(username: str, state: Dict[str, Any],
                     label = str(name) if name not in (None, "") else str(value)
                 else:
                     label = str(value)
+                part = str(name) if stype == "bws" and name else ""
                 records.append(LabelRecord(username, str(instance_id),
-                                           schema, label))
+                                           schema, label, part))
     return records
 
 

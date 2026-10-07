@@ -75,6 +75,26 @@ def _shared_rank(labels_a: Sequence, labels_b: Sequence,
     return _lexical_rank([str(v) for v in combined if not _is_number(v)])
 
 
+def _scale_points(a: Sequence, b: Sequence, rank: Optional[dict]) -> list:
+    """Every point on the scale, in order, for sklearn's ``labels=``.
+
+    sklearn weights a disagreement by the distance between the two labels'
+    INDICES in ``labels``, and without it uses only the labels observed. An
+    unused scale point then vanishes, so 2 vs 4 on a 1-5 scale nobody rated 3
+    on counted as one step: linear kappa read 0.263 against 0.333. The scale
+    is the declared ranks plus anything observed, and for integer ratings
+    every integer between the lowest and highest observed.
+    """
+    points = set(a) | set(b)
+    if rank:
+        points |= set(rank.values())
+    if all(float(p).is_integer() for p in points):
+        low, high = int(min(points)), int(max(points))
+        if high - low <= 1000:
+            return [float(p) for p in range(low, high + 1)]
+    return sorted(points)
+
+
 def _is_number(value) -> bool:
     try:
         float(value)
@@ -102,7 +122,8 @@ def weighted_kappa(labels_a: Sequence, labels_b: Sequence,
         rank = _shared_rank(labels_a, labels_b, ordering)
         a = _coerce_ordinal(labels_a, rank)
         b = _coerce_ordinal(labels_b, rank)
-        return float(cohen_kappa_score(a, b, weights=weights))
+        return float(cohen_kappa_score(
+            a, b, weights=weights, labels=_scale_points(a, b, rank)))
     except ImportError:  # pragma: no cover
         logger.warning("sklearn unavailable; weighted_kappa returning NaN")
         return float("nan")

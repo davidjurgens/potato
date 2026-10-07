@@ -5,10 +5,14 @@ annotator ability, and item difficulty — no gold labels, no LLM.
 The model is a multiclass generalization of GLAD (Whitehill et al., NeurIPS
 2009). Each annotation is modeled as:
 
-    P(annotator j labels item i correctly) = sigmoid(alpha_j * exp(b_i))
+    P(annotator j labels item i correctly) = sigmoid(alpha_j * exp(b_i) + c)
 
-where ``alpha_j`` is annotator ability (higher = better; 0 = uninformative;
-negative = systematically wrong) and ``b_i`` is item *easiness* on a log
+with ``c = logit(1/K)``, so that ``alpha_j = 0`` is a uniform random guess
+over K labels whatever K is. Without the offset, 0 meant 50% correct, which
+is chance only for K = 2: a random guesser on a 4-label task fitted at
+-1.10 and was shown as "inverted". ``alpha_j`` is annotator ability (higher =
+better; 0 = uninformative; negative = systematically wrong) and ``b_i`` is
+item *easiness* on a log
 scale (reported as difficulty = -b_i, higher = harder). Incorrect responses
 are spread uniformly over the remaining K-1 labels. The latent true label
 ``z_i`` and the parameters are fit jointly by EM:
@@ -234,9 +238,15 @@ class IRTModel:
         )
         return self
 
+    @property
+    def _chance_logit(self) -> float:
+        """logit(1/K): the offset that makes ability 0 mean chance."""
+        K = len(self.class_labels)
+        return -math.log(K - 1) if K > 1 else 0.0
+
     def _correct_prob(self, alpha: np.ndarray, b: np.ndarray) -> np.ndarray:
         """P(correct) per observation, clipped away from 0/1."""
-        x = alpha[self._obs_ann] * np.exp(b[self._obs_item])
+        x = alpha[self._obs_ann] * np.exp(b[self._obs_item]) + self._chance_logit
         return np.clip(expit(np.clip(x, -30.0, 30.0)), _P_MIN, _P_MAX)
 
     def _e_step(
@@ -270,11 +280,13 @@ class IRTModel:
         obs_item, obs_ann = self._obs_item, self._obs_ann
         mu_a, va = self.prior_ability_mean, self.prior_ability_var
         vb = self.prior_difficulty_var
+        offset = self._chance_logit
 
         def objective(params: np.ndarray) -> Tuple[float, np.ndarray]:
             alpha, b = params[:J], params[J:]
             e = np.exp(b[obs_item])
-            x = np.clip(alpha[obs_ann] * e, -30.0, 30.0)
+            # The constant offset leaves both gradients' form unchanged.
+            x = np.clip(alpha[obs_ann] * e + offset, -30.0, 30.0)
             s = np.clip(expit(x), _P_MIN, _P_MAX)
             # Expected complete-data ll (dropping the constant K-1 spread term).
             ll = np.sum(q_obs * np.log(s) + (1.0 - q_obs) * np.log1p(-s))
@@ -453,7 +465,8 @@ class IRTModel:
             if annotator_id in self._ann_index
             else self.prior_ability_mean
         )
-        s = float(np.clip(expit(np.clip(theta * easiness, -30.0, 30.0)), _P_MIN, _P_MAX))
+        s = float(np.clip(expit(np.clip(theta * easiness + self._chance_logit,
+                                        -30.0, 30.0)), _P_MIN, _P_MAX))
 
         # Response likelihood matrix: P(response l | truth k)
         lik = np.full((K, K), (1.0 - s) / (K - 1))

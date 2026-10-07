@@ -82,9 +82,10 @@ fall.
 
 It deliberately does not fire on two things:
 
-- **An old dip.** Only the latest non-sparse window is judged. A drop the team
-  already recovered from is history, and firing on it teaches people to ignore
-  the prompt.
+- **An old dip.** Only the latest non-sparse window is judged, even when its
+  coefficient is undefined (every annotator agreed). A drop the team already
+  recovered from is history, and firing on it teaches people to ignore the
+  prompt.
 - **A baseline at or below zero.** Agreement already at chance is a problem the
   whole-project number reports, and a percentage fall from zero is arithmetic.
 

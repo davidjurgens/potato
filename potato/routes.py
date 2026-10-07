@@ -3484,10 +3484,11 @@ def _record_judge_comparison_if_enabled(username, instance_id):
         if allow:
             schemas = [s for s in schemas if s.get("name") in allow]
         preds = ja_mod.load_predictions(config)
-        version = ja_mod.latest_prompt_version(config)
-        version_preds = preds.get(version, {}) if version else {}
         for schema_info in schemas:
             schema_name = schema_info.get("name")
+            # Each schema has its own prompt versions.
+            version = ja_mod.latest_prompt_version(config, schema_name)
+            version_preds = preds.get(version, {}) if version else {}
             pred = version_preds.get(f"{instance_id}::{schema_name}")
             if not pred:
                 continue
@@ -3497,6 +3498,7 @@ def _record_judge_comparison_if_enabled(username, instance_id):
             ja_mod.record_comparison(
                 config, instance_id, schema_name, human_label,
                 pred.get("predicted_label"), version or "",
+                username=username,
             )
     except Exception as e:
         logger.warning(f"Judge comparison recording failed for {instance_id}: {e}")
@@ -4127,6 +4129,7 @@ def admin_api_step_agreement():
     Query params:
         scheme: Annotation scheme name (required)
         metric: "krippendorff_alpha" or "cohens_kappa" (default: krippendorff_alpha)
+        level: "nominal", "ordinal" or "interval" for alpha (default: nominal)
 
     Returns:
         JSON with overall, per_step, and per_instance agreement.
@@ -4141,9 +4144,12 @@ def admin_api_step_agreement():
 
         scheme_name = request.args.get("scheme", "")
         metric = request.args.get("metric", "krippendorff_alpha")
+        level = request.args.get("level", "nominal")
 
         if not scheme_name:
             return jsonify({"error": "scheme parameter is required"}), 400
+        if level not in ("nominal", "ordinal", "interval"):
+            return jsonify({"error": "level must be nominal, ordinal or interval"}), 400
 
         ism = get_item_state_manager()
         # Collect step-level annotations from all instances
@@ -4163,7 +4169,8 @@ def admin_api_step_agreement():
             }), 404
 
         result = compute_step_agreement(
-            annotations, scheme_name=scheme_name, metric=metric
+            annotations, scheme_name=scheme_name, metric=metric,
+            level_of_measurement=level,
         )
         return jsonify(result)
 
@@ -4192,8 +4199,15 @@ def admin_api_step_quality():
             return jsonify({"enabled": False, "message": "Step-level QC not configured"})
 
         from potato.step_quality_control import StepQualityControlManager
+        from potato.item_state_management import get_item_state_manager
         task_dir = config.get("task_dir", ".")
         manager = StepQualityControlManager(step_qc_config, task_dir)
+        annotations = {}
+        for instance_id, item in get_item_state_manager().iter_items():
+            stored = item.get_annotations()
+            if stored:
+                annotations[instance_id] = stored
+        manager.score_annotations(annotations)
         return jsonify(manager.get_quality_summary())
 
     except Exception as e:
@@ -6498,7 +6512,7 @@ def update_instance():
             # here; only the configured pool is injected and must not.
             if (not qc_manager.is_attention_check(instance_id)
                     and not qc_manager.is_configured_gold_standard(instance_id)):
-                qc_manager.record_regular_item(username)
+                qc_manager.record_regular_item(username, instance_id)
 
                 # Track for gold standard auto-promotion
                 promotion_result = qc_manager.record_item_annotation(

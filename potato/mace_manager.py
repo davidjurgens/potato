@@ -174,6 +174,10 @@ class MACEResult:
         return cls(**d)
 
 
+#: Labels a schema stores that are not one of its choices.
+_NOT_A_CHOICE = frozenset({"free_response"})
+
+
 class MACEManager:
     """Manages MACE computation, caching, and result access.
 
@@ -267,7 +271,12 @@ class MACEManager:
                 # Per-option binary MACE
                 labels = scheme.get("labels", [])
                 for option in labels:
-                    option_name = option if isinstance(option, str) else str(option)
+                    # Options may be written as {name: ...} dicts; str() of the
+                    # dict never matched a stored label name.
+                    option_name = (str(option.get("name", ""))
+                                   if isinstance(option, dict) else str(option))
+                    if not option_name:
+                        continue
                     result = self._run_for_schema(
                         usm, ism, schema_name, schema_type,
                         binary_option=option_name
@@ -350,6 +359,10 @@ class MACEManager:
             iid: annots for iid, annots in annotations_by_item.items()
             if len(annots) >= min_annots
         }
+        # Only annotators who answered an eligible item. Someone who only
+        # annotated items nobody else did became an all-missing column and
+        # got the prior's 0.5 as a "competence".
+        all_annotators = {uid for annots in eligible_items.values() for uid in annots}
 
         if len(eligible_items) < self.mace_config.min_items:
             logger.debug(
@@ -466,12 +479,22 @@ class MACEManager:
                     if value not in _FALSY:
                         return "1"
                     return "0"
-            return None
+            # The server clears unchecked options rather than storing False,
+            # so an annotator who saved this item and did not check the
+            # option voted "0". Reading the absence as "no answer" left MACE
+            # a matrix of 1s: every option predicted on every item and a
+            # coin-flip spammer scored 0.95.
+            return "0" if label_dict else None
         else:
             # Radio/likert/select: find the label with a truthy (non-falsy) value.
             # The value may be True, "true", or the label name itself (e.g. "positive").
+            # The free-text box of a radio with has_free_response is stored
+            # as its own label; it is not the choice, and which of the two
+            # came first in the dict decided what MACE read.
             for label, value in label_dict.items():
                 if label.get_schema() != schema_name:
+                    continue
+                if label.get_name() in _NOT_A_CHOICE:
                     continue
                 if value not in _FALSY:
                     return label.get_name()

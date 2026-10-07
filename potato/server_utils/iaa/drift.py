@@ -67,8 +67,14 @@ DEFAULT_DROP_THRESHOLD = 0.15
 #: are agreeing less than chance would predict.
 HEADLINE_METRICS = (
     "alpha_nominal", "alpha_ordinal", "alpha_interval", "alpha_masi",
+    # Matrix schemas (multirate, likert matrix, bws, ...) report per-row
+    # numbers under ``pooled``; region captions a bare ``alpha``; grounding
+    # and rollouts a ``detection`` group. Missing here, those schemas never
+    # had a headline, so no drift prompt could fire for them.
+    "pooled.alpha_ordinal", "pooled.alpha_interval", "pooled.alpha_nominal",
+    "alpha",
     "krippendorff_alpha_u", "detection_alpha", "classification_alpha",
-    "outcome.outcome_alpha",
+    "detection.alpha", "outcome.outcome_alpha",
     "fleiss_kappa", "cohen_kappa", "weighted_kappa_quadratic",
     "weighted_kappa_linear", "token_level_kappa",
     "kendall_tau", "icc_2_k", "pearson_r", "spearman_rho",
@@ -471,14 +477,12 @@ def _find_drops(series: Dict[str, Any], windows: List[Window],
             # that is a problem the whole-project number already reports.
             continue
 
-        latest = None
-        for point in reversed(entry.get("points") or []):
-            if point.get("sparse"):
-                continue
-            if isinstance(point.get("value"), (int, float)):
-                latest = point
-                break
-        if latest is None:
+        # The latest non-sparse window, even when its value is undefined
+        # (e.g. total agreement). Skipping a defined-None window used to fall
+        # back to an older one and fire on a dip already recovered from.
+        latest = next((point for point in reversed(entry.get("points") or [])
+                       if not point.get("sparse")), None)
+        if latest is None or not isinstance(latest.get("value"), (int, float)):
             continue
 
         drop = (baseline - latest["value"]) / baseline

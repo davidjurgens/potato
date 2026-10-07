@@ -152,7 +152,12 @@ Regular annotators complete their work through the standard `/annotate` interfac
 When an adjudicator logs in and navigates to `/adjudicate`, the system builds the adjudication queue by scanning all items. An item enters the queue when:
 
 1. It has at least `min_annotations` completed annotations (excluding adjudicator users).
-2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true).
+2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
+
+An item has no score when none of its schemas can be compared: a span-only item,
+or one where every schema was answered by a single annotator. Such items are
+queued with a **no score** badge, ahead of the scored ones: without a score,
+nothing says their annotators agreed.
 
 Agreement is computed as pairwise percentage agreement: for each annotation schema, the system counts how many annotator pairs chose the same label and divides by the total number of pairs. The overall agreement is the mean across all schemas.
 

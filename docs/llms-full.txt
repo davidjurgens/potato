@@ -11261,12 +11261,15 @@ Fits a Bradley-Terry model via `choix.ilsr_pairwise()`. Produces log-scale stren
 
 ### 3. Plackett-Luce
 
-Converts BWS to partial rankings:
-- [best] > [middle items] > [worst]
+Fits the best-worst (MaxDiff) form of the Plackett-Luce model by maximum
+likelihood. Each judgment is two choices: the best item is picked from the
+tuple with probability proportional to exp(u), and the worst from the
+remaining items with probability proportional to exp(-u). Scores are the
+fitted utilities u on a log scale, centred on 0. Unlike Bradley-Terry, this
+uses the order of the two choices rather than reducing each judgment to
+pairwise wins.
 
-Fits a Plackett-Luce model. Most statistically sophisticated option.
-
-**Requires:** `pip install choix`
+**Requires:** scipy, which Potato already installs.
 
 ## Scoring via CLI
 
@@ -11358,9 +11361,9 @@ Standard BWS generates all tuples upfront and produces relative rankings. IBWS a
 2. **Score & Partition**: Score all items using the chosen method (counting, Bradley-Terry, or Plackett-Luce). Partition items into upper/middle/lower thirds by score.
 3. **Round 2**: Generate new tuples *within each bucket*. Items only compete against others in the same bucket, refining the ranking.
 4. **Repeat**: Each round splits buckets into 3 sub-buckets. After K rounds, items are sorted into up to 3^K buckets.
-5. **Stop**: When all buckets have fewer items than the tuple size (terminal), or `max_rounds` is reached.
+5. **Stop**: When all buckets have fewer items than the tuple size (terminal), or `max_rounds` is reached. The last round's annotations are scored before stopping, and a bucket too small to split into thirds is ordered by score and finished.
 
-The result is an ordinal ranking derived from bucket positions plus within-bucket scores.
+The result is an ordinal ranking derived from bucket positions plus within-bucket scores. Buckets keep their rank position as they split, and each round shows every item in a bucket before showing any item again.
 
 ## Configuration
 
@@ -21758,7 +21761,10 @@ answer, which is what a free-text or numeric schema stores.
 An item is promoted when `min_annotators` have answered it and they agree.
 Agreement is measured per schema on the resolved label, so two annotators
 giving opposite answers do not promote, and a schema only one of them answered
-is not treated as unanimous.
+is not treated as unanimous. A tie never promotes, whatever
+`agreement_threshold` is: at 0.5, a one-to-one split has no majority label.
+The promotion record's `agreement` is the share of annotators behind the
+promoted label, taken from the least-agreed schema.
 
 Raters declared under
 [`machine_annotators`](../advanced/machine_annotators.md) are not counted
@@ -21768,7 +21774,8 @@ key before any person had looked at the item. People who agree with the tools
 still promote it.
 
 A promoted item is graded when an annotator meets it in the ordinary stream; it
-is never injected. The headline gold accuracy therefore depends on when an
+is never injected. The annotators whose answers promoted it are not graded on
+it, since its gold label is their own consensus. The headline gold accuracy therefore depends on when an
 annotator arrived: items promoted behind them count, items promoted ahead of
 them do not. `/admin/api/quality_control` reports `configured_correct` /
 `configured_total` per annotator alongside the totals, because the configured
@@ -26176,9 +26183,11 @@ curl -X POST localhost:8000/admin/api/judge-alignment/run \
 
 ### κ drift trend
 
-The dashboard's **Prompt versions** card plots a sparkline of mean κ across every
-prompt version, with a direction badge — **improving**, **declining**, or
-**stable** — and the first→last delta. This makes calibration *drift* visible at a
+The dashboard's **Prompt versions** card plots a sparkline of κ across prompt
+versions in the order they were created, with a direction badge — **improving**,
+**declining**, or **stable** — and the first→last delta. Each schema has its own
+prompt versions, so the trend is per schema; with several, the card shows the
+schema with the most versions and the report's `kappa_trends` has the rest. This makes calibration *drift* visible at a
 glance: you can see whether successive rubric edits (or auto-calibration rounds)
 are actually raising agreement, or whether a "fix" quietly regressed it.
 
@@ -26224,7 +26233,10 @@ GET /admin/judge-alignment?prompt_version=v_abc123  # a specific version
 - a **disagreement table** (instance, human, judge, confidence, judge reasoning),
 - **prompt-version history** with mean κ per version, so calibration progress is visible.
 
-Human gold is the majority vote across annotators for each instance.
+Human gold is the majority vote across annotators for each instance. An
+instance where the vote is tied has no gold and is left out. The running κ shown
+during annotation counts each annotator's latest label on each instance once,
+however many times it was saved.
 
 ## Judging beyond single-choice (span & free-text)
 
@@ -37128,9 +37140,10 @@ fall.
 
 It deliberately does not fire on two things:
 
-- **An old dip.** Only the latest non-sparse window is judged. A drop the team
-  already recovered from is history, and firing on it teaches people to ignore
-  the prompt.
+- **An old dip.** Only the latest non-sparse window is judged, even when its
+  coefficient is undefined (every annotator agreed). A drop the team already
+  recovered from is history, and firing on it teaches people to ignore the
+  prompt.
 - **A baseline at or below zero.** Agreement already at chance is a problem the
   whole-project number reports, and a percentage fall from zero is arithmetic.
 
@@ -40013,7 +40026,9 @@ Objects are paired across annotators above an IoU threshold that defaults to
 
 - **Localization** matches objects between every two annotators with the Hungarian
   algorithm on IoU (globally optimal when scipy is present; greedy best-first
-  otherwise).
+  otherwise). The threshold is applied inside the assignment, so it keeps as
+  many pairs at or above the threshold as exist, and among those the most
+  similar.
 - **Detection and classification** group each item's objects into clusters
   greedily: annotators are taken in sorted order, and each object joins the
   first cluster whose first object it overlaps above the threshold. The result
@@ -40861,8 +40876,9 @@ or treat low-probability items as genuinely ambiguous rather than as noise.
 ### Annotator ability, honestly presented
 
 Ability θ is estimated from agreement patterns: 1.0 is the prior for a new
-annotator, 0 means the annotator's labels carry no information, and negative
-values mean systematically wrong. Every estimate ships with a standard
+annotator, 0 means the annotator's labels carry no information (a random guess
+over the schema's labels, however many there are), and negative values mean
+systematically wrong. Every estimate ships with a standard
 error — an annotator with 12 labels has a wide whisker, and the dashboard
 says so. **Never make personnel decisions from a wide whisker**; the
 standard errors are approximate (Fisher information at the mode) and mildly
@@ -44802,7 +44818,12 @@ Regular annotators complete their work through the standard `/annotate` interfac
 When an adjudicator logs in and navigates to `/adjudicate`, the system builds the adjudication queue by scanning all items. An item enters the queue when:
 
 1. It has at least `min_annotations` completed annotations (excluding adjudicator users).
-2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true).
+2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
+
+An item has no score when none of its schemas can be compared: a span-only item,
+or one where every schema was answered by a single annotator. Such items are
+queued with a **no score** badge, ahead of the scored ones: without a score,
+nothing says their annotators agreed.
 
 Agreement is computed as pairwise percentage agreement: for each annotation schema, the system counts how many annotator pairs chose the same label and divides by the total number of pairs. The overall agreement is the mean across all schemas.
 

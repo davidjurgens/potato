@@ -179,8 +179,9 @@ class TestAgreementComputation:
 
     def test_overall_agreement_empty(self, base_config):
         mgr = AdjudicationManager(base_config)
-        overall = mgr._compute_overall_agreement({})
-        assert overall == 1.0
+        # Nothing scored is not perfect agreement: None, and the item is
+        # queued instead of passing the threshold.
+        assert mgr._compute_overall_agreement({}) is None
 
     def test_agreement_with_dict_values(self, base_config):
         """Test agreement with multiselect-style dict annotations."""

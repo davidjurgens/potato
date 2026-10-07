@@ -153,6 +153,11 @@
     color: #16a34a;
 }
 
+.adj-agreement-none {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
 /* Main Content Area */
 .adj-main {
     flex: 1;

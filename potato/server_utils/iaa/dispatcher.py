@@ -43,15 +43,14 @@ _KIND_BY_TYPE = {
     "radio": SchemaKind.NOMINAL,
     "select": SchemaKind.NOMINAL,
     "triage": SchemaKind.NOMINAL,
-    # Ordinal
+    # Ordinal. confidence in slider mode is continuous; see classify_schema.
     "likert": SchemaKind.ORDINAL,
     "confidence": SchemaKind.ORDINAL,
-    "semantic_differential": SchemaKind.ORDINAL,
-    "range_slider": SchemaKind.ORDINAL,
-    "vas": SchemaKind.ORDINAL,
-    # Continuous
+    # Continuous. vas stores {<schema>: "73"}: the answer is the value, which
+    # the ordinal path never read -- it gathered the key name for everyone.
     "slider": SchemaKind.CONTINUOUS,
     "number": SchemaKind.CONTINUOUS,
+    "vas": SchemaKind.CONTINUOUS,
     # Matrix: one scheme, several sub-answers keyed by row or option. Scored
     # as CONTINUOUS these reported zero annotators over zero items (multirate,
     # whose values are label names) or scored only the first sub-answer and
@@ -59,6 +58,10 @@ _KIND_BY_TYPE = {
     "multirate": SchemaKind.MATRIX,
     "constant_sum": SchemaKind.MATRIX,
     "soft_label": SchemaKind.MATRIX,
+    # {"Formal__Informal": "3", ...}: one sub-answer per adjective pair.
+    "semantic_differential": SchemaKind.MATRIX,
+    # {"range_low": "20", "range_high": "60"}: two numbers.
+    "range_slider": SchemaKind.MATRIX,
     # Multi-label
     "multiselect": SchemaKind.MULTILABEL,  # may be downgraded to NOMINAL if max=1
     "hierarchical_multiselect": SchemaKind.MULTILABEL,
@@ -115,6 +118,10 @@ def classify_schema(scheme: Dict[str, Any]) -> SchemaKind:
         max_choices = scheme.get("max_choices") or scheme.get("max_selections")
         if max_choices == 1:
             return SchemaKind.NOMINAL
+    # confidence's slider mode stores {"confidence_level": "70"}; its likert
+    # mode stores the level as the label name, like likert.
+    if atype == "confidence" and scheme.get("scale_type") == "slider":
+        return SchemaKind.CONTINUOUS
     # pairwise renders three different widgets under one type name and stores a
     # different shape for each, so the type alone cannot decide the measure.
     if atype == "pairwise":
@@ -295,6 +302,14 @@ def _gather_labels(
                 names = packed
             else:
                 names = annotation_values.selected_labels(values)
+                if numeric and isinstance(values, dict):
+                    # A slider or number answer of 0 is an answer, but
+                    # selected_labels reads "0" as "not chosen" and the
+                    # annotator vanished from the item.
+                    names = list(names) + [
+                        k for k, v in values.items()
+                        if k not in names and _is_zero(v)
+                        and _as_number(k, None) is None]
             if not names:
                 continue
             if numeric:
@@ -403,6 +418,15 @@ def packed_answer(scheme: Dict[str, Any], values: Any) -> Optional[List[str]]:
 
 def _pairwise_mode(scheme: Dict[str, Any]) -> str:
     return str(scheme.get("mode") or "binary").strip().lower()
+
+
+def _is_zero(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    try:
+        return float(value) == 0.0
+    except (TypeError, ValueError):
+        return False
 
 
 def _as_number(name: str, values: Any) -> Optional[float]:
@@ -671,20 +695,38 @@ def _gather_spans(
     user_states: Dict[str, Any],
     schema_name: str,
 ):
+    """
+    {item: {annotator: [spans]}}, where an annotator who saved the item and
+    marked nothing counts with ``[]``.
+
+    Empty answers used to be dropped, so "A found an entity, B found none"
+    left the item with one annotator and it was never scored: every span
+    measure read 1.0 for a study whose second annotator missed two of three
+    entities. Items nobody marked anything on are still left out -- there is
+    nothing to agree about.
+    """
     rows: Dict[str, Dict[str, list]] = {}
     for iid in instance_ids:
         per_user = {}
         for uid, ustate in user_states.items():
-            spans_by_schema = ustate.get_span_annotations(iid)
-            if not spans_by_schema:
-                continue
+            spans_by_schema = ustate.get_span_annotations(iid) or {}
             spans = spans_by_schema.get(schema_name) or []
-            if not spans:
-                continue
-            per_user[uid] = list(spans)
-        if per_user:
+            if spans:
+                per_user[uid] = list(spans)
+            elif _saved_item(ustate, iid):
+                per_user[uid] = []
+        if any(per_user.values()):
             rows[iid] = per_user
     return rows
+
+
+def _saved_item(ustate, iid) -> bool:
+    """Whether this annotator saved anything on the item."""
+    has_annotated = getattr(ustate, "has_annotated", None)
+    try:
+        return bool(has_annotated(iid)) if callable(has_annotated) else False
+    except Exception:
+        return False
 
 
 def _text_length_for_item(item) -> int:
@@ -729,7 +771,7 @@ def _aggregate_nominal(rows):
     # heterogeneous coverage is often none, and the coefficient was NaN.
     # `pairwise_cohen_kappa` is kept as an alias for scripts that read it.
     kappa = nominal.mean_cohen_kappa_over_shared_items(rated_items)
-    return {
+    result = {
         "alpha_nominal": alpha.krippendorff_alpha(long_rows, level="nominal"),
         "fleiss_kappa": nominal.fleiss_kappa(fleiss_inputs),
         "percent_agreement": nominal.mean_pairwise_agreement(rated_items),
@@ -739,6 +781,13 @@ def _aggregate_nominal(rows):
         "n_aligned_items": len(aligned_iids),
         "n_annotators": len(pair_users),
     }
+    if rated_items and len({v for _u, _i, v in long_rows}) < 2:
+        # "note" is the key the admin page prints beside the table.
+        result["note"] = (
+            "every annotator gave the same label on every item, so chance "
+            "agreement is 1 and kappa and alpha are undefined. Perfect "
+            "agreement, not a failed computation; percent_agreement shows it.")
+    return result
 
 
 def _aggregate_ordinal(rows, ordering: Optional[Dict[str, int]] = None):
@@ -757,7 +806,7 @@ def _aggregate_ordinal(rows, ordering: Optional[Dict[str, int]] = None):
     once, because everything downstream then sees numbers.
     """
     long_rows = []
-    seqs_by_user: Dict[str, list] = defaultdict(list)
+    seqs_by_user: Dict[str, dict] = defaultdict(dict)
     aligned_users = None
     for iid, per_user in rows.items():
         flat = {u: v[0] for u, v in per_user.items() if v}
@@ -772,7 +821,7 @@ def _aggregate_ordinal(rows, ordering: Optional[Dict[str, int]] = None):
         else:
             aligned_users &= set(flat)
         for u, val in flat.items():
-            seqs_by_user[u].append(val)
+            seqs_by_user[u][iid] = val
     weighted_lin = _pairwise_mean(seqs_by_user, ordinal.weighted_kappa, weights="linear")
     weighted_quad = _pairwise_mean(seqs_by_user, ordinal.weighted_kappa, weights="quadratic")
     rho = _pairwise_mean(seqs_by_user, ordinal.spearman_rho)
@@ -788,7 +837,7 @@ def _aggregate_ordinal(rows, ordering: Optional[Dict[str, int]] = None):
 
 def _aggregate_continuous(rows):
     long_rows = []
-    seqs_by_user: Dict[str, list] = defaultdict(list)
+    seqs_by_user: Dict[str, dict] = defaultdict(dict)
     for iid, per_user in rows.items():
         flat = {}
         for u, v in per_user.items():
@@ -800,7 +849,7 @@ def _aggregate_continuous(rows):
             continue
         for u, val in flat.items():
             long_rows.append((u, iid, val))
-            seqs_by_user[u].append(val)
+            seqs_by_user[u][iid] = val
 
     pearson = _pairwise_mean(seqs_by_user, continuous.pearson_r)
     mae_val = _pairwise_mean(seqs_by_user, continuous.mae)
@@ -853,13 +902,13 @@ def _aggregate_multilabel(rows):
 
 
 def _aggregate_ranking(rows):
-    seqs_by_user: Dict[str, list] = defaultdict(list)
+    seqs_by_user: Dict[str, dict] = defaultdict(dict)
     for iid, per_user in rows.items():
         flat = {u: list(v) for u, v in per_user.items() if v}
         if len(flat) < 2:
             continue
         for u, val in flat.items():
-            seqs_by_user[u].append(val)
+            seqs_by_user[u][iid] = val
     tau = _pairwise_rank_mean(seqs_by_user, ranking.kendall_tau)
     footrule = _pairwise_rank_mean(seqs_by_user, ranking.spearman_footrule)
     return {
@@ -1093,20 +1142,31 @@ def _aggregate_span(span_rows, find_item):
 # Pairwise helpers
 # ---------------------------------------------------------------------------
 
+def _shared_items(seqs_by_user, a, b):
+    """The item ids both annotators answered, sorted.
+
+    ``seqs_by_user`` maps annotator -> {item_id: value}. Each annotator's
+    values used to be one list, and a pair was scored on the first
+    min(len) entries of each, which are different items as soon as coverage
+    is uneven: two annotators who agreed on every shared item read MAE 0.8
+    and linear kappa 0.5.
+    """
+    return sorted(set(seqs_by_user[a]) & set(seqs_by_user[b]), key=str)
+
+
 def _pairwise_mean(seqs_by_user, fn, **kwargs):
-    users = list(seqs_by_user)
-    if len(users) < 2:
-        return float("nan")
+    """Mean of ``fn`` over annotator pairs, each scored on its shared items."""
+    users = sorted(seqs_by_user, key=str)
     out = []
-    for i in range(len(users)):
-        for j in range(i + 1, len(users)):
-            a = seqs_by_user[users[i]]
-            b = seqs_by_user[users[j]]
-            m = min(len(a), len(b))
-            if m < 2:
+    for i, ua in enumerate(users):
+        for ub in users[i + 1:]:
+            shared = _shared_items(seqs_by_user, ua, ub)
+            if len(shared) < 2:
                 continue
+            a = [seqs_by_user[ua][iid] for iid in shared]
+            b = [seqs_by_user[ub][iid] for iid in shared]
             try:
-                v = fn(a[:m], b[:m], **kwargs) if kwargs else fn(a[:m], b[:m])
+                v = fn(a, b, **kwargs)
                 if v == v:
                     out.append(v)
             except Exception as exc:
@@ -1115,18 +1175,15 @@ def _pairwise_mean(seqs_by_user, fn, **kwargs):
 
 
 def _pairwise_rank_mean(seqs_by_user, fn):
-    users = list(seqs_by_user)
-    if len(users) < 2:
-        return float("nan")
+    """Mean of ``fn`` over every (pair, shared item): two annotators'
+    rankings of the same item."""
+    users = sorted(seqs_by_user, key=str)
     out = []
-    for i in range(len(users)):
-        for j in range(i + 1, len(users)):
-            a = seqs_by_user[users[i]]
-            b = seqs_by_user[users[j]]
-            m = min(len(a), len(b))
-            for k in range(m):
+    for i, ua in enumerate(users):
+        for ub in users[i + 1:]:
+            for iid in _shared_items(seqs_by_user, ua, ub):
                 try:
-                    v = fn(a[k], b[k])
+                    v = fn(seqs_by_user[ua][iid], seqs_by_user[ub][iid])
                     if v == v:
                         out.append(v)
                 except Exception:

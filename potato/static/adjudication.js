@@ -112,6 +112,11 @@
      * Get agreement badge HTML
      */
     function getAgreementBadge(agreement) {
+        if (agreement === null || agreement === undefined) {
+            return '<span class="adj-agreement-badge adj-agreement-none" ' +
+                'title="No schema on this item can be scored for agreement">' +
+                'no score</span>';
+        }
         var pct = Math.round(agreement * 100);
         var cls = 'adj-agreement-low';
         if (agreement >= 0.75) cls = 'adj-agreement-high';

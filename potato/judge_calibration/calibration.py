@@ -10,7 +10,7 @@ These did not exist anywhere in Potato — implemented here and covered by
 known-value fixtures in tests/unit/test_jc_calibration.py.
 """
 
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 
 def _bin_index(conf: float, n_bins: int) -> int:
@@ -61,11 +61,13 @@ def expected_calibration_error(
     confidences: Sequence[float],
     correctness: Sequence[int],
     n_bins: int = 10,
-) -> float:
+) -> Optional[float]:
     """ECE = sum over bins of (n_b/N) * |accuracy_b - mean_confidence_b|."""
     n_total = len(confidences)
     if n_total == 0:
-        return 0.0
+        # No predictions to calibrate: undefined. 0.0 read as perfect
+        # calibration on nothing.
+        return None
     ece = 0.0
     for b in reliability_bins(confidences, correctness, n_bins):
         if b["count"] == 0:
@@ -74,11 +76,11 @@ def expected_calibration_error(
     return round(ece, 6)
 
 
-def brier_score(confidences: Sequence[float], correctness: Sequence[int]) -> float:
+def brier_score(confidences: Sequence[float], correctness: Sequence[int]) -> Optional[float]:
     """Mean squared error between confidence and correctness (lower is better)."""
     n = len(confidences)
     if n == 0:
-        return 0.0
+        return None
     return round(sum((float(c) - float(y)) ** 2 for c, y in zip(confidences, correctness)) / n, 6)
 
 

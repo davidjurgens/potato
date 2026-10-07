@@ -181,7 +181,10 @@ answer, which is what a free-text or numeric schema stores.
 An item is promoted when `min_annotators` have answered it and they agree.
 Agreement is measured per schema on the resolved label, so two annotators
 giving opposite answers do not promote, and a schema only one of them answered
-is not treated as unanimous.
+is not treated as unanimous. A tie never promotes, whatever
+`agreement_threshold` is: at 0.5, a one-to-one split has no majority label.
+The promotion record's `agreement` is the share of annotators behind the
+promoted label, taken from the least-agreed schema.
 
 Raters declared under
 [`machine_annotators`](../advanced/machine_annotators.md) are not counted
@@ -191,7 +194,8 @@ key before any person had looked at the item. People who agree with the tools
 still promote it.
 
 A promoted item is graded when an annotator meets it in the ordinary stream; it
-is never injected. The headline gold accuracy therefore depends on when an
+is never injected. The annotators whose answers promoted it are not graded on
+it, since its gold label is their own consensus. The headline gold accuracy therefore depends on when an
 annotator arrived: items promoted behind them count, items promoted ahead of
 them do not. `/admin/api/quality_control` reports `configured_correct` /
 `configured_total` per annotator alongside the totals, because the configured

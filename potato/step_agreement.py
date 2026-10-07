@@ -117,9 +117,16 @@ def _compute_step_cohens_kappa(
     annotations: Dict[str, Dict[str, Any]],
     scheme_name: str,
 ) -> Dict[str, Any]:
-    """Compute Cohen's kappa at step level (pairwise, for 2 annotators)."""
-    step_labels = defaultdict(lambda: defaultdict(dict))  # step -> {annotator: label}
+    """Mean pairwise Cohen's kappa at step level.
+
+    Per step, the units are the instances; per instance, the steps; overall,
+    every (instance, step). Labels used to be stored per step only, so each
+    instance overwrote the last, and per-step "kappa" was raw agreement
+    between whichever two annotators were inserted first.
+    """
+    by_step = defaultdict(dict)        # step -> {instance: {annotator: label}}
     per_instance = {}
+    overall_units = {}                 # (instance, step) -> {annotator: label}
     all_annotators = set()
 
     for instance_id, annotator_data in annotations.items():
@@ -130,27 +137,16 @@ def _compute_step_cohens_kappa(
             step_annotations = _extract_step_annotations(ann_data, scheme_name)
 
             for step_idx, label in step_annotations.items():
-                step_labels[step_idx][annotator_id] = label
+                by_step[step_idx].setdefault(instance_id, {})[annotator_id] = label
                 instance_steps[step_idx][annotator_id] = label
+                overall_units.setdefault((instance_id, step_idx), {})[annotator_id] = label
 
         if instance_steps:
             per_instance[instance_id] = _kappa_from_step_dict(instance_steps)
 
-    # Per-step kappa
-    per_step = {}
-    for step_idx in sorted(step_labels.keys()):
-        annotator_labels = step_labels[step_idx]
-        if len(annotator_labels) >= 2:
-            per_step[step_idx] = _kappa_from_annotator_dict(annotator_labels)
-
-    # Overall (flatten all step labels)
-    all_labels = defaultdict(dict)
-    for step_idx, annotator_dict in step_labels.items():
-        for ann_id, label in annotator_dict.items():
-            key = f"{step_idx}"
-            all_labels[key][ann_id] = label
-
-    overall = _kappa_from_step_dict(all_labels) if all_labels else None
+    per_step = {step_idx: _kappa_from_step_dict(by_step[step_idx])
+                for step_idx in sorted(by_step)}
+    overall = _kappa_from_step_dict(overall_units) if overall_units else None
 
     return {
         "metric": "cohens_kappa",
@@ -159,10 +155,8 @@ def _compute_step_cohens_kappa(
         "per_instance": per_instance,
         "n_instances": len(annotations),
         "n_annotators": len(all_annotators),
-        "n_steps": len(step_labels),
+        "n_steps": len(by_step),
     }
-
-
 def _extract_step_annotations(
     ann_data: Any, scheme_name: str
 ) -> Dict[int, str]:
@@ -230,61 +224,20 @@ def _alpha_from_step_dict(
     return _alpha_from_pairs(rows, level) if rows else None
 
 
-def _kappa_from_annotator_dict(
-    annotator_labels: Dict[str, str]
-) -> Optional[float]:
-    """Compute Cohen's kappa for two annotators on one item."""
-    annotators = list(annotator_labels.keys())
-    if len(annotators) < 2:
-        return None
-
-    # Take first two annotators
-    a1_label = annotator_labels[annotators[0]]
-    a2_label = annotator_labels[annotators[1]]
-
-    # Simple agreement for single item
-    return 1.0 if a1_label == a2_label else 0.0
-
-
 def _kappa_from_step_dict(
     step_dict: Dict[Any, Dict[str, str]]
 ) -> Optional[float]:
-    """Compute Cohen's kappa across multiple items (steps)."""
-    if not step_dict:
+    """Mean Cohen's kappa over annotator pairs, each pair on the units both
+    labelled; ``step_dict`` maps unit -> {annotator: label}. None when no
+    pair's kappa is defined (one annotator, under two shared units, or one
+    label throughout), never a NaN that would break the JSON response."""
+    from potato.server_utils.iaa.nominal import mean_cohen_kappa_over_shared_items
+
+    units = [labels for labels in step_dict.values() if len(labels) >= 2]
+    if not units:
         return None
-
-    # Collect all annotator pairs
-    all_annotators = set()
-    for annotator_labels in step_dict.values():
-        all_annotators.update(annotator_labels.keys())
-
-    if len(all_annotators) < 2:
-        return None
-
-    annotators = sorted(all_annotators)[:2]  # Use first two annotators
-
-    # Build label vectors
-    labels_a = []
-    labels_b = []
-    all_labels = set()
-
-    for step_idx, annotator_labels in step_dict.items():
-        if annotators[0] in annotator_labels and annotators[1] in annotator_labels:
-            la = annotator_labels[annotators[0]]
-            lb = annotator_labels[annotators[1]]
-            labels_a.append(la)
-            labels_b.append(lb)
-            all_labels.add(la)
-            all_labels.add(lb)
-
-    if len(labels_a) < 2:
-        return None
-
-    # Compute Cohen's kappa
     try:
-        from sklearn.metrics import cohen_kappa_score
-        return float(cohen_kappa_score(labels_a, labels_b))
+        value = mean_cohen_kappa_over_shared_items(units)
     except ImportError:
-        # Fallback: simple agreement
-        agreements = sum(1 for a, b in zip(labels_a, labels_b) if a == b)
-        return agreements / len(labels_a) if labels_a else None
+        return None
+    return float(value) if value == value else None

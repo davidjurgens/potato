@@ -81,6 +81,9 @@ class PsychometricsManager:
                     label_obj.get_name()
                     for label_obj, value in (annotations.get("labels") or {}).items()
                     if label_obj.get_schema() == schema
+                    # A radio's free-text box is its own label, not a second
+                    # choice; counting it dropped the answer as ambiguous.
+                    and label_obj.get_name() != "free_response"
                     and not (isinstance(value, Hashable) and value in _FALSY_VALUES)
                 ]
                 if len(names) == 1:

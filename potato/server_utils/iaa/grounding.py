@@ -189,21 +189,31 @@ def set_similarity(a: Sequence[Dict], b: Sequence[Dict]) -> Optional[float]:
     if not left or not right:
         return None
 
-    remaining = list(range(len(right)))
-    total = 0.0
+    scores = []
     for region in left:
-        best_score, best_index = 0.0, None
-        for index in remaining:
+        row = []
+        for other in right:
             try:
-                score = region_similarity(region, right[index])
+                row.append(float(region_similarity(region, other)))
             except Exception:  # a malformed shape must not sink the report
                 logger.debug("region_similarity failed", exc_info=True)
-                continue
-            if score > best_score:
-                best_score, best_index = score, index
-        if best_index is not None:
-            total += best_score
-            remaining.remove(best_index)
+                row.append(0.0)
+        scores.append(row)
+
+    # The best one-to-one assignment. Greedy first-come pairing depended on
+    # which annotator was "a": 0.300 one way round, 0.429 the other.
+    try:
+        from scipy.optimize import linear_sum_assignment
+        rows, cols = linear_sum_assignment([[-v for v in row] for row in scores])
+        total = sum(scores[i][j] for i, j in zip(rows.tolist(), cols.tolist()))
+    except ImportError:  # pragma: no cover
+        remaining = set(range(len(right)))
+        total = 0.0
+        for row in scores:
+            best = max(remaining, key=lambda j: row[j], default=None)
+            if best is not None and row[best] > 0:
+                total += row[best]
+                remaining.discard(best)
     return total / max(len(left), len(right))
 
 

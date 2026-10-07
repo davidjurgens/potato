@@ -471,7 +471,8 @@ def geometry_agreement(
 
     if bootstrap:
         result["confidence"] = _bootstrap_intervals(
-            comparable, metric, threshold, chance_samples, bootstrap, seed)
+            comparable, metric, threshold, chance_samples, bootstrap, seed,
+            max_pairs)
     return result
 
 
@@ -607,7 +608,8 @@ def _alpha_result(rows, unanimous_note: str) -> Dict[str, Any]:
 
 
 def _bootstrap_intervals(items, metric, threshold, chance_samples,
-                         resamples, seed) -> Dict[str, Any]:
+                         resamples, seed,
+                         max_pairs: int = DEFAULT_MAX_PAIRS) -> Dict[str, Any]:
     """
     Percentile bootstrap over ITEMS.
 
@@ -630,7 +632,10 @@ def _bootstrap_intervals(items, metric, threshold, chance_samples,
                   for i, item_id in enumerate(drawn)}
         source = {f"{item_id}~{i}": item_id
                   for i, item_id in enumerate(drawn)}
-        within, _skipped = _within_item_distances(sample, metric, threshold)
+        # The point estimate's budget, or the interval would describe items
+        # the point estimate left out.
+        within, _skipped = _within_item_distances(sample, metric, threshold,
+                                                  max_pairs)
         between = _between_item_distances(
             sample, metric, chance_samples, rng, source)
         value = sigma_agreement(within, between)

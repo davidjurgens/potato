@@ -73,8 +73,9 @@ or treat low-probability items as genuinely ambiguous rather than as noise.
 ### Annotator ability, honestly presented
 
 Ability θ is estimated from agreement patterns: 1.0 is the prior for a new
-annotator, 0 means the annotator's labels carry no information, and negative
-values mean systematically wrong. Every estimate ships with a standard
+annotator, 0 means the annotator's labels carry no information (a random guess
+over the schema's labels, however many there are), and negative values mean
+systematically wrong. Every estimate ships with a standard
 error — an annotator with 12 labels has a wide whisker, and the dashboard
 says so. **Never make personnel decisions from a wide whisker**; the
 standard errors are approximate (Fisher information at the mode) and mildly

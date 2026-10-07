@@ -178,16 +178,35 @@ def iou_polygon(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]],
 
         pa = Polygon([(float(p[0]), float(p[1])) for p in a])
         pb = Polygon([(float(p[0]), float(p[1])) for p in b])
-        if not pa.is_valid:
-            pa = pa.buffer(0)
-        if not pb.is_valid:
-            pb = pb.buffer(0)
+        pa, pb = _repaired(pa), _repaired(pb)
         if pa.is_empty or pb.is_empty:
             return 0.0
         union = pa.union(pb).area
         return pa.intersection(pb).area / union if union > 0 else 0.0
     except ImportError:
         return _iou_polygon_raster(a, b, samples)
+
+
+def _repaired(polygon):
+    """A valid version of a possibly self-intersecting polygon.
+
+    ``buffer(0)`` keeps only one lobe of a figure-eight, so a bowtie scored
+    IoU 1.0 against one of its halves and 0.0 against the other.
+    ``make_valid`` keeps both; only its polygonal parts carry area.
+    """
+    if polygon.is_valid:
+        return polygon
+    try:
+        from shapely.validation import make_valid
+    except ImportError:  # shapely < 1.8
+        return polygon.buffer(0)
+    from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+    fixed = make_valid(polygon)
+    if isinstance(fixed, GeometryCollection):
+        parts = [g for g in fixed.geoms if isinstance(g, (Polygon, MultiPolygon))]
+        from shapely.ops import unary_union
+        fixed = unary_union(parts) if parts else Polygon()
+    return fixed
 
 
 def _iou_polygon_raster(a, b, samples: int) -> float:
@@ -667,7 +686,41 @@ def temporal_boundary_distance(a: Sequence[float], b: Sequence[float]) -> float:
 # Dispatch
 # ---------------------------------------------------------------------------
 
-def similarity(obj_a: Dict[str, Any], obj_b: Dict[str, Any]) -> float:
+def _box_area(obj: Dict[str, Any]) -> float:
+    box = obj.get("bbox") or [0, 0, 0, 0]
+    try:
+        return float(box[2] or 0) * float(box[3] or 0)
+    except (IndexError, TypeError, ValueError):
+        return 0.0
+
+
+def _box_diagonal(obj: Dict[str, Any]) -> float:
+    box = obj.get("bbox") or [0, 0, 0, 0]
+    try:
+        return math.hypot(float(box[2] or 0), float(box[3] or 0))
+    except (IndexError, TypeError, ValueError):
+        return 0.0
+
+
+def _scale_area(obj_a: Dict[str, Any], obj_b: Dict[str, Any],
+                reference: Optional[str], measure=_box_area) -> float:
+    """The object size OKS and landmark tolerance scale by.
+
+    ``reference="b"`` takes it from ``obj_b`` alone, as COCO takes it from the
+    ground truth. Otherwise it is the mean of the two, so similarity(a, b)
+    equals similarity(b, a). Taking it from ``obj_a`` alone made agreement
+    depend on which annotator's id sorted first: 0.315 one way, 0.428 the
+    other.
+    """
+    area_a, area_b = measure(obj_a), measure(obj_b)
+    if reference == "b":
+        return area_b or area_a
+    present = [a for a in (area_a, area_b) if a > 0]
+    return sum(present) / len(present) if present else 0.0
+
+
+def similarity(obj_a: Dict[str, Any], obj_b: Dict[str, Any],
+               reference: Optional[str] = None) -> float:
     """
     Similarity in [0, 1] between two canonical annotation objects.
 
@@ -675,6 +728,9 @@ def similarity(obj_a: Dict[str, Any], obj_b: Dict[str, Any]) -> float:
     Different geometry types never match: a mask and a box may cover the same
     pixels, but treating them as interchangeable would hide a real
     disagreement about how the object should be represented.
+
+    Symmetric by default. ``reference="b"`` treats ``obj_b`` as ground truth
+    for the size-scaled types (keypoints, landmarks), as COCO does.
     """
     if not obj_a or not obj_b:
         return 0.0
@@ -702,10 +758,8 @@ def similarity(obj_a: Dict[str, Any], obj_b: Dict[str, Any]) -> float:
         # object's size and by a per-joint tolerance, because annotators agree
         # far more tightly on an eye than on a hip. IoU is meaningless here --
         # a point has no area.
-        box = obj_a.get("bbox") or [0, 0, 0, 0]
-        area = float(box[2] or 0) * float(box[3] or 0)
         return oks(obj_a.get("points") or [], obj_b.get("points") or [],
-                   area=area,
+                   area=_scale_area(obj_a, obj_b, reference),
                    vis_a=obj_a.get("visibility"),
                    vis_b=obj_b.get("visibility"))
 
@@ -730,8 +784,7 @@ def similarity(obj_a: Dict[str, Any], obj_b: Dict[str, Any]) -> float:
         pa = (obj_a.get("points") or [[0, 0]])[0]
         pb = (obj_b.get("points") or [[0, 0]])[0]
         # Scale tolerance to the objects' own size when we know it.
-        box = obj_a.get("bbox") or [0, 0, 0, 0]
-        scale = max(1.0, math.hypot(float(box[2] or 0), float(box[3] or 0)))
+        scale = max(1.0, _scale_area(obj_a, obj_b, reference, _box_diagonal))
         distance = math.hypot(float(pa[0]) - float(pb[0]), float(pa[1]) - float(pb[1]))
         return max(0.0, 1.0 - distance / (scale * 10))
 
@@ -785,9 +838,10 @@ def match_instances(objects_a: List[Dict[str, Any]], objects_b: List[Dict[str, A
     :func:`temporal_similarity` to match audio/video segments with the same
     algorithm.
 
-    Uses the Hungarian algorithm when scipy is available so the assignment is
-    globally optimal; otherwise falls back to greedy best-first, which can be
-    wrong when several objects overlap heavily.
+    Uses the Hungarian algorithm when scipy is available: the most pairs at or
+    above ``threshold``, and among those the highest total similarity.
+    Otherwise falls back to greedy best-first, which can be wrong when several
+    objects overlap heavily.
     """
     if not objects_a or not objects_b:
         return [], list(range(len(objects_a))), list(range(len(objects_b)))
@@ -799,7 +853,15 @@ def match_instances(objects_a: List[Dict[str, Any]], objects_b: List[Dict[str, A
     try:
         from scipy.optimize import linear_sum_assignment  # type: ignore
 
-        cost = [[1.0 - s for s in row] for row in scores]
+        # The threshold goes INTO the assignment. Assigning on raw
+        # similarity and filtering afterwards let two sub-threshold pairs
+        # outscore one valid match and then threw all three away. A pair
+        # below the threshold costs more than any number of valid pairs can,
+        # so the assignment keeps as many valid matches as exist, and among
+        # those the most similar.
+        ineligible = float(min(len(objects_a), len(objects_b)) + 1)
+        cost = [[(1.0 - s) if s >= threshold else ineligible for s in row]
+                for row in scores]
         rows, cols = linear_sum_assignment(cost)
         pairs = list(zip(rows.tolist(), cols.tolist()))
     except ImportError:

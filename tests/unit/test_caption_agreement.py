@@ -151,7 +151,23 @@ class TestRegionMatching:
         }}
         report = C.region_caption_report(items)
         assert report["matching"]["n_matched_regions"] == 0
-        assert report["matching"]["n_unmatched_regions"] == 1
+        # Both regions lack a counterpart: a's and b's.
+        assert report["matching"]["n_unmatched_regions"] == 2
+
+    def test_one_region_cannot_stand_in_for_two(self):
+        """Matching is one-to-one: b's single nearby region pairs with one of
+        a's two, and b's distant region is counted as unmatched."""
+        items = {"img": {
+            "a": [{"region": box(0.10), "caption": "red car"},
+                  {"region": box(0.15), "caption": "blue truck"}],
+            "b": [{"region": box(0.12), "caption": "red car"},
+                  {"region": box(0.60), "caption": "a tree"}],
+        }}
+        rows, matching = C.region_caption_rows(items)
+        b_units = [unit for annotator, unit, _ in rows if annotator == "b"]
+        assert len(b_units) == len(set(b_units)) == 1
+        assert matching["n_matched_regions"] == 1
+        assert matching["n_unmatched_regions"] == 2
 
     def test_the_match_threshold_is_configurable_and_reported(self):
         items = {"i1": {

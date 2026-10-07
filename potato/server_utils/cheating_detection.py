@@ -58,36 +58,53 @@ def _by_item(obs: List[Observation]) -> Dict[str, Dict[str, str]]:
     return d
 
 
-def correlated_agreement(obs: List[Observation]) -> Dict[str, float]:
+def correlated_agreement(obs: List[Observation]) -> Dict[str, Optional[float]]:
     """Per-worker CA = P(agree with a peer on the SAME item) − P(agree with a peer
     on a DIFFERENT item). Honest workers > 0; random/duplicating workers ≈ 0.
+
+    The cross-item term is worker-specific, as Shnayder et al. define it:
+    sum_k f_w(k) * f_peer(k) over each peer the worker shares items with,
+    weighted by how many items they share. A pooled sum_k p_k^2 let a
+    worker who always answers the majority label score above the flag line
+    on an imbalanced task (0.069 against a threshold of 0.05), because their
+    same-item agreement beats the pooled baseline while equalling their own.
+
+    None for a worker who shares no item with anyone: there is no peer to
+    compare with, which is not the same as scoring 0.
     """
     by_item = _by_item(obs)
-    items = list(by_item)
-    # global label frequency drives the cross-item (chance) agreement baseline
-    all_labels = [l for _w, _i, l in obs]
     workers = sorted({w for w, _i, _l in obs})
-    # cross-item expected agreement ≈ sum(p_label^2) over the label distribution
-    freq: Dict[str, int] = defaultdict(int)
-    for l in all_labels:
-        freq[l] += 1
-    tot = sum(freq.values()) or 1
-    chance = sum((c / tot) ** 2 for c in freq.values())
 
-    out: Dict[str, float] = {}
+    label_freq: Dict[str, Dict[str, float]] = {}
+    for w in workers:
+        counts: Dict[str, int] = defaultdict(int)
+        for it, labels in by_item.items():
+            if w in labels:
+                counts[labels[w]] += 1
+        total = sum(counts.values()) or 1
+        label_freq[w] = {label: c / total for label, c in counts.items()}
+
+    out: Dict[str, Optional[float]] = {}
     for w in workers:
         same_hits = same_n = 0
-        for it in items:
-            labels = by_item[it]
+        shared_with: Dict[str, int] = defaultdict(int)
+        for labels in by_item.values():
             if w not in labels:
                 continue
-            peers = [labels[o] for o in labels if o != w]
-            if not peers:
-                continue
-            same_hits += sum(1 for p in peers if p == labels[w])
-            same_n += len(peers)
-        same = (same_hits / same_n) if same_n else None
-        out[w] = round(same - chance, 4) if same is not None else 0.0
+            for o in labels:
+                if o == w:
+                    continue
+                shared_with[o] += 1
+                same_n += 1
+                same_hits += labels[o] == labels[w]
+        if not same_n:
+            out[w] = None
+            continue
+        chance = sum(
+            n * sum(p * label_freq[o].get(label, 0.0)
+                    for label, p in label_freq[w].items())
+            for o, n in shared_with.items()) / same_n
+        out[w] = round(same_hits / same_n - chance, 4)
     return out
 
 

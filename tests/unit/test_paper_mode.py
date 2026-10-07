@@ -64,7 +64,8 @@ class TestCohenKappa:
         assert cohen_kappa([]) is None
 
     def test_single_category_degenerate(self):
-        assert cohen_kappa([("A", "A"), ("A", "A")]) == 1.0
+        # Chance agreement is 1, so kappa is 0/0; sklearn gives NaN too.
+        assert cohen_kappa([("A", "A"), ("A", "A")]) is None
 
 
 class TestInterpretAlpha:

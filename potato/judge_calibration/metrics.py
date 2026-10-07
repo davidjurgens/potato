@@ -77,7 +77,8 @@ def _classification_metrics(y_true: List[str], y_pred: List[str], valid_labels: 
     from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
 
     labels = valid_labels or sorted(set(y_true) | set(y_pred))
-    acc = float(accuracy_score(y_true, y_pred)) if y_true else 0.0
+    # No gold overlap: undefined, not 0% (or, with ECE 0, "perfectly calibrated").
+    acc = float(accuracy_score(y_true, y_pred)) if y_true else None
     p, r, f1, _ = precision_recall_fscore_support(
         y_true, y_pred, labels=labels, average="macro", zero_division=0
     )

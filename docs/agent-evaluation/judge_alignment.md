@@ -69,9 +69,11 @@ curl -X POST localhost:8000/admin/api/judge-alignment/run \
 
 ### κ drift trend
 
-The dashboard's **Prompt versions** card plots a sparkline of mean κ across every
-prompt version, with a direction badge — **improving**, **declining**, or
-**stable** — and the first→last delta. This makes calibration *drift* visible at a
+The dashboard's **Prompt versions** card plots a sparkline of κ across prompt
+versions in the order they were created, with a direction badge — **improving**,
+**declining**, or **stable** — and the first→last delta. Each schema has its own
+prompt versions, so the trend is per schema; with several, the card shows the
+schema with the most versions and the report's `kappa_trends` has the rest. This makes calibration *drift* visible at a
 glance: you can see whether successive rubric edits (or auto-calibration rounds)
 are actually raising agreement, or whether a "fix" quietly regressed it.
 
@@ -117,7 +119,10 @@ GET /admin/judge-alignment?prompt_version=v_abc123  # a specific version
 - a **disagreement table** (instance, human, judge, confidence, judge reasoning),
 - **prompt-version history** with mean κ per version, so calibration progress is visible.
 
-Human gold is the majority vote across annotators for each instance.
+Human gold is the majority vote across annotators for each instance. An
+instance where the vote is tied has no gold and is left out. The running κ shown
+during annotation counts each annotator's latest label on each instance once,
+however many times it was saved.
 
 ## Judging beyond single-choice (span & free-text)
 

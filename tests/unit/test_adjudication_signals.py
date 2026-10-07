@@ -249,8 +249,9 @@ class TestConsensusLabel:
         consensus = mgr._get_consensus_label(item)
         assert consensus == "neutral"
 
-    def test_tie_returns_one_value(self):
-        """When there is a tie, Counter.most_common returns one of them."""
+    def test_tie_has_no_consensus(self):
+        """A tied vote has no majority. Picking one let insertion order, which
+        follows set iteration, decide who 'agreed with the consensus'."""
         mgr = _make_manager()
         item = _make_item(
             "item_1",
@@ -259,8 +260,27 @@ class TestConsensusLabel:
                 "user_2": {"sentiment": "negative"},
             },
         )
-        consensus = mgr._get_consensus_label(item)
-        assert consensus in ("positive", "negative")
+        assert mgr._get_consensus_label(item) is None
+
+    def test_majority_wins(self):
+        mgr = _make_manager()
+        item = _make_item("item_1", annotations={
+            "user_1": {"sentiment": "positive"},
+            "user_2": {"sentiment": "negative"},
+            "user_3": {"sentiment": "positive"},
+        })
+        assert mgr._get_consensus_label(item) == "positive"
+
+    def test_every_user_is_compared_on_the_same_schema(self):
+        """Answers stored in a different key order are the same answers."""
+        mgr = _make_manager()
+        for n in range(3):
+            mgr.queue[f"i{n}"] = _make_item(f"i{n}", annotations={
+                "alice": {"sentiment": "pos", "topic": "a"},
+                "bob": {"topic": "a", "sentiment": "pos"},
+                "carol": {"sentiment": "pos", "topic": "a"},
+            })
+        assert mgr._compute_user_agreement_rate("bob") == 1.0
 
 
 class TestComputeUserAgreementRate:

@@ -12,9 +12,9 @@ Standard BWS generates all tuples upfront and produces relative rankings. IBWS a
 2. **Score & Partition**: Score all items using the chosen method (counting, Bradley-Terry, or Plackett-Luce). Partition items into upper/middle/lower thirds by score.
 3. **Round 2**: Generate new tuples *within each bucket*. Items only compete against others in the same bucket, refining the ranking.
 4. **Repeat**: Each round splits buckets into 3 sub-buckets. After K rounds, items are sorted into up to 3^K buckets.
-5. **Stop**: When all buckets have fewer items than the tuple size (terminal), or `max_rounds` is reached.
+5. **Stop**: When all buckets have fewer items than the tuple size (terminal), or `max_rounds` is reached. The last round's annotations are scored before stopping, and a bucket too small to split into thirds is ordered by score and finished.
 
-The result is an ordinal ranking derived from bucket positions plus within-bucket scores.
+The result is an ordinal ranking derived from bucket positions plus within-bucket scores. Buckets keep their rank position as they split, and each round shows every item in a bucket before showing any item again.
 
 ## Configuration
 

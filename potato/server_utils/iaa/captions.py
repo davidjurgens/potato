@@ -248,6 +248,7 @@ def region_caption_rows(items: Dict[str, Dict[str, Any]],
     scored as a caption disagreement, which would blame the wrong thing.
     """
     from potato.grounding.metrics import region_similarity
+    from potato.server_utils.iaa.geometry import match_instances
 
     rows: List[Tuple[str, str, str]] = []
     matched = unmatched = 0
@@ -264,25 +265,26 @@ def region_caption_rows(items: Dict[str, Dict[str, Any]],
         anchor = annotators[0]
         anchor_entries = per_annotator[anchor] or []
         for index, entry in enumerate(anchor_entries):
-            unit = f"{item_id}::{index}"
             caption = str(entry.get("caption") or "")
             if caption.strip():
-                rows.append((anchor, unit, caption))
+                rows.append((anchor, f"{item_id}::{index}", caption))
 
-            for other in annotators[1:]:
-                best, best_score = None, 0.0
-                for candidate in (per_annotator[other] or []):
-                    score = region_similarity(entry.get("region") or {},
-                                              candidate.get("region") or {})
-                    if score > best_score:
-                        best, best_score = candidate, score
-                if best is not None and best_score >= match_iou:
-                    matched += 1
-                    other_caption = str(best.get("caption") or "")
-                    if other_caption.strip():
-                        rows.append((other, unit, other_caption))
-                else:
-                    unmatched += 1
+        # One-to-one, thresholded inside the assignment. Taking each anchor
+        # region's best candidate let one region (and its caption) stand in
+        # for several anchor regions, and a region matching nothing was never
+        # counted as unmatched.
+        for other in annotators[1:]:
+            other_entries = per_annotator[other] or []
+            pairs, lone_anchor, lone_other = match_instances(
+                [e.get("region") or {} for e in anchor_entries],
+                [e.get("region") or {} for e in other_entries],
+                threshold=match_iou, sim_fn=region_similarity)
+            matched += len(pairs)
+            unmatched += len(lone_anchor) + len(lone_other)
+            for index, other_index, _score in pairs:
+                other_caption = str(other_entries[other_index].get("caption") or "")
+                if other_caption.strip():
+                    rows.append((other, f"{item_id}::{index}", other_caption))
 
     return rows, {
         "n_matched_regions": matched,

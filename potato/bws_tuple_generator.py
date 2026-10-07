@@ -10,6 +10,7 @@ Key features:
 - Configurable tuple size and number of tuples
 - Auto-calculates num_tuples based on Louviere's guideline (2 * tuple_size appearances per item)
 - Each item appears in multiple tuples; no item repeats within a single tuple
+- Coverage is balanced: every item is used once before any is used again
 """
 
 import logging
@@ -91,9 +92,29 @@ class BwsTupleGenerator:
             f"from pool of {len(self.pool_items)} items (seed={self.seed})"
         )
 
+        # Balanced coverage: walk shuffled copies of the pool, cutting tuples
+        # off the front, so every item appears once per pass. Independent
+        # draws per tuple left ~13% of a 100-item pool unshown in an IBWS
+        # round, and an unshown item was ranked as if it scored 0.
+        queue: List[int] = []
         tuples = []
         for i in range(num_tuples):
-            sampled = rng.sample(self.pool_items, self.tuple_size)
+            chosen: List[int] = []
+            while len(chosen) < self.tuple_size:
+                if not queue:
+                    queue = list(range(len(self.pool_items)))
+                    rng.shuffle(queue)
+                # The first queued item not already in this tuple; at a pass
+                # boundary that can be from the next pass.
+                pick = next((q for q in queue if q not in chosen), None)
+                if pick is None:
+                    refill = list(range(len(self.pool_items)))
+                    rng.shuffle(refill)
+                    queue.extend(refill)
+                    continue
+                queue.remove(pick)
+                chosen.append(pick)
+            sampled = [self.pool_items[q] for q in chosen]
 
             bws_items = []
             for pos_idx, item in enumerate(sampled):

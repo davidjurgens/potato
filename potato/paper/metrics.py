@@ -55,7 +55,9 @@ def cohen_kappa(pairs: List[Tuple[str, str]]) -> Optional[float]:
         (counts_a[c] / n) * (counts_b.get(c, 0) / n) for c in counts_a
     )
     if expected >= 1.0:
-        return 1.0 if observed >= 1.0 else 0.0
+        # Both raters used one label throughout: chance agreement is 1 and
+        # kappa is 0/0. Publishing 1.0 read as measured perfect agreement.
+        return None
     return (observed - expected) / (1 - expected)
 
 
@@ -76,6 +78,12 @@ def configured_labels(scheme: Dict[str, Any]) -> List[str]:
     return out
 
 
+def _unit(record: LabelRecord) -> Any:
+    """The unit a record is a value of: the instance, or (instance, part)
+    for one part of a multi-part answer such as BWS best/worst."""
+    return (record.instance_id, record.part) if record.part else record.instance_id
+
+
 def _units_for_scheme(records: List[LabelRecord], scheme: Dict[str, Any]
                       ) -> Dict[Any, List[str]]:
     """unit -> values. Radio/likert: unit = instance, value = chosen label.
@@ -88,11 +96,12 @@ def _units_for_scheme(records: List[LabelRecord], scheme: Dict[str, Any]
         units: Dict[Any, List[str]] = defaultdict(list)
         # Latest value per (annotator, instance) — duplicates shouldn't occur,
         # but be safe.
-        latest: Dict[Tuple[str, str], str] = {}
+        # A BWS answer is two units, best and worst, keyed by ``part``.
+        latest: Dict[Tuple[str, Any], str] = {}
         for r in scheme_records:
-            latest[(r.annotator, r.instance_id)] = r.value
-        for (annotator, instance_id), value in latest.items():
-            units[instance_id].append(value)
+            latest[(r.annotator, _unit(r))] = r.value
+        for (annotator, unit), value in latest.items():
+            units[unit].append(value)
         return dict(units)
 
     # Multiselect: which annotators touched each instance
@@ -114,15 +123,15 @@ def _units_for_scheme(records: List[LabelRecord], scheme: Dict[str, Any]
 def _pairwise_kappas(records: List[LabelRecord], scheme_name: str
                      ) -> List[Tuple[str, str, float, int]]:
     """(annotator_a, annotator_b, kappa, shared_items) for every pair with overlap."""
-    by_annotator: Dict[str, Dict[str, str]] = defaultdict(dict)
+    by_annotator: Dict[str, Dict[Any, str]] = defaultdict(dict)
     for r in records:
         if r.schema == scheme_name:
-            by_annotator[r.annotator][r.instance_id] = r.value
+            by_annotator[r.annotator][_unit(r)] = r.value
     names = sorted(by_annotator)
     results = []
     for i, a in enumerate(names):
         for b in names[i + 1:]:
-            shared = sorted(set(by_annotator[a]) & set(by_annotator[b]))
+            shared = sorted(set(by_annotator[a]) & set(by_annotator[b]), key=str)
             if len(shared) < 2:
                 continue
             pairs = [(by_annotator[a][iid], by_annotator[b][iid]) for iid in shared]
@@ -216,7 +225,8 @@ def compute_metrics(project: ProjectData) -> Dict[str, Any]:
         scheme_records = [r for r in records if r.schema == name]
         if not scheme_records:
             continue
-        distribution = Counter(r.value for r in scheme_records)
+        distribution = Counter(f"{r.part}: {r.value}" if r.part else r.value
+                               for r in scheme_records)
         units = _units_for_scheme(records, scheme)
         multi = {u: v for u, v in units.items() if len(v) >= 2}
         alpha = _alpha_nominal(units)

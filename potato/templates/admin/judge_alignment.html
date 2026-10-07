@@ -103,6 +103,7 @@
       </svg>
       <figcaption class="ja-trend-cap">
         {{ ui_lang.judge_mean_kappa_drift|default('Mean κ drift:') }}
+        {% if report.kappa_trends and report.kappa_trends|length > 1 %}<span class="ja-mono">{{ t.schema }}</span>{% endif %}
         <span class="ja-trend-tag trend-{{ t.direction }}">{{ t.direction }}</span>
         {{ '%.3f'|format(t.first) }} → {{ '%.3f'|format(t.last) }}
         (<span class="ja-mono">{{ '%+.3f'|format(t.delta) }}</span> {{ (ui_lang.judge_over_versions|default('over {n} versions'))|replace('{n}', t.series|length|string) }})

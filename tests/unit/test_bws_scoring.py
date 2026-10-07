@@ -187,12 +187,7 @@ class TestBwsPlackettLuce:
     """Tests for Plackett-Luce scoring method."""
 
     def test_plackett_luce_ordering(self):
-        """Known-better items get higher PL scores."""
-        try:
-            import choix
-        except ImportError:
-            pytest.skip("choix not installed")
-
+        """Known-better items get higher PL scores (scipy only, no choix)."""
         pool = make_pool(4)
         items = make_bws_items(["s001", "s002", "s003", "s004"])
 
@@ -206,6 +201,40 @@ class TestBwsPlackettLuce:
         scores = scorer.plackett_luce()
 
         assert scores["s001"]["score"] > scores["s004"]["score"]
+
+    def test_recovers_simulated_utilities(self):
+        """Best-worst choices simulated from known utilities are recovered in
+        order. The old method was Bradley-Terry under another name."""
+        import math
+        import random
+
+        rng = random.Random(0)
+        ids = [f"s{n:03d}" for n in range(1, 9)]
+        utility = {sid: (n - 3.5) / 2 for n, sid in enumerate(ids)}
+        pool = [{"id": sid, "text": sid} for sid in ids]
+        annotations = []
+        for _ in range(600):
+            tuple_ids = rng.sample(ids, 4)
+
+            def draw(cands, sign):
+                weights = [math.exp(sign * utility[c]) for c in cands]
+                return rng.choices(cands, weights)[0]
+
+            best = draw(tuple_ids, 1)
+            worst = draw([c for c in tuple_ids if c != best], -1)
+            items = make_bws_items(tuple_ids)
+            pos = {i["source_id"]: i["position"] for i in items}
+            annotations.append(make_annotation(items, pos[best], pos[worst]))
+
+        scores = BwsScorer(annotations, pool, "id", "text").plackett_luce()
+        fitted = [scores[sid]["score"] for sid in ids]
+        assert fitted == sorted(fitted)
+        # Utilities are identified up to a shift; compare centred slopes.
+        true = [utility[sid] for sid in ids]
+        mean_t, mean_f = sum(true) / 8, sum(fitted) / 8
+        slope = sum((t - mean_t) * (f - mean_f) for t, f in zip(true, fitted)) / \
+            sum((t - mean_t) ** 2 for t in true)
+        assert slope == pytest.approx(1.0, abs=0.2)
 
 
 class TestScoreFileOutput:

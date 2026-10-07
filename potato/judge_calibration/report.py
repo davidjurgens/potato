@@ -300,6 +300,9 @@ def render_html(report: Dict[str, Any]) -> str:
             cal = m.get("calibration", {})
             mae = f" · MAE {m['mae']}" if m.get("mae") is not None else ""
             acc = m.get("accuracy", m.get("exact_match_accuracy", ""))
+            # Undefined (no gold overlap) reads as n/a, never "None" or 0.
+            show = lambda v: "n/a" if v is None else v
+            acc = show(acc)
             extra = f" · Jaccard {m['mean_jaccard']}" if m.get("mean_jaccard") is not None else ""
             if m.get("mean_iou") is not None and "mean_jaccard" not in m:
                 extra = f" · IoU {m['mean_iou']}"
@@ -309,8 +312,8 @@ def render_html(report: Dict[str, Any]) -> str:
                 f"<tr><td>{model}</td>"
                 f"<td class='metric'>{acc}</td>"
                 f"<td class='metric'>{f1}{mae}{extra}</td>"
-                f"<td class='metric'>{cal.get('ece','')}</td>"
-                f"<td class='metric'>{cal.get('brier','')}</td>"
+                f"<td class='metric'>{show(cal.get('ece', ''))}</td>"
+                f"<td class='metric'>{show(cal.get('brier', ''))}</td>"
                 f"<td class='metric'>{n}</td></tr>"
             )
         parts.append("</table></div>")

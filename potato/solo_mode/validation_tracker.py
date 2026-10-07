@@ -198,6 +198,35 @@ class ValidationTracker:
                 f"agrees={agrees}, rate={self._metrics.agreement_rate:.2%}"
             )
 
+    def retract_comparison(self, instance_id: str, schema_name: str) -> bool:
+        """Undo the latest comparison recorded for (instance, schema).
+
+        Used when a human re-labels: the new label replaces the old one
+        rather than being counted on top of it or being ignored.
+        Returns False when there was nothing to retract.
+        """
+        with self._lock:
+            for index in range(len(self._comparison_history) - 1, -1, -1):
+                entry = self._comparison_history[index]
+                if (entry['instance_id'], entry['schema_name']) != (instance_id, schema_name):
+                    continue
+                del self._comparison_history[index]
+                human_str, llm_str = str(entry['human_label']), str(entry['llm_label'])
+                self._metrics.total_compared -= 1
+                if entry['agrees']:
+                    self._metrics.agreements -= 1
+                    _decrement(self._metrics.label_agreements, human_str)
+                else:
+                    self._metrics.disagreements -= 1
+                    _decrement(self._metrics.label_disagreements, human_str)
+                    _decrement(self._metrics.confusion_matrix, (llm_str, human_str))
+                self._metrics.agreement_rate = (
+                    self._metrics.agreements / self._metrics.total_compared
+                    if self._metrics.total_compared > 0 else 0.0)
+                self._update_recent_metrics()
+                return True
+            return False
+
     def _update_recent_metrics(self) -> None:
         """Update metrics based on recent comparisons."""
         if len(self._comparison_history) < 2:
@@ -580,3 +609,11 @@ class ValidationTracker:
                 )
 
             self._llm_labels_since_review = data.get('llm_labels_since_review', 0)
+
+
+def _decrement(counts: dict, key) -> None:
+    """Subtract one, dropping the key at zero."""
+    if counts.get(key, 0) <= 1:
+        counts.pop(key, None)
+    else:
+        counts[key] -= 1

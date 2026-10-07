@@ -130,6 +130,30 @@ def span_f1_exact(spans_a: Iterable, spans_b: Iterable) -> Tuple[float, float, f
     return p, r, f1
 
 
+def _max_matching(ok: List[List[bool]]) -> int:
+    """Size of a maximum one-to-one matching on an eligibility matrix.
+
+    Greedy first-fit let an early span claim the only partner a later span
+    had: (0,10) took (0,4), leaving (0,4) unmatched though (0,10)-(5,10) and
+    (0,4)-(0,4) were both available. F1 0.5 where it is 1.0.
+    """
+    if not ok or not ok[0]:
+        return 0
+    try:
+        from scipy.optimize import linear_sum_assignment
+        rows, cols = linear_sum_assignment(
+            [[0 if cell else 1 for cell in row] for row in ok])
+        return sum(1 for i, j in zip(rows.tolist(), cols.tolist()) if ok[i][j])
+    except ImportError:  # pragma: no cover
+        used, count = set(), 0
+        for row in ok:
+            j = next((j for j, cell in enumerate(row) if cell and j not in used), None)
+            if j is not None:
+                used.add(j)
+                count += 1
+        return count
+
+
 def span_f1_partial(
     spans_a: Iterable,
     spans_b: Iterable,
@@ -147,24 +171,16 @@ def span_f1_partial(
     b = _normalize(spans_b)
     if not a and not b:
         return 1.0, 1.0, 1.0
-    matched_b = set()
-    tp = 0
-    for sa in a:
-        for idx, sb in enumerate(b):
-            if idx in matched_b:
-                continue
-            if label_must_match and sa[2] != sb[2]:
-                continue
-            ov = _overlap_len(sa, sb)
-            if ov <= 0:
-                continue
-            la, lb = sa[1] - sa[0], sb[1] - sb[0]
-            if la <= 0 or lb <= 0:
-                continue
-            if (ov / la) >= threshold or (ov / lb) >= threshold:
-                tp += 1
-                matched_b.add(idx)
-                break
+    def eligible(sa, sb) -> bool:
+        if label_must_match and sa[2] != sb[2]:
+            return False
+        ov = _overlap_len(sa, sb)
+        la, lb = sa[1] - sa[0], sb[1] - sb[0]
+        if ov <= 0 or la <= 0 or lb <= 0:
+            return False
+        return (ov / la) >= threshold or (ov / lb) >= threshold
+
+    tp = _max_matching([[eligible(sa, sb) for sb in b] for sa in a])
     p = tp / len(a) if a else 0.0
     r = tp / len(b) if b else 0.0
     f1 = 2 * p * r / (p + r) if (p + r) else 0.0
@@ -236,29 +252,22 @@ def krippendorff_alpha_u(
 # Gamma (Mathet et al. 2015)
 # ---------------------------------------------------------------------------
 
-def _positional_dissimilarity(
-    a: Tuple[int, int, str],
-    b: Tuple[int, int, str],
-    delta_empty: float,
-) -> float:
-    """Positional component of the Mathet dissimilarity (normalized)."""
-    if a is None or b is None:
-        return delta_empty
-    # Sum of |starts diff| + |ends diff|, normalized by total span lengths.
-    diff = abs(a[0] - b[0]) + abs(a[1] - b[1])
+def _positional_dissimilarity(a: Tuple[int, int, str],
+                               b: Tuple[int, int, str]) -> float:
+    """Mathet's positional dissimilarity: squared, normalised boundary shift.
+
+    ``((|s_a - s_b| + |e_a - e_b|) / (len_a + len_b)) ** 2``. Unsquared, a far
+    misplacement cost only linearly, and the alignment could not prefer
+    leaving a unit unpaired.
+    """
     total = (a[1] - a[0]) + (b[1] - b[0])
     if total <= 0:
-        return delta_empty
-    return diff / total
+        return 0.0 if (a[0], a[1]) == (b[0], b[1]) else float("inf")
+    return ((abs(a[0] - b[0]) + abs(a[1] - b[1])) / total) ** 2
 
 
-def _categorical_dissimilarity(
-    a: Tuple[int, int, str],
-    b: Tuple[int, int, str],
-    delta_empty: float,
-) -> float:
-    if a is None or b is None:
-        return delta_empty
+def _categorical_dissimilarity(a: Tuple[int, int, str],
+                               b: Tuple[int, int, str]) -> float:
     return 0.0 if a[2] == b[2] else 1.0
 
 
@@ -270,10 +279,16 @@ def _pairwise_disorder(
     delta_empty: float,
 ) -> float:
     """
-    Optimal-alignment disorder between two annotators' span sets.
+    Disorder of the best alignment of two annotators' units (Mathet 2015).
 
-    Uses the Hungarian algorithm (``scipy.optimize.linear_sum_assignment``)
-    with padded empty units so that |spans_a| != |spans_b| is handled.
+    Every unit is either paired with one of the other annotator's units, at
+    ``alpha * d_pos + beta * d_cat``, or aligned with the empty unit at
+    ``delta_empty``. The total is divided by the mean number of units per
+    annotator. A padded square assignment used to force every unit onto a
+    real partner when the counts were equal, so one misplaced span cost
+    without bound: two annotators matching on two of three spans read gamma
+    0.06, chance level. This matches pygamma-agreement's best alignment
+    (0.667 on that example).
     """
     try:
         import numpy as np
@@ -282,23 +297,30 @@ def _pairwise_disorder(
         logger.warning("scipy unavailable; gamma falling back to NaN")
         return float("nan")
 
-    n = max(len(spans_a), len(spans_b))
-    if n == 0:
+    na, nb = len(spans_a), len(spans_b)
+    if na + nb == 0:
         return 0.0
-    # Pad shorter side with None (= empty unit)
-    a_padded: List[Optional[Tuple[int, int, str]]] = list(spans_a) + [None] * (n - len(spans_a))
-    b_padded: List[Optional[Tuple[int, int, str]]] = list(spans_b) + [None] * (n - len(spans_b))
+    blocked = 1e9
+    size = na + nb
+    cost = np.zeros((size, size), dtype=float)
+    # a_i with b_j
+    for i, ua in enumerate(spans_a):
+        for j, ub in enumerate(spans_b):
+            d = alpha * _positional_dissimilarity(ua, ub) \
+                + beta * _categorical_dissimilarity(ua, ub)
+            cost[i, j] = min(d, blocked)
+    # a_i with the empty unit (its own column only), and b_j likewise
+    cost[:na, nb:] = blocked
+    cost[na:, :nb] = blocked
+    for i in range(na):
+        cost[i, nb + i] = delta_empty
+    for j in range(nb):
+        cost[na + j, j] = delta_empty
+    # empty with empty: free
 
-    cost = np.zeros((n, n), dtype=float)
-    for i in range(n):
-        for j in range(n):
-            pos = _positional_dissimilarity(a_padded[i], b_padded[j], delta_empty)
-            cat = _categorical_dissimilarity(a_padded[i], b_padded[j], delta_empty)
-            cost[i, j] = alpha * pos + beta * cat
-
-    row_ind, col_ind = linear_sum_assignment(cost)
-    total = float(cost[row_ind, col_ind].sum())
-    return total / n
+    rows, cols = linear_sum_assignment(cost)
+    total = float(cost[rows, cols].sum())
+    return total / ((na + nb) / 2.0)
 
 
 def gamma(
@@ -327,12 +349,15 @@ def gamma(
         chance-level. NaN if scipy is unavailable.
 
     Notes:
-        This implementation is a faithful but simplified rendition: positional
-        dissimilarity is normalized by combined span length, and the chance
-        baseline is estimated by re-pairing spans across all annotators
-        ``n_samples`` times. Full pygamma-agreement uses a more sophisticated
-        baseline (continuum-of-shuffles); the simplification is sufficient for
-        the relative IAA comparisons that drive routing decisions.
+        The observed disorder is Mathet's best alignment (squared positional
+        dissimilarity, units may align with the empty unit), and matches
+        pygamma-agreement for two annotators; with more it is the mean over
+        annotator pairs. The chance baseline is simpler than pygamma's
+        sampler: ``n_samples`` times, every unit is dealt to a random
+        annotator (keeping each annotator's count) and placed at a random
+        position in ``[0, length]`` (keeping its length and label). Gamma
+        therefore agrees with pygamma in direction and rough size, not to
+        the digit.
     """
     import random as _random
 
@@ -360,16 +385,22 @@ def gamma(
         return float("nan")
     observed = sum(pair_disorders) / len(pair_disorders)
 
-    # Expected-by-chance disorder via shuffled pairings
+    # Expected-by-chance disorder via shuffled, relocated units
     all_spans = [s for u in users for s in normed[u]]
     if len(all_spans) < 2:
-        return 1.0 if observed == 0 else float("nan")
+        # Nothing (or one unit) to agree about: undefined, not perfect.
+        return float("nan")
+    extent = float(length) if length else float(max(e for _s, e, _l in all_spans))
 
     rng = _random.Random(seed)
     chance_disorders = []
     sizes = [len(normed[u]) for u in users]
     for _ in range(n_samples):
-        shuffled = list(all_spans)
+        shuffled = []
+        for start, end, label in all_spans:
+            width = end - start
+            new_start = rng.uniform(0.0, max(0.0, extent - width))
+            shuffled.append((new_start, new_start + width, label))
         rng.shuffle(shuffled)
         # Re-distribute back to annotators preserving original counts
         idx = 0
@@ -394,5 +425,5 @@ def gamma(
         return float("nan")
     expected = sum(chance_disorders) / len(chance_disorders)
     if expected <= 0:
-        return 1.0 if observed == 0 else float("nan")
+        return float("nan")
     return 1.0 - (observed / expected)

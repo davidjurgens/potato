@@ -157,7 +157,9 @@ Objects are paired across annotators above an IoU threshold that defaults to
 
 - **Localization** matches objects between every two annotators with the Hungarian
   algorithm on IoU (globally optimal when scipy is present; greedy best-first
-  otherwise).
+  otherwise). The threshold is applied inside the assignment, so it keeps as
+  many pairs at or above the threshold as exist, and among those the most
+  similar.
 - **Detection and classification** group each item's objects into clusters
   greedily: annotators are taken in sorted order, and each object joins the
   first cluster whose first object it overlaps above the threshold. The result

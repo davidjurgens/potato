@@ -86,6 +86,9 @@ class MACEAlgorithm:
                 spamming, theta = self._m_step(
                     annotations, marginals, spamming, theta)
 
+            # Posteriors for the parameters actually returned, not the ones
+            # before the last M-step.
+            marginals = self._e_step(annotations, spamming, theta)
             ll = self._log_likelihood(annotations, marginals, spamming, theta)
 
             if ll > best_ll:
@@ -254,43 +257,33 @@ class MACEAlgorithm:
         return new_spamming, new_theta
 
     def _log_likelihood(self, annotations, marginals, spamming, theta):
-        """Compute log-likelihood of the data given current parameters.
+        """Marginal log-likelihood of the data under the point estimates.
 
-        Args:
-            annotations: np.ndarray shape (num_instances, num_annotators)
-            marginals: np.ndarray shape (num_instances, num_labels)
-            spamming: np.ndarray shape (num_annotators, 2)
-            theta: np.ndarray shape (num_annotators, num_labels)
+        ``sum_i log sum_k (1/K) prod_j P(a_ij | T_i = k)``, with
+        ``P(a | k) = s_j [a == k] + (1 - s_j) theta_j[a]``. This is what picks
+        the best restart. It used to be ``sum_ik q_ik log P(x_i | k)`` with no
+        label prior or entropy term, which on hard data chose restarts 0.5 to
+        1.9 nats worse by the real likelihood in 35 of 80 datasets.
 
-        Returns:
-            float: log-likelihood value
+        ``marginals`` is accepted for compatibility and not used.
         """
-        ll = 0.0
-
-        # Normalize spamming and theta to probabilities for likelihood
         s_norm = spamming / spamming.sum(axis=1, keepdims=True)
         t_norm = theta / theta.sum(axis=1, keepdims=True)
+        log_prior = -np.log(self.num_labels)
 
+        ll = 0.0
         for i in range(self.num_instances):
-            for k in range(self.num_labels):
-                if marginals[i, k] < EPS:
+            log_p = np.full(self.num_labels, log_prior)
+            for j in range(self.num_annotators):
+                a = int(annotations[i, j])
+                if a < 0:
                     continue
-
-                log_p = 0.0
-                for j in range(self.num_annotators):
-                    if annotations[i, j] < 0:
-                        continue
-                    a = int(annotations[i, j])
-
-                    # P(a_ij | T_i=k) = s_j * I(a==k) + (1-s_j) * theta_j_a
-                    p_knowing = s_norm[j, 0] * (1.0 if a == k else 0.0)
-                    p_guessing = s_norm[j, 1] * t_norm[j, a]
-                    p = p_knowing + p_guessing
-                    log_p += np.log(max(p, EPS))
-
-                ll += marginals[i, k] * log_p
-
-        return ll
+                p = s_norm[j, 1] * t_norm[j, a] + s_norm[j, 0] * (
+                    np.arange(self.num_labels) == a)
+                log_p += np.log(np.maximum(p, EPS))
+            top = log_p.max()
+            ll += top + np.log(np.exp(log_p - top).sum())
+        return float(ll)
 
     @staticmethod
     def entropy(marginals):

@@ -8,6 +8,7 @@ instance selection, and validation tracking.
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 import json
 import logging
@@ -926,11 +927,18 @@ class SoloModeManager:
 
         # Get current state
         metrics = self.get_agreement_metrics()
-        agreement_rate = metrics.agreement_rate if hasattr(metrics, 'agreement_rate') else 0.0
         prompt_version = self.current_prompt_version
+        # The current prompt version's own rate: it is both the "after" of
+        # the previous cycle and the "before" of this one. The cumulative rate
+        # diluted a real gain with every comparison made before it (a +0.10
+        # read as +0.014) and the loop stopped as plateaued.
+        version_rate = self._version_rate(prompt_version)
+        agreement_rate = (version_rate if version_rate is not None else
+                          getattr(metrics, 'agreement_rate', 0.0))
 
         # Check for post-cycle metrics from previous cycle
-        loop.record_post_cycle_metrics(agreement_rate)
+        if version_rate is not None:
+            loop.record_post_cycle_metrics(version_rate)
 
         # Get confusion patterns
         analysis = self.get_confusion_analysis_full()
@@ -1121,10 +1129,11 @@ class SoloModeManager:
         if loop.is_stopped:
             return {'success': False, 'error': f'Refinement loop stopped: {loop.stop_reason}'}
 
-        # Record post-cycle metrics from the previous cycle
-        metrics = self.get_agreement_metrics()
-        agreement_rate = getattr(metrics, 'agreement_rate', 0.0)
-        loop.record_post_cycle_metrics(agreement_rate)
+        # Record post-cycle metrics from the previous cycle, on the current
+        # prompt version's comparisons only (see run_refinement_cycle).
+        version_rate = self._version_rate(self.current_prompt_version)
+        if version_rate is not None:
+            loop.record_post_cycle_metrics(version_rate)
 
         # Instantiate strategy
         try:
@@ -1953,6 +1962,7 @@ class SoloModeManager:
             # click, Accept+Enter, back-button resubmit) must NOT double-count
             # agreement metrics or the confusion matrix.
             already_counted = prediction.human_label is not None
+            previous_agrees = prediction.agrees_with_human
 
             prediction.human_label = label
             agrees = self._check_agreement(
@@ -1989,12 +1999,29 @@ class SoloModeManager:
                     agrees=agrees,
                 )
             else:
-                # Re-label of an already-counted instance: keep the disagreement
-                # set consistent with the newest label without double-counting.
+                # Re-label of an already-counted instance: the newest label
+                # replaces the old one in every count. Only the disagreement
+                # set used to follow it, so a corrected label left the rate
+                # (and the gate that ends human annotation) at the old value.
                 if agrees:
                     self.disagreement_ids.discard(instance_id)
                 else:
                     self.disagreement_ids.add(instance_id)
+                if previous_agrees is not None and previous_agrees != agrees:
+                    step = 1 if agrees else -1
+                    self.agreement_metrics.agreements += step
+                    self.agreement_metrics.disagreements -= step
+                    self.agreement_metrics.update_rate()
+                    if pv in self._per_version_agreement:
+                        self._per_version_agreement[pv]['agreements'] += step
+                self.validation_tracker.retract_comparison(instance_id, schema_name)
+                self.validation_tracker.record_comparison(
+                    instance_id=instance_id,
+                    human_label=label,
+                    llm_label=prediction.predicted_label,
+                    schema_name=schema_name,
+                    agrees=agrees,
+                )
 
             human_count = len(self.human_labeled_ids)
             pv_stats = self._per_version_agreement.get(pv, {})
@@ -2140,17 +2167,21 @@ class SoloModeManager:
             return True
         if not hs or not ls:
             return False
-        total_human = sum(max(0, s['end'] - s['start']) for s in hs)
+        # Covered characters per label, as sets: summing span-by-span
+        # overlaps counted a character twice when two LLM spans covered it,
+        # so a human span half covered by a duplicated LLM span read as fully
+        # covered.
+        def chars(spans):
+            out: Dict[str, set] = defaultdict(set)
+            for sp in spans:
+                out[sp['label']].update(range(int(sp['start']), int(sp['end'])))
+            return out
+
+        human, llm = chars(hs), chars(ls)
+        total_human = sum(len(c) for c in human.values())
         if total_human == 0:
             return False
-        overlap = 0
-        for h in hs:
-            for l in ls:
-                if h['label'] != l['label']:
-                    continue
-                o = min(h['end'], l['end']) - max(h['start'], l['start'])
-                if o > 0:
-                    overlap += o
+        overlap = sum(len(c & llm.get(label, set())) for label, c in human.items())
         return (overlap / total_human) >= threshold
 
     def _get_annotation_type(self, schema_name: str) -> str:
@@ -2216,6 +2247,13 @@ class SoloModeManager:
                 f"agrees={agrees}, prompt_v{pv}"
             )
 
+    def _version_rate(self, prompt_version) -> Optional[float]:
+        """Agreement on comparisons made under one prompt version, or None
+        before there are any."""
+        stats = self._per_version_agreement.get(prompt_version) or {}
+        compared = stats.get('compared', 0)
+        return stats.get('agreements', 0) / compared if compared else None
+
     def _get_stored_human_label(
         self, instance_id: str, schema_name: str
     ) -> Optional[Any]:
@@ -2224,17 +2262,28 @@ class SoloModeManager:
         Returns:
             The human label if found, None otherwise.
         """
+        # get_all_user_ids() and get_annotations_for_instance() do not exist;
+        # the AttributeError was swallowed, so this always returned None and a
+        # human who labelled before the LLM was never compared.
         try:
+            from potato.server_utils import annotation_values
             from potato.user_state_management import get_user_state_manager
             usm = get_user_state_manager()
-            # Check all users' annotations for this instance
-            for user_id in usm.get_all_user_ids():
+            for user_id in usm.get_user_ids():
                 user_state = usm.get_user_state(user_id)
                 if user_state is None:
                     continue
-                annotations = user_state.get_annotations_for_instance(instance_id)
-                if annotations and schema_name in annotations:
-                    return annotations[schema_name]
+                stored = user_state.get_label_annotations(instance_id)
+                if not stored:
+                    continue
+                values = annotation_values.group_by_schema(stored).get(schema_name)
+                if not values:
+                    continue
+                chosen = annotation_values.selected_labels(values)
+                if len(chosen) == 1:
+                    return chosen[0]
+                if chosen:
+                    return sorted(chosen)
         except Exception as e:
             logger.debug(f"Could not look up human label for {instance_id}: {e}")
         return None

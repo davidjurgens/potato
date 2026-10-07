@@ -42,7 +42,8 @@ class TestECE:
         assert expected_calibration_error(conf, corr, n_bins=10) == 0.2
 
     def test_empty(self):
-        assert expected_calibration_error([], [], 10) == 0.0
+        # Nothing to calibrate is undefined, not perfectly calibrated.
+        assert expected_calibration_error([], [], 10) is None
 
     def test_length_mismatch_raises(self):
         with pytest.raises(ValueError):
