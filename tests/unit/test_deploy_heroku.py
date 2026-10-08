@@ -103,7 +103,9 @@ class TestNames:
 class TestSource:
     def test_dockerfile_derives_from_the_published_image(self, spec):
         dockerfile = source_files(spec)["Dockerfile"]
-        assert dockerfile.startswith("#") and "FROM ghcr.io/davidjurgens/potato:latest" in dockerfile
+        from potato import __version__
+        assert dockerfile.startswith("#")
+        assert f"FROM ghcr.io/davidjurgens/potato:{__version__}" in dockerfile
 
     def test_the_task_is_writable_by_an_arbitrary_uid(self, spec):
         """Heroku runs the container as a random non-root uid, not 1000."""

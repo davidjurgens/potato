@@ -41,7 +41,7 @@ from potato.deploy.providers.base import (
 from potato.deploy.state import DeploymentRecord
 
 API_ROOT = "https://api.render.com/v1"
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 DEFAULT_REGION = "oregon"
 DEFAULT_PLAN = "free"
 

@@ -67,10 +67,10 @@ The 48-hour idle-sleep timer cannot be shortened on free hardware.
 
 A Space built by `potato deploy` contains the project, a Dockerfile and a
 README, which is a dozen or so files. The Dockerfile derives from the published
-image:
+image, tagged with the Potato version you have installed:
 
 ```dockerfile
-FROM ghcr.io/davidjurgens/potato:latest
+FROM ghcr.io/davidjurgens/potato:2.10.3
 COPY --chown=potato:potato . /app
 ```
 

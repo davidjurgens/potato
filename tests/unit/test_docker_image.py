@@ -552,7 +552,11 @@ class TestPublishWorkflow:
         # The workflow publishes ghcr.io/<owner>/<repo>; the provider default
         # must name the same image or `deploy up` pulls something that is not
         # there.
-        assert DEFAULT_IMAGE.endswith(":latest")
+        # The tag is the installed version, which the workflow publishes from
+        # each v* tag; `latest` ran whatever release was newest on the day.
+        from potato import __version__
+        assert DEFAULT_IMAGE.endswith(f":{__version__}")
+        assert "steps.version.outputs.version" in open(WORKFLOW).read()
 
 
 # Read by path, not imported: once create_app() has loaded the module as

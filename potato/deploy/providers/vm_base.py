@@ -43,7 +43,7 @@ from potato.deploy.providers.base import (
 from potato.deploy.remote import SSHSession, WAL_DATABASES, generate_keypair
 from potato.deploy.state import DeploymentRecord, SecretStore
 
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 CADDY_IMAGE = "caddy:2.11.3-alpine"
 
 APP_DIR = "/opt/potato/app"

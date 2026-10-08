@@ -46,7 +46,7 @@ from potato.deploy.providers.base import (
 from potato.deploy.state import DeploymentRecord
 
 API_ROOT = "https://api.heroku.com"
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 DEFAULT_REGION = "us"
 DEFAULT_SIZE = "basic"
 

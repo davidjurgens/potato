@@ -35,7 +35,7 @@ from potato.deploy.state import DeploymentRecord
 
 GRAPHQL_API = "https://backboard.railway.com/graphql/v2"
 TOKEN_PAGE = "https://railway.com/account/tokens"
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 CONTAINER_PORT = 7860
 
 FAILED_STATES = {"FAILED", "CRASHED", "REMOVED", "SKIPPED"}

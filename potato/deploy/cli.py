@@ -241,6 +241,15 @@ def build_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------
 
 
+def _missing_extra(provider) -> Optional[str]:
+    """What stops create() before any API call: an extra that is not installed."""
+    missing = provider.check_requirements()
+    if not missing:
+        return None
+    return (f"the {provider.name} target needs {', '.join(missing)}. Install with: "
+            f"pip install 'potato-annotation[{provider.install_extra}]'")
+
+
 def cmd_check(args) -> int:
     provider = get_provider(args.provider)
     report = run_preflight(args.config_file, provider=args.provider,
@@ -250,6 +259,13 @@ def cmd_check(args) -> int:
         _echo(json.dumps(report.to_dict(), indent=2))
     else:
         _echo(render_report(report))
+    # The config can pass while the target cannot run at all; "safe to deploy"
+    # followed by a refusal from `up` is what this used to print.
+    needs = _missing_extra(provider)
+    if needs:
+        if not args.as_json:
+            _echo(f"BLOCKED: {needs}")
+        return EXIT_BLOCKED
     return EXIT_OK if report.ok else EXIT_BLOCKED
 
 
@@ -395,7 +411,7 @@ def cmd_up(args) -> int:
 
     # The same check create() makes first, so a dry run that `up` would refuse
     # fails too instead of printing a clean plan.
-    refused = provider.refusal(spec, manifest)
+    refused = provider.refusal(spec, manifest) or _missing_extra(provider)
     if refused:
         _echo(f"REFUSED: {refused}")
         return EXIT_BLOCKED
@@ -442,7 +458,8 @@ def _resolve_backup(args, name: str, provider_name: str) -> BackupOptions:
                 backup.hf_repo = default_hf_repo(backup.hf_token, name)
             except Exception as exc:
                 raise BackupOptionsError(
-                    f"could not ask HuggingFace who the token belongs to: {exc}")
+                    f"could not ask HuggingFace who the token belongs to: {exc}. "
+                    "Pass --hf-backup-repo <owner>/<name> to skip the lookup.")
     return backup
 
 
@@ -630,10 +647,15 @@ def cmd_providers(args) -> int:
         # An unmet extra is the first thing that will stop someone, so say it
         # here rather than after they have chosen a target and typed a token.
         missing = provider.check_requirements()
-        if missing:
-            traits.append(f"needs `pip install 'potato-annotation[{provider.install_extra}]'` "
-                          f"({', '.join(missing)} missing)")
-        _echo(f"  {name:14s} {provider.summary or ', '.join(traits) or 'durable, public'}")
+        needs = (f"needs `pip install 'potato-annotation[{provider.install_extra}]'` "
+                 f"({', '.join(missing)} missing)") if missing else None
+        if provider.summary:
+            # A summary replaces the traits, but never the missing extra:
+            # seven targets had a summary and so hid it.
+            line = provider.summary + (f"; {needs}" if needs else "")
+        else:
+            line = ", ".join(traits + ([needs] if needs else [])) or "durable, public"
+        _echo(f"  {name:14s} {line}")
     _echo("")
     _echo("Credentials:")
     for line in creds.describe_available(providers=available_providers()):
@@ -691,7 +713,8 @@ def cmd_button(args) -> int:
                 except Exception as exc:
                     raise BackupOptionsError(
                         "could not ask HuggingFace who the token belongs to: "
-                        f"{exc}")
+                        f"{exc}. Pass --hf-backup-repo <owner>/<name> to skip "
+                        "the lookup.")
         result = buttons.generate(args.config_file, args.target, backup, name=name,
                                   image=args.image, template_url=args.template_url,
                                   region=args.region)

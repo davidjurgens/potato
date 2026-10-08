@@ -116,6 +116,28 @@ class TestCheck:
         assert "findings" in payload
 
 
+    def test_a_missing_extra_blocks_check(self, project, capsys, monkeypatch):
+        """The config passing is not the target being able to run."""
+        monkeypatch.setattr(RecordingProvider, "requires", ["no_such_module_xyz"])
+        assert cli.main(["check", project, "--provider", "recording"]) == cli.EXIT_BLOCKED
+        assert "no_such_module_xyz" in capsys.readouterr().out
+
+    def test_a_missing_extra_fails_the_dry_run(self, project, capsys, monkeypatch):
+        """`up --dry-run` exited 0, then a real `up` stopped in create()."""
+        monkeypatch.setattr(RecordingProvider, "requires", ["no_such_module_xyz"])
+        code = cli.main(["up", project, "--provider", "recording", "--dry-run"])
+        assert code == cli.EXIT_BLOCKED
+        assert "REFUSED" in capsys.readouterr().out
+
+    def test_a_new_output_directory_is_not_a_missing_path(self, project, capsys):
+        """The server creates annotation_output/ at boot, so D004b is wrong."""
+        import os
+        assert not os.path.exists(os.path.join(os.path.dirname(project),
+                                               "annotation_output"))
+        cli.main(["check", project, "--provider", "local"])
+        assert "D004b" not in capsys.readouterr().out
+
+
 class TestBuild:
     def test_writes_a_bundle(self, project, capsys, tmp_path):
         out = tmp_path / "bundle"
@@ -413,6 +435,18 @@ class TestProvidersCommand:
         cli.main(["providers"])
         out = capsys.readouterr().out
         assert "potato-annotation[deploy]" in out
+
+    def test_a_summary_does_not_hide_the_missing_extra(self, capsys, monkeypatch):
+        """Seven targets have a summary, and it replaced the trait line whole."""
+        from potato.deploy.providers.base import Provider
+        monkeypatch.setattr(Provider, "check_requirements",
+                            lambda self: ["paramiko"] if self.name == "hetzner"
+                            else [])
+        cli.main(["providers"])
+        line = next(l for l in capsys.readouterr().out.splitlines()
+                    if l.strip().startswith("hetzner"))
+        assert "Hetzner Cloud" in line
+        assert "needs `pip install" in line and "paramiko missing" in line
 
     def test_never_prints_a_whole_token(self, capsys, monkeypatch):
         monkeypatch.setenv("DIGITALOCEAN_TOKEN", "dop_v1_supersecretvalue")

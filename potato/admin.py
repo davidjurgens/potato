@@ -1798,20 +1798,31 @@ class AdminDashboard:
                         # undefined with percent agreement 1.0.
                         metrics["by_schema"][schema_name] = {
                             "krippendorff_alpha": None,
-                            "cohen_kappa": None,
-                            "fleiss_kappa": None,
                             "percent_agreement": 1.0,
                             "metric_type": metric_name,
                             "items_evaluated": len(valid_items),
                             "total_annotations": len(reliability_data),
                             "interpretation": "Undefined",
                             "note": (
-                                "every annotator gave the same answer on every "
+                                "every annotator gave the same label on every "
                                 "item, so chance agreement is 1 and kappa and "
                                 "alpha are undefined. Perfect agreement, not a "
                                 "failed computation; percent_agreement shows it."
                             ),
                         }
+                        if metric_name == "nominal":
+                            # The helpers' usual objects with null inside, so a
+                            # client reading fleiss_kappa["kappa"] gets None
+                            # rather than a TypeError on a bare null.
+                            undefined = metrics["by_schema"][schema_name]
+                            try:
+                                from potato.agreement import (
+                                    cohen_kappa_pairwise, fleiss_kappa,
+                                )
+                                undefined["cohen_kappa"] = cohen_kappa_pairwise(df)
+                                undefined["fleiss_kappa"] = fleiss_kappa(df)
+                            except Exception as e:
+                                undefined["kappa_error"] = str(e)
                         continue
 
                     # `calculate_krippendorffs_alpha` takes an

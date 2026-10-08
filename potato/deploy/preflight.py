@@ -250,6 +250,9 @@ def _check_referenced_paths(ctx: CheckContext) -> List[Finding]:
     for missing in paths.missing:
         if missing.required:
             continue
+        if missing.config_key == "output_annotation_dir":
+            # The server creates it at boot; a new task has none yet.
+            continue
         findings.append(Finding(
             "D004b", "warning",
             f"{missing.config_key} references a missing path: {missing.raw}",

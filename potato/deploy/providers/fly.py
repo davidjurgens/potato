@@ -35,7 +35,7 @@ from potato.deploy.state import DeploymentRecord
 MACHINES_API = "https://api.machines.dev/v1"
 GRAPHQL_API = "https://api.fly.io/graphql"
 TOKEN_PAGE = "https://fly.io/user/personal_access_tokens (or `fly tokens create org`)"
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 DEFAULT_REGION = "iad"
 DEFAULT_MEMORY_MB = 1024
 DEFAULT_VOLUME_GB = 1

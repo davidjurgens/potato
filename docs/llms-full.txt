@@ -53645,7 +53645,9 @@ Docker, running. Potato checks the daemon rather than the binary, because
 Docker Desktop installed but not started is the common case and produces an
 unreadable socket error otherwise.
 
-The image is pulled from `ghcr.io/davidjurgens/potato:latest` on every `up`,
+The image is `ghcr.io/davidjurgens/potato:<version>`, tagged with the Potato
+version you have installed, so a study keeps running the release it was
+deployed from. Pass `--image` to use another tag. It is pulled on every `up`,
 which is about 840 MB the first time and a few seconds after that. Without the
 pull, an image fetched weeks ago would be reused forever with nothing to say
 so. If the pull fails and you already have the image, the deploy continues and
@@ -53661,12 +53663,12 @@ Preflight for myproject/config.yaml  (provider: local)
 Bundle: 4 files, 75.3KB
 
 4 step(s):
-   1. docker.pull   pull ghcr.io/davidjurgens/potato:latest
+   1. docker.pull   pull ghcr.io/davidjurgens/potato:2.10.3
    2. docker.rm     remove any existing container potato-deploy-my-study
    3. docker.run    run potato-deploy-my-study on 127.0.0.1:8123 ...
    4. health.wait   poll http://127.0.0.1:8123/health until the server answers
 
-Pulling ghcr.io/davidjurgens/potato:latest ...
+Pulling ghcr.io/davidjurgens/potato:2.10.3 ...
 Started potato-deploy-my-study at http://127.0.0.1:8123
 
 Deployed: http://127.0.0.1:8123
@@ -55204,10 +55206,10 @@ The 48-hour idle-sleep timer cannot be shortened on free hardware.
 
 A Space built by `potato deploy` contains the project, a Dockerfile and a
 README, which is a dozen or so files. The Dockerfile derives from the published
-image:
+image, tagged with the Potato version you have installed:
 
 ```dockerfile
-FROM ghcr.io/davidjurgens/potato:latest
+FROM ghcr.io/davidjurgens/potato:2.10.3
 COPY --chown=potato:potato . /app
 ```
 

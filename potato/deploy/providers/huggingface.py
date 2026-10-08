@@ -40,7 +40,7 @@ from potato.deploy.providers.base import (
 from potato.deploy.providers.vm_base import render_template
 from potato.deploy.state import DeploymentRecord
 
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 DEFAULT_BACKUP_MINUTES = 5
 
 # Concurrent running Spaces a free organization gets. A fourth cannot start.
@@ -120,7 +120,7 @@ class HuggingFaceProvider(Provider):
         return f"{name} ({plan_type})" if plan_type else name
 
     def plan(self, spec: DeploySpec, bundle) -> DeployPlan:
-        owner = spec.extra.get("owner") or "<your-username>"
+        owner = spec.extra.get("owner") or "<hf-account>"
         repo_id = f"{owner}/{spec.name}"
         backup = None if spec.demo else backup_repo_id(owner, spec.name)
 

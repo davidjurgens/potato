@@ -48,7 +48,7 @@ from potato.deploy.providers.base import (
 from potato.deploy.state import DeploymentRecord
 
 DEFAULT_REGION = "us-east-1"
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 CPU = "512"
 MEMORY = "1024"
 CONTAINER_PORT = 7860

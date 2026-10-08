@@ -272,8 +272,9 @@ class TestUnanimousAgreementIsUndefined:
         sarcasm = _agreement(unanimous_server)["by_schema"]["sarcasm"]
         assert "error" not in sarcasm, sarcasm
         assert sarcasm["krippendorff_alpha"] is None
-        assert sarcasm["cohen_kappa"] is None
-        assert sarcasm["fleiss_kappa"] is None
+        # Same shape as a defined result, so readers of the objects work.
+        assert sarcasm["cohen_kappa"]["mean_kappa"] is None
+        assert sarcasm["fleiss_kappa"]["kappa"] is None
         assert sarcasm["percent_agreement"] == 1.0
         assert "chance agreement is 1" in sarcasm["note"]
 

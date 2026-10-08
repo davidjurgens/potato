@@ -46,7 +46,7 @@ _NEEDS_BACKUP = {
 }
 DEPLOY_CONFIG = "potato.deploy.yaml"
 DOCKERFILE = "Dockerfile.potato"
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 
 #: What must never be copied into an image built from the repository.
 #: .dockerignore patterns are anchored at the build context's root, so a task in

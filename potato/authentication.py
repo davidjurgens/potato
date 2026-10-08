@@ -666,7 +666,7 @@ class UserAuthenticator:
         # and learns the user on first sign-in.
         if (not isinstance(authenticator.auth_backend, ClerkAuthBackend)
                 and not authenticator.auth_backend.is_valid_username(username)):
-            logger.warning(f"Authentication failed: user '{username}' does not exist")
+            logger.debug(f"Authentication failed: user '{username}' does not exist")
             if password and authenticator.require_password:
                 _verify_password(password, _timing_dummy())
             return False

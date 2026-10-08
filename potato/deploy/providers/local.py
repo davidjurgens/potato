@@ -28,7 +28,7 @@ from potato.deploy.providers.base import (
 )
 from potato.deploy.state import DeploymentRecord
 
-DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
+from potato.deploy.image import DEFAULT_IMAGE  # noqa: E402
 CONTAINER_PREFIX = "potato-deploy-"
 
 
