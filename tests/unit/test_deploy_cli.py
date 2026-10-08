@@ -120,7 +120,20 @@ class TestCheck:
         """The config passing is not the target being able to run."""
         monkeypatch.setattr(RecordingProvider, "requires", ["no_such_module_xyz"])
         assert cli.main(["check", project, "--provider", "recording"]) == cli.EXIT_BLOCKED
-        assert "no_such_module_xyz" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "no_such_module_xyz" in out
+        # The verdict itself, not a line after "PASS — safe to deploy".
+        assert "PASS" not in out
+
+    def test_a_missing_extra_is_not_ok_in_json(self, project, capsys, monkeypatch):
+        import json
+        monkeypatch.setattr(RecordingProvider, "requires", ["no_such_module_xyz"])
+        code = cli.main(["check", project, "--provider", "recording", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert code == cli.EXIT_BLOCKED
+        assert payload["ok"] is False
+        assert any(f["code"] == "D021" and "no_such_module_xyz" in f["message"]
+                   for f in payload["findings"])
 
     def test_a_missing_extra_fails_the_dry_run(self, project, capsys, monkeypatch):
         """`up --dry-run` exited 0, then a real `up` stopped in create()."""

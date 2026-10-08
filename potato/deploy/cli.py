@@ -27,7 +27,12 @@ from potato.deploy.backup_options import (
     from_args as backup_from_args,
 )
 from potato.deploy.bundle import build_bundle
-from potato.deploy.preflight import harden_config, render_report, run_preflight
+from potato.deploy.preflight import (
+    Finding,
+    harden_config,
+    render_report,
+    run_preflight,
+)
 from potato.deploy.providers.base import (
     DeploySpec,
     Provider,
@@ -255,17 +260,21 @@ def cmd_check(args) -> int:
     report = run_preflight(args.config_file, provider=args.provider,
                            public=(provider.public and not args.private),
                            ephemeral_fs=provider.ephemeral_fs)
+    # The config can pass while the target cannot run at all. As a finding, a
+    # missing extra makes the verdict BLOCKED and `ok` false in --json, where a
+    # trailing line used to follow "PASS — safe to deploy".
+    missing = provider.check_requirements()
+    if missing:
+        report.findings.append(Finding(
+            "D021", "error",
+            f"the {provider.name} target needs {', '.join(missing)}, which is "
+            "not installed",
+            f"pip install 'potato-annotation[{provider.install_extra}]'",
+            key=None))
     if args.as_json:
         _echo(json.dumps(report.to_dict(), indent=2))
     else:
         _echo(render_report(report))
-    # The config can pass while the target cannot run at all; "safe to deploy"
-    # followed by a refusal from `up` is what this used to print.
-    needs = _missing_extra(provider)
-    if needs:
-        if not args.as_json:
-            _echo(f"BLOCKED: {needs}")
-        return EXIT_BLOCKED
     return EXIT_OK if report.ok else EXIT_BLOCKED
 
 
@@ -458,7 +467,8 @@ def _resolve_backup(args, name: str, provider_name: str) -> BackupOptions:
                 backup.hf_repo = default_hf_repo(backup.hf_token, name)
             except Exception as exc:
                 raise BackupOptionsError(
-                    f"could not ask HuggingFace who the token belongs to: {exc}. "
+                    "could not ask HuggingFace who the token belongs to: "
+                    f"{str(exc).rstrip('.')}. "
                     "Pass --hf-backup-repo <owner>/<name> to skip the lookup.")
     return backup
 
@@ -713,7 +723,8 @@ def cmd_button(args) -> int:
                 except Exception as exc:
                     raise BackupOptionsError(
                         "could not ask HuggingFace who the token belongs to: "
-                        f"{exc}. Pass --hf-backup-repo <owner>/<name> to skip "
+                        f"{str(exc).rstrip('.')}. Pass --hf-backup-repo "
+                        "<owner>/<name> to skip "
                         "the lookup.")
         result = buttons.generate(args.config_file, args.target, backup, name=name,
                                   image=args.image, template_url=args.template_url,

@@ -787,7 +787,8 @@ def auth():
                                   login_error=error_msg,
                                   login_email=user_id,
                                   title=config.get("annotation_task_name", "Annotation Platform"),
-                                  require_password=require_password)
+                                  require_password=require_password,
+                                  **_sso_login_context())
 
     # GET request - show the login form
     return render_template("home.html",
@@ -1339,6 +1340,21 @@ def submit_annotation():
         logger.error(f"Error saving annotation: {type(e).__name__}: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": "Failed to save annotation"}), 500
 
+def _register_error(message: str):
+    """The login page with a registration error, in the task's own form.
+
+    These renders passed only the message, so the page fell back to the
+    default title and the passwordless form: someone told to log in instead
+    was shown a form with no password field.
+    """
+    return render_template(
+        "home.html",
+        login_error=message,
+        title=config.get("annotation_task_name", "Annotation Platform"),
+        require_password=config.get("require_password", True),
+        **_sso_login_context())
+
+
 def _username_owns_annotations(username: str) -> bool:
     """True when this username already has an annotation directory on disk.
 
@@ -1401,12 +1417,21 @@ def register():
 
     if not username or not password:
         logger.warning("Missing username or password")
-        return render_template("home.html",
-                                login_error="Username and password are required")
+        return _register_error("Username and password are required")
 
     # Register the user with the authenticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
+
+    # A known account is not a desync: the annotator pressed Register rather
+    # than Log in. Asking the roster first matters, because the check below
+    # used to see alice's own annotations and tell her to have her account
+    # restored, and log an ERROR saying the roster was out of step.
+    if user_authenticator.is_valid_username(username):
+        logger.info("Registration for '%s' refused: the account already exists",
+                    username)
+        return _register_error("An account with that username already exists. "
+                               "Log in instead.")
 
     # Refuse a username that already owns annotations but is not a known
     # account. That combination means the roster and the output directory have
@@ -1415,21 +1440,20 @@ def register():
     # because an annotator's directory is keyed on the username alone.
     if _username_owns_annotations(username):
         logger.error(
-            "Refused registration for '%s': %s/%s already holds annotations "
+            "Refused registration for '%s': %s already holds annotations "
             "but the account is not in the roster. The roster file "
             "(authentication.user_config_path) is missing or out of step with "
             "the output directory; restore it rather than re-registering.",
-            username, config.get("output_annotation_dir", ""), username)
-        return render_template(
-            "home.html",
-            login_error="That username is already in use on this task. "
-                        "Ask the study administrator to restore your account.")
+            username, os.path.join(config.get("output_annotation_dir", ""),
+                                   username))
+        return _register_error("That username is already in use on this task. "
+                               "Ask the study administrator to restore your account.")
 
     result = user_authenticator.add_user(username, password)
 
     if result != "Success":
         logger.warning(f"Registration failed for '{username}': {result}")
-        return render_template("home.html", login_error=result)
+        return _register_error(result)
 
     # Persist user config if explicitly configured
     user_authenticator.save_user_config()

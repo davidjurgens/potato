@@ -48,7 +48,7 @@ class TestRegistrationAuth:
             data={"email": "dup_user", "pass": "pw2"},
         )
         assert r2.status_code == 200
-        assert "Duplicate user" in r2.text
+        assert "already exists" in r2.text
 
         # The second session should NOT have an authenticated user
         # Verify by trying to access annotate — should redirect to home/login
@@ -73,7 +73,7 @@ class TestRegistrationAuth:
             f"{self.server.base_url}/register",
             data={"email": "auth_test_user", "pass": "pw"},
         )
-        assert "Duplicate user" in r.text
+        assert "already exists" in r.text
 
     def test_successful_registration_sets_session(self):
         """A successful registration should set the session and allow annotation access."""

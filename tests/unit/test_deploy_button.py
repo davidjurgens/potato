@@ -212,10 +212,12 @@ class TestCLI:
     def test_a_rejected_token_is_an_error_not_a_traceback(
             self, repo, capsys, monkeypatch):
         def rejected(*_args, **_kwargs):
-            raise RuntimeError("401 Client Error: Unauthorized")
+            raise RuntimeError("Invalid user token.")
         monkeypatch.setattr(cli, "default_hf_repo", rejected)
         code = cli.main(["button", config_of(repo), "--target", "render",
                          "--backup", "hf", "--hf-token", "x"])
         assert code == cli.EXIT_ERROR
-        assert "could not ask HuggingFace" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "could not ask HuggingFace" in out
+        assert "token.." not in out and "--hf-backup-repo" in out
         assert not (repo / "render.yaml").exists()
