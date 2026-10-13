@@ -1,6 +1,6 @@
 {# Default ui_lang values if not provided by context processor #}
 {% if ui_lang is not defined %}
-{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'jump_prev_unannotated': 'Previous unannotated', 'jump_next_unannotated': 'Next unannotated', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
+{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'jump_prev_unannotated': 'Previous unannotated', 'jump_next_unannotated': 'Next unannotated', 'jump_unannotated_label': 'Unlabeled', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'image_to_annotate': 'Image to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
 {% endif %}
 <!DOCTYPE html>
 <html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
@@ -30,21 +30,32 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=35">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=37">
 
     <!-- Span Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=2">
-
-    <!-- Turn-Level Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
-
-    <!-- Multi-Agent Discussion Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=1">
-
-    <!-- Audio Dialogue (podcast turn annotation) Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-dialogue.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=3">
 
     {% set frontend_assets = frontend_assets | default({}) %}
+
+    {# Display-specific stylesheets load only when the page renders that
+       display. Every one of these used to load on every page, so a pairwise
+       task fetched sixteen stylesheets per item, most of them for displays it
+       never shows. Gated on the same FRONTEND_ASSET_MARKERS scan as the JS. #}
+
+    <!-- Turn-Level Annotation Styles -->
+    {% if frontend_assets.turn_annotations | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
+    {% endif %}
+
+    <!-- Multi-Agent Discussion Styles -->
+    {% if frontend_assets.multi_agent_discussion | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=1">
+    {% endif %}
+
+    <!-- Audio Dialogue (podcast turn annotation) Styles -->
+    {% if frontend_assets.audio_dialogue | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-dialogue.css') }}?v=4">
+    {% endif %}
 
     <!-- Image Annotation Styles.
          Also loaded for spatial_annotation and episode_annotation: both render
@@ -56,7 +67,7 @@
     {% if frontend_assets.image_annotation | default(false)
           or frontend_assets.spatial_annotation | default(false)
           or frontend_assets.episode_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=15">
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=16">
     {% endif %}
 
     <!-- Point cloud viewer styles -->
@@ -91,7 +102,7 @@
 
     <!-- Audio Annotation Styles -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=5">
     {% endif %}
 
     <!-- Video Annotation Styles -->
@@ -115,10 +126,14 @@
     {% endif %}
 
     <!-- Spreadsheet Display Styles -->
+    {% if frontend_assets.spreadsheet_display | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}?v=1">
+    {% endif %}
 
     <!-- Coding Trace Display Styles -->
+    {% if frontend_assets.coding_trace | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='coding-trace.css') }}?v=1">
+    {% endif %}
 
     <!-- Live Coding Agent Viewer -->
     {% if frontend_assets.live_coding_agent | default(false) %}
@@ -244,14 +259,21 @@
                 {% if not jumping_to_id_disabled %}
                 <div class="navbar-divider"></div>
 
-                <div class="nav-controls">
+                {# These jump to the nearest item WITHOUT an answer, not to the
+                   adjacent item. Bare backward/forward glyphs read as plain
+                   prev/next, so the pair carries a visible label at desktop
+                   widths and step-to-gap icons everywhere. #}
+                <div class="nav-controls" role="group" aria-label="{{ ui_lang.jump_unannotated_label|default('Unlabeled') }}">
                     <button type="button" class="nav-control-btn" id="jump-unannotated-prev-btn"
-                            onclick="jumpToUnannotatedPrev()" title="{{ ui_lang.jump_prev_unannotated }}">
-                        <i class="fas fa-backward"></i>
+                            onclick="jumpToUnannotatedPrev()" title="{{ ui_lang.jump_prev_unannotated }}"
+                            aria-label="{{ ui_lang.jump_prev_unannotated }}">
+                        <i class="fas fa-backward-step" aria-hidden="true"></i>
                     </button>
+                    <span class="nav-controls-label" aria-hidden="true">{{ ui_lang.jump_unannotated_label|default('Unlabeled') }}</span>
                     <button type="button" class="nav-control-btn" id="jump-unannotated-btn"
-                            onclick="jumpToUnannotated()" title="{{ ui_lang.jump_next_unannotated }}">
-                        <i class="fas fa-forward"></i>
+                            onclick="jumpToUnannotated()" title="{{ ui_lang.jump_next_unannotated }}"
+                            aria-label="{{ ui_lang.jump_next_unannotated }}">
+                        <i class="fas fa-forward-step" aria-hidden="true"></i>
                     </button>
                 </div>
 
@@ -361,8 +383,11 @@
                         </div>
                     </details>
                     {% endif %}
-                    <!-- Instance display area -->
-                    <div class="mb-4">
+                    <!-- Instance display area. `instance-area` collapses (styles.css)
+                         when everything in it is hidden -- image annotation, a
+                         media-path item, a pairwise item drawn by its scheme --
+                         so the card does not open on an empty band and a rule. -->
+                    <div class="mb-4 instance-area">
                         {% if has_instance_display | default(false) %}
                         <!-- New instance_display mode: explicit content display configuration -->
                         {{ display_html | safe }}
@@ -380,9 +405,7 @@
                         {% else %}
                         <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
                         <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
-                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
-                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
-                            </div>
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}<div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div></div>
                         </div>
                         {% endif %}
                         {% elif has_audio_annotation | default(false) %}
@@ -395,9 +418,7 @@
                         {% else %}
                         <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
                         <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
-                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
-                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
-                            </div>
+                            <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}<div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div></div>
                         </div>
                         {% endif %}
                         {% elif has_image_annotation | default(false) %}
@@ -411,15 +432,28 @@
                            separate flag defaulting to is_annotation_page so every
                            non-training render is unchanged. #}
                         {% if show_instance_text | default(is_annotation_page) %}
-                                {% set _heading = instance_text_heading | default(ui_lang.text_to_annotate|default('Text to Annotate:')) %}
+                                {# The heading names what the item is. Items that embed a
+                                   <video>/<audio>/<img> in their text field land in this
+                                   branch too, and were all labelled "Text to Annotate:". #}
+                                {% set _raw_instance = (instance | string | lower) %}
+                                {% if '<video' in _raw_instance %}
+                                {% set _default_heading = ui_lang.video_to_annotate|default('Video to Annotate:') %}
+                                {% elif '<audio' in _raw_instance %}
+                                {% set _default_heading = ui_lang.audio_to_annotate|default('Audio to Annotate:') %}
+                                {% elif '<img' in _raw_instance and not instance_image | default('') %}
+                                {% set _default_heading = ui_lang.image_to_annotate|default('Image to Annotate:') %}
+                                {% else %}
+                                {% set _default_heading = ui_lang.text_to_annotate|default('Text to Annotate:') %}
+                                {% endif %}
+                                {% set _heading = instance_text_heading | default(_default_heading) %}
                                 {% if _heading %}
                                 <h5 class="instance-text-heading">{{ _heading }}</h5>
                                 {% endif %}
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
-                                    <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{% if instance_image | default('') %}{# text_as_image: the server rendered the instance to a PNG and blanked `instance`, so nothing here can be copied. The markup is built in server_utils/text_to_image.py from a base64 payload, never from annotation content, so `safe` is correct -- sanitize_html would strip the data: URI. #}{{ instance_image | safe }}{% else %}{{instance | sanitize_html}}{% endif %}
-                                        <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
-                                        </div>
-                                    </div>
+                                    <div id="text-content" data-original-text="{{instance_plain_text}}" data-offset-basis="dom" style="position: relative; z-index: 1; pointer-events: auto;">{% if instance_image | default('') %}{# text_as_image: the server rendered the instance to a PNG and blanked `instance`, so nothing here can be copied. The markup is built in server_utils/text_to_image.py from a base64 payload, never from annotation content, so `safe` is correct -- sanitize_html would strip the data: URI. #}{{ instance_image | safe }}{% else %}{{instance | sanitize_html}}{% endif %}{#
+   No whitespace between the instance and the overlay layer: #text-content is
+   white-space: pre-wrap, so the newline and indentation that used to sit here
+   rendered as a blank extra line under every item. #}<div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div></div>
                                 </div>
                             {% else %}
                                 <div id="instance-text" style="display: none;">
@@ -670,17 +704,17 @@
          reads is on every annotation page, and the media widgets need it
          whether or not `instance_display` is declared. -->
     <script src="{{ url_for('static', filename='instance-fields.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=22"></script>
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=25"></script>
     <!-- Touch path for span highlighting; no-op on a fine pointer. -->
     <script src="{{ url_for('static', filename='span-touch.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=5"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
     <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
-    <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=46"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=47"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
@@ -740,7 +774,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=38"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=39"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -870,7 +904,7 @@
     {% endif %}
     <!-- Audio annotation manager -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=8"></script>
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
@@ -976,13 +1010,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/live-agent.css') }}?v=1">
     <script src="{{ url_for('static', filename='live-agent-viewer.js') }}?v=1"></script>
     {% endif %}
-
-    <!-- Global keyboard debug (temporary) -->
-    <script>
-        window.addEventListener('keydown', function(e) {
-            console.log('[GLOBAL DEBUG] keydown:', e.key, 'code:', e.code, 'target:', e.target.tagName);
-        }, true);
-    </script>
 
     <!-- Instance height limit functionality -->
     <script>

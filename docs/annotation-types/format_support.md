@@ -192,7 +192,7 @@ instance_display:
         striped: true          # Alternating row colors
         hoverable: true        # Highlight on hover
         sortable: true         # Enable column sorting
-        selectable: true       # Enable row/cell selection
+        selectable: false      # Row checkboxes / cell selection (off by default)
         compact: false         # Compact table styling
 ```
 
@@ -200,6 +200,8 @@ instance_display:
 - A list of dictionaries, or `{columns, rows}` with dictionary rows: every key any row has, in the order it first appears. A row that omits a key gets an empty cell rather than a shifted one, so a JSON-lines export that drops empty fields keeps all its columns
 - `columns` or `headers` in the data: exactly those, in that order. Naming them is choosing them, including choosing to leave one out
 - A list of lists: no headers, unless `header_row: true` says the first row is one. It is off by default because promoting row 0 on a list that has no header line would take a real row out of the data
+
+`selectable` is off by default. The selection it draws is not saved with the annotation, so leave it off for read-only tables such as trace metadata.
 
 **Annotation Modes:**
 - `row` - Annotate entire rows (default)

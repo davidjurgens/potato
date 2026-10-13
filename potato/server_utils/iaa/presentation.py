@@ -435,3 +435,62 @@ def present(report: Dict[str, Any]) -> Dict[str, Any]:
                              n_aligned_items=metrics.get("n_aligned_items"))
     out["schemas"] = schemas
     return out
+
+
+#: Scales a dashboard headline may be drawn from, best first. A
+#: chance-corrected coefficient is the number to lead with; raw overlap only
+#: stands in when the schema has nothing chance-corrected.
+_HEADLINE_SCALES = ("kappa", "correlation", "span", "raw")
+
+
+def headlines(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    One agreement number per schema, for the admin overview.
+
+    The overview is not the place for the full table on ``/admin/iaa``; it
+    needs the single number a researcher checks first, chosen the same way
+    for every schema so two rows are comparable. That is the first metric,
+    in the order :func:`metrics_for_schema` declares them, on the best
+    available scale in ``_HEADLINE_SCALES``. A schema with no computable
+    metric still gets a row, carrying the report's note, so "not enough
+    overlap yet" reads as that and not as a missing schema.
+    """
+    from potato.server_utils.iaa.dispatcher import metrics_for_schema
+
+    out: List[Dict[str, Any]] = []
+    for name, schema in (report.get("schemas") or {}).items():
+        metrics = schema.get("metrics") or {}
+        declared = metrics_for_schema(
+            {"annotation_type": schema.get("annotation_type"), "name": name},
+            kind=schema.get("kind"))
+        rows = {row["name"]: row for row in flatten(metrics)}
+        ordered = [rows[n] for n in declared if n in rows] + [
+            row for n, row in rows.items() if n not in declared]
+        # Krippendorff's alpha first among the chance-corrected: it is defined
+        # for any number of annotators and for missing ratings, where Cohen's
+        # kappa is a two-rater statistic averaged over pairs.
+        ordered.sort(key=lambda row: 0 if re.search(
+            r"(?:^|_)alpha(?:_|$)", str(row["name"]).rsplit(".", 1)[-1]) else 1)
+        chosen = None
+        for scale in _HEADLINE_SCALES:
+            chosen = next((row for row in ordered
+                           if row["scale"] == scale
+                           and isinstance(row["value"], (int, float))
+                           and not isinstance(row["value"], bool)
+                           and str(row["name"]).rsplit(".", 1)[-1]
+                           not in _UNBANDED_RAW), None)
+            if chosen:
+                break
+        note = metrics.get("note") or schema.get("note") or ""
+        out.append({
+            "schema": name,
+            "annotation_type": schema.get("annotation_type"),
+            "metric": chosen["name"] if chosen else None,
+            "value": chosen["value"] if chosen else None,
+            "display": chosen["display"] if chosen else "",
+            "band": chosen["band"] if chosen else "",
+            "n_items": metrics.get("n_items"),
+            "n_annotators": metrics.get("n_annotators"),
+            "note": "" if chosen else str(note),
+        })
+    return out

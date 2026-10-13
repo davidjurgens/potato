@@ -3591,6 +3591,23 @@ def admin_calibration_start():
     return jsonify(result)
 
 
+def _admin_wants_html() -> bool:
+    """Whether an admin report route should render its page or return JSON.
+
+    ``?format=html`` / ``?format=json`` decide when given. Otherwise the
+    Accept header does: a browser navigating to ``/admin/iaa`` asks for
+    ``text/html`` first and gets the page, while ``fetch()``, ``requests``
+    and curl send ``*/*`` (or nothing) and keep getting the JSON every
+    analysis script reads. Before this, a researcher who typed the URL got a
+    wall of JSON and had to know the ``?format=html`` incantation.
+    """
+    fmt = (request.args.get("format") or "").lower()
+    if fmt:
+        return fmt == "html"
+    best = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    return best == "text/html"
+
+
 @app.route("/admin/iaa", methods=["GET"])
 def admin_iaa():
     """
@@ -3617,7 +3634,7 @@ def admin_iaa():
         logger.exception("Failed to compute overlap IAA")
         return jsonify({"error": str(exc)}), 500
 
-    if (request.args.get("format") or "json").lower() == "html":
+    if _admin_wants_html():
         try:
             # Only the HTML path is presented. The JSON body stays the nested
             # report every downstream analysis script reads; flattening it for
@@ -3634,6 +3651,33 @@ def admin_iaa():
     # the browser's JSON.parse rejects the whole response.
     from potato.server_utils.iaa.dispatcher import json_safe
     return jsonify(json_safe(report))
+
+
+@app.route("/admin/api/iaa_summary", methods=["GET"])
+def admin_api_iaa_summary():
+    """One headline agreement number per schema, for the dashboard overview.
+
+    The full report stays on ``/admin/iaa``; this is the row a researcher
+    checks first, with the metric chosen by
+    :func:`potato.server_utils.iaa.presentation.headlines`.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.iaa import compute_overlap_iaa
+        from potato.server_utils.iaa.dispatcher import json_safe
+        from potato.server_utils.iaa.presentation import headlines
+        report = compute_overlap_iaa(
+            get_item_state_manager(), get_user_state_manager(), config,
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute overlap IAA summary")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(json_safe({
+        "schemas": headlines(report),
+        "n_overlap_items": report.get("n_overlap_items"),
+    }))
 
 
 def _record_judge_comparison_if_enabled(username, instance_id):
@@ -3713,7 +3757,7 @@ def admin_judge_alignment():
         logger.exception("Failed to compute judge alignment")
         return jsonify({"error": str(exc)}), 500
 
-    if (request.args.get("format") or "json").lower() == "html":
+    if _admin_wants_html():
         try:
             return render_template("admin/judge_alignment.html", report=report)
         except Exception:
@@ -4123,7 +4167,7 @@ def admin_annotation_integrity():
 
     payload = {"reports": reports, "n_annotators": len(reports),
                "used_llm_labels": bool(llm_labels)}
-    if (request.args.get("format") or "json").lower() == "html":
+    if _admin_wants_html():
         try:
             return render_template("admin/annotation_integrity.html", **payload)
         except Exception:
@@ -4226,7 +4270,7 @@ def admin_triage_queue():
         logger.exception("Failed to compute triage queue")
         return jsonify({"error": str(exc)}), 500
 
-    if (request.args.get("format") or "json").lower() == "html":
+    if _admin_wants_html():
         try:
             return render_template("admin/triage_queue.html", report=report)
         except Exception:
@@ -7351,15 +7395,28 @@ def admin():
 
     if not validate_admin_api_key(api_key):
         # Show API key entry form
+        from potato.server_utils.admin_key import admin_api_key_source
+        # A key that was presented and refused gets a 403. The key form
+        # submits by fetch() and checks response.ok, and the 200 this used to
+        # return sent a wrong key straight back to the empty form with no
+        # message: the "not recognized" branch could never run.
+        status = 403 if request.headers.get('X-API-Key') else 200
         return render_template("admin_login.html",
-                             title=config.get("annotation_task_name", "Admin Dashboard"))
+                             title=config.get("annotation_task_name", "Admin Dashboard"),
+                             key_source=admin_api_key_source(config)), status
 
     # Store API key in session for future requests
     session['admin_api_key'] = api_key
 
     # Check if embedding visualization is available
-    from potato.embedding_visualization import get_embedding_viz_manager
-    viz_manager = get_embedding_viz_manager()
+    # Read the manager only if the module is already loaded. Importing it
+    # pulls in umap at module level -- 12 s on the first dashboard load of a
+    # project that never enabled the feature, long enough that the key
+    # form's sign-in looked like it had silently failed. A project that did
+    # enable it imported the module at startup to build the manager.
+    import sys as _sys
+    _viz_module = _sys.modules.get("potato.embedding_visualization")
+    viz_manager = _viz_module.get_embedding_viz_manager() if _viz_module else None
     embedding_viz_enabled = viz_manager is not None and viz_manager.enabled
 
     # Get basic context for the dashboard
@@ -7385,8 +7442,60 @@ def admin():
         # Publishing is always available to admins (no per-project config needed).
         "publish_enabled": True,
     }
+    context["analysis_links"] = _admin_analysis_links()
+    context["adjudication_enabled"] = bool((config.get("adjudication") or {}).get("enabled"))
 
     return render_template("admin.html", **context)
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    """Forget the admin key this browser session presented.
+
+    The dashboard's Logout button used to GET /admin and reload it, which
+    left the key in the session: the admin was shown the dashboard again,
+    still signed in. Only the admin key is dropped -- an annotator login in
+    the same browser is not this button's business.
+    """
+    session.pop('admin_api_key', None)
+    return jsonify({"status": "logged_out"})
+
+
+def _admin_analysis_links():
+    """The researcher pages the dashboard links to, each only when it works.
+
+    These pages existed but nothing linked to them: a researcher had to know
+    the URL, and ``/admin/iaa`` then answered with JSON. A link that leads to
+    "not enabled" is worse than no link, so each one is gated on the same
+    condition its route checks.
+    """
+    from potato.review_workflow import review_enabled
+
+    schemes = config.get("annotation_schemes") or []
+    categorical = any(s.get("annotation_type") in ("radio", "multiselect", "multiple_choice",
+                                                  "select", "likert")
+                      for s in schemes if isinstance(s, dict))
+    links = [{
+        "href": "/admin/iaa",
+        "label": "Agreement (IAA)",
+        "title": "Inter-annotator agreement per schema, over items with 2+ annotators",
+    }]
+    if (config.get("adjudication") or {}).get("enabled"):
+        links.append({"href": "/adjudicate", "label": "Adjudication",
+                      "title": "Resolve items where annotators disagreed"})
+    if review_enabled(config):
+        links.append({"href": "/admin/review", "label": "Review board",
+                      "title": "Second-pass review of submitted annotations"})
+    if (config.get("triage") or {}).get("enabled"):
+        links.append({"href": "/admin/triage-queue", "label": "Triage queue",
+                      "title": "Remaining items ranked by their quality signal"})
+    if (config.get("judge_alignment") or {}).get("enabled"):
+        links.append({"href": "/admin/judge-alignment", "label": "Judge alignment",
+                      "title": "LLM judge versus human labels"})
+    if categorical:
+        links.append({"href": "/admin/annotation-integrity", "label": "Annotation integrity",
+                      "title": "Per-annotator low-effort and LLM-copying signals"})
+    return links
 
 
 
@@ -10171,6 +10280,8 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/api/iaa_summary", "admin_api_iaa_summary", admin_api_iaa_summary, methods=["GET"])
+    app.add_url_rule("/admin/logout", "admin_logout", admin_logout, methods=["POST"])
     app.add_url_rule("/admin/iaa/drift", "admin_iaa_drift", admin_iaa_drift,
                      methods=["GET"])
     app.add_url_rule("/admin/calibration", "admin_calibration",
@@ -10693,9 +10804,31 @@ def adjudicate_api_queue():
             item_dict = blind_item_dict(
                 item_dict,
                 annotator_aliases(item.instance_id, item.annotations))
+        # One line of the item, so an adjudicator can triage the queue
+        # without opening every entry -- it listed bare ids.
+        item_dict["text_preview"] = _adjudication_text_preview(
+            adj_mgr.get_item_text(item.instance_id))
         payload.append(item_dict)
 
     return jsonify({"items": payload, "total": len(payload)})
+
+
+def _adjudication_text_preview(text, limit=120):
+    """Plain one-line preview of an item's text for the queue sidebar.
+
+    Instance text may be HTML (dialogue, custom displays) or a media URL;
+    tags are stripped and whitespace collapsed, and the result is escaped
+    client-side, so nothing here is trusted as markup.
+    """
+    import html as _html
+
+    if not isinstance(text, str):
+        return ""
+    plain = re.sub(r"<[^>]+>", " ", text)
+    plain = _html.unescape(re.sub(r"\s+", " ", plain)).strip()
+    if len(plain) > limit:
+        plain = plain[:limit - 1].rstrip() + "\u2026"
+    return plain
 
 
 @app.route('/adjudicate/api/item/<instance_id>', methods=['GET'])

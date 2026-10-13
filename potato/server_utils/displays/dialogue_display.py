@@ -538,17 +538,31 @@ class DialogueDisplay(BaseDisplay):
         escaped_max = html.escape(str(max_label))
         escaped_schema = html.escape(str(schema_name), quote=True)
 
-        # Build rating circles/stars
+        # Build rating circles/stars. They are a radio group, not bare spans:
+        # spans were not focusable, so the per-turn ratings had no keyboard
+        # path at all. instance-display.js keeps aria-checked and the roving
+        # tabindex (one tab stop per group) in step with the selection.
+        readable_name = schema_name.replace("_", " ").title() if schema_name else ""
         rating_items = []
         for v in range(1, size + 1):
+            name = f"{v} of {size}"
+            if v == 1 and min_label:
+                name += f", {min_label}"
+            elif v == size and max_label:
+                name += f", {max_label}"
             rating_items.append(
-                f'<span class="ptr-value" data-field="{field_key}" '
+                f'<span class="ptr-value" role="radio" aria-checked="false" '
+                f'tabindex="{0 if v == 1 else -1}" '
+                f'aria-label="{html.escape(name, quote=True)}" '
+                f'data-field="{field_key}" '
                 f'data-turn="{turn_index}" data-value="{v}" '
                 f'data-schema="{escaped_schema}" '
                 f'title="{v}">{v}</span>'
             )
 
         items_html = "\n".join(rating_items)
+        group_name = f"{readable_name or 'Rating'}, turn {turn_index + 1}"
+        escaped_group = html.escape(group_name, quote=True)
 
         min_html = f'<span class="ptr-label ptr-min">{escaped_min}</span>' if min_label else ""
         max_html = f'<span class="ptr-label ptr-max">{escaped_max}</span>' if max_label else ""
@@ -556,7 +570,6 @@ class DialogueDisplay(BaseDisplay):
         # Schema label for multi-dimension mode
         schema_label_html = ""
         if schema_name:
-            readable_name = schema_name.replace("_", " ").title()
             escaped_readable = html.escape(readable_name)
             schema_label_html = f'<span class="ptr-schema-label">{escaped_readable}:</span>'
 
@@ -564,7 +577,7 @@ class DialogueDisplay(BaseDisplay):
         <div class="per-turn-rating" data-field="{field_key}" data-turn="{turn_index}" data-schema="{escaped_schema}">
             {schema_label_html}
             {min_html}
-            <div class="ptr-values">{items_html}</div>
+            <div class="ptr-values" role="radiogroup" aria-label="{escaped_group}">{items_html}</div>
             {max_html}
         </div>
         '''

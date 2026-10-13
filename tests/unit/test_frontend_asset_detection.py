@@ -290,6 +290,16 @@ _GENERATOR_MARKER_EXPECTATIONS = {
         "symbol": "generate_span_layout",
         "markers": ["data-entity-linking"],
     },
+    "spreadsheet_display": {
+        "module": "potato.server_utils.displays.spreadsheet_display",
+        "symbol": "SpreadsheetDisplay",
+        "markers": ['class="spreadsheet-'],
+    },
+    "coding_trace": {
+        "module": "potato.server_utils.displays.coding_trace_display",
+        "symbol": "CodingTraceDisplay",
+        "markers": ["coding-trace-display", "coding-trace-empty"],
+    },
 }
 
 

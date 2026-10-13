@@ -76,7 +76,11 @@ class SpreadsheetDisplay(BaseDisplay):
         "hoverable": True,           # Highlight row on hover
         "sortable": False,           # Enable column sorting
         "filterable": False,         # Enable column filtering
-        "selectable": True,          # Enable row/cell selection
+        # Off by default. The selection is only emitted as a DOM event that
+        # nothing stores, so on by default it put row checkboxes on every
+        # read-only table (an agent trace's "Trace Info" metadata, say) that
+        # an annotator could tick and then lose on the next item.
+        "selectable": False,         # Show row/cell selection controls
         "compact": False,            # Compact table styling
         # New styling options
         "border_style": "default",   # "default", "bordered", "minimal", "rounded", "none"
@@ -381,7 +385,7 @@ class SpreadsheetDisplay(BaseDisplay):
         options = self.get_display_options(field_config)
 
         attrs["annotation-mode"] = options.get("annotation_mode", "row")
-        attrs["selectable"] = str(options.get("selectable", True)).lower()
+        attrs["selectable"] = str(options.get("selectable", False)).lower()
 
         return attrs
 

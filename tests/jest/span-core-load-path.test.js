@@ -97,12 +97,22 @@ describe('loading the rendered instance', () => {
     });
 });
 
-describe('anything else still asks the server', () => {
+describe('phase pages do not ask at all', () => {
+    // is_annotation_page is false exactly when the user is outside the
+    // annotation phase, and there /api/current_instance always answers 404:
+    // the request could not succeed, and each one put a failed load in the
+    // console of every consent and instructions page.
     test('a page that is not the annotation page', async () => {
         window.config = { is_annotation_page: false };
-        await manager().loadAnnotations('item_7');
-        expect(requested[0]).toBe('/api/current_instance');
+        const m = manager();
+        await m.loadAnnotations('item_7');
+        expect(requested).not.toContain('/api/current_instance');
+        expect(requested.filter(u => u.startsWith('/api/spans/'))).toEqual([]);
+        expect(m.currentInstanceId).toBeNull();
     });
+});
+
+describe('anything else still asks the server', () => {
 
     test('an id other than the one rendered', async () => {
         await manager().loadAnnotations('item_3');

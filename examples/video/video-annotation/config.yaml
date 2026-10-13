@@ -10,6 +10,20 @@ data_files:
 item_properties:
   id_key: id
   text_key: text
+# The clips live in data/files and are served at /media/<name>. Putting a
+# <video> tag in the text field does not work: instance text is sanitised,
+# and the tag is stripped, leaving an empty box.
+media_directory: data/files
+instance_display:
+  fields:
+  - key: video
+    type: video
+    label: Video
+    display_options:
+      autoplay: true
+      loop: true
+      muted: true
+      max_width: 480
 user_config:
   allow_all_users: true
   users: []

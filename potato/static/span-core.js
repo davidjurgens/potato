@@ -781,8 +781,8 @@ class UnifiedPositioningStrategy {
                 segment.style.borderRadius = '3px';
                 segment.style.boxShadow = `0 0 4px ${color}`;
             } else {
-                segment.style.backgroundColor = color;
-                segment.style.border = `1px solid ${color.replace('0.3', '0.8')}`;
+                segment.style.backgroundColor = spanFillColour(color);
+                segment.style.border = `1px solid ${spanEdgeColour(color)}`;
                 segment.style.borderRadius = '4px';
             }
             segment.style.pointerEvents = 'none';
@@ -801,8 +801,16 @@ class UnifiedPositioningStrategy {
             controlsContainer.className = 'span-controls';
             controlsContainer.style.position = 'absolute';
             controlsContainer.style.left = `${segmentLeft}px`;
-            // Position 22px above the segment top (controls are ~18px tall)
-            controlsContainer.style.top = `${segmentTop - 22}px`;
+            // The chip is a fixed 18px tall and sits with its bottom 1px
+            // above the glyphs it labels, inside the gutter that
+            // .span-labels-on opens between lines. It used to sit at -22px
+            // and inherit the text's 2.35 line-height, which made it 30px
+            // tall: it covered the top of its own word and, on wrapped text,
+            // the bottom of the line above.
+            const CHIP_HEIGHT = 18;
+            controlsContainer.style.top = `${segmentTop + VERTICAL_PADDING - 1 - CHIP_HEIGHT}px`;
+            controlsContainer.style.height = `${CHIP_HEIGHT}px`;
+            controlsContainer.style.lineHeight = '1';
             controlsContainer.style.display = 'flex';
             controlsContainer.style.alignItems = 'center';
             controlsContainer.style.gap = '4px';
@@ -829,7 +837,8 @@ class UnifiedPositioningStrategy {
                 label.style.color = 'white';
                 label.style.padding = '2px 6px';
                 label.style.borderRadius = '3px';
-                label.style.fontSize = '11px';
+                label.style.fontSize = '12px';
+                label.style.lineHeight = '14px';
                 label.style.fontWeight = '500';
                 label.style.whiteSpace = 'nowrap';
                 label.style.display = 'block';
@@ -839,7 +848,10 @@ class UnifiedPositioningStrategy {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'span-delete-btn';
             deleteBtn.textContent = '×';
-            deleteBtn.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
+            deleteBtn.type = 'button';
+            deleteBtn.setAttribute('aria-label', `Remove ${span.label} span`);
+            deleteBtn.title = `Remove ${span.label} span`;
+            // Colour comes from span-styles.css (--destructive).
             deleteBtn.style.color = 'white';
             deleteBtn.style.border = 'none';
             deleteBtn.style.borderRadius = '50%';
@@ -859,8 +871,10 @@ class UnifiedPositioningStrategy {
             deleteBtn.style.alignItems = 'center';
             deleteBtn.style.justifyContent = 'center';
             deleteBtn.style.flexShrink = '0';
-            // Reset any CSS positioning that might interfere
-            deleteBtn.style.position = 'static';
+            // Reset any CSS positioning that might interfere. Relative rather
+            // than static so span-styles.css can give the 16px glyph a 24px
+            // hit area with ::after.
+            deleteBtn.style.position = 'relative';
             deleteBtn.style.top = 'auto';
             deleteBtn.style.right = 'auto';
             deleteBtn.style.left = 'auto';
@@ -916,6 +930,55 @@ function paletteColorFor(label) {
 
 if (typeof window !== 'undefined') {
     window.potatoPaletteColor = paletteColorFor;
+}
+
+/*
+ * A span highlight is painted ON TOP of the text it covers, so its alpha
+ * decides how readable the labelled words are. /api/colors sends label
+ * colours at alpha 0.8 (the same values label chips and image tools use),
+ * and painting that straight onto the text left it at 1.7:1 in the worst
+ * palette colour -- the words being labelled were the hardest text on the
+ * page to read. At 0.2 the worst palette colour keeps the covered text at
+ * 11.6:1, and two overlapping spans of the same colour at 6.9:1. The border
+ * stays at 0.8 so the extent of the span is still obvious.
+ */
+const SPAN_FILL_ALPHA = 0.2;
+const SPAN_EDGE_ALPHA = 0.8;
+
+/**
+ * Parse "rgba(r, g, b, a)", "rgb(r, g, b)", the "(r, g, b)" triple
+ * /api/colors uses, or "#rgb"/"#rrggbb".
+ * @returns {number[]|null} [r, g, b, a], or null for anything else
+ */
+function spanColourParts(colour) {
+    const s = String(colour == null ? '' : colour).trim();
+    const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) {
+        let h = hex[1];
+        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+        return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), 1];
+    }
+    const m = s.match(/^(?:rgba?)?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+}
+
+/** The fill for a highlight segment: the label's hue at no more than SPAN_FILL_ALPHA. */
+function spanFillColour(colour) {
+    const p = spanColourParts(colour);
+    if (!p) return `color-mix(in srgb, ${colour} ${SPAN_FILL_ALPHA * 100}%, transparent)`;
+    return `rgba(${p[0]}, ${p[1]}, ${p[2]}, ${Math.min(p[3], SPAN_FILL_ALPHA)})`;
+}
+
+/** The outline for a highlight segment: the label's hue at SPAN_EDGE_ALPHA. */
+function spanEdgeColour(colour) {
+    const p = spanColourParts(colour);
+    if (!p) return colour;
+    return `rgba(${p[0]}, ${p[1]}, ${p[2]}, ${SPAN_EDGE_ALPHA})`;
+}
+
+if (typeof window !== 'undefined') {
+    window.potatoSpanFillColour = spanFillColour;
 }
 
 /**
@@ -1251,6 +1314,12 @@ class SpanManager {
     // ==================== CORE SPAN MANAGER METHODS ====================
 
     async fetchCurrentInstanceIdFromServer() {
+        // Phase pages have no instance; asking anyway costs a 404 that the
+        // browser logs as a failed load on every consent/instructions page.
+        if (window.config && window.config.is_annotation_page === false) {
+            this.currentInstanceId = null;
+            return null;
+        }
         try {
             const response = await fetch('/api/current_instance');
             if (response.status === 404) {
@@ -1652,6 +1721,17 @@ class SpanManager {
             }
             const existingSpans = textContent ? textContent.querySelectorAll('.span-highlight') : [];
             const hasServerRenderedSpans = existingSpans.length > 0;
+
+            if (!instanceId) {
+                // No instance (a phase page): there are no spans to load, and
+                // asking for /api/spans/null only earned a 404.
+                this.annotations = { spans: [] };
+                if (!hasServerRenderedSpans) {
+                    this.clearAllStateAndOverlays();
+                    this.renderSpans();
+                }
+                return Promise.resolve();
+            }
 
             const response = await fetch(`/api/spans/${instanceId}`);
 
@@ -2211,8 +2291,8 @@ class SpanManager {
             segment.style.top = `${pos.y - VERTICAL_PADDING}px`;
             segment.style.width = `${pos.width + 2 * HORIZONTAL_PADDING}px`;
             segment.style.height = `${pos.height + 2 * VERTICAL_PADDING}px`;
-            segment.style.backgroundColor = color;
-            segment.style.border = `2px dashed ${color.replace('0.15', '0.8').replace('0.3', '0.8')}`;
+            segment.style.backgroundColor = spanFillColour(color);
+            segment.style.border = `2px dashed ${spanEdgeColour(color)}`;
             segment.style.borderRadius = '4px';
             segment.style.pointerEvents = 'none';
             overlay.appendChild(segment);
@@ -2840,5 +2920,8 @@ setTimeout(() => {
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SpanManager, UnifiedPositioningStrategy, getFontMetrics };
+    module.exports = {
+        SpanManager, UnifiedPositioningStrategy, getFontMetrics,
+        spanFillColour, spanEdgeColour, SPAN_FILL_ALPHA,
+    };
 }

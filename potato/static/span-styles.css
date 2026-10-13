@@ -191,10 +191,34 @@
     white-space: nowrap;
 }
 
+/* The × is drawn at 16px so it does not crowd the line above, but WCAG 2.2
+   wants a 24px target: the pseudo-element extends the hit area without
+   changing the drawing. */
+.span-controls .span-delete-btn::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+}
+
+/* --destructive-text, not the --destructive fill: the white × on #ef4444 is
+   3.8:1, below the 4.5:1 a 12px glyph needs. On #9f1e17 it is 8.3:1. */
+.span-controls .span-delete-btn {
+    background-color: var(--destructive-text);
+}
+
+.span-controls .span-delete-btn:hover {
+    background-color: var(--destructive);
+}
+
+.span-controls .span-delete-btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
 /* --------------------------------------------------------------------------
    Overlapping codes
 
-   A chip sits 22px above the line it labels, which at line-height 1.8 lands on
+   A chip sat 22px above the line it labels, which at line-height 1.8 lands on
    the glyphs of the line above. Coding a passage with several overlapping codes
    — the normal case in qualitative work, not an edge case — then papers the
    text over with chips. Two things fix it: a gutter tall enough for a chip to
@@ -255,7 +279,7 @@
 
 #instance-text:focus {
     outline: none;
-    border-color: #007bff;
+    border-color: var(--ring);
 }
 
 /* ==========================================================================

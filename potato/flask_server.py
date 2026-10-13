@@ -406,13 +406,20 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     # Per-turn schema binding: the anchor form's hidden input (a scheme, so in
     # the page template) and the per-turn slots (in the display).
     "turn_annotations": ("turn-anno-hidden", "turn-anno-slot"),
-    # multi_agent_discussion display: the legend chips are all its script acts on.
-    "multi_agent_discussion": ("mad-legend-chip",),
+    # multi_agent_discussion display: the legend chips are all its script acts
+    # on, but its stylesheet is gated on this key too, and a discussion with a
+    # single speaker renders no legend -- so the display's own wrapper counts.
+    "multi_agent_discussion": ("mad-legend-chip", 'class="multi-agent-discussion"'),
     "audio_dialogue": ('class="audio-dialogue"',),
     # agent_trace display's sub-agent run tree.
     "run_tree": ('class="run-tree"',),
     # span schemes configured with entity_linking.
     "entity_linking": ("data-entity-linking",),
+    # Stylesheet-only keys: these displays have no script of their own.
+    # `class="spreadsheet-` covers the table wrapper and its error state;
+    # the live coding-agent display reuses the coding-trace wrapper class.
+    "spreadsheet_display": ('class="spreadsheet-',),
+    "coding_trace": ("coding-trace-display", "coding-trace-empty"),
 }
 
 # What the marker scan ignores: comments, script elements, and the tags that
@@ -3214,7 +3221,12 @@ def get_current_page_html(config, username):
         'annotation_status': 'unlabeled',
         'instance_has_annotations': False,
         'can_go_back': usm.can_user_go_back(username),
-        'jumping_to_id_disabled': config.get('jumping_to_id_disabled', False),
+        # Jump-to-unlabeled and go-to-#N move between annotation instances.
+        # A consent, instructions or survey page has none, so the controls
+        # only offered a way out of the phase -- same reasoning as the
+        # missing `instance_index` above.
+        'jumping_to_id_disabled': (config.get('jumping_to_id_disabled', False)
+                                   or not is_annotation_page),
     }
     # Phase pages render through this path rather than render_page_with_annotations,
     # so the keystroke-tracker wiring has to be repeated here. Without it, typing

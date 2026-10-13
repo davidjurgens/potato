@@ -326,7 +326,7 @@ def _generate_html(
         spectrogram_html = f'''
                     <!-- Spectrogram visualization -->
                     <div class="spectrogram-section">
-                        <div class="spectrogram-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px; margin-top: 12px;">
+                        <div class="spectrogram-label">
                             Spectrogram (frequency analysis)
                         </div>
                         <div id="spectrogram-{escaped_name}" class="spectrogram-container">
@@ -347,11 +347,11 @@ def _generate_html(
 
                 <!-- 1. Full waveform overview at top -->
                 <div class="waveform-wrapper">
-                    <div class="overview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Full Audio Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
+                    <div class="overview-label">Full Audio Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
                     <div id="overview-{escaped_name}" class="overview-container" style="margin-bottom: 12px;"></div>
 
                     <!-- 2. Zoomed waveform below -->
-                    <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Zoomed View <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
+                    <div class="zoomview-label">Zoomed View <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
                     <div id="waveform-{escaped_name}" class="waveform-container"></div>
 
                     {spectrogram_html}
@@ -397,19 +397,24 @@ def _generate_html(
                     </div>
 
                     <!-- Help toggle button -->
-                    <div class="help-toggle" style="margin-left: auto;">
-                        <button type="button" class="help-toggle-btn" onclick="this.closest('.audio-annotation-container').querySelector('.help-panel').classList.toggle('collapsed')" title="Show or hide usage instructions" style="background: none; border: 1px solid #ccc; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.85em;">
-                            ❓ Help
+                    <div class="help-toggle">
+                        <button type="button" class="help-toggle-btn" aria-expanded="true"
+                                aria-controls="help-panel-{escaped_name}"
+                                title="Show or hide usage instructions">
+                            Help
                         </button>
                     </div>
                 </div>
 
-                <!-- 4. Help/Instructions Panel -->
-                <div class="help-panel" style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-top: 10px; font-size: 0.9em;">
-                    <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                <!-- 4. Help/Instructions Panel. Open on first use; the toggle's
+                     state is remembered per schema (audio-annotation.js), so an
+                     annotator who has read it does not scroll past it on every
+                     item. -->
+                <div class="help-panel" id="help-panel-{escaped_name}">
+                    <div class="help-panel-columns">
                         <div>
-                            <strong style="color: #495057;">🖱️ Creating Segments:</strong>
-                            <ul style="margin: 5px 0 0 0; padding-left: 20px; color: #666;">
+                            <strong>Creating segments</strong>
+                            <ul>
                                 <li><strong>Left-click</strong> to navigate through the audio</li>
                                 <li><strong>Right-click + drag</strong> to create a segment</li>
                                 <li>Or use <strong>[ and ]</strong> keys to mark start/end while playing</li>
@@ -417,8 +422,8 @@ def _generate_html(
                             </ul>
                         </div>
                         <div>
-                            <strong style="color: #495057;">⌨️ Keyboard Shortcuts:</strong>
-                            <ul style="margin: 5px 0 0 0; padding-left: 20px; color: #666;">
+                            <strong>Keyboard shortcuts</strong>
+                            <ul>
                                 <li><strong>Space</strong> - Play/Pause</li>
                                 <li><strong>[ ]</strong> - Mark segment start/end</li>
                                 <li><strong>Enter</strong> - Create segment from markers</li>
@@ -428,8 +433,8 @@ def _generate_html(
                             </ul>
                         </div>
                         <div>
-                            <strong style="color: #495057;">📝 Quick Start:</strong>
-                            <ol style="margin: 5px 0 0 0; padding-left: 20px; color: #666;">
+                            <strong>Quick start</strong>
+                            <ol>
                                 <li>Select a label above</li>
                                 <li>Right-click and drag on waveform to create segment</li>
                                 <li>Adjust edges by dragging if needed</li>
@@ -437,9 +442,6 @@ def _generate_html(
                         </div>
                     </div>
                 </div>
-                <style>
-                    .help-panel.collapsed {{ display: none; }}
-                </style>
 
                 <!-- Segment list -->
                 <div class="segment-list-container" style="margin-top: 12px;">
@@ -476,25 +478,30 @@ def _generate_html(
             <!-- Initialize the annotation manager -->
             <script>
                 (function() {{
-                    console.log('[AudioAnnotation] Initialization script started for schema: {escaped_name}');
+                    // Trace logging only in debug mode; a production page
+                    // printed a dozen of these per item.
+                    function dlog() {{
+                        if (window.config && window.config.debug) console.log.apply(console, arguments);
+                    }}
+                    dlog('[AudioAnnotation] Initialization script started for schema: {escaped_name}');
 
                     function initWhenReady() {{
                         if (typeof AudioAnnotationManager === 'undefined') {{
-                            console.log('[AudioAnnotation] Waiting for AudioAnnotationManager...');
+                            dlog('[AudioAnnotation] Waiting for AudioAnnotationManager...');
                             setTimeout(initWhenReady, 100);
                             return;
                         }}
                         // Peaks.js exports as lowercase 'peaks', create alias for uppercase 'Peaks' if needed
                         if (typeof Peaks === 'undefined' && typeof peaks !== 'undefined') {{
                             window.Peaks = peaks;
-                            console.log('[AudioAnnotation] Created Peaks alias from lowercase peaks');
+                            dlog('[AudioAnnotation] Created Peaks alias from lowercase peaks');
                         }}
                         if (typeof Peaks === 'undefined' && typeof peaks === 'undefined') {{
-                            console.log('[AudioAnnotation] Waiting for Peaks.js (checked both Peaks and peaks)...');
+                            dlog('[AudioAnnotation] Waiting for Peaks.js (checked both Peaks and peaks)...');
                             setTimeout(initWhenReady, 100);
                             return;
                         }}
-                        console.log('[AudioAnnotation] AudioAnnotationManager and Peaks.js loaded');
+                        dlog('[AudioAnnotation] AudioAnnotationManager and Peaks.js loaded');
 
                         var container = document.querySelector('.audio-annotation-container[data-schema="{escaped_name}"]');
                         if (!container) {{
@@ -508,12 +515,12 @@ def _generate_html(
                         if (waveformContainer) {{
                             var rect = waveformContainer.getBoundingClientRect();
                             if (rect.width === 0 || rect.height === 0) {{
-                                console.log('[AudioAnnotation] Waveform container not visible yet, waiting...');
+                                dlog('[AudioAnnotation] Waveform container not visible yet, waiting...');
                                 setTimeout(initWhenReady, 100);
                                 return;
                             }}
                         }}
-                        console.log('[AudioAnnotation] Container found and visible:', container);
+                        dlog('[AudioAnnotation] Container found and visible:', container);
 
                         var config = {config_json};
                         var waveformId = 'waveform-{escaped_name}';
@@ -532,20 +539,20 @@ def _generate_html(
                         // 1. First try to find from source_field in instance_display field
                         if (config.sourceField) {{
                             var displayField = document.querySelector('[data-field-key="' + config.sourceField + '"]');
-                            console.log('[AudioAnnotation] Looking for display field:', config.sourceField, displayField);
+                            dlog('[AudioAnnotation] Looking for display field:', config.sourceField, displayField);
                             if (displayField) {{
                                 // Check for data-source-url attribute
                                 var sourceUrl = displayField.dataset.sourceUrl;
                                 if (sourceUrl) {{
                                     audioUrl = sourceUrl;
-                                    console.log('[AudioAnnotation] Found audio URL from display field data-source-url:', audioUrl);
+                                    dlog('[AudioAnnotation] Found audio URL from display field data-source-url:', audioUrl);
                                 }}
                                 // Check for audio element inside display field
                                 var audioEl = displayField.querySelector('audio');
                                 if (!audioUrl && audioEl) {{
                                     var source = audioEl.querySelector('source');
                                     audioUrl = source ? source.src : audioEl.src;
-                                    console.log('[AudioAnnotation] Found audio URL from display field audio element:', audioUrl);
+                                    dlog('[AudioAnnotation] Found audio URL from display field audio element:', audioUrl);
                                 }}
                             }}
                         }}
@@ -558,7 +565,7 @@ def _generate_html(
                                     var instanceFields = JSON.parse(instanceDisplayContainer.dataset.instanceFields);
                                     if (instanceFields[config.sourceField]) {{
                                         audioUrl = instanceFields[config.sourceField];
-                                        console.log('[AudioAnnotation] Found audio URL from instance fields:', audioUrl);
+                                        dlog('[AudioAnnotation] Found audio URL from instance fields:', audioUrl);
                                     }}
                                 }} catch (e) {{
                                     console.warn('[AudioAnnotation] Failed to parse instance fields:', e);
@@ -573,32 +580,32 @@ def _generate_html(
                                 && window.potatoInstanceField) {{
                             audioUrl = window.potatoInstanceField(config.sourceField);
                             if (audioUrl) {{
-                                console.log('[AudioAnnotation] Found audio URL from instance data:', audioUrl);
+                                dlog('[AudioAnnotation] Found audio URL from instance data:', audioUrl);
                             }}
                         }}
 
                         // 4. Fallback: Try instance-text or text-content containers
                         if (!audioUrl) {{
                             var instanceContainer = document.getElementById('instance-text') || document.getElementById('text-content');
-                            console.log('[AudioAnnotation] Fallback - Instance container:', instanceContainer);
+                            dlog('[AudioAnnotation] Fallback - Instance container:', instanceContainer);
                             if (instanceContainer) {{
                                 var text = instanceContainer.textContent || instanceContainer.innerText;
                                 // Check if it's a URL
                                 if (text && (text.trim().startsWith('http') || text.trim().endsWith('.mp3') || text.trim().endsWith('.wav'))) {{
                                     audioUrl = text.trim();
-                                    console.log('[AudioAnnotation] Found audio URL in text:', audioUrl);
+                                    dlog('[AudioAnnotation] Found audio URL in text:', audioUrl);
                                 }}
                                 // Check for audio element
                                 var audioEl = instanceContainer.querySelector('audio');
                                 if (audioEl && audioEl.src) {{
                                     audioUrl = audioEl.src;
-                                    console.log('[AudioAnnotation] Found audio URL in audio element:', audioUrl);
+                                    dlog('[AudioAnnotation] Found audio URL in audio element:', audioUrl);
                                 }}
                             }}
                         }}
 
                         // Initialize manager
-                        console.log('[AudioAnnotation] Creating AudioAnnotationManager with audioUrl:', audioUrl);
+                        dlog('[AudioAnnotation] Creating AudioAnnotationManager with audioUrl:', audioUrl);
                         var manager = new AudioAnnotationManager({{
                             container: container,
                             waveformId: waveformId,
@@ -625,13 +632,16 @@ def _generate_html(
                                 var currentOrigin = window.location.origin;
                                 if (!audioUrl.startsWith(currentOrigin)) {{
                                     finalAudioUrl = '/api/audio/proxy?url=' + encodeURIComponent(audioUrl);
-                                    console.log('[AudioAnnotation] Using proxy for external URL:', finalAudioUrl);
+                                    dlog('[AudioAnnotation] Using proxy for external URL:', finalAudioUrl);
                                 }}
                             }}
-                            console.log('[AudioAnnotation] Calling loadAudio with:', finalAudioUrl);
+                            dlog('[AudioAnnotation] Calling loadAudio with:', finalAudioUrl);
                             manager.loadAudio(finalAudioUrl);
                         }} else {{
                             console.warn('[AudioAnnotation] No audio URL found, waveform will not be loaded');
+                            if (typeof manager.showLoadFailure === 'function') {{
+                                manager.showLoadFailure('This item has no audio file to load.');
+                            }}
                         }}
 
                         // Wire up toolbar buttons
@@ -680,6 +690,13 @@ def _generate_html(
                             rateSelect.addEventListener('change', function() {{
                                 manager.setPlaybackRate(parseFloat(this.value));
                             }});
+                        }}
+
+                        // Help panel: collapsible, state remembered per schema.
+                        // Guarded: a browser still holding an older cached
+                        // audio-annotation.js has no such method.
+                        if (typeof manager.setupHelpToggle === 'function') {{
+                            manager.setupHelpToggle();
                         }}
 
                         // Set default label

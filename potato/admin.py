@@ -210,10 +210,12 @@ class AdminDashboard:
                     if timing_data:
                         total_working_time += timing_data.total_seconds
 
-            # Format total working time
-            hours = total_working_time // 3600
-            minutes = (total_working_time % 3600) // 60
-            formatted_time = f"{hours}h {minutes}m"
+            # Format total working time. The seconds are a float sum, and
+            # floor-dividing a float keeps it a float, so this printed
+            # "0.0h 7.0m". Whole minutes, and no "0h" in front of them.
+            total_seconds_int = int(round(total_working_time))
+            hours, minutes = total_seconds_int // 3600, (total_seconds_int % 3600) // 60
+            formatted_time = f"{hours}h {minutes}m" if hours else f"{minutes}m"
 
             # Items carrying more annotations than the cap asked for. The
             # assignment relaxation can hand out an item that is held but
@@ -242,6 +244,7 @@ class AdminDashboard:
                     "completion_percentage": completion_percentage,
                     "total_assignments": total_assignments,
                     "total_working_time": formatted_time,
+                    "total_working_seconds": total_seconds_int,
                     "average_annotations_per_item": round(total_annotations / total_items, 1) if total_items > 0 else 0
                 },
                 "config": {
@@ -469,6 +472,7 @@ class AdminDashboard:
 
             # Convert items to InstanceData objects
             instances_data = []
+            label_summaries: Dict[str, List[Dict[str, Any]]] = {}
             for item in items:
                 item_id = item.get_id()
                 annotators = ism.get_annotators_for_item(item_id)
@@ -487,6 +491,8 @@ class AdminDashboard:
                     ai_count = 0
                 else:
                     most_frequent_label, disagreement = self._label_stats_from_names(stats["labels"])
+                    label_summaries[item_id] = self._label_summary_by_schema(
+                        stats.get("labels_by_schema") or {})
                     timed = stats["timed_count"]
                     avg_time = stats["total_seconds"] / timed if timed else None
                     ai_count = stats["ai_count"]
@@ -540,6 +546,7 @@ class AdminDashboard:
                     "annotation_count": instance.annotation_count,
                     "completion_percentage": round(instance.completion_percentage, 1),
                     "most_frequent_label": instance.most_frequent_label,
+                    "label_summary_by_schema": label_summaries.get(instance.id, []),
                     "label_disagreement": round(instance.label_disagreement, 2),
                     "annotators": instance.annotators,
                     "num_ai_instance": instance.num_ai_instance,
@@ -2360,6 +2367,7 @@ class AdminDashboard:
             interaction_counts = Counter()
             change_sources = Counter()
             total_interactions = 0
+            instances_with_interaction_log = 0
             total_changes = 0
             total_ai_requests = 0
             users_with_fast_annotations = 0
@@ -2385,6 +2393,7 @@ class AdminDashboard:
                 user_low_interaction_count = 0
                 user_no_scroll_count = 0
                 user_no_change_count = 0
+                user_logged_instances = 0
 
                 for instance_id, bd in behavioral_data.items():
                     # 0 means no time was measured (fewer than two events),
@@ -2398,18 +2407,37 @@ class AdminDashboard:
                         if time_sec < 5:
                             user_fast_count += 1
 
-                    interactions = self._behavioral_sequence(self._behavioral_field(bd, 'interactions', []))
+                    # Imported or pre-seeded annotations carry their label
+                    # changes but no interaction log. Counting those as zero
+                    # interactions showed "Interactions 0" beside 48 label
+                    # changes and marked every such instance low-interaction,
+                    # which inflated the suspicion score of annotators who did
+                    # nothing wrong. The tracker records every click and
+                    # keydown (interaction_tracker.js), so a label change with
+                    # no interaction event at all means no log was kept --
+                    # as does a record without the field. Unknown, not zero.
+                    raw_interactions = self._behavioral_field(bd, 'interactions', None)
+                    interactions = self._behavioral_sequence(raw_interactions)
+                    n_changes_here = len(self._behavioral_sequence(
+                        self._behavioral_field(bd, 'annotation_changes', [])))
                     user_interactions += len(interactions)
                     total_interactions += len(interactions)
-                    if len(interactions) < 3:
-                        user_low_interaction_count += 1
+                    has_interaction_log = raw_interactions is not None and not (
+                        len(interactions) == 0 and n_changes_here > 0)
+                    if has_interaction_log:
+                        user_logged_instances += 1
+                        instances_with_interaction_log += 1
+                        if len(interactions) < 3:
+                            user_low_interaction_count += 1
 
                     for event in interactions:
                         event_type = self._behavioral_field(event, 'event_type', 'unknown')
                         interaction_counts[event_type] += 1
 
+                    # Scroll depth comes from the same tracker, so without an
+                    # interaction log it was never measured either.
                     scroll = self._behavioral_field(bd, 'scroll_depth_max', 0) or 0
-                    if scroll < 25:
+                    if has_interaction_log and scroll < 25:
                         user_no_scroll_count += 1
 
                     changes = self._behavioral_sequence(self._behavioral_field(bd, 'annotation_changes', []))
@@ -2448,14 +2476,27 @@ class AdminDashboard:
                         if isinstance(decision_time, (int, float)):
                             ai_usage_total['decision_times'].append(decision_time)
 
+                # An annotator with label changes and not one interaction
+                # event anywhere had no tracker running at all; their
+                # change-free instances are no evidence of low effort either.
+                if user_interactions == 0 and user_changes > 0 and user_logged_instances:
+                    instances_with_interaction_log -= user_logged_instances
+                    user_logged_instances = 0
+                    user_low_interaction_count = 0
+                    user_no_scroll_count = 0
+
                 total_instances = len(behavioral_data)
                 if total_instances > 0:
                     # Fast rate is over the instances whose time was measured.
                     # With none, it is unknown and drops out of the score,
                     # whose remaining weights are rescaled to sum to 1.
                     fast_rate = (user_fast_count / len(user_times)) if user_times else None
-                    low_interaction_rate = user_low_interaction_count / total_instances
-                    no_scroll_rate = user_no_scroll_count / total_instances
+                    # Over the instances that had an interaction log; with
+                    # none it is unknown and drops out like fast_rate.
+                    low_interaction_rate = ((user_low_interaction_count / user_logged_instances)
+                                            if user_logged_instances else None)
+                    no_scroll_rate = ((user_no_scroll_count / user_logged_instances)
+                                      if user_logged_instances else None)
                     no_change_rate = user_no_change_count / total_instances
                     parts = [(fast_rate, 0.3), (low_interaction_rate, 0.35),
                              (no_scroll_rate, 0.2), (no_change_rate, 0.15)]
@@ -2478,6 +2519,7 @@ class AdminDashboard:
                         'min_time_sec': min(user_times) if user_times else None,
                         'max_time_sec': max(user_times) if user_times else None,
                         'total_interactions': user_interactions,
+                        'instances_with_interaction_log': user_logged_instances,
                         'avg_interactions': user_interactions / total_instances,
                         'total_changes': user_changes,
                         'avg_changes': user_changes / total_instances,
@@ -2504,6 +2546,9 @@ class AdminDashboard:
                 'total_instances': aggregate['total_instances'],
                 'avg_time_per_instance_sec': aggregate['avg_time_per_instance'],
                 'total_interactions': total_interactions,
+                # How many instances the interaction total is over. 0 means
+                # interactions were not recorded, not that nobody clicked.
+                'instances_with_interaction_log': instances_with_interaction_log,
                 'total_changes': total_changes,
                 'total_ai_requests': total_ai_requests,
             }
@@ -3039,6 +3084,37 @@ class AdminDashboard:
             out.append(name if name else str(value))
 
     @staticmethod
+    def _collect_labels_by_schema(labels: Dict[Any, Any], out: Dict[str, List[str]]) -> None:
+        """Like ``_collect_label_names``, but keeping each label's schema.
+
+        The pooled list answers "which label was most frequent" across every
+        schema at once, so one column read ``food`` for one item (a topic) and
+        ``positive`` for the next (a sentiment). Kept per schema, the column
+        can say which question each answer belongs to.
+        """
+        for label, value in labels.items():
+            schema = label.get_schema() if hasattr(label, "get_schema") else None
+            if hasattr(label, "get_name"):
+                name = label.get_name()
+            else:
+                name = getattr(label, "label_name", None) or getattr(label, "name", None)
+            out.setdefault(str(schema) if schema else "", []).append(
+                name if name else str(value))
+
+    @staticmethod
+    def _label_summary_by_schema(by_schema: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+        """Modal label per schema, with its count and the number of votes."""
+        summary = []
+        for schema in sorted(by_schema):
+            names = by_schema[schema]
+            if not names:
+                continue
+            label, count = Counter(names).most_common(1)[0]
+            summary.append({"schema": schema, "label": label,
+                            "count": count, "total": len(names)})
+        return summary
+
+    @staticmethod
     def _label_stats_from_names(all_labels: List[str]) -> Tuple[Optional[str], float]:
         """Most frequent label and disagreement from a list of label names.
 
@@ -3089,7 +3165,8 @@ class AdminDashboard:
         def bucket(instance_id: str) -> Dict[str, Any]:
             entry = aggregates.get(instance_id)
             if entry is None:
-                entry = {"labels": [], "total_seconds": 0.0, "timed_count": 0, "ai_count": 0}
+                entry = {"labels": [], "labels_by_schema": {}, "total_seconds": 0.0,
+                         "timed_count": 0, "ai_count": 0}
                 aggregates[instance_id] = entry
             return entry
 
@@ -3107,7 +3184,9 @@ class AdminDashboard:
             for instance_id, entry in annotations.items():
                 labels = entry.get("labels") if isinstance(entry, dict) else None
                 if labels:
-                    self._collect_label_names(labels, bucket(instance_id)["labels"])
+                    target = bucket(instance_id)
+                    self._collect_label_names(labels, target["labels"])
+                    self._collect_labels_by_schema(labels, target["labels_by_schema"])
 
             behavioral = getattr(user_state, "instance_id_to_behavioral_data", None) or {}
             for instance_id, behavioral_data in behavioral.items():

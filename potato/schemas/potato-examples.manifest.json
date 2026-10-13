@@ -4772,7 +4772,9 @@
       ],
       "description": "",
       "dir": "examples/video/video-annotation",
-      "display_types": [],
+      "display_types": [
+        "video"
+      ],
       "has_data_dir": true,
       "has_modeline": true,
       "has_readme": false,

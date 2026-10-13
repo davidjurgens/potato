@@ -227,14 +227,29 @@ class TestTheUiDoesNotInventAConfidence:
             "a real confidence value is preselected, so an untouched control "
             "still submits one")
 
-    def test_the_client_sends_no_fallback_value(self):
-        """Driven by the value the expression produces, not by reading it: an
-        absent element must yield the empty string, not 'medium'."""
+    def test_the_client_never_writes_a_confidence_itself(self):
+        """No code path in the page may put a confidence value there.
+
+        This used to check only the submit payload line, and passed while
+        resetMetadata() set the select to 'medium' on every item -- so the
+        value still went out, one function earlier. The behaviour itself is
+        driven in tests/playwright/test_adjudication_page_ux.py
+        (test_confidence_starts_empty_and_blocks_submit); this is the cheap
+        guard that runs with the unit suite.
+        """
+        import re
         from pathlib import Path
 
         source = Path("potato/static/adjudication.js").read_text()
-        line = [l for l in source.splitlines()
-                if "confidence:" in l and "getElementById" in l]
-        assert line, "the submit payload no longer builds confidence"
-        assert "'medium'" not in line[0], (
-            "the client substitutes a confidence the adjudicator never chose")
+        assert "confidence" in source, "the page no longer handles confidence"
+        # A confidence literal assigned or used as a fallback, on a line about
+        # confidence (`conf.value = 'medium'`, `... || 'medium'`). Comments
+        # and other fields (a signal's severity is also 'medium') are not it.
+        invented = [
+            line.strip() for line in source.splitlines()
+            if not line.strip().startswith("//") and "conf" in line.lower()
+            and re.search(r"""(?:value\s*=\s*|\|\|\s*)['"](?:high|medium|low)['"]""", line)
+        ]
+        assert not invented, (
+            "the client substitutes a confidence the adjudicator never chose: "
+            f"{invented}")

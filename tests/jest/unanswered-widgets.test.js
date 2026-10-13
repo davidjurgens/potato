@@ -125,7 +125,10 @@ describe('the ranking rows go back to the config order between instances', () =>
         const end = whole.indexOf('    // Clear hierarchical multiselect checkboxes');
         expect(start).toBeGreaterThan(-1);
         expect(end).toBeGreaterThan(start);
-        clearRanking = new Function(whole.slice(start, end));
+        // The block calls splitKnownValues(), a top-level helper in the same
+        // file; without it every case threw a ReferenceError.
+        clearRanking = new Function(
+            extractFunction(src, 'splitKnownValues') + '\n' + whole.slice(start, end));
     });
 
     function page({order, placeholder, serverSet}) {

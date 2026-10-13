@@ -83,6 +83,21 @@ def get_admin_api_key(config):
     return _generated_admin_api_key
 
 
+def admin_api_key_source(config):
+    """Where the key that ``get_admin_api_key`` returns comes from.
+
+    ``"config"``, ``"env"`` or ``"file"``, in the same priority order. The
+    admin login page used to say the key was in ``admin_api_key.txt`` even
+    when the config file set ``admin_api_key`` inline, so an administrator
+    who followed the instruction looked for a file that was never written.
+    """
+    if config.get("admin_api_key"):
+        return "config"
+    if os.environ.get("POTATO_ADMIN_API_KEY"):
+        return "env"
+    return "file"
+
+
 def is_loopback_bind(config) -> bool:
     """True when the server is bound to loopback only.
 

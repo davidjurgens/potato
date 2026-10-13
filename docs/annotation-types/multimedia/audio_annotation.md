@@ -272,6 +272,9 @@ Annotations are saved as JSON:
 - **Zoom Controls**: Zoom in, zoom out, fit to view
 - **Segment Controls**: Create segment, delete selected
 - **Segment Count**: Shows current number of segments
+- **Help**: Shows or hides the usage panel below the toolbar. The panel starts
+  open; once an annotator closes it, it stays closed on later items in the same
+  browser.
 
 ### Waveform Display
 
@@ -325,6 +328,19 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 ## Troubleshooting
 
 ### Waveform not loading
+
+When the audio cannot be loaded, the zoomed waveform pane shows the reason and
+the play, zoom and segment controls are disabled. The other questions on the
+page still work. The messages are:
+
+| Message | Cause |
+|---|---|
+| "the server answered HTTP 404" (or another status) | The URL, or the `/api/audio/proxy` request for an external URL, returned that status. A 502 from the proxy means Potato could not fetch the remote file. |
+| "could not be reached from this browser" | The request failed before any response arrived: a network error, or a cross-origin server that did not allow the read. |
+| "downloaded, but this browser cannot play its format" | The file arrived but the browser cannot decode it. Convert to MP3, WAV or OGG. |
+| "This item has no audio file to load" | No URL was found in `source_field`, the display, or the item text. |
+
+Then:
 
 1. Check browser console for errors
 2. Verify the audio URL is accessible

@@ -176,7 +176,9 @@ class AdjudicationDecision:
             label_decisions=d.get("label_decisions", {}),
             span_decisions=d.get("span_decisions", []),
             source=d.get("source", {}),
-            confidence=d.get("confidence", "medium"),
+            # Absent stays absent: a record saved without a confidence must
+            # not reload as "medium", a value nobody chose.
+            confidence=d.get("confidence") or "",
             notes=d.get("notes", ""),
             error_taxonomy=d.get("error_taxonomy", []),
             guideline_update_flag=d.get("guideline_update_flag", False),

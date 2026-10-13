@@ -23,9 +23,13 @@ The admin dashboard requires an API key for access. The API key can be configure
 3. **Auto-generated**: If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key is logged to the console on server startup.
 
 **Access Methods:**
-1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted
+1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted. The form says where this server's key comes from: the config file, the environment variable, or `admin_api_key.txt`
 2. **Header Access**: Include `X-API-Key: <your_key>` in request headers
-3. **Debug Mode**: When `debug: true` is set in config, no API key is required
+3. **Debug Mode**: When `debug: true` is set in config and the server is bound to loopback, no API key is required
+
+A request to `/admin` that carries a wrong key gets HTTP 403, and the form shows "That API key wasn't recognized".
+
+**Logout** in the header removes the key from the browser session (`POST /admin/logout`) and returns you to the key form. An annotator login in the same browser is not affected.
 
 ### Finding Your Auto-Generated Key
 
@@ -36,29 +40,44 @@ If you didn't configure an API key explicitly, find it in one of these ways:
 ### Security Notes
 
 - API keys are stored in the session for the duration of the browser session
-- All admin API endpoints require the API key in headers
+- Admin API endpoints accept the key in the `X-API-Key` header, or the session set by the `/admin` form
 - The dashboard automatically redirects to login if no valid API key is provided
 - Auto-generated keys are persisted across server restarts (stored in `admin_api_key.txt`)
 - For production deployments, consider setting an explicit key via config or environment variable
 
 ## Dashboard Features
 
+### Navigation
+
+The bar under the header links to the other admin pages. A link appears only when its page has something to show for this project:
+
+| Link | Shown when |
+|---|---|
+| Agreement (IAA) | always |
+| Adjudication | `adjudication.enabled: true` |
+| Review board | `review_workflow.enabled: true` |
+| Triage queue | `triage.enabled: true` |
+| Judge alignment | `judge_alignment.enabled: true` |
+| Annotation integrity | the project has a radio, multiselect, select or likert scheme |
+
+The Tools group links Datasets, Judge Calibration, Automation, Catalog and Arena when each is enabled, and Publish Dataset always.
+
+The selected tab is kept in the URL (`/admin#instances`), so a reload or a shared link opens the same tab. The tab strip takes the arrow keys, Home and End.
+
 ### 1. Overview Tab
 
 The Overview tab holds project-wide counts and progress.
 
-**Key Metrics:**
-- **Total Users**: Number of registered annotators
-- **Active Users**: Users currently in annotation phase
-- **Total Annotations**: Completed annotations across all users
-- **Completion Percentage**: Percentage of items with annotations
-- **Total Items**: Items in the dataset
-- **Working Time**: Total time spent by all annotators
+**Summary row:**
+- **Items**: Items in the dataset, and how many have at least one annotation
+- **Annotations**: Total annotations, and the mean per item
+- **Annotators**: Registered annotators, how many are in the annotation phase, and how many have finished. Being in the annotation phase does not mean someone is annotating right now
+- **Working Time**: Time summed over all annotators, shown as `7m` or `1h 12m`
+- **Over-collected**: Shown only when some items hold more annotations than the per-item cap
 
-**System Information:**
-- Task name and configuration
-- Assignment limits and strategy
-- Debug mode status
+**Agreement:** One number per schema, computed over items that have two or more annotators. The measure is Krippendorff's alpha where the schema has one. Otherwise it is the first chance-corrected coefficient in the schema's list, then a correlation, then raw overlap such as mean Jaccard. Percent agreement is never used here. Values of 0.6 and above are labelled *strong*, values below 0.2 *weak*. The full table is at **Full report**, which opens `/admin/iaa`.
+
+**System Information:** Task name, assignment limits ("No limit" when unset), assignment strategy and debug mode.
 
 ### 2. Annotators Tab
 
@@ -72,6 +91,7 @@ The Annotators tab lists each annotator with their timing and throughput.
 - **Average Time/Annotation**: Mean time per annotation
 - **Speed**: Annotations completed per hour
 - **Completion %**: Percentage of assigned items completed
+- **Max Instances**: The most items this annotator can be assigned. Type a number and press **Set**, or leave the field empty for no limit. The value cannot go below the number of items the annotator has already done; the server raises it to that number and the message says so. A message with **Undo** confirms each change
 - **Last Activity**: Timestamp of last annotation activity
 
 **Timing Analysis:**
@@ -89,10 +109,12 @@ The Instances tab is a paginated list of every annotation instance and its stati
 - **Text Preview**: First 100 characters of the instance text
 - **Annotations**: Number of annotations received
 - **Completion %**: Percentage of target annotations reached
-- **Most Frequent Label**: Most commonly selected label
+- **Most Frequent Label**: The most common answer to each question, written `schema: label (count/total)`
 - **Disagreement**: The share of annotations that did not choose the modal
-  label, so 0.0 is unanimity and 0.67 is three annotators picking three
-  different labels
+  label, pooled over all questions, so 0.0 is unanimity and 0.67 is three
+  annotators picking three different labels. Shaded green at 0, amber above 0,
+  and red at 0.5 or more; "—" when fewer than two people annotated the item.
+  With adjudication enabled, the value links to the item in `/adjudicate`
 - **Average Time**: Mean time spent annotating this instance
 - **Annotators**: List of users who annotated this instance
 
@@ -112,8 +134,10 @@ The Questions tab aggregates responses for each annotation schema in your config
 
 **Analysis by Annotation Type:**
 
+Distributions are drawn as horizontal bars, with the count and share at the right.
+
 For **Radio/Select** questions:
-- Response distribution histogram
+- Response distribution
 - Most common label
 - Agreement score (percentage of annotators selecting the same label)
 
@@ -144,7 +168,7 @@ The Behavioral Analytics tab reports what the interaction tracker recorded: how 
 - **Users with Data**: Number of users with behavioral tracking data
 - **Total Instances**: Total tracked annotation sessions
 - **Avg Time**: Average time per annotation instance
-- **Total Interactions**: All tracked interactions (clicks, focus, navigation)
+- **Interactions**: All tracked interactions (clicks, focus, navigation), and the number of instances they were counted over. Annotations that were imported or seeded have label changes but no interaction log. Those instances read **Not recorded** (per user: "not recorded") instead of 0
 - **Annotation Changes**: Total label modifications
 - **AI Requests**: Total AI assistance requests
 
@@ -202,7 +226,7 @@ Users are sorted by suspicion score to help identify potentially problematic ann
 
 The suspicion score is calculated based on:
 1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort. Measured over the instances with a recorded time; with none it drops out and the other weights are rescaled
-2. **Low Interaction Rate**: Very few interactions may indicate random clicking
+2. **Low Interaction Rate**: Very few interactions may indicate random clicking. Measured over the instances that have an interaction log; with none it drops out like the fast rate. An instance with label changes but no interaction events at all has no log, since the tracker records every click and keypress
 3. **No Change Rate**: Never changing initial selections may indicate lack of careful consideration
 
 Users with suspicion scores above 50% are highlighted in red.
@@ -284,8 +308,10 @@ This tab is particularly useful for:
 The Configuration tab changes assignment settings on a running server.
 
 **Configurable Settings:**
-- **Max Annotations per User**: Limit annotations per user (-1 for unlimited)
-- **Max Annotations per Item**: Limit annotations per item (-1 for unlimited)
+- **Max Annotations per User**: Limit annotations per user. Tick **No limit** for none
+- **Max Annotations per Item**: Limit annotations per item. Tick **No limit** for none
+
+The API behind the form still uses `-1` for no limit.
 - **Assignment Strategy**:
   - `random`: Random assignment
   - `fixed_order`: Sequential assignment
@@ -312,6 +338,30 @@ Headers: X-API-Key: admin_api_key
 ```
 
 Returns user statistics, annotation progress, and a configuration summary.
+`total_working_time` is a display string (`7m`, `1h 12m`);
+`total_working_seconds` is the same value as a whole number of seconds.
+
+### Agreement Summary
+```
+GET /admin/api/iaa_summary
+Headers: X-API-Key: admin_api_key
+```
+
+One row per schema: `schema`, `annotation_type`, `metric` (the measure
+chosen, or `null`), `value`, `display`, `band` (`strong`, `weak` or empty),
+`n_items`, `n_annotators`, and `note` when no measure could be computed.
+`n_overlap_items` counts the items with two or more annotators.
+
+### Agreement Report
+```
+GET /admin/iaa
+Headers: X-API-Key: admin_api_key
+```
+
+Returns JSON to API clients. A browser, which sends `Accept: text/html`,
+gets the rendered page. `?format=json` or `?format=html` overrides the
+`Accept` header. `/admin/judge-alignment`, `/admin/annotation-integrity` and
+`/admin/triage-queue` follow the same rule.
 
 ### Annotators Data
 ```
@@ -335,6 +385,9 @@ Returns paginated instances data with sorting and filtering options.
 - `sort_by`: Sort field (annotation_count, completion_percentage, disagreement, id, average_time)
 - `sort_order`: Sort order (asc, desc)
 - `filter_completion`: Filter by completion (completed, incomplete, all)
+
+Each row's `most_frequent_label` pools every schema. `label_summary_by_schema`
+lists the modal label per schema as `{schema, label, count, total}`.
 
 ### Questions Data
 ```
@@ -402,6 +455,7 @@ Returns the behavioral analytics for every annotator.
     "total_instances": 500,
     "avg_time_per_instance_sec": 45.2,
     "total_interactions": 15000,
+    "instances_with_interaction_log": 480,
     "total_changes": 2500,
     "total_ai_requests": 150
   },
@@ -437,6 +491,7 @@ Returns the behavioral analytics for every annotator.
       "total_instances": 50,
       "avg_time_sec": 45.2,
       "total_interactions": 600,
+      "instances_with_interaction_log": 50,
       "total_changes": 150,
       "ai_requests": 10,
       "ai_accept_rate": 0.7,

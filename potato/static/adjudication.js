@@ -40,6 +40,50 @@
         loadQueue(currentFilter === 'all' ? null : currentFilter);
         bindNavigation();
         bindFilters();
+        bindQueueKeys();
+        bindDrawer();
+        bindResponsesToggle();
+    }
+
+    /**
+     * Phone layout: the queue is a drawer. It starts open (it is the first
+     * screen), and folds into its toggle bar once an item is chosen.
+     */
+    function setDrawerOpen(open) {
+        var sidebar = document.getElementById('adj-sidebar');
+        var toggle = document.getElementById('adj-drawer-toggle');
+        if (!sidebar || !toggle) return;
+        sidebar.classList.toggle('adj-drawer-closed', !open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function bindDrawer() {
+        var toggle = document.getElementById('adj-drawer-toggle');
+        if (!toggle) return;
+        toggle.addEventListener('click', function () {
+            setDrawerOpen(toggle.getAttribute('aria-expanded') !== 'true');
+        });
+    }
+
+    function updateDrawerCount() {
+        var el = document.getElementById('adj-drawer-count');
+        if (el) el.textContent = '(' + queue.length + ')';
+    }
+
+    /** Remember whether the adjudicator folded the annotator overview away. */
+    function bindResponsesToggle() {
+        var section = document.getElementById('adj-responses-section');
+        if (!section) return;
+        try {
+            if (window.localStorage.getItem('potato.adj.responsesOpen') === '0') {
+                section.open = false;
+            }
+        } catch (e) { /* storage unavailable: keep it open */ }
+        section.addEventListener('toggle', function () {
+            try {
+                window.localStorage.setItem('potato.adj.responsesOpen', section.open ? '1' : '0');
+            } catch (e) { /* ignore */ }
+        });
     }
 
     /**
@@ -64,40 +108,114 @@
                     if (found >= 0) {
                         selectQueueItem(found, true);
                     }
+                } else if (queue.length > 0 && !isNarrow()) {
+                    // Open the first item rather than greeting the adjudicator
+                    // with "select an item": on a wide screen the queue stays
+                    // in view beside it, so nothing is hidden by doing so. On
+                    // a phone the queue IS the first screen, so leave it.
+                    var first = queue.findIndex(function (i) { return i.status === 'pending'; });
+                    selectQueueItem(first >= 0 ? first : 0);
+                } else if (queue.length === 0) {
+                    showQueueEmptyState();
                 }
             })
             .catch(function (err) {
                 console.error('Failed to load adjudication queue:', err);
+                showMessage(emptyState, 'error',
+                    'The adjudication queue could not be loaded',
+                    'The request to /adjudicate/api/queue failed (' + err.message +
+                    '). Check that the server is still running, then reload.');
             });
     }
 
+    /** Phone-width layout, where the queue is a drawer above the item. */
+    function isNarrow() {
+        return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+    }
+
     /**
-     * Render the queue sidebar
+     * Replace the empty-state panel's content. `kind` picks the icon:
+     * 'done' | 'empty' | 'error'.
+     */
+    function showMessage(panel, kind, heading, body) {
+        if (!panel) return;
+        var icon = kind === 'done' ? 'fa-circle-check' :
+            (kind === 'error' ? 'fa-triangle-exclamation' : 'fa-inbox');
+        panel.className = 'adj-empty-state adj-empty-' + kind;
+        panel.innerHTML = '<i class="fas ' + icon + '" aria-hidden="true"></i>' +
+            '<h5>' + AdjudicationForms.escapeHtml(heading) + '</h5>' +
+            '<p>' + AdjudicationForms.escapeHtml(body) + '</p>';
+        panel.style.display = 'flex';
+        if (itemView) itemView.style.display = 'none';
+        if (navBar) navBar.style.display = 'none';
+    }
+
+    /** What an empty queue means depends on the filter that emptied it. */
+    function showQueueEmptyState() {
+        if (currentFilter === 'pending') {
+            showMessage(emptyState, 'done', 'Nothing left to adjudicate',
+                'Every item in the queue has a decision or was skipped. ' +
+                'Use "All" or "Done" to review earlier decisions.');
+        } else if (currentFilter === 'completed') {
+            showMessage(emptyState, 'empty', 'No decisions yet',
+                'Items appear here once you submit a decision for them.');
+        } else {
+            showMessage(emptyState, 'empty', 'The queue is empty',
+                'No item has enough annotations to need adjudication yet. ' +
+                'An item enters the queue once min_annotations annotators have labelled it ' +
+                'and their agreement is below agreement_threshold.');
+        }
+    }
+
+    /**
+     * Render the queue sidebar.
+     *
+     * Each entry is a <button>, so the queue is reachable by keyboard; it was a
+     * <div> with a click handler, and Tab went from the filters straight into
+     * the decision form. Only one entry is in the tab order (roving tabindex):
+     * a queue of 500 items should be one Tab stop, walked with the arrow keys.
      */
     function renderQueue() {
         if (!queueList) return;
         queueList.innerHTML = '';
+        updateDrawerCount();
 
         if (queue.length === 0) {
-            queueList.innerHTML = '<div class="text-center text-muted p-3" style="font-size: 0.85rem;">' +
-                'No items in queue</div>';
+            var none = document.createElement('p');
+            none.className = 'adj-queue-empty';
+            none.textContent = currentFilter === 'pending' ? 'No pending items' :
+                (currentFilter === 'completed' ? 'No completed items' : 'No items in queue');
+            queueList.appendChild(none);
             return;
         }
 
+        var activeIndex = queue.findIndex(function (i) { return i.instance_id === currentItemId; });
+
         queue.forEach(function (item, index) {
-            var el = document.createElement('div');
+            var el = document.createElement('button');
+            el.type = 'button';
             el.className = 'adj-queue-item';
             if (item.status === 'completed') el.className += ' completed';
             if (item.status === 'skipped') el.className += ' skipped';
-            if (item.instance_id === currentItemId) el.className += ' active';
+            if (index === activeIndex) {
+                el.className += ' active';
+                el.setAttribute('aria-current', 'true');
+            }
+            el.dataset.instanceId = item.instance_id;
+            el.tabIndex = index === (activeIndex >= 0 ? activeIndex : 0) ? 0 : -1;
 
-            var agBadge = getAgreementBadge(item.overall_agreement);
+            var status = item.status === 'completed' ? '<span class="adj-queue-status">Done</span>' :
+                (item.status === 'skipped' ? '<span class="adj-queue-status">Skipped</span>' : '');
+            var preview = item.text_preview ?
+                '<div class="adj-queue-item-preview">' +
+                AdjudicationForms.escapeHtml(item.text_preview) + '</div>' : '';
 
             el.innerHTML = '<div class="adj-queue-item-id">' +
-                AdjudicationForms.escapeHtml(item.instance_id) + '</div>' +
+                AdjudicationForms.escapeHtml(item.instance_id) + status + '</div>' +
+                preview +
                 '<div class="adj-queue-item-meta">' +
                 '<span>' + item.num_annotators + ' annotators</span>' +
-                agBadge +
+                getAgreementBadge(item.overall_agreement) +
                 '</div>';
 
             el.addEventListener('click', function () {
@@ -105,6 +223,28 @@
             });
 
             queueList.appendChild(el);
+        });
+    }
+
+    /** Arrow keys move through the queue; Enter/Space are the button's own. */
+    function bindQueueKeys() {
+        if (!queueList) return;
+        queueList.addEventListener('keydown', function (e) {
+            var items = Array.prototype.slice.call(queueList.querySelectorAll('.adj-queue-item'));
+            var at = items.indexOf(document.activeElement);
+            if (at < 0) return;
+            var to = null;
+            if (e.key === 'ArrowDown') to = Math.min(at + 1, items.length - 1);
+            else if (e.key === 'ArrowUp') to = Math.max(at - 1, 0);
+            else if (e.key === 'Home') to = 0;
+            else if (e.key === 'End') to = items.length - 1;
+            if (to === null) return;
+            e.preventDefault();
+            // Stop the page-level ArrowLeft/Right handler from also firing.
+            e.stopPropagation();
+            items[at].tabIndex = -1;
+            items[to].tabIndex = 0;
+            items[to].focus();
         });
     }
 
@@ -119,10 +259,12 @@
         }
         var pct = Math.round(agreement * 100);
         var cls = 'adj-agreement-low';
-        if (agreement >= 0.75) cls = 'adj-agreement-high';
-        else if (agreement >= 0.5) cls = 'adj-agreement-medium';
+        var word = 'low';
+        if (agreement >= 0.75) { cls = 'adj-agreement-high'; word = 'high'; }
+        else if (agreement >= 0.5) { cls = 'adj-agreement-medium'; word = 'medium'; }
 
-        return '<span class="adj-agreement-badge ' + cls + '">' + pct + '%</span>';
+        return '<span class="adj-agreement-badge ' + cls + '" ' +
+            'title="Annotator agreement ' + pct + '% (' + word + ')">' + pct + '% agree</span>';
     }
 
     /**
@@ -160,6 +302,22 @@
     }
 
     /**
+     * Mark queue entry `index` as the open item (-1: none). Keeps the roving
+     * tabindex on the open entry, so Tab into the queue lands on it.
+     */
+    function markActive(index) {
+        if (!queueList) return;
+        var items = queueList.querySelectorAll('.adj-queue-item');
+        items.forEach(function (el, i) {
+            var on = i === index;
+            el.classList.toggle('active', on);
+            if (on) el.setAttribute('aria-current', 'true');
+            else el.removeAttribute('aria-current');
+            el.tabIndex = (on || (index < 0 && i === 0)) ? 0 : -1;
+        });
+    }
+
+    /**
      * Select and load a queue item
      * @param {number} index - Index in the current queue array
      * @param {boolean} skipHistory - If true, don't push to navigation history
@@ -175,11 +333,9 @@
             pushToHistory(currentItemId);
         }
 
-        // Update active state in sidebar
-        queueList.querySelectorAll('.adj-queue-item').forEach(function (el, i) {
-            el.classList.toggle('active', i === index);
-        });
-
+        markActive(index);
+        // On a phone, opening an item is the end of using the queue.
+        if (isNarrow()) setDrawerOpen(false);
         loadItem(item.instance_id);
     }
 
@@ -275,16 +431,23 @@
                 // is a rendered copy of the text field, so printing it showed
                 // the adjudicator the same passage twice under an internal name.
                 var internal = data.item_internal_fields || [];
+                // The id field is skipped too: the header already says
+                // "Item: <id>", and printing it again as `id: item_001` put a
+                // second copy of it above the text being adjudicated.
+                var fields = Object.keys(itemData).filter(function (key) {
+                    return internal.indexOf(key) === -1 &&
+                        typeof itemData[key] === 'string' &&
+                        itemData[key] !== String(item.instance_id);
+                });
                 var html = '';
-                Object.keys(itemData).forEach(function (key) {
-                    if (internal.indexOf(key) !== -1) return;
-                    var val = itemData[key];
-                    if (typeof val === 'string') {
-                        html += '<div style="margin-bottom: 8px;">' +
-                            '<strong style="font-size: 0.8rem; color: #6b7280;">' +
-                            AdjudicationForms.escapeHtml(key) + ':</strong><br>' +
-                            AdjudicationForms.escapeHtml(val) + '</div>';
-                    }
+                fields.forEach(function (key) {
+                    // A lone field needs no caption; it is simply the item.
+                    var caption = fields.length > 1 ?
+                        '<div class="adj-item-field-name">' +
+                        AdjudicationForms.escapeHtml(key) + '</div>' : '';
+                    html += '<div class="adj-item-field">' + caption +
+                        '<div class="adj-item-field-value">' +
+                        AdjudicationForms.escapeHtml(itemData[key]) + '</div></div>';
                 });
                 textEl.innerHTML = html || AdjudicationForms.escapeHtml(itemText);
             } else {
@@ -307,13 +470,13 @@
             renderSpanOverlays(item.span_annotations, itemText);
         }
 
-        // If there's an existing decision, populate it
+        // Reset, THEN restore. The reset used to run second, so reopening a
+        // decided item showed its labels but wiped the confidence, notes and
+        // error types that had been saved with them.
+        resetMetadata();
         if (decision) {
             populateExistingDecision(decision);
         }
-
-        // Reset metadata fields
-        resetMetadata();
 
         // Bind form interactions
         AdjudicationForms.bindFormEvents();
@@ -332,24 +495,13 @@
             var containerRect = container.getBoundingClientRect();
             overlayContainer.innerHTML = '';
 
-            // Color palette for annotators (matching chip colors but as border colors)
-            var borderColors = [
-                '#3b82f6', '#22c55e', '#f59e0b', '#ec4899',
-                '#6366f1', '#f97316', '#10b981', '#a855f7'
-            ];
-            var annotatorColorIdx = 0;
-            var annotatorColors = {};
-
             Object.keys(spanAnnotations).forEach(function(userId) {
-                if (!annotatorColors[userId]) {
-                    annotatorColors[userId] = borderColors[annotatorColorIdx % borderColors.length];
-                    annotatorColorIdx++;
-                }
-
                 var spans = spanAnnotations[userId];
                 if (!spans || spans.length === 0) return;
 
-                var color = annotatorColors[userId];
+                // The same identity class the chips in the span form use, so
+                // an outline and the chip naming its annotator match.
+                var whoClass = AdjudicationForms.getAnnotatorColor(userId);
 
                 spans.forEach(function(span) {
                     var start = span.start;
@@ -362,19 +514,17 @@
 
                     positions.forEach(function(pos) {
                         var overlay = document.createElement('div');
-                        overlay.className = 'adj-span-overlay';
+                        overlay.className = 'adj-span-overlay ' + whoClass;
                         overlay.style.left = pos.left + 'px';
                         overlay.style.top = pos.top + 'px';
                         overlay.style.width = pos.width + 'px';
                         overlay.style.height = pos.height + 'px';
-                        overlay.style.borderColor = color;
                         overlay.title = (span.name || 'span') + ' (' + userId + ')';
 
                         // Add a label on the first segment
                         if (pos === positions[0]) {
                             var label = document.createElement('span');
                             label.className = 'adj-span-overlay-label';
-                            label.style.backgroundColor = color;
                             label.textContent = (span.name || 'span') + ' (' + userId + ')';
                             overlay.appendChild(label);
                         }
@@ -463,16 +613,17 @@
         responsesContainer.innerHTML = '';
         decisionsContainer.innerHTML = '';
 
-        schemes.forEach(function (schema) {
+        var shown = schemes.filter(function (schema) {
+            // Display-only types have nothing to adjudicate.
+            var t = schema.annotation_type || '';
+            return t !== 'pure_display' && t !== 'video';
+        });
+
+        renderAnnotatorSummary(item, shown, responsesContainer);
+
+        shown.forEach(function (schema) {
             var schemaName = schema.name || '';
             var schemaType = schema.annotation_type || '';
-
-            // Skip display-only types
-            if (schemaType === 'pure_display' || schemaType === 'video') return;
-
-            // For span type, check span_annotations instead of annotations
-            var isSpanType = (schemaType === 'span');
-            var isComplexType = (schemaType === 'image_annotation' || schemaType === 'audio_annotation' || schemaType === 'video_annotation');
 
             var agreement = item.agreement_scores[schemaName];
             var agreementHtml = '';
@@ -480,118 +631,85 @@
                 agreementHtml = getAgreementBadge(agreement);
             }
 
-            // Annotator responses section
-            var responseHtml = '<div class="adj-schema-group">';
-            responseHtml += '<div class="adj-schema-header">';
-            responseHtml += '<span class="adj-schema-name">' +
-                AdjudicationForms.escapeHtml(schemaName) +
-                ' <span class="text-muted" style="font-weight: normal; font-size: 0.8rem;">(' + schemaType + ')</span></span>';
-            responseHtml += '<span>' + agreementHtml + '</span>';
-            responseHtml += '</div>';
-
-            if (isSpanType) {
-                // For spans, show summary per annotator (spans are visualized as dashed overlays on text)
-                responseHtml += '<div class="adj-annotator-cards">';
-                Object.keys(item.span_annotations || {}).forEach(function (userId) {
-                    var spans = item.span_annotations[userId] || [];
-                    var schemaSpans = spans.filter(function(s) { return s.schema === schemaName || !s.schema; });
-                    if (schemaSpans.length === 0) return;
-
-                    var timing = AdjudicationForms.formatTime(
-                        item.behavioral_data[userId] ?
-                            (item.behavioral_data[userId].total_time_ms || 0) : 0
-                    );
-
-                    responseHtml += '<div class="adj-annotator-card" data-annotator="' + userId + '">';
-                    responseHtml += '<div class="adj-annotator-name">' +
-                        AdjudicationForms.escapeHtml(userId) + '</div>';
-                    responseHtml += '<div class="adj-annotator-value">' + schemaSpans.length + ' span(s)</div>';
-                    schemaSpans.forEach(function(span) {
-                        responseHtml += '<div class="adj-span-summary">' +
-                            '<span class="adj-span-label-badge" style="font-size:0.7rem;">' +
-                            AdjudicationForms.escapeHtml(span.name || 'span') + '</span> ' +
-                            '<span style="font-size:0.75rem;color:#6b7280;">' +
-                            AdjudicationForms.escapeHtml(span.title || ('chars ' + span.start + '-' + span.end)) + '</span></div>';
-                    });
-                    if (config.show_timing_data && timing) {
-                        responseHtml += '<div class="adj-annotator-timing">';
-                        responseHtml += '<i class="fas fa-clock"></i> ' + timing;
-                        responseHtml += '</div>';
-                    }
-                    responseHtml += '</div>';
-                });
-                responseHtml += '</div>';
-            } else if (isComplexType) {
-                // For image/audio/video, show summary per annotator
-                responseHtml += '<div class="adj-annotator-cards">';
-                Object.keys(item.annotations).forEach(function (userId) {
-                    var userAnn = item.annotations[userId];
-                    var schemaVal = userAnn[schemaName];
-                    if (schemaVal === undefined) return;
-
-                    var summary = formatComplexAnnotationSummary(schemaVal, schemaType);
-                    var timing = AdjudicationForms.formatTime(
-                        item.behavioral_data[userId] ?
-                            (item.behavioral_data[userId].total_time_ms || 0) : 0
-                    );
-
-                    responseHtml += '<div class="adj-annotator-card" data-annotator="' + userId + '">';
-                    responseHtml += '<div class="adj-annotator-name">' +
-                        AdjudicationForms.escapeHtml(userId) + '</div>';
-                    responseHtml += '<div class="adj-annotator-value">' + summary + '</div>';
-                    if (config.show_timing_data && timing) {
-                        responseHtml += '<div class="adj-annotator-timing">';
-                        responseHtml += '<i class="fas fa-clock"></i> ' + timing;
-                        responseHtml += '</div>';
-                    }
-                    responseHtml += '</div>';
-                });
-                responseHtml += '</div>';
-            } else {
-                // Standard label annotations
-                responseHtml += '<div class="adj-annotator-cards">';
-                Object.keys(item.annotations).forEach(function (userId) {
-                    var userAnn = item.annotations[userId];
-                    var schemaVal = userAnn[schemaName];
-                    if (schemaVal === undefined) return;
-
-                    var valueStr = formatAnnotationValue(schemaVal);
-                    var timing = AdjudicationForms.formatTime(
-                        item.behavioral_data[userId] ?
-                            (item.behavioral_data[userId].total_time_ms || 0) : 0
-                    );
-                    var isFast = config.fast_decision_warning_ms > 0 &&
-                        item.behavioral_data[userId] &&
-                        item.behavioral_data[userId].total_time_ms > 0 &&
-                        item.behavioral_data[userId].total_time_ms < config.fast_decision_warning_ms;
-
-                    responseHtml += '<div class="adj-annotator-card" data-annotator="' + userId + '">';
-                    responseHtml += '<div class="adj-annotator-name">' +
-                        AdjudicationForms.escapeHtml(userId) + '</div>';
-                    responseHtml += '<div class="adj-annotator-value">' + AdjudicationForms.escapeHtml(valueStr) + '</div>';
-
-                    if (config.show_timing_data && timing) {
-                        responseHtml += '<div class="adj-annotator-timing' + (isFast ? ' adj-timing-warning' : '') + '">';
-                        responseHtml += '<i class="fas fa-clock"></i> ' + timing;
-                        if (isFast) responseHtml += ' <i class="fas fa-exclamation-triangle"></i>';
-                        responseHtml += '</div>';
-                    }
-                    responseHtml += '</div>';
-                });
-                responseHtml += '</div>';
-            }
-
-            responseHtml += '</div>';
-            responsesContainer.innerHTML += responseHtml;
-
-            // Decision form
+            // The decision form is where each answer is shown against the
+            // option it chose (the chips beside every label), so the
+            // per-schema agreement belongs on its header.
             var formHtml = '<div class="adj-decision-schema">';
-            formHtml += '<div class="adj-decision-schema-name">' + AdjudicationForms.escapeHtml(schemaName) + '</div>';
+            formHtml += '<div class="adj-decision-schema-name">' +
+                '<span>' + AdjudicationForms.escapeHtml(schemaName) +
+                ' <span class="adj-schema-type">' + AdjudicationForms.escapeHtml(schemaType) + '</span></span>' +
+                agreementHtml + '</div>';
             formHtml += AdjudicationForms.renderForm(schema, item.annotations, item.behavioral_data, config, item.span_annotations, currentImageUrl);
             formHtml += '</div>';
 
             decisionsContainer.innerHTML += formHtml;
         });
+    }
+
+    /**
+     * One row per annotator: what they answered on every schema, how long
+     * they took, and (filled in later) their signal flags.
+     *
+     * This replaced a card per annotator PER SCHEMA, which repeated each
+     * annotator's flags once for every schema and restated, above the
+     * decision form, the answers the form's own chips already show -- about
+     * 600px of scrolling before the adjudicator could decide anything.
+     */
+    function renderAnnotatorSummary(item, shown, container) {
+        var annotators = [];
+        Object.keys(item.annotations || {}).concat(Object.keys(item.span_annotations || {}))
+            .forEach(function (u) { if (annotators.indexOf(u) === -1) annotators.push(u); });
+
+        var count = document.getElementById('adj-responses-count');
+        if (count) count.textContent = annotators.length;
+
+        var html = '';
+        annotators.forEach(function (userId) {
+            var userAnn = (item.annotations || {})[userId] || {};
+            var answers = '';
+            shown.forEach(function (schema) {
+                var name = schema.name || '';
+                var type = schema.annotation_type || '';
+                var text = null;
+                if (type === 'span') {
+                    var spans = ((item.span_annotations || {})[userId] || []).filter(function (sp) {
+                        return sp.schema === name || !sp.schema;
+                    });
+                    if (spans.length) text = spans.length + (spans.length === 1 ? ' span' : ' spans');
+                } else if (type === 'image_annotation' || type === 'audio_annotation' || type === 'video_annotation') {
+                    if (userAnn[name] !== undefined) text = formatComplexAnnotationSummary(userAnn[name], type);
+                } else if (userAnn[name] !== undefined) {
+                    text = formatAnnotationValue(userAnn[name]);
+                }
+                if (text === null || text === '') return;
+                answers += '<span class="adj-answer">' +
+                    (shown.length > 1 ? '<span class="adj-answer-schema">' +
+                        AdjudicationForms.escapeHtml(name) + '</span> ' : '') +
+                    AdjudicationForms.escapeHtml(text) + '</span>';
+            });
+
+            var bd = (item.behavioral_data || {})[userId];
+            var ms = bd ? (bd.total_time_ms || 0) : 0;
+            var timing = AdjudicationForms.formatTime(ms);
+            var isFast = config.fast_decision_warning_ms > 0 && ms > 0 &&
+                ms < config.fast_decision_warning_ms;
+
+            html += '<div class="adj-annotator-card" role="listitem" data-annotator="' +
+                AdjudicationForms.escapeHtml(userId) + '">';
+            html += '<div class="adj-annotator-name">' + AdjudicationForms.escapeHtml(userId) + '</div>';
+            html += '<div class="adj-annotator-value">' + (answers ||
+                '<span class="adj-answer adj-answer-none">no answer</span>') + '</div>';
+            if (config.show_timing_data && timing) {
+                html += '<div class="adj-annotator-timing' + (isFast ? ' adj-timing-warning' : '') + '"' +
+                    (isFast ? ' title="Faster than fast_decision_warning_ms (' +
+                        config.fast_decision_warning_ms + ' ms)"' : '') + '>' +
+                    '<i class="fas ' + (isFast ? 'fa-triangle-exclamation' : 'fa-clock') +
+                    '" aria-hidden="true"></i> ' + timing +
+                    (isFast ? '<span class="visually-hidden"> (fast)</span>' : '') + '</div>';
+            }
+            html += '</div>';
+        });
+        container.innerHTML = html;
     }
 
     /**
@@ -703,8 +821,14 @@
      * Reset metadata fields
      */
     function resetMetadata() {
+        // Empty, not 'medium'. The template ships the select with no
+        // preselected value, and this reset put 'medium' back on every item
+        // it rendered -- so require_confidence never fired, and every decision
+        // went out as a confidence nobody chose.
         var conf = document.getElementById('adj-confidence');
-        if (conf) conf.value = 'medium';
+        if (conf) conf.value = '';
+        setFieldError(conf, null);
+        setStatus('');
 
         var notes = document.getElementById('adj-notes');
         if (notes) notes.value = '';
@@ -726,16 +850,62 @@
     }
 
     /**
+     * Say something in the action bar's status line ('' clears it).
+     * Replaces alert(): a modal dialog blocked the page for a message that
+     * belongs next to the button that caused it.
+     */
+    function setStatus(message, kind) {
+        var el = document.getElementById('adj-submit-status');
+        if (!el) return;
+        el.textContent = message || '';
+        el.className = 'adj-submit-status' + (message ? ' adj-status-' + (kind || 'error') : '');
+    }
+
+    /** Mark a form control invalid with a message under it, or clear it. */
+    function setFieldError(control, message) {
+        if (!control) return;
+        var id = control.id + '-error';
+        var msg = document.getElementById(id);
+        if (!message) {
+            control.removeAttribute('aria-invalid');
+            if (msg) msg.remove();
+            return;
+        }
+        control.setAttribute('aria-invalid', 'true');
+        control.setAttribute('aria-describedby', id);
+        if (!msg) {
+            msg = document.createElement('div');
+            msg.id = id;
+            msg.className = 'adj-field-error';
+            control.insertAdjacentElement('afterend', msg);
+        }
+        msg.textContent = message;
+    }
+
+    /**
      * Submit the current adjudication decision
      */
     function submitDecision() {
         if (!currentItemId) return;
 
         var result = AdjudicationForms.collectDecisions();
-        if (Object.keys(result.decisions).length === 0) {
-            alert('Please make at least one annotation decision before submitting.');
+        if (Object.keys(result.decisions).length === 0 &&
+                (result.spanDecisions || []).length === 0) {
+            setStatus('Choose a label in "Your decision" before submitting.');
             return;
         }
+
+        var confEl = document.getElementById('adj-confidence');
+        var confidence = confEl ? confEl.value : '';
+        if (config.require_confidence && confEl && !confidence) {
+            setFieldError(confEl, 'Choose how confident you are in this decision. ' +
+                'This task requires it (require_confidence).');
+            setStatus('Choose a confidence level first.');
+            confEl.scrollIntoView({ block: 'center' });
+            confEl.focus();
+            return;
+        }
+        setFieldError(confEl, null);
 
         var timeSpent = itemStartTime ? Date.now() - itemStartTime : 0;
 
@@ -752,7 +922,7 @@
             source: result.sources,
             // No `|| 'medium'`: an absent confidence has to reach the server
             // absent, or the export cannot tell a default from a choice.
-            confidence: (document.getElementById('adj-confidence') || {}).value || '',
+            confidence: confidence || '',
             notes: (document.getElementById('adj-notes') || {}).value || '',
             error_taxonomy: errorTags,
             guideline_update_flag: (document.getElementById('adj-guideline-flag') || {}).checked || false,
@@ -760,17 +930,23 @@
             time_spent_ms: timeSpent
         };
 
+        setStatus('Saving…', 'info');
         fetch('/adjudicate/api/submit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (data.error) {
-                    alert('Error: ' + data.error);
-                    return;
-                }
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    if (!r.ok || data.error) {
+                        throw new Error(data.error ||
+                            ('The server refused the decision (HTTP ' + r.status + ').'));
+                    }
+                    return data;
+                });
+            })
+            .then(function () {
+                setStatus('');
                 // Move to next item
                 goToNext();
                 // Refresh queue
@@ -778,7 +954,7 @@
             })
             .catch(function (err) {
                 console.error('Failed to submit decision:', err);
-                alert('Failed to submit decision. Please try again.');
+                setStatus('Not saved: ' + err.message);
             });
     }
 
@@ -813,14 +989,9 @@
                         loadQueue(currentFilter === 'all' ? null : currentFilter);
                     } else {
                         // No more items
-                        if (itemView) itemView.style.display = 'none';
-                        if (emptyState) {
-                            emptyState.style.display = 'flex';
-                            emptyState.innerHTML = '<i class="fas fa-check-circle" style="color: #16a34a;"></i>' +
-                                '<h5>All Done!</h5>' +
-                                '<p>No more items to adjudicate.</p>';
-                        }
-                        if (navBar) navBar.style.display = 'none';
+                        showMessage(emptyState, 'done', 'All done',
+                            'There are no more items to adjudicate. ' +
+                            'Use "All" or "Done" to review your decisions.');
                     }
                 });
         }
@@ -837,22 +1008,10 @@
 
             // Try to highlight in the sidebar queue
             var found = queue.findIndex(function (i) { return i.instance_id === prevId; });
-            if (found >= 0) {
-                currentQueueIndex = found;
-                if (queueList) {
-                    queueList.querySelectorAll('.adj-queue-item').forEach(function (el, i) {
-                        el.classList.toggle('active', i === found);
-                    });
-                }
-            } else {
-                // Item not in current filtered queue (e.g. completed item in pending view)
-                currentQueueIndex = -1;
-                if (queueList) {
-                    queueList.querySelectorAll('.adj-queue-item').forEach(function (el) {
-                        el.classList.remove('active');
-                    });
-                }
-            }
+            // -1 when the item is not in the current filtered queue (e.g. a
+            // completed item while viewing Pending).
+            currentQueueIndex = found;
+            markActive(found);
 
             loadItem(prevId);
         }
@@ -879,8 +1038,16 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function (e) {
-            // Only handle when not in an input/textarea
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+            // Ctrl/Cmd+Enter submits from anywhere, including the notes box --
+            // that is where the hand is when the decision is finished.
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                submitDecision();
+                return;
+            }
+            // Everything else only when not typing in a field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' ||
+                    e.target.isContentEditable || e.altKey || e.ctrlKey || e.metaKey) {
                 return;
             }
 
@@ -890,11 +1057,19 @@
             } else if (e.key === 'ArrowLeft' || e.key === 'p') {
                 e.preventDefault();
                 goToPrev();
-            } else if (e.key === 'Enter' && e.ctrlKey) {
-                e.preventDefault();
-                submitDecision();
             }
         });
+
+        // Clearing a confidence error as soon as one is chosen.
+        var confEl = document.getElementById('adj-confidence');
+        if (confEl) {
+            confEl.addEventListener('change', function () {
+                if (confEl.value) {
+                    setFieldError(confEl, null);
+                    setStatus('');
+                }
+            });
+        }
     }
 
     /**
@@ -911,7 +1086,7 @@
 
         var html = '<div class="adj-similar-header">' +
             '<h5><i class="fas fa-link"></i> Similar Items</h5>' +
-            '<span class="text-muted" style="font-size:0.8rem;">' +
+            '<span class="adj-similar-count">' +
             similarItems.length + ' found</span></div>';
 
         html += '<div class="adj-similar-items-list">';
@@ -1071,8 +1246,10 @@
             btn.addEventListener('click', function () {
                 document.querySelectorAll('.adj-filter-btn').forEach(function (b) {
                     b.classList.remove('active');
+                    b.setAttribute('aria-pressed', 'false');
                 });
                 this.classList.add('active');
+                this.setAttribute('aria-pressed', 'true');
 
                 currentFilter = this.dataset.filter || 'pending';
                 loadQueue(currentFilter === 'all' ? null : currentFilter);

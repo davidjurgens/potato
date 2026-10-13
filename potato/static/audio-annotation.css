@@ -69,7 +69,7 @@
 
 .playback-btn:hover {
     background: var(--accent, #f3f4f6);
-    border-color: var(--primary, #3b82f6);
+    border-color: var(--primary, #6e56cf);
 }
 
 .playback-btn:disabled {
@@ -128,9 +128,9 @@
 }
 
 .label-btn.active {
-    border-color: var(--label-color, var(--primary, #3b82f6));
-    background: color-mix(in srgb, var(--label-color, var(--primary, #3b82f6)) 15%, white);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color, var(--primary, #3b82f6)) 25%, transparent);
+    border-color: var(--label-color, var(--primary, #6e56cf));
+    background: color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 15%, white);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 25%, transparent);
 }
 
 .label-color-dot {
@@ -166,7 +166,7 @@
 
 .zoom-btn:hover {
     background: var(--accent, #f3f4f6);
-    border-color: var(--primary, #3b82f6);
+    border-color: var(--primary, #6e56cf);
 }
 
 /* Segment controls */
@@ -193,7 +193,7 @@
 
 .segment-btn:hover:not(:disabled) {
     background: var(--accent, #f3f4f6);
-    border-color: var(--primary, #3b82f6);
+    border-color: var(--primary, #6e56cf);
 }
 
 .segment-btn:disabled {
@@ -202,9 +202,9 @@
 }
 
 .segment-btn.delete-btn:hover:not(:disabled) {
-    background: #fef2f2;
-    border-color: #ef4444;
-    color: #ef4444;
+    background: var(--destructive-tint);
+    border-color: var(--destructive-text);
+    color: var(--destructive-text);
 }
 
 /* Segment count */
@@ -292,9 +292,9 @@
 }
 
 .segment-item.active {
-    border-color: var(--primary, #3b82f6);
-    background: color-mix(in srgb, var(--primary, #3b82f6) 5%, white);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #3b82f6) 15%, transparent);
+    border-color: var(--primary, #6e56cf);
+    background: color-mix(in srgb, var(--primary, #6e56cf) 5%, white);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #6e56cf) 15%, transparent);
 }
 
 .segment-color {
@@ -350,14 +350,14 @@
 
 .segment-play-btn:hover {
     background: var(--accent, #f3f4f6);
-    color: var(--primary, #3b82f6);
-    border-color: var(--primary, #3b82f6);
+    color: var(--primary, #6e56cf);
+    border-color: var(--primary, #6e56cf);
 }
 
 .segment-delete-btn:hover {
-    background: #fef2f2;
-    color: #ef4444;
-    border-color: #ef4444;
+    background: var(--destructive-tint);
+    color: var(--destructive-text);
+    border-color: var(--destructive-text);
 }
 
 /* ==================== Questions Panel ==================== */
@@ -528,7 +528,7 @@
 
 /* Overview highlight */
 .peaks-overview-highlight {
-    stroke: var(--primary, #3b82f6);
+    stroke: var(--primary, #6e56cf);
     stroke-width: 2;
     fill: none;
 }
@@ -539,4 +539,113 @@
     .spectrogram-container {
         height: 100px;
     }
+}
+
+
+/* ---- Waveform captions and the help panel --------------------------------
+   These were inline styles carrying their own greys (#666, #495057, #ccc,
+   #f8f9fa); they now sit on the shared tokens. */
+.audio-annotation-container .overview-label,
+.audio-annotation-container .zoomview-label,
+.audio-annotation-container .spectrogram-label {
+    font-size: var(--text-sm);
+    color: var(--muted-foreground);
+    margin-bottom: var(--space-xs);
+}
+
+.audio-annotation-container .spectrogram-label {
+    margin-top: 12px;
+}
+
+.audio-annotation-container .overview-container {
+    margin-bottom: 12px;
+}
+
+.audio-annotation-container .help-toggle {
+    margin-left: auto;
+}
+
+.audio-annotation-container .help-toggle-btn {
+    min-height: 32px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    color: var(--foreground);
+    font-size: var(--text-dense);
+    cursor: pointer;
+}
+
+.audio-annotation-container .help-toggle-btn:hover {
+    background: var(--muted);
+}
+
+.audio-annotation-container .help-toggle-btn[aria-expanded="true"] {
+    border-color: var(--primary);
+    background: var(--primary-tint);
+}
+
+.audio-annotation-container .help-toggle-btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
+.audio-annotation-container .help-panel {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--muted);
+    font-size: var(--text-dense);
+    color: var(--foreground);
+}
+
+.audio-annotation-container .help-panel.collapsed {
+    display: none;
+}
+
+.audio-annotation-container .help-panel-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md) var(--space-xl);
+}
+
+.audio-annotation-container .help-panel ul,
+.audio-annotation-container .help-panel ol {
+    margin: var(--space-xs) 0 0;
+    padding-left: 20px;
+}
+
+/* ---- Load failure ---------------------------------------------------------
+   The reason sits in the zoomed waveform pane, where the annotator is looking,
+   and the controls that need audio are disabled (audio-annotation.js
+   showLoadFailure). */
+.audio-annotation-container .waveform-container {
+    position: relative;
+}
+
+.audio-annotation-container .audio-load-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    text-align: center;
+    background: var(--destructive-tint);
+    border: 1px solid var(--destructive-text);
+    border-radius: var(--radius);
+    color: var(--destructive-text);
+    font-size: var(--text-dense);
+    z-index: 2;
+}
+
+.audio-annotation-container .audio-load-error span {
+    color: var(--foreground);
+}
+
+.audio-annotation-container.audio-load-failed .overview-container {
+    opacity: 0.5;
 }

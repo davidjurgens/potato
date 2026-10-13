@@ -5805,6 +5805,11 @@
         "iaa_th_value": {},
         "iaa_title": {},
         "iaa_title_overlap_sample": {},
+        "image_to_annotate": {
+          "default": "Image to Annotate:",
+          "description": "Heading above an item whose text field embeds an image",
+          "type": "string"
+        },
         "in_progress_badge": {},
         "instructions_heading": {},
         "integrity_annotators_suffix": {},
@@ -5869,6 +5874,11 @@
         "judge_prompt_versions": {},
         "jump_next_unannotated": {},
         "jump_prev_unannotated": {},
+        "jump_unannotated_label": {
+          "default": "Unlabeled",
+          "description": "Caption between the header's jump-to-unlabeled buttons (shown at 1200px and wider)",
+          "type": "string"
+        },
         "labeled_badge": {},
         "loading": {},
         "login_subtitle_password": {},

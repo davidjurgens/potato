@@ -5,6 +5,16 @@
  * admin pages should link this file rather than duplicating these rules.
  */
 
+/* The dashboard has no Bootstrap reset, so the default 8px body margin put
+   a white frame around the full-bleed navbar. */
+.admin-body {
+  margin: 0;
+}
+
+.pagination:empty {
+  display: none;
+}
+
 .admin-container {
   min-height: 100vh;
   background-color: var(--light-bg);
@@ -38,38 +48,68 @@
   margin: 0 auto;
 }
 
-/* Tab Navigation */
+/* Tab Navigation
+ *
+ * The active tab is an underline, not a filled purple pill. The accent is
+ * for the moment that matters; a tab being selected is not one, and a
+ * filled tab competed with every primary button on the page. */
 .admin-tabs {
   display: flex;
+  gap: var(--space-xs);
   /* Ten-plus tabs do not fit a phone; scroll the strip, not the page. */
   overflow-x: auto;
+  scrollbar-width: none;
   max-width: 100%;
-  background: white;
-  border-radius: var(--radius);
-  padding: 0.25rem;
-  margin-bottom: 2rem;
-  box-shadow: var(--box-shadow);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-lg);
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* The strip scrolls sideways on a phone with no scrollbar; a fade on the
+   edge that has more tabs past it is the cue. Set by updateTabOverflow(). */
+.admin-tabs.overflow-end {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 48px), transparent);
+}
+
+.admin-tabs.overflow-start {
+  -webkit-mask-image: linear-gradient(to left, black calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to left, black calc(100% - 48px), transparent);
+}
+
+.admin-tabs.overflow-start.overflow-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 48px, black calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 48px, black calc(100% - 48px), transparent);
 }
 
 .admin-tab {
-  flex: 1;
-  padding: 0.75rem 1rem;
-  text-align: center;
-  border-radius: var(--radius);
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
   cursor: pointer;
   transition: var(--transition);
+  font-family: var(--font-sans);
+  font-size: var(--text-dense);
   font-weight: 500;
   color: var(--muted-foreground);
+  white-space: nowrap;
 }
 
 .admin-tab.active {
-  background-color: var(--primary);
-  color: white;
+  color: var(--foreground);
+  border-bottom-color: var(--primary);
 }
 
 .admin-tab:hover:not(.active) {
-  background-color: var(--muted);
   color: var(--foreground);
+  border-bottom-color: var(--border);
 }
 
 /* Tab Content */
@@ -124,7 +164,9 @@
   background: white;
   border-radius: var(--radius);
   box-shadow: var(--box-shadow);
-  overflow: hidden;
+  /* Scroll, never clip: with `overflow: hidden` the right-hand columns of a
+     wide table were unreachable on a narrow screen. */
+  overflow-x: auto;
 }
 
 .admin-table {
@@ -142,7 +184,8 @@
 .admin-table th {
   background-color: var(--muted);
   font-weight: 500;
-  color: var(--muted-foreground);
+  /* --muted-foreground on --muted is 4.4:1, under AA for 14px text. */
+  color: var(--secondary-foreground);
   font-size: 0.875rem;
 }
 
@@ -196,9 +239,10 @@
 }
 
 .pagination-button.active {
-  background-color: var(--primary);
-  color: white;
+  background-color: var(--primary-tint);
+  color: var(--foreground);
   border-color: var(--primary);
+  font-weight: 600;
 }
 
 /* Filters and Controls */
@@ -212,6 +256,9 @@
 
 .table-controls select,
 .table-controls input {
+  min-height: 36px;
+  font-family: var(--font-sans);
+  background-color: var(--card);
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -242,25 +289,29 @@
 
 /* Status Indicators */
 .status-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius);
-  font-size: 0.75rem;
+  display: inline-block;
+  white-space: nowrap;
+  padding: 0.125rem var(--space-sm);
+  border-radius: 999px;
+  font-size: var(--text-xs);
   font-weight: 500;
+  background-color: var(--secondary);
+  color: var(--foreground);
 }
 
 .status-active {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: var(--success-color);
+  background-color: var(--success-tint);
+  color: var(--success-text);
 }
 
 .status-completed {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: var(--primary);
+  background-color: var(--primary-tint);
+  color: var(--foreground);
 }
 
 .status-login {
-  background-color: rgba(156, 163, 175, 0.1);
-  color: var(--gray-color);
+  background-color: var(--secondary);
+  color: var(--foreground);
 }
 
 /* Config Form */
@@ -332,7 +383,7 @@
   font-size: 0.75rem;
   font-weight: 500;
   background-color: var(--muted);
-  color: var(--muted-foreground);
+  color: var(--secondary-foreground);
 }
 
 .question-description {
@@ -364,7 +415,7 @@
 
 .question-stat .label {
   font-size: 0.75rem;
-  color: var(--muted-foreground);
+  color: var(--secondary-foreground);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -420,11 +471,7 @@
 
 .distribution-bar {
   flex: 1;
-  background: linear-gradient(
-    to top,
-    var(--primary),
-    var(--success-color)
-  );
+  background: var(--primary);
   border-radius: 2px 2px 0 0;
   position: relative;
   min-height: 4px;
@@ -453,7 +500,7 @@
 
 .text-stat .label {
   font-size: 0.75rem;
-  color: var(--muted-foreground);
+  color: var(--secondary-foreground);
   margin-top: 0.25rem;
 }
 
@@ -466,10 +513,10 @@
 
 .word-tag {
   padding: 0.25rem 0.5rem;
-  background: var(--primary);
-  color: white;
+  background: var(--primary-tint);
+  color: var(--foreground);
   border-radius: var(--radius);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .word-tag .count {
@@ -500,14 +547,14 @@
 
 .span-stat .label {
   font-size: 0.75rem;
-  color: var(--muted-foreground);
+  color: var(--secondary-foreground);
   margin-top: 0.25rem;
 }
 
 .error-message {
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--destructive-tint);
   border: 1px solid var(--destructive);
-  color: var(--destructive);
+  color: var(--destructive-text);
   padding: 1rem;
   border-radius: var(--radius);
   margin: 1rem 0;
@@ -515,9 +562,442 @@
 
 /* Keyboard focus parity for the elements admin.html exposes as clickable. */
 .admin-tab:focus-visible,
-.pagination-button:focus-visible {
+.pagination-button:focus-visible,
+.admin-subnav-link:focus-visible,
+.admin-panel-link:focus-visible,
+.admin-row-link:focus-visible,
+.admin-toast button:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* ---- Dashboard shell (navbar is .potato-navbar from styles.css) ---- */
+
+.admin-navbar .user-pill .username {
+  font-weight: 500;
+}
+
+/* Secondary navigation: links to the analysis pages and the tools. Quiet
+   text links, so they do not compete with the tab strip below them. */
+.admin-subnav {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-subnav-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-sm) var(--space-xl);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-xl);
+}
+
+.admin-subnav-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.admin-subnav-heading {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  margin-right: var(--space-xs);
+}
+
+.admin-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius);
+  font-size: var(--text-dense);
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.admin-subnav-link:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.admin-muted {
+  color: var(--muted-foreground);
+}
+
+/* ---- Overview: a dense row of figures, not hero cards ---- */
+
+.admin-summary {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-lg) 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.admin-summary-item {
+  box-sizing: border-box;
+  flex: 1 1 160px;
+  padding: var(--space-md) var(--space-lg);
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+.admin-summary-item:last-child {
+  border-right: none;
+}
+
+.admin-summary-item dt {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-summary-item dd {
+  margin: var(--space-xs) 0 0 0;
+}
+
+.admin-summary-value {
+  display: block;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-summary-sub {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.admin-summary-item.is-warning {
+  background: var(--warning-tint);
+}
+
+.admin-summary-item.is-warning .admin-summary-value,
+.admin-summary-item.is-warning .admin-summary-sub {
+  color: var(--warning-text);
+}
+
+.admin-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.admin-panel h3 {
+  font-size: var(--text-md);
+  font-weight: 600;
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.admin-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.admin-panel-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: var(--text-dense);
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+}
+
+.admin-panel-link:hover {
+  text-decoration-color: var(--primary);
+}
+
+/* A table inside a panel: the panel already draws the box. */
+.admin-table-flat {
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+
+.admin-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Agreement values carry their band in words as well as colour. */
+.agreement-value {
+  font-weight: 600;
+}
+
+.agreement-value.band-strong { color: var(--success-text); }
+.agreement-value.band-weak { color: var(--destructive-text); }
+
+.agreement-band {
+  display: inline-block;
+  margin-left: var(--space-xs);
+  padding: 0 var(--space-sm);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.agreement-band.band-strong { background: var(--success-tint); color: var(--success-text); }
+.agreement-band.band-weak { background: var(--destructive-tint); color: var(--destructive-text); }
+
+/* System information: a definition list in the page font, replacing
+   read-only <input>s that looked editable and rendered in the system font. */
+.admin-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, max-content) 1fr;
+}
+
+.admin-dl-row {
+  display: contents;
+}
+
+.admin-dl dt,
+.admin-dl dd {
+  margin: 0;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-dense);
+}
+
+.admin-dl dt {
+  color: var(--muted-foreground);
+  padding-right: var(--space-lg);
+}
+
+.admin-dl dd {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.admin-dl-row:last-child dt,
+.admin-dl-row:last-child dd {
+  border-bottom: none;
+}
+
+/* ---- Instances table ---- */
+
+/* On a narrow screen the table scrolls; give the text column enough width
+   to read rather than one word per line. */
+#instancesTable td:nth-child(2) {
+  min-width: 16rem;
+}
+
+#instancesTable td:nth-child(5) {
+  min-width: 11rem;
+}
+
+.admin-label-line + .admin-label-line {
+  margin-top: 2px;
+}
+
+.admin-th-defined {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.disagreement {
+  display: inline-block;
+  min-width: 3.25em;
+  padding: 0 var(--space-sm);
+  border-radius: 999px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.disagreement-agree { background: var(--success-tint); color: var(--success-text); }
+.disagreement-some { background: var(--warning-tint); color: var(--warning-text); }
+.disagreement-high { background: var(--destructive-tint); color: var(--destructive-text); }
+.disagreement-none { color: var(--muted-foreground); }
+
+.admin-row-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  text-decoration: none;
+}
+
+.admin-row-link .disagreement {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.admin-row-flagged {
+  background: var(--warning-tint);
+}
+
+/* ---- Annotators: max-instances control ---- */
+
+.admin-quota {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+}
+
+.admin-quota input {
+  width: 6.5rem;
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: var(--text-dense);
+}
+
+.admin-quota .admin-quota-set {
+  height: 32px;
+  padding: 0 var(--space-md);
+  font-size: var(--text-dense);
+}
+
+/* ---- Configuration: "No limit" beside each cap ---- */
+
+.admin-limit-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.admin-limit-control input[type="number"] {
+  max-width: 12rem;
+}
+
+.admin-limit-control input[type="number"]:disabled {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.config-group .admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  min-height: 32px;
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.config-group .admin-check input {
+  width: auto;
+}
+
+.config-group input,
+.config-group select {
+  font-family: var(--font-sans);
+}
+
+/* ---- Questions: horizontal bars ---- */
+
+.admin-hbars {
+  display: grid;
+  gap: var(--space-xs);
+  margin: var(--space-sm) 0 var(--space-md);
+}
+
+.admin-hbar-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 14rem) 1fr minmax(4.5rem, max-content);
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--text-dense);
+}
+
+.admin-hbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+}
+
+.admin-hbar-track {
+  height: 12px;
+  background: var(--muted);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.admin-hbar-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  opacity: 0.75;
+  border-radius: 999px;
+}
+
+.admin-hbar-value {
+  text-align: right;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Status toast (replaces alert()) ---- */
+
+.admin-toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-lg);
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: min(640px, calc(100vw - 2rem));
+  padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-md);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow-lg);
+  font-size: var(--text-dense);
+  color: var(--foreground);
+}
+
+.admin-toast[hidden] {
+  display: none;
+}
+
+.admin-toast-success { border-left-color: var(--success-text); }
+.admin-toast-error { border-left-color: var(--destructive); }
+.admin-toast-error span { color: var(--destructive-text); }
+
+.admin-toast button {
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: var(--text-dense);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.admin-toast .admin-toast-action {
+  border-color: var(--border);
+  font-weight: 600;
+}
+
+.admin-toast .admin-toast-close {
+  font-size: var(--text-md);
+  color: var(--muted-foreground);
 }
 
 /* Responsive Design */
@@ -531,6 +1011,28 @@
 
   .admin-main {
     padding: 1rem;
+  }
+
+  .admin-subnav-inner {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .admin-summary-item {
+    flex-basis: 50%;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .admin-dl {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dl dt {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .admin-hbar-row {
+    grid-template-columns: minmax(5rem, 8rem) 1fr max-content;
   }
 
   .dashboard-grid {
@@ -553,5 +1055,47 @@
 
   .span-analysis {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Back link in the shared sub-page header (admin/_page_header.html). It sits
+   on the purple bar, so it takes the bar's foreground, not --primary. */
+.admin-navbar .admin-back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius);
+  color: var(--primary-foreground);
+  font-size: var(--text-dense);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.admin-navbar .admin-back-link:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.admin-navbar .admin-back-link:focus-visible {
+  outline: 2px solid var(--primary-foreground);
+  outline-offset: 2px;
+}
+
+/* The sub-pages keep the browser's default 8px body margin, which inset the
+   bar on all sides; the header is meant to run edge to edge. */
+body:has(> .admin-navbar) {
+  margin: 0;
+}
+
+/* ...and those pages' <main> relied on that margin for its only inset. */
+body:has(> .admin-navbar) > main.dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-xl);
+}
+
+@media (max-width: 640px) {
+  body:has(> .admin-navbar) > main.dashboard {
+    padding: var(--space-md);
   }
 }

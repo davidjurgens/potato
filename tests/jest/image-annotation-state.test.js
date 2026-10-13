@@ -477,9 +477,20 @@ describe('keybinding notice', () => {
         m._maybeShowKeybindingNotice();
 
         const text = container.querySelector('.keybinding-notice').textContent;
-        expect(text).toContain('bbox: B → R');
+        // The toolbar's name for the tool and the key to press now.
+        expect(text).toContain('Box is R');
         // polygon is P in both profiles; listing it would be noise.
-        expect(text).not.toContain('polygon');
+        expect(text).not.toContain('Polygon');
+    });
+
+    test('speaks to the annotator, not the study admin', () => {
+        const {m, container} = noticeManager('v7', ['bbox'], V7);
+        m._maybeShowKeybindingNotice();
+        const text = container.querySelector('.keybinding-notice').textContent;
+        // Config jargon and internal tool ids are researcher-facing.
+        expect(text).not.toContain('keybinding_profile');
+        expect(text).not.toContain('Admins');
+        expect(text).not.toContain('bbox');
     });
 
     test('is not shown on the legacy profile', () => {
@@ -506,7 +517,7 @@ describe('keybinding notice', () => {
 
         // Real elements, not a string that happened to parse.
         expect(note.querySelector('strong')).not.toBeNull();
-        expect(note.querySelectorAll('code').length).toBeGreaterThan(0);
+        expect(note.querySelectorAll('kbd').length).toBeGreaterThan(0);
         expect(note.querySelector('button.keybinding-notice-dismiss')).not.toBeNull();
     });
 });

@@ -278,12 +278,10 @@
 </style>
 </head>
 <body>
+  {% include 'admin/_page_header.html' %}
   <div class="admin-container">
     <header class="admin-header">
       <h1>{{ ui_lang.iaa_title|default('Inter-Annotator Agreement') }}</h1>
-      <div class="header-actions">
-        <a href="/admin" class="pagination-button">&larr; {{ ui_lang.iaa_admin_dashboard|default('Admin Dashboard') }}</a>
-      </div>
     </header>
     <main class="admin-main">
       <p class="iaa-meta">

@@ -237,13 +237,26 @@ class TestAdjudicationUI(unittest.TestCase):
         filters = self.driver.find_elements(By.CLASS_NAME, "adj-filter-btn")
         self.assertGreaterEqual(len(filters), 2, "Should have at least Pending and All filters")
 
-    def test_adjudication_page_has_empty_state(self):
-        """Before selecting an item, the empty state message should show."""
+    def test_first_pending_item_opens_on_its_own(self):
+        """On a wide screen the first pending item opens without a click.
+
+        The page used to open on an empty panel reading "Select an item from
+        the queue", which cost a click per session and showed nothing useful.
+        The empty-state panel remains, for an empty queue.
+        """
         self._login_adjudicator()
         self.driver.get(f"{self.server.base_url}/adjudicate")
 
         empty = self._wait(By.ID, "adj-empty-state")
-        self.assertTrue(empty.is_displayed())
+        items = self.driver.find_elements(By.CLASS_NAME, "adj-queue-item")
+        if not items:
+            self.assertTrue(empty.is_displayed(), "an empty queue must say so")
+            return
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.find_element(By.ID, "adj-item-view").is_displayed())
+        self.assertFalse(empty.is_displayed())
+        active = self.driver.find_elements(By.CSS_SELECTOR, ".adj-queue-item.active")
+        self.assertEqual(len(active), 1, "exactly one queue entry is marked open")
 
     def test_non_adjudicator_is_redirected(self):
         """A regular user navigating to /adjudicate should be redirected."""

@@ -70,6 +70,9 @@ Potato localizes five areas of the interface:
 | `previous_button` | Previous | Navigation: previous instance button |
 | `submit_button` | Submit | Form submission button |
 | `go_button` | Go | "Go to instance" jump button |
+| `jump_prev_unannotated` | Previous unannotated | Header button: back to the nearest unlabeled item |
+| `jump_next_unannotated` | Next unannotated | Header button: on to the nearest unlabeled item |
+| `jump_unannotated_label` | Unlabeled | Caption between those two buttons (wide screens) |
 | `retry_button` | Retry | Error recovery button |
 | `logout` | Logout | Logout link in header |
 | `labeled_badge` | Labeled | Status badge (annotated instances) |
@@ -83,6 +86,7 @@ Potato localizes five areas of the interface:
 | `text_to_annotate` | Text to Annotate: | Content heading for text instances |
 | `video_to_annotate` | Video to Annotate: | Content heading for video instances |
 | `audio_to_annotate` | Audio to Annotate: | Content heading for audio instances |
+| `image_to_annotate` | Image to Annotate: | Content heading when the item's text embeds an image |
 
 ### 2. Login & Registration Page
 

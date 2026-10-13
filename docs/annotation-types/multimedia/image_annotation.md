@@ -495,8 +495,9 @@ the keys Potato used before:
     keybinding_profile: legacy
 ```
 
-Annotators on a rebound project see a one-time dismissible notice naming the keys
-that moved, so the change is announced rather than discovered.
+Annotators on a rebound project see a one-time dismissible notice naming each
+moved tool and its new key ("New shortcut keys: Box is R."). The notice does not mention
+`keybinding_profile`; that option is for the study's administrator.
 
 If a label's `key_value` collides with a tool key, both actions fire on that
 press. Potato logs a warning naming the schema, the key, and both bindings —

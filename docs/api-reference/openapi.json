@@ -1485,6 +1485,29 @@
         ]
       }
     },
+    "/admin/api/iaa_summary": {
+      "get": {
+        "operationId": "get_admin_api_iaa_summary",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "One headline agreement number per schema, for the dashboard overview.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/api/ibws_ranking": {
       "get": {
         "operationId": "get_admin_api_ibws_ranking",
@@ -3273,6 +3296,20 @@
         ],
         "x-potato-auth": [
           "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/logout": {
+      "post": {
+        "operationId": "post_admin_logout",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Forget the admin key this browser session presented.",
+        "tags": [
+          "core"
         ]
       }
     },

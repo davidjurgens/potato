@@ -4415,7 +4415,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `task_layout` |  | string |  | Custom HTML for the annotation form area |  |
 | `ui` |  | object |  | Interface toggles |  |
 | `ui_config` |  | object |  | Additional interface settings |  |
-| `ui_language` |  | string | `en` | Interface language code | `_base`, `adjudicate`, `admin_btn_computing`, `admin_btn_generate_scores`, `admin_btn_reload`, `admin_btn_save_changes`, `admin_err_annotators`, `admin_err_behavioral`, `admin_err_config`, `admin_err_crowdsourcing`, `admin_err_instances`, `admin_err_mace_load`, `admin_err_mace_trigger`, `admin_err_overview`, `admin_err_questions`, `admin_filter_all`, `admin_filter_completed`, `admin_filter_incomplete`, `admin_hint_unlimited`, `admin_label_assignment_strategy`, `admin_label_max_per_item`, `admin_label_max_per_user`, `admin_login_help`, `admin_login_key_label`, `admin_login_key_placeholder`, `admin_login_submit`, `admin_login_title`, `admin_mace_predicted_help`, `admin_mace_run_predictions`, `admin_mode_badge`, `admin_ok_config_saved`, `admin_opt_color_mace`, `admin_opt_color_majority`, `admin_opt_per_page`, `admin_opt_scoring_counting`, `admin_opt_strat_active_learning`, `admin_opt_strat_fixed_order`, `admin_opt_strat_least_annotated`, `admin_opt_strat_llm_confidence`, `admin_opt_strat_max_diversity`, `admin_opt_strat_random`, `admin_order_asc`, `admin_order_desc`, `admin_page_title`, `admin_section_ai_usage`, `admin_section_bws_scores`, `admin_section_competence`, `admin_section_predicted_labels`, `admin_section_quality`, `admin_section_system_config`, `admin_section_system_info`, `admin_sort_annotations`, `admin_sort_avg_time`, `admin_sort_completion`, `admin_sort_disagreement`, `admin_sort_id`, `admin_tab_annotators`, `admin_tab_behavioral`, `admin_tab_bws`, `admin_tab_configuration`, `admin_tab_crowdsourcing`, `admin_tab_datasets`, `admin_tab_embeddings`, `admin_tab_instances`, `admin_tab_mace`, `admin_tab_overview`, `admin_tab_questions`, `admin_th_ai_accept_rate`, `admin_th_ai_requests`, `admin_th_annotations`, `admin_th_annotator`, `admin_th_annotators`, `admin_th_appearances`, `admin_th_assignment_id`, `admin_th_avg_time`, `admin_th_avg_time_per_annotation`, `admin_th_avg_time_s`, `admin_th_best_count`, `admin_th_changes`, `admin_th_competence`, `admin_th_completion`, `admin_th_completion_pct`, `admin_th_disagreement`, `admin_th_instance`, `admin_th_instance_id`, `admin_th_instances`, `admin_th_interactions`, `admin_th_item_id`, `admin_th_last_activity`, `admin_th_max_instances`, `admin_th_most_frequent_label`, `admin_th_num_ai_used`, `admin_th_phase`, `admin_th_predicted_label`, `admin_th_rank`, `admin_th_reliability`, `admin_th_score`, `admin_th_session_id`, `admin_th_speed`, `admin_th_speed_per_hour`, `admin_th_status`, `admin_th_suspicion`, `admin_th_text`, `admin_th_text_preview`, `admin_th_time`, `admin_th_uncertainty`, `admin_th_user_id`, `admin_th_worker_id`, `admin_th_working_time`, `admin_th_worst_count`, `arena_empty`, `arena_enter_prompt`, `arena_error_prefix`, `arena_export`, `arena_export_title`, `arena_failed`, `arena_heading`, `arena_lb_note`, `arena_leaderboard_heading`, `arena_lede`, `arena_models_label`, `arena_ms`, `arena_no_dpo_pairs`, `arena_page_title`, `arena_pick_as_best`, `arena_picked`, `arena_prompt_heading`, `arena_prompt_placeholder`, `arena_responses_heading`, `arena_run`, `arena_running`, `arena_sent_to`, `arena_th_bt`, `arena_th_comparisons`, `arena_th_elo`, `arena_th_model`, `arena_th_win_rate`, `arena_th_wins`, `audio_to_annotate`, `automation_actions_error`, `automation_actions_ok`, `automation_actions_skipped`, `automation_activity`, `automation_col_action`, `automation_col_actions`, `automation_col_detail`, `automation_col_enabled`, `automation_col_item`, `automation_col_rule`, `automation_col_sample_rate`, `automation_col_status`, `automation_configured_rules`, `automation_heading`, `automation_items_processed`, `automation_latest`, `automation_lede_1`, `automation_lede_2`, `automation_lede_3`, `automation_no`, `automation_no_actions`, `automation_no_rules`, `automation_page_title`, `automation_recent_outcomes`, `automation_reload`, `automation_rules_fired`, `automation_snapshot_title`, `automation_yes`, `catalog_all_placeholder`, `catalog_anchor_label`, `catalog_anchor_placeholder`, `catalog_build_index`, `catalog_clusters_label`, `catalog_discover_button`, `catalog_discover_desc`, `catalog_discover_heading`, `catalog_embeddings_warn_1`, `catalog_embeddings_warn_2`, `catalog_heading`, `catalog_index_heading`, `catalog_items_indexed`, `catalog_lede_1`, `catalog_lede_2`, `catalog_lede_3`, `catalog_lede_slices`, `catalog_lede_what`, `catalog_more_traces_suffix`, `catalog_no_matches`, `catalog_no_slices`, `catalog_page_title`, `catalog_prompt_curate_prefix`, `catalog_prompt_curate_suffix`, `catalog_query_text_label`, `catalog_query_text_placeholder`, `catalog_resolve_button`, `catalog_save_slice_button`, `catalog_search_button`, `catalog_search_heading`, `catalog_slice_name_label`, `catalog_slice_query_label`, `catalog_slice_query_placeholder`, `catalog_slice_threshold_label`, `catalog_slices_heading`, `catalog_status_building`, `catalog_status_candidate_modes`, `catalog_status_clustering`, `catalog_status_curating`, `catalog_status_failed`, `catalog_status_imported_mid`, `catalog_status_imported_prefix`, `catalog_status_imported_suffix`, `catalog_status_indexed_prefix`, `catalog_status_indexed_suffix`, `catalog_status_matching_instances`, `catalog_status_name_required`, `catalog_status_results_suffix`, `catalog_status_saved`, `catalog_status_searching`, `catalog_th_actions`, `catalog_th_instance`, `catalog_th_query_anchor`, `catalog_th_similarity`, `catalog_th_slice`, `catalog_th_threshold`, `catalog_threshold_label`, `catalog_to_dataset_button`, `catalog_topk_label`, `catalog_traces_suffix`, `catalog_unlabeled`, `choose_username_placeholder`, `cite_us`, `codebook`, `continue_button`, `create_password_placeholder`, `dash_assigned_completed`, `dash_back_to_annotating`, `dash_error`, `dash_items_started_pct`, `dash_loading`, `dash_no_items_assigned`, `dash_no_items_project`, `dash_project_progress`, `dash_readonly`, `dash_stat_active_annotators`, `dash_stat_annotated`, `dash_stat_annotations`, `dash_stat_assigned`, `dash_stat_complete`, `dash_stat_items_started`, `dash_stat_total_items`, `dash_subtitle`, `dash_your_progress`, `datasets_annotation_process`, `datasets_assignment_active`, `datasets_assignment_paused`, `datasets_col_cmp`, `datasets_col_created`, `datasets_col_dataset`, `datasets_col_examples`, `datasets_col_experiment`, `datasets_col_scores`, `datasets_col_version`, `datasets_compare_selected`, `datasets_create_dataset_btn`, `datasets_created`, `datasets_creating`, `datasets_dataset_label`, `datasets_datasets_heading`, `datasets_description_label`, `datasets_done`, `datasets_evaluators_label`, `datasets_example_label`, `datasets_examples_label`, `datasets_experiments_heading`, `datasets_failed`, `datasets_heading`, `datasets_lede`, `datasets_llm_judge_note`, `datasets_loading_status`, `datasets_name_hint`, `datasets_name_label`, `datasets_new_dataset`, `datasets_no_datasets`, `datasets_no_experiments`, `datasets_optional_placeholder`, `datasets_page_title`, `datasets_pause_assignment`, `datasets_pick_dataset_evaluator`, `datasets_resume_assignment`, `datasets_run_btn`, `datasets_run_experiment`, `datasets_running`, `datasets_select_dataset`, `datasets_select_label`, `datasets_stat_annotated`, `datasets_stat_annotators`, `datasets_stat_datasets`, `datasets_stat_experiments`, `datasets_stat_ingested`, `datasets_stat_instances`, `datasets_stat_multi_annotated`, `datasets_stat_remaining`, `datasets_status_unavailable`, `datasets_version_label`, `datasets_versions_label`, `dsdetail_back_link`, `dsdetail_col_created`, `dsdetail_col_examples`, `dsdetail_col_experiment`, `dsdetail_col_id`, `dsdetail_col_inputs`, `dsdetail_col_note`, `dsdetail_col_reference`, `dsdetail_col_scores`, `dsdetail_col_split`, `dsdetail_col_tags`, `dsdetail_col_version`, `dsdetail_examples_heading`, `dsdetail_examples_subtitle`, `dsdetail_experiments_heading`, `dsdetail_export_dpo`, `dsdetail_export_dpo_title`, `dsdetail_export_sft`, `dsdetail_export_sft_title`, `dsdetail_import_instances`, `dsdetail_import_instances_title`, `dsdetail_import_traces`, `dsdetail_import_traces_title`, `dsdetail_include_annotations`, `dsdetail_no_examples`, `dsdetail_no_experiments`, `dsdetail_no_versions`, `dsdetail_status_import_failed`, `dsdetail_status_imported`, `dsdetail_status_imported_suffix`, `dsdetail_status_importing`, `dsdetail_tag_button`, `dsdetail_tag_input_label`, `dsdetail_tag_placeholder`, `dsdetail_versions_heading`, `error_heading`, `evalanalytics_alerts_heading`, `evalanalytics_col_avg_latency`, `evalanalytics_col_cost`, `evalanalytics_col_errors`, `evalanalytics_col_model`, `evalanalytics_col_tokens`, `evalanalytics_col_traces`, `evalanalytics_empty`, `evalanalytics_lede_after`, `evalanalytics_lede_before`, `evalanalytics_lede_tail`, `evalanalytics_permodel_aria`, `evalanalytics_permodel_heading`, `evalanalytics_stat_avg_latency`, `evalanalytics_stat_error_rate`, `evalanalytics_stat_p95_latency`, `evalanalytics_stat_total_cost`, `evalanalytics_stat_total_tokens`, `evalanalytics_stat_traces`, `evalanalytics_title`, `expcompare_back_link`, `expcompare_baseline`, `expcompare_ci_label`, `expcompare_col_metric`, `expcompare_empty`, `expcompare_heading`, `expcompare_lede_part1`, `expcompare_lede_part2`, `expcompare_lede_strong`, `expcompare_not_significant`, `expcompare_page_title`, `expcompare_row_examples`, `expcompare_sig_title`, `expcompare_significant`, `forgot_password`, `go_button`, `html_dir`, `html_lang`, `iaa_admin_dashboard`, `iaa_agreement`, `iaa_annotators`, `iaa_at_cap`, `iaa_band_fair`, `iaa_band_moderate`, `iaa_band_poor`, `iaa_band_strong`, `iaa_band_substantial`, `iaa_band_weak`, `iaa_drift_approx`, `iaa_drift_baseline`, `iaa_drift_below_baseline`, `iaa_drift_codebook_changes`, `iaa_drift_note`, `iaa_drift_recalibrate`, `iaa_drift_sparse`, `iaa_drift_th_window`, `iaa_drift_title`, `iaa_drift_untimed`, `iaa_empty_state`, `iaa_fully_aligned_items`, `iaa_items`, `iaa_meta_scored`, `iaa_na`, `iaa_overlap_sample`, `iaa_per_item_breakdown`, `iaa_scale_correlation_label`, `iaa_scale_correlation_note`, `iaa_scale_coverage_label`, `iaa_scale_coverage_note`, `iaa_scale_distribution_label`, `iaa_scale_distribution_note`, `iaa_scale_kappa_label`, `iaa_scale_lower_label`, `iaa_scale_lower_note`, `iaa_scale_raw_label`, `iaa_scale_raw_note`, `iaa_scale_span_label`, `iaa_scale_span_note_post`, `iaa_scale_span_note_pre`, `iaa_sweep_headline`, `iaa_sweep_note`, `iaa_sweep_title`, `iaa_th_annotators`, `iaa_th_cap`, `iaa_th_instance`, `iaa_th_metric`, `iaa_th_value`, `iaa_title`, `iaa_title_overlap_sample`, `in_progress_badge`, `instructions_heading`, `integrity_annotators_suffix`, `integrity_col_annotator`, `integrity_col_ca_score`, `integrity_col_flags`, `integrity_col_items`, `integrity_col_llm_alignment`, `integrity_col_residual`, `integrity_col_suspicion`, `integrity_correlated_agreement`, `integrity_heading`, `integrity_lede`, `integrity_lede_ca_desc`, `integrity_lede_residual_desc`, `integrity_lede_with_low`, `integrity_lede_without_ground_truth`, `integrity_llm_alignment`, `integrity_llm_labels_available`, `integrity_no_annotations`, `integrity_no_llm_labels`, `integrity_page_title`, `integrity_residual`, `judge_above`, `judge_agreement`, `judge_autocalibrate`, `judge_autocalibrate_intro_1`, `judge_autocalibrate_intro_2`, `judge_autocalibrate_intro_3`, `judge_autocalibrate_intro_4`, `judge_autocalibrate_intro_5`, `judge_bias_robustness`, `judge_chars`, `judge_cohens_kappa`, `judge_col_conf`, `judge_col_human`, `judge_col_instance`, `judge_col_judge`, `judge_col_reasoning`, `judge_compared_n`, `judge_confusion_caption`, `judge_confusion_caption_2`, `judge_confusion_label`, `judge_corrected`, `judge_current_paren`, `judge_current_prompt_version`, `judge_disagreements`, `judge_empty_1`, `judge_empty_2`, `judge_empty_3`, `judge_eval_cards`, `judge_eval_cards_intro`, `judge_heading`, `judge_human_vs_judge`, `judge_intro`, `judge_length_bias`, `judge_mean_kappa`, `judge_mean_kappa_drift`, `judge_over_versions`, `judge_page_title`, `judge_predictions`, `judge_prompt_versions`, `jump_next_unannotated`, `jump_prev_unannotated`, `labeled_badge`, `loading`, `login_subtitle_password`, `login_subtitle_username`, `login_title`, `logout`, `next_button`, `not_labeled_badge`, `or_divider`, `password_label`, `powered_by`, `previous_button`, `progress_label`, `register_button`, `register_tab`, `retry_button`, `sign_in_button`, `sign_in_tab`, `sign_in_with`, `submit_button`, `text_to_annotate`, `triage_col_annotations`, `triage_col_assigned`, `triage_col_instance`, `triage_col_priority`, `triage_col_reason`, `triage_empty_queue`, `triage_flagged`, `triage_heading`, `triage_intro_before`, `triage_intro_served`, `triage_intro_signal`, `triage_items_remaining`, `triage_no`, `triage_not_enabled_after`, `triage_not_enabled_before`, `triage_not_enabled_rank`, `triage_page_title`, `triage_priority_label`, `triage_summary_aria`, `triage_table_caption`, `triage_yes`, `username_label`, `username_placeholder`, `video_to_annotate` |
+| `ui_language` |  | string | `en` | Interface language code | `_base`, `adjudicate`, `admin_btn_computing`, `admin_btn_generate_scores`, `admin_btn_reload`, `admin_btn_save_changes`, `admin_err_annotators`, `admin_err_behavioral`, `admin_err_config`, `admin_err_crowdsourcing`, `admin_err_instances`, `admin_err_mace_load`, `admin_err_mace_trigger`, `admin_err_overview`, `admin_err_questions`, `admin_filter_all`, `admin_filter_completed`, `admin_filter_incomplete`, `admin_hint_unlimited`, `admin_label_assignment_strategy`, `admin_label_max_per_item`, `admin_label_max_per_user`, `admin_login_help`, `admin_login_key_label`, `admin_login_key_placeholder`, `admin_login_submit`, `admin_login_title`, `admin_mace_predicted_help`, `admin_mace_run_predictions`, `admin_mode_badge`, `admin_ok_config_saved`, `admin_opt_color_mace`, `admin_opt_color_majority`, `admin_opt_per_page`, `admin_opt_scoring_counting`, `admin_opt_strat_active_learning`, `admin_opt_strat_fixed_order`, `admin_opt_strat_least_annotated`, `admin_opt_strat_llm_confidence`, `admin_opt_strat_max_diversity`, `admin_opt_strat_random`, `admin_order_asc`, `admin_order_desc`, `admin_page_title`, `admin_section_ai_usage`, `admin_section_bws_scores`, `admin_section_competence`, `admin_section_predicted_labels`, `admin_section_quality`, `admin_section_system_config`, `admin_section_system_info`, `admin_sort_annotations`, `admin_sort_avg_time`, `admin_sort_completion`, `admin_sort_disagreement`, `admin_sort_id`, `admin_tab_annotators`, `admin_tab_behavioral`, `admin_tab_bws`, `admin_tab_configuration`, `admin_tab_crowdsourcing`, `admin_tab_datasets`, `admin_tab_embeddings`, `admin_tab_instances`, `admin_tab_mace`, `admin_tab_overview`, `admin_tab_questions`, `admin_th_ai_accept_rate`, `admin_th_ai_requests`, `admin_th_annotations`, `admin_th_annotator`, `admin_th_annotators`, `admin_th_appearances`, `admin_th_assignment_id`, `admin_th_avg_time`, `admin_th_avg_time_per_annotation`, `admin_th_avg_time_s`, `admin_th_best_count`, `admin_th_changes`, `admin_th_competence`, `admin_th_completion`, `admin_th_completion_pct`, `admin_th_disagreement`, `admin_th_instance`, `admin_th_instance_id`, `admin_th_instances`, `admin_th_interactions`, `admin_th_item_id`, `admin_th_last_activity`, `admin_th_max_instances`, `admin_th_most_frequent_label`, `admin_th_num_ai_used`, `admin_th_phase`, `admin_th_predicted_label`, `admin_th_rank`, `admin_th_reliability`, `admin_th_score`, `admin_th_session_id`, `admin_th_speed`, `admin_th_speed_per_hour`, `admin_th_status`, `admin_th_suspicion`, `admin_th_text`, `admin_th_text_preview`, `admin_th_time`, `admin_th_uncertainty`, `admin_th_user_id`, `admin_th_worker_id`, `admin_th_working_time`, `admin_th_worst_count`, `arena_empty`, `arena_enter_prompt`, `arena_error_prefix`, `arena_export`, `arena_export_title`, `arena_failed`, `arena_heading`, `arena_lb_note`, `arena_leaderboard_heading`, `arena_lede`, `arena_models_label`, `arena_ms`, `arena_no_dpo_pairs`, `arena_page_title`, `arena_pick_as_best`, `arena_picked`, `arena_prompt_heading`, `arena_prompt_placeholder`, `arena_responses_heading`, `arena_run`, `arena_running`, `arena_sent_to`, `arena_th_bt`, `arena_th_comparisons`, `arena_th_elo`, `arena_th_model`, `arena_th_win_rate`, `arena_th_wins`, `audio_to_annotate`, `automation_actions_error`, `automation_actions_ok`, `automation_actions_skipped`, `automation_activity`, `automation_col_action`, `automation_col_actions`, `automation_col_detail`, `automation_col_enabled`, `automation_col_item`, `automation_col_rule`, `automation_col_sample_rate`, `automation_col_status`, `automation_configured_rules`, `automation_heading`, `automation_items_processed`, `automation_latest`, `automation_lede_1`, `automation_lede_2`, `automation_lede_3`, `automation_no`, `automation_no_actions`, `automation_no_rules`, `automation_page_title`, `automation_recent_outcomes`, `automation_reload`, `automation_rules_fired`, `automation_snapshot_title`, `automation_yes`, `catalog_all_placeholder`, `catalog_anchor_label`, `catalog_anchor_placeholder`, `catalog_build_index`, `catalog_clusters_label`, `catalog_discover_button`, `catalog_discover_desc`, `catalog_discover_heading`, `catalog_embeddings_warn_1`, `catalog_embeddings_warn_2`, `catalog_heading`, `catalog_index_heading`, `catalog_items_indexed`, `catalog_lede_1`, `catalog_lede_2`, `catalog_lede_3`, `catalog_lede_slices`, `catalog_lede_what`, `catalog_more_traces_suffix`, `catalog_no_matches`, `catalog_no_slices`, `catalog_page_title`, `catalog_prompt_curate_prefix`, `catalog_prompt_curate_suffix`, `catalog_query_text_label`, `catalog_query_text_placeholder`, `catalog_resolve_button`, `catalog_save_slice_button`, `catalog_search_button`, `catalog_search_heading`, `catalog_slice_name_label`, `catalog_slice_query_label`, `catalog_slice_query_placeholder`, `catalog_slice_threshold_label`, `catalog_slices_heading`, `catalog_status_building`, `catalog_status_candidate_modes`, `catalog_status_clustering`, `catalog_status_curating`, `catalog_status_failed`, `catalog_status_imported_mid`, `catalog_status_imported_prefix`, `catalog_status_imported_suffix`, `catalog_status_indexed_prefix`, `catalog_status_indexed_suffix`, `catalog_status_matching_instances`, `catalog_status_name_required`, `catalog_status_results_suffix`, `catalog_status_saved`, `catalog_status_searching`, `catalog_th_actions`, `catalog_th_instance`, `catalog_th_query_anchor`, `catalog_th_similarity`, `catalog_th_slice`, `catalog_th_threshold`, `catalog_threshold_label`, `catalog_to_dataset_button`, `catalog_topk_label`, `catalog_traces_suffix`, `catalog_unlabeled`, `choose_username_placeholder`, `cite_us`, `codebook`, `continue_button`, `create_password_placeholder`, `dash_assigned_completed`, `dash_back_to_annotating`, `dash_error`, `dash_items_started_pct`, `dash_loading`, `dash_no_items_assigned`, `dash_no_items_project`, `dash_project_progress`, `dash_readonly`, `dash_stat_active_annotators`, `dash_stat_annotated`, `dash_stat_annotations`, `dash_stat_assigned`, `dash_stat_complete`, `dash_stat_items_started`, `dash_stat_total_items`, `dash_subtitle`, `dash_your_progress`, `datasets_annotation_process`, `datasets_assignment_active`, `datasets_assignment_paused`, `datasets_col_cmp`, `datasets_col_created`, `datasets_col_dataset`, `datasets_col_examples`, `datasets_col_experiment`, `datasets_col_scores`, `datasets_col_version`, `datasets_compare_selected`, `datasets_create_dataset_btn`, `datasets_created`, `datasets_creating`, `datasets_dataset_label`, `datasets_datasets_heading`, `datasets_description_label`, `datasets_done`, `datasets_evaluators_label`, `datasets_example_label`, `datasets_examples_label`, `datasets_experiments_heading`, `datasets_failed`, `datasets_heading`, `datasets_lede`, `datasets_llm_judge_note`, `datasets_loading_status`, `datasets_name_hint`, `datasets_name_label`, `datasets_new_dataset`, `datasets_no_datasets`, `datasets_no_experiments`, `datasets_optional_placeholder`, `datasets_page_title`, `datasets_pause_assignment`, `datasets_pick_dataset_evaluator`, `datasets_resume_assignment`, `datasets_run_btn`, `datasets_run_experiment`, `datasets_running`, `datasets_select_dataset`, `datasets_select_label`, `datasets_stat_annotated`, `datasets_stat_annotators`, `datasets_stat_datasets`, `datasets_stat_experiments`, `datasets_stat_ingested`, `datasets_stat_instances`, `datasets_stat_multi_annotated`, `datasets_stat_remaining`, `datasets_status_unavailable`, `datasets_version_label`, `datasets_versions_label`, `dsdetail_back_link`, `dsdetail_col_created`, `dsdetail_col_examples`, `dsdetail_col_experiment`, `dsdetail_col_id`, `dsdetail_col_inputs`, `dsdetail_col_note`, `dsdetail_col_reference`, `dsdetail_col_scores`, `dsdetail_col_split`, `dsdetail_col_tags`, `dsdetail_col_version`, `dsdetail_examples_heading`, `dsdetail_examples_subtitle`, `dsdetail_experiments_heading`, `dsdetail_export_dpo`, `dsdetail_export_dpo_title`, `dsdetail_export_sft`, `dsdetail_export_sft_title`, `dsdetail_import_instances`, `dsdetail_import_instances_title`, `dsdetail_import_traces`, `dsdetail_import_traces_title`, `dsdetail_include_annotations`, `dsdetail_no_examples`, `dsdetail_no_experiments`, `dsdetail_no_versions`, `dsdetail_status_import_failed`, `dsdetail_status_imported`, `dsdetail_status_imported_suffix`, `dsdetail_status_importing`, `dsdetail_tag_button`, `dsdetail_tag_input_label`, `dsdetail_tag_placeholder`, `dsdetail_versions_heading`, `error_heading`, `evalanalytics_alerts_heading`, `evalanalytics_col_avg_latency`, `evalanalytics_col_cost`, `evalanalytics_col_errors`, `evalanalytics_col_model`, `evalanalytics_col_tokens`, `evalanalytics_col_traces`, `evalanalytics_empty`, `evalanalytics_lede_after`, `evalanalytics_lede_before`, `evalanalytics_lede_tail`, `evalanalytics_permodel_aria`, `evalanalytics_permodel_heading`, `evalanalytics_stat_avg_latency`, `evalanalytics_stat_error_rate`, `evalanalytics_stat_p95_latency`, `evalanalytics_stat_total_cost`, `evalanalytics_stat_total_tokens`, `evalanalytics_stat_traces`, `evalanalytics_title`, `expcompare_back_link`, `expcompare_baseline`, `expcompare_ci_label`, `expcompare_col_metric`, `expcompare_empty`, `expcompare_heading`, `expcompare_lede_part1`, `expcompare_lede_part2`, `expcompare_lede_strong`, `expcompare_not_significant`, `expcompare_page_title`, `expcompare_row_examples`, `expcompare_sig_title`, `expcompare_significant`, `forgot_password`, `go_button`, `html_dir`, `html_lang`, `iaa_admin_dashboard`, `iaa_agreement`, `iaa_annotators`, `iaa_at_cap`, `iaa_band_fair`, `iaa_band_moderate`, `iaa_band_poor`, `iaa_band_strong`, `iaa_band_substantial`, `iaa_band_weak`, `iaa_drift_approx`, `iaa_drift_baseline`, `iaa_drift_below_baseline`, `iaa_drift_codebook_changes`, `iaa_drift_note`, `iaa_drift_recalibrate`, `iaa_drift_sparse`, `iaa_drift_th_window`, `iaa_drift_title`, `iaa_drift_untimed`, `iaa_empty_state`, `iaa_fully_aligned_items`, `iaa_items`, `iaa_meta_scored`, `iaa_na`, `iaa_overlap_sample`, `iaa_per_item_breakdown`, `iaa_scale_correlation_label`, `iaa_scale_correlation_note`, `iaa_scale_coverage_label`, `iaa_scale_coverage_note`, `iaa_scale_distribution_label`, `iaa_scale_distribution_note`, `iaa_scale_kappa_label`, `iaa_scale_lower_label`, `iaa_scale_lower_note`, `iaa_scale_raw_label`, `iaa_scale_raw_note`, `iaa_scale_span_label`, `iaa_scale_span_note_post`, `iaa_scale_span_note_pre`, `iaa_sweep_headline`, `iaa_sweep_note`, `iaa_sweep_title`, `iaa_th_annotators`, `iaa_th_cap`, `iaa_th_instance`, `iaa_th_metric`, `iaa_th_value`, `iaa_title`, `iaa_title_overlap_sample`, `image_to_annotate`, `in_progress_badge`, `instructions_heading`, `integrity_annotators_suffix`, `integrity_col_annotator`, `integrity_col_ca_score`, `integrity_col_flags`, `integrity_col_items`, `integrity_col_llm_alignment`, `integrity_col_residual`, `integrity_col_suspicion`, `integrity_correlated_agreement`, `integrity_heading`, `integrity_lede`, `integrity_lede_ca_desc`, `integrity_lede_residual_desc`, `integrity_lede_with_low`, `integrity_lede_without_ground_truth`, `integrity_llm_alignment`, `integrity_llm_labels_available`, `integrity_no_annotations`, `integrity_no_llm_labels`, `integrity_page_title`, `integrity_residual`, `judge_above`, `judge_agreement`, `judge_autocalibrate`, `judge_autocalibrate_intro_1`, `judge_autocalibrate_intro_2`, `judge_autocalibrate_intro_3`, `judge_autocalibrate_intro_4`, `judge_autocalibrate_intro_5`, `judge_bias_robustness`, `judge_chars`, `judge_cohens_kappa`, `judge_col_conf`, `judge_col_human`, `judge_col_instance`, `judge_col_judge`, `judge_col_reasoning`, `judge_compared_n`, `judge_confusion_caption`, `judge_confusion_caption_2`, `judge_confusion_label`, `judge_corrected`, `judge_current_paren`, `judge_current_prompt_version`, `judge_disagreements`, `judge_empty_1`, `judge_empty_2`, `judge_empty_3`, `judge_eval_cards`, `judge_eval_cards_intro`, `judge_heading`, `judge_human_vs_judge`, `judge_intro`, `judge_length_bias`, `judge_mean_kappa`, `judge_mean_kappa_drift`, `judge_over_versions`, `judge_page_title`, `judge_predictions`, `judge_prompt_versions`, `jump_next_unannotated`, `jump_prev_unannotated`, `jump_unannotated_label`, `labeled_badge`, `loading`, `login_subtitle_password`, `login_subtitle_username`, `login_title`, `logout`, `next_button`, `not_labeled_badge`, `or_divider`, `password_label`, `powered_by`, `previous_button`, `progress_label`, `register_button`, `register_tab`, `retry_button`, `sign_in_button`, `sign_in_tab`, `sign_in_with`, `submit_button`, `text_to_annotate`, `triage_col_annotations`, `triage_col_assigned`, `triage_col_instance`, `triage_col_priority`, `triage_col_reason`, `triage_empty_queue`, `triage_flagged`, `triage_heading`, `triage_intro_before`, `triage_intro_served`, `triage_intro_signal`, `triage_items_remaining`, `triage_no`, `triage_not_enabled_after`, `triage_not_enabled_before`, `triage_not_enabled_rank`, `triage_page_title`, `triage_priority_label`, `triage_summary_aria`, `triage_table_caption`, `triage_yes`, `username_label`, `username_placeholder`, `video_to_annotate` |
 
 ## Content
 
@@ -7501,6 +7501,9 @@ Potato localizes five areas of the interface:
 | `previous_button` | Previous | Navigation: previous instance button |
 | `submit_button` | Submit | Form submission button |
 | `go_button` | Go | "Go to instance" jump button |
+| `jump_prev_unannotated` | Previous unannotated | Header button: back to the nearest unlabeled item |
+| `jump_next_unannotated` | Next unannotated | Header button: on to the nearest unlabeled item |
+| `jump_unannotated_label` | Unlabeled | Caption between those two buttons (wide screens) |
 | `retry_button` | Retry | Error recovery button |
 | `logout` | Logout | Logout link in header |
 | `labeled_badge` | Labeled | Status badge (annotated instances) |
@@ -7514,6 +7517,7 @@ Potato localizes five areas of the interface:
 | `text_to_annotate` | Text to Annotate: | Content heading for text instances |
 | `video_to_annotate` | Video to Annotate: | Content heading for video instances |
 | `audio_to_annotate` | Audio to Annotate: | Content heading for audio instances |
+| `image_to_annotate` | Image to Annotate: | Content heading when the item's text embeds an image |
 
 ### 2. Login & Registration Page
 
@@ -10293,7 +10297,7 @@ instance_display:
         striped: true          # Alternating row colors
         hoverable: true        # Highlight on hover
         sortable: true         # Enable column sorting
-        selectable: true       # Enable row/cell selection
+        selectable: false      # Row checkboxes / cell selection (off by default)
         compact: false         # Compact table styling
 ```
 
@@ -10301,6 +10305,8 @@ instance_display:
 - A list of dictionaries, or `{columns, rows}` with dictionary rows: every key any row has, in the order it first appears. A row that omits a key gets an empty cell rather than a shifted one, so a JSON-lines export that drops empty fields keeps all its columns
 - `columns` or `headers` in the data: exactly those, in that order. Naming them is choosing them, including choosing to leave one out
 - A list of lists: no headers, unless `header_row: true` says the first row is one. It is off by default because promoting row 0 on a list that has no header line would take a real row out of the data
+
+`selectable` is off by default. The selection it draws is not saved with the annotation, so leave it off for read-only tables such as trace metadata.
 
 **Annotation Modes:**
 - `row` - Annotate entire rows (default)
@@ -14527,8 +14533,9 @@ the keys Potato used before:
     keybinding_profile: legacy
 ```
 
-Annotators on a rebound project see a one-time dismissible notice naming the keys
-that moved, so the change is announced rather than discovered.
+Annotators on a rebound project see a one-time dismissible notice naming each
+moved tool and its new key ("New shortcut keys: Box is R."). The notice does not mention
+`keybinding_profile`; that option is for the study's administrator.
 
 If a label's `key_value` collides with a tool key, both actions fire on that
 press. Potato logs a warning naming the schema, the key, and both bindings —
@@ -15348,6 +15355,9 @@ Annotations are saved as JSON:
 - **Zoom Controls**: Zoom in, zoom out, fit to view
 - **Segment Controls**: Create segment, delete selected
 - **Segment Count**: Shows current number of segments
+- **Help**: Shows or hides the usage panel below the toolbar. The panel starts
+  open; once an annotator closes it, it stays closed on later items in the same
+  browser.
 
 ### Waveform Display
 
@@ -15401,6 +15411,19 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 ## Troubleshooting
 
 ### Waveform not loading
+
+When the audio cannot be loaded, the zoomed waveform pane shows the reason and
+the play, zoom and segment controls are disabled. The other questions on the
+page still work. The messages are:
+
+| Message | Cause |
+|---|---|
+| "the server answered HTTP 404" (or another status) | The URL, or the `/api/audio/proxy` request for an external URL, returned that status. A 502 from the proxy means Potato could not fetch the remote file. |
+| "could not be reached from this browser" | The request failed before any response arrived: a network error, or a cross-origin server that did not allow the read. |
+| "downloaded, but this browser cannot play its format" | The file arrived but the browser cannot decode it. Convert to MP3, WAV or OGG. |
+| "This item has no audio file to load" | No URL was found in `source_field`, the display, or the item text. |
+
+Then:
 
 1. Check browser console for errors
 2. Verify the audio URL is accessible
@@ -44160,9 +44183,13 @@ The admin dashboard requires an API key for access. The API key can be configure
 3. **Auto-generated**: If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key is logged to the console on server startup.
 
 **Access Methods:**
-1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted
+1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted. The form says where this server's key comes from: the config file, the environment variable, or `admin_api_key.txt`
 2. **Header Access**: Include `X-API-Key: <your_key>` in request headers
-3. **Debug Mode**: When `debug: true` is set in config, no API key is required
+3. **Debug Mode**: When `debug: true` is set in config and the server is bound to loopback, no API key is required
+
+A request to `/admin` that carries a wrong key gets HTTP 403, and the form shows "That API key wasn't recognized".
+
+**Logout** in the header removes the key from the browser session (`POST /admin/logout`) and returns you to the key form. An annotator login in the same browser is not affected.
 
 ### Finding Your Auto-Generated Key
 
@@ -44173,29 +44200,44 @@ If you didn't configure an API key explicitly, find it in one of these ways:
 ### Security Notes
 
 - API keys are stored in the session for the duration of the browser session
-- All admin API endpoints require the API key in headers
+- Admin API endpoints accept the key in the `X-API-Key` header, or the session set by the `/admin` form
 - The dashboard automatically redirects to login if no valid API key is provided
 - Auto-generated keys are persisted across server restarts (stored in `admin_api_key.txt`)
 - For production deployments, consider setting an explicit key via config or environment variable
 
 ## Dashboard Features
 
+### Navigation
+
+The bar under the header links to the other admin pages. A link appears only when its page has something to show for this project:
+
+| Link | Shown when |
+|---|---|
+| Agreement (IAA) | always |
+| Adjudication | `adjudication.enabled: true` |
+| Review board | `review_workflow.enabled: true` |
+| Triage queue | `triage.enabled: true` |
+| Judge alignment | `judge_alignment.enabled: true` |
+| Annotation integrity | the project has a radio, multiselect, select or likert scheme |
+
+The Tools group links Datasets, Judge Calibration, Automation, Catalog and Arena when each is enabled, and Publish Dataset always.
+
+The selected tab is kept in the URL (`/admin#instances`), so a reload or a shared link opens the same tab. The tab strip takes the arrow keys, Home and End.
+
 ### 1. Overview Tab
 
 The Overview tab holds project-wide counts and progress.
 
-**Key Metrics:**
-- **Total Users**: Number of registered annotators
-- **Active Users**: Users currently in annotation phase
-- **Total Annotations**: Completed annotations across all users
-- **Completion Percentage**: Percentage of items with annotations
-- **Total Items**: Items in the dataset
-- **Working Time**: Total time spent by all annotators
+**Summary row:**
+- **Items**: Items in the dataset, and how many have at least one annotation
+- **Annotations**: Total annotations, and the mean per item
+- **Annotators**: Registered annotators, how many are in the annotation phase, and how many have finished. Being in the annotation phase does not mean someone is annotating right now
+- **Working Time**: Time summed over all annotators, shown as `7m` or `1h 12m`
+- **Over-collected**: Shown only when some items hold more annotations than the per-item cap
 
-**System Information:**
-- Task name and configuration
-- Assignment limits and strategy
-- Debug mode status
+**Agreement:** One number per schema, computed over items that have two or more annotators. The measure is Krippendorff's alpha where the schema has one. Otherwise it is the first chance-corrected coefficient in the schema's list, then a correlation, then raw overlap such as mean Jaccard. Percent agreement is never used here. Values of 0.6 and above are labelled *strong*, values below 0.2 *weak*. The full table is at **Full report**, which opens `/admin/iaa`.
+
+**System Information:** Task name, assignment limits ("No limit" when unset), assignment strategy and debug mode.
 
 ### 2. Annotators Tab
 
@@ -44209,6 +44251,7 @@ The Annotators tab lists each annotator with their timing and throughput.
 - **Average Time/Annotation**: Mean time per annotation
 - **Speed**: Annotations completed per hour
 - **Completion %**: Percentage of assigned items completed
+- **Max Instances**: The most items this annotator can be assigned. Type a number and press **Set**, or leave the field empty for no limit. The value cannot go below the number of items the annotator has already done; the server raises it to that number and the message says so. A message with **Undo** confirms each change
 - **Last Activity**: Timestamp of last annotation activity
 
 **Timing Analysis:**
@@ -44226,10 +44269,12 @@ The Instances tab is a paginated list of every annotation instance and its stati
 - **Text Preview**: First 100 characters of the instance text
 - **Annotations**: Number of annotations received
 - **Completion %**: Percentage of target annotations reached
-- **Most Frequent Label**: Most commonly selected label
+- **Most Frequent Label**: The most common answer to each question, written `schema: label (count/total)`
 - **Disagreement**: The share of annotations that did not choose the modal
-  label, so 0.0 is unanimity and 0.67 is three annotators picking three
-  different labels
+  label, pooled over all questions, so 0.0 is unanimity and 0.67 is three
+  annotators picking three different labels. Shaded green at 0, amber above 0,
+  and red at 0.5 or more; "—" when fewer than two people annotated the item.
+  With adjudication enabled, the value links to the item in `/adjudicate`
 - **Average Time**: Mean time spent annotating this instance
 - **Annotators**: List of users who annotated this instance
 
@@ -44249,8 +44294,10 @@ The Questions tab aggregates responses for each annotation schema in your config
 
 **Analysis by Annotation Type:**
 
+Distributions are drawn as horizontal bars, with the count and share at the right.
+
 For **Radio/Select** questions:
-- Response distribution histogram
+- Response distribution
 - Most common label
 - Agreement score (percentage of annotators selecting the same label)
 
@@ -44281,7 +44328,7 @@ The Behavioral Analytics tab reports what the interaction tracker recorded: how 
 - **Users with Data**: Number of users with behavioral tracking data
 - **Total Instances**: Total tracked annotation sessions
 - **Avg Time**: Average time per annotation instance
-- **Total Interactions**: All tracked interactions (clicks, focus, navigation)
+- **Interactions**: All tracked interactions (clicks, focus, navigation), and the number of instances they were counted over. Annotations that were imported or seeded have label changes but no interaction log. Those instances read **Not recorded** (per user: "not recorded") instead of 0
 - **Annotation Changes**: Total label modifications
 - **AI Requests**: Total AI assistance requests
 
@@ -44339,7 +44386,7 @@ Users are sorted by suspicion score to help identify potentially problematic ann
 
 The suspicion score is calculated based on:
 1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort. Measured over the instances with a recorded time; with none it drops out and the other weights are rescaled
-2. **Low Interaction Rate**: Very few interactions may indicate random clicking
+2. **Low Interaction Rate**: Very few interactions may indicate random clicking. Measured over the instances that have an interaction log; with none it drops out like the fast rate. An instance with label changes but no interaction events at all has no log, since the tracker records every click and keypress
 3. **No Change Rate**: Never changing initial selections may indicate lack of careful consideration
 
 Users with suspicion scores above 50% are highlighted in red.
@@ -44421,8 +44468,10 @@ This tab is particularly useful for:
 The Configuration tab changes assignment settings on a running server.
 
 **Configurable Settings:**
-- **Max Annotations per User**: Limit annotations per user (-1 for unlimited)
-- **Max Annotations per Item**: Limit annotations per item (-1 for unlimited)
+- **Max Annotations per User**: Limit annotations per user. Tick **No limit** for none
+- **Max Annotations per Item**: Limit annotations per item. Tick **No limit** for none
+
+The API behind the form still uses `-1` for no limit.
 - **Assignment Strategy**:
   - `random`: Random assignment
   - `fixed_order`: Sequential assignment
@@ -44449,6 +44498,30 @@ Headers: X-API-Key: admin_api_key
 ```
 
 Returns user statistics, annotation progress, and a configuration summary.
+`total_working_time` is a display string (`7m`, `1h 12m`);
+`total_working_seconds` is the same value as a whole number of seconds.
+
+### Agreement Summary
+```
+GET /admin/api/iaa_summary
+Headers: X-API-Key: admin_api_key
+```
+
+One row per schema: `schema`, `annotation_type`, `metric` (the measure
+chosen, or `null`), `value`, `display`, `band` (`strong`, `weak` or empty),
+`n_items`, `n_annotators`, and `note` when no measure could be computed.
+`n_overlap_items` counts the items with two or more annotators.
+
+### Agreement Report
+```
+GET /admin/iaa
+Headers: X-API-Key: admin_api_key
+```
+
+Returns JSON to API clients. A browser, which sends `Accept: text/html`,
+gets the rendered page. `?format=json` or `?format=html` overrides the
+`Accept` header. `/admin/judge-alignment`, `/admin/annotation-integrity` and
+`/admin/triage-queue` follow the same rule.
 
 ### Annotators Data
 ```
@@ -44472,6 +44545,9 @@ Returns paginated instances data with sorting and filtering options.
 - `sort_by`: Sort field (annotation_count, completion_percentage, disagreement, id, average_time)
 - `sort_order`: Sort order (asc, desc)
 - `filter_completion`: Filter by completion (completed, incomplete, all)
+
+Each row's `most_frequent_label` pools every schema. `label_summary_by_schema`
+lists the modal label per schema as `{schema, label, count, total}`.
 
 ### Questions Data
 ```
@@ -44539,6 +44615,7 @@ Returns the behavioral analytics for every annotator.
     "total_instances": 500,
     "avg_time_per_instance_sec": 45.2,
     "total_interactions": 15000,
+    "instances_with_interaction_log": 480,
     "total_changes": 2500,
     "total_ai_requests": 150
   },
@@ -44574,6 +44651,7 @@ Returns the behavioral analytics for every annotator.
       "total_instances": 50,
       "avg_time_sec": 45.2,
       "total_interactions": 600,
+      "instances_with_interaction_log": 50,
       "total_changes": 150,
       "ai_requests": 10,
       "ai_accept_rate": 0.7,
@@ -45156,15 +45234,18 @@ python -m potato.adjudication_export --config config.yaml --output final_dataset
 
 The adjudication interface is a dedicated page with three main areas: the sidebar queue, the main content area, and the bottom navigation bar.
 
+On a wide screen the first pending item opens as soon as the page loads. If the queue is empty, the main area says why: nothing left to adjudicate, no decisions yet (on the **Done** filter), or no item has met `min_annotations` and `agreement_threshold` yet.
+
 ### Sidebar Queue
 
 The left sidebar displays the adjudication queue as a scrollable list. Each item shows:
 
-- The instance ID.
+- The instance ID, with "Done" or "Skipped" beside it once it has been handled.
+- The first line of the item's text, so you can triage without opening each one.
 - The number of annotators who labeled it.
-- A color-coded agreement badge (red for low, amber for medium, green for high).
+- An agreement badge such as "33% agree", colored by level: red below 50%, amber from 50% to 74%, green from 75%.
 
-Items are sorted by status (pending first) and then by agreement score (lowest first). Three filter buttons at the top of the sidebar allow switching between views:
+Items are sorted by status (pending first) and then by agreement score (lowest first). Three filter buttons at the top of the sidebar switch between views:
 
 - **Pending** -- Items that have not yet been adjudicated (default view).
 - **All** -- All items in the queue regardless of status.
@@ -45172,57 +45253,64 @@ Items are sorted by status (pending first) and then by agreement score (lowest f
 
 A progress bar at the top of the sidebar shows overall completion percentage.
 
+The queue is one stop in the Tab order. Tab into it to reach the open item, move with Up/Down (Home/End jump to either end), and press Enter or Space to open the focused item.
+
+On a phone the queue sits above the item as a drawer. It is open when the page loads; choosing an item folds it into a "Queue (N)" bar, and tapping the bar opens it again.
+
 ### Main Content Area
 
-When you select an item from the queue, the main area displays:
+The main area shows the open item:
 
-1. **Item Header** -- The instance ID, agreement score badge, and annotator count.
+1. **Item Header** -- The instance ID, agreement badge, and annotator count.
 
-2. **The Item** -- Rendered through the project's `instance_display` when one is configured, so the adjudicator sees exactly what the annotators saw, images included. Projects without `instance_display` fall back to listing the item's data fields with their keys as labels; fields Potato writes for itself, such as `displayed_text`, are not shown.
+2. **The Item** -- Rendered through the project's `instance_display` when one is configured, so the adjudicator sees exactly what the annotators saw, images included. Projects without `instance_display` fall back to the item's text fields, captioned with their keys when there is more than one. Fields Potato writes for itself, such as `displayed_text`, and the id field (already in the header) are not shown.
 
-3. **Annotator Responses** -- For each annotation schema, a grouped panel shows what each annotator selected. Each annotator's response appears in a card with:
-   - The annotator's username (or "Annotator" if `show_annotator_names` is false).
-   - Their selected label(s) or text response.
+3. **Annotators** -- One row per annotator, in a section you can fold away (the page remembers the choice). Each row shows:
+   - The annotator's username, or a per-item alias if `show_annotator_names` is false.
+   - What they answered on every schema, side by side.
    - Time spent on the item (if `show_timing_data` is true), with a warning icon if the time was below `fast_decision_warning_ms`.
-   - A per-schema agreement badge (if `show_agreement_scores` is true).
-   - Quality flags, where any apply. Each names its own scope: "many edits on this item" is about this item, "low agreement across all items" is about the annotator's record across the whole task. The second one sits beside a per-schema agreement percentage and is not about it. An annotator can carry it on a scheme everyone agreed on. Hover a flag for the number behind it.
+   - Quality flags, where any apply, once per annotator. Each names its own scope: "many edits on this item" is about this item, "low agreement across all items" is about the annotator's record across the whole task, so an annotator can carry it on a schema everyone agreed on. Hover a flag for the number behind it.
 
-4. **Your Decision** -- For each schema, a compact decision form is rendered based on the annotation type:
-   - **Radio/single-choice**: Options listed vertically with radio buttons. Colored annotator chips appear next to each option showing which annotators chose it. Click an option or an annotator chip to select it.
-   - **Multiselect/checkbox**: Similar to radio but with checkboxes for multiple selection.
-   - **Likert/slider**: A track showing dots for each annotator's rating, plus a slider for the adjudicator's decision. Click an annotator dot to adopt their value.
-   - **Text/number**: Each annotator's text response is shown as a clickable card. Click a card to adopt its text into your response textarea, or type your own.
+4. **Your decision** -- For each schema, a compact decision form based on the annotation type, with the schema's agreement badge (if `show_agreement_scores` is true) on its heading:
+   - **Radio/single-choice**: Options listed vertically. Beside each option, a chip for every annotator who chose it, with their time. Click anywhere on the row to select it.
+   - **Multiselect/checkbox**: The same, with checkboxes for multiple selection.
+   - **Likert/slider**: A track showing a dot for each annotator's rating, plus a slider for the adjudicator's decision. Click an annotator's dot to adopt their value.
+   - **Text/number**: Each annotator's text response is shown as a clickable card. Select one or more and use **Use Selected** or **Merge Selected** to fill your response, or type your own.
+   - **Span, image, audio and video**: Each annotator's spans, shapes or segments, with adopt controls. Here every annotator has their own outline color, and the chip that names them carries a matching swatch, because their work is drawn over the same text or image. Elsewhere the chips are neutral gray.
    - **Everything else**: A list of the answers annotators actually gave, one radio each. Pick one and it becomes the decision, in the same shape and value space as the answers it resolves. This covers the composite widgets, whose answers cannot be re-elicited from a generic input: `constant_sum`, `soft_label`, `hierarchical_multiselect`, `ranking` and `card_sort`.
 
    A likert that declares a `labels:` list renders as a radio group here, not a slider, because that is how the annotators answered it. A slider would store `3` against their `"Good"`.
 
 5. **Decision Metadata** -- Below the schema forms:
-   - **Confidence** (if `require_confidence` is true): A dropdown to select high, medium, or low confidence.
-   - **Error Type**: Clickable tags from the `error_taxonomy` list. Select one or more to classify the source of disagreement.
+   - **Confidence** (if `require_confidence` is true): A dropdown for high, medium, or low, with nothing preselected. Submit without a choice and a message appears under the dropdown and nothing is saved. The submit endpoint also returns HTTP 400 for a decision without a confidence, so a script cannot skip it either.
+   - **Error type**: One checkbox row per entry in `error_taxonomy`. Select any that apply.
    - **Notes**: A free-text area for optional notes about the decision.
-   - **Flag for Guideline Update**: A checkbox to flag items that reveal a gap or ambiguity in the annotation guidelines, with an optional text field to describe the issue.
+   - **Flag for guideline update**: A checkbox to flag items that reveal a gap or ambiguity in the annotation guidelines, with an optional text field to describe the issue.
+
+   Reopening an item you already decided shows the confidence, error types and notes you saved with it.
 
 ### Bottom Navigation Bar
 
-The navigation bar has three actions:
+The navigation bar has three actions, plus a reminder of the keyboard shortcuts:
 
-- **Previous** -- Go to the previous item in the queue.
+- **Previous** -- Go back to the item you were on before.
 - **Skip** -- Mark the current item as skipped and move to the next.
-- **Submit & Next** -- Submit the decision and advance to the next item.
+- **Submit and continue** -- Submit the decision and advance to the next item.
+
+If a decision cannot be submitted, the reason appears next to the buttons.
 
 ---
 
 ## Keyboard Shortcuts
 
-The following keyboard shortcuts are available when focus is not in an input field, textarea, or dropdown:
-
 | Key | Action |
 |-----|--------|
 | `n` or Right Arrow | Navigate to the next item in the queue |
-| `p` or Left Arrow | Navigate to the previous item in the queue |
-| `Ctrl+Enter` | Submit the current decision and advance to the next item |
+| `p` or Left Arrow | Navigate to the previous item |
+| `Ctrl+Enter` (`Cmd+Enter` on a Mac) | Submit the current decision and advance to the next item |
+| Up/Down, Home/End | Move through the queue when it has focus |
 
-These shortcuts are disabled when you are typing in a textarea (such as notes or text-based annotation decisions) or interacting with a select dropdown.
+`n`, `p` and the arrow keys are ignored while you are typing in a field or using a dropdown. `Ctrl+Enter` also works while typing, so you can submit from the notes box.
 
 ---
 

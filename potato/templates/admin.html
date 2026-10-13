@@ -14,92 +14,114 @@
       href="{{ url_for('static', filename='admin.css') }}"
     />
   </head>
-  <body>
+  <body class="admin-body">
     <div class="admin-container">
-      <!-- Header -->
-      <header class="admin-header">
-        <h1>📊 {{ annotation_task_name }} - {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</h1>
-        <div class="header-actions">
-          <span class="status-badge status-active">{{ ui_lang.admin_mode_badge|default('Admin Mode') }}</span>
-          {% if datasets_enabled %}
-          <a href="{{ url_for('datasets.admin') }}"
-             class="shadcn-button shadcn-button-outline"
-             title="Versioned eval datasets & experiment runs">{{ ui_lang.admin_tab_datasets|default('Datasets &amp; Experiments') }}</a>
-          {% endif %}
-          {% if judge_calibration_enabled %}
-          <a href="{{ url_for('judge_calibration.admin') }}"
-             class="shadcn-button shadcn-button-outline"
-             title="LLM-as-judge calibration">Judge Calibration</a>
-          {% endif %}
-          {% if triage_enabled %}
-          <a href="{{ url_prefix }}/admin/triage-queue"
-             class="shadcn-button shadcn-button-outline"
-             title="Signal-prioritized annotation queue">Triage Queue</a>
-          {% endif %}
-          {% if automation_enabled %}
-          <a href="{{ url_for('automation.admin_page') }}"
-             class="shadcn-button shadcn-button-outline"
-             title="Filter→sample→action rules over incoming items">Automation</a>
-          {% endif %}
-          {% if curation_enabled %}
-          <a href="{{ url_for('curation.catalog_page') }}"
-             class="shadcn-button shadcn-button-outline"
-             title="Semantic search & dynamic slices over items">Catalog</a>
-          {% endif %}
-          {% if publish_enabled %}
-          <a href="{{ url_for('publish.publish_page') }}"
-             class="shadcn-button shadcn-button-outline"
-             title="Package & publish this dataset to HuggingFace, Zenodo, or a downloadable archive">Publish Dataset</a>
-          {% endif %}
-          {% if arena_enabled %}
-          <a href="{{ url_for('arena.arena_page') }}"
-             class="shadcn-button shadcn-button-outline"
-             title="Compare N models side by side on one prompt">Arena</a>
-          {% endif %}
-          <button
-            onclick="logout()"
-            class="shadcn-button shadcn-button-outline"
-          >
-            {{ ui_lang.logout|default('Logout') }}
-          </button>
+      <!-- Header: the same purple bar as the annotation and adjudication
+           pages, so the three surfaces read as one tool. -->
+      <nav class="potato-navbar admin-navbar" role="navigation" aria-label="Admin">
+        <div class="navbar-inner">
+          <div class="navbar-brand">
+            <span class="task-name" title="{{ annotation_task_name }} — {{ ui_lang.admin_page_title|default('Admin Dashboard') }}">{{ annotation_task_name }} — {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</span>
+          </div>
+          <div class="navbar-end" style="margin-left: auto;">
+            <div class="user-pill">
+              <span class="username">{{ ui_lang.admin_mode_badge|default('Admin Mode') }}</span>
+              <a href="#" onclick="logout(); return false;" class="logout-btn">{{ ui_lang.logout|default('Logout') }}</a>
+            </div>
+          </div>
         </div>
-      </header>
+      </nav>
+
+      <!-- Secondary navigation. The analysis pages existed but nothing
+           linked to them; each link is rendered only when its route works. -->
+      <nav class="admin-subnav" aria-label="Admin pages">
+        <div class="admin-subnav-inner">
+          {% if analysis_links %}
+          <div class="admin-subnav-group" data-group="analysis">
+            <span class="admin-subnav-heading">Analysis</span>
+            {% for link in analysis_links %}
+            <a href="{{ url_prefix }}{{ link.href }}" class="admin-subnav-link" title="{{ link.title }}">{{ link.label }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="admin-subnav-group" data-group="tools">
+            <span class="admin-subnav-heading">Tools</span>
+            {% if datasets_enabled %}
+            <a href="{{ url_for('datasets.admin') }}" class="admin-subnav-link"
+               title="Versioned eval datasets &amp; experiment runs">{{ ui_lang.admin_tab_datasets|default('Datasets &amp; Experiments') }}</a>
+            {% endif %}
+            {% if judge_calibration_enabled %}
+            <a href="{{ url_for('judge_calibration.admin') }}" class="admin-subnav-link"
+               title="LLM-as-judge calibration">Judge Calibration</a>
+            {% endif %}
+            {% if automation_enabled %}
+            <a href="{{ url_for('automation.admin_page') }}" class="admin-subnav-link"
+               title="Filter→sample→action rules over incoming items">Automation</a>
+            {% endif %}
+            {% if curation_enabled %}
+            <a href="{{ url_for('curation.catalog_page') }}" class="admin-subnav-link"
+               title="Semantic search &amp; dynamic slices over items">Catalog</a>
+            {% endif %}
+            {% if arena_enabled %}
+            <a href="{{ url_for('arena.arena_page') }}" class="admin-subnav-link"
+               title="Compare N models side by side on one prompt">Arena</a>
+            {% endif %}
+            {% if publish_enabled %}
+            <a href="{{ url_for('publish.publish_page') }}" class="admin-subnav-link"
+               title="Package &amp; publish this dataset to HuggingFace, Zenodo, or a downloadable archive">Publish Dataset</a>
+            {% endif %}
+          </div>
+        </div>
+      </nav>
 
       <!-- Main Content -->
       <main class="admin-main">
         <!-- Tab Navigation -->
-        <div class="admin-tabs">
-          <div class="admin-tab active" data-tab="overview">{{ ui_lang.admin_tab_overview|default('Overview') }}</div>
-          <div class="admin-tab" data-tab="annotators">{{ ui_lang.admin_tab_annotators|default('Annotators') }}</div>
-          <div class="admin-tab" data-tab="instances">{{ ui_lang.admin_tab_instances|default('Instances') }}</div>
-          <div class="admin-tab" data-tab="questions">{{ ui_lang.admin_tab_questions|default('Questions') }}</div>
-          <div class="admin-tab" data-tab="behavioral">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</div>
-          <div class="admin-tab" data-tab="devices">{{ ui_lang.admin_tab_devices|default('Devices') }}</div>
-          <div class="admin-tab" data-tab="crowdsourcing">{{ ui_lang.admin_tab_crowdsourcing|default('Crowdsourcing') }}</div>
+        <div class="admin-tabs" role="tablist" aria-label="Dashboard sections">
+          <button type="button" role="tab" class="admin-tab active" data-tab="overview" aria-controls="overview" aria-selected="true">{{ ui_lang.admin_tab_overview|default('Overview') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="annotators" aria-controls="annotators" aria-selected="false">{{ ui_lang.admin_tab_annotators|default('Annotators') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="instances" aria-controls="instances" aria-selected="false">{{ ui_lang.admin_tab_instances|default('Instances') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="questions" aria-controls="questions" aria-selected="false">{{ ui_lang.admin_tab_questions|default('Questions') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="behavioral" aria-controls="behavioral" aria-selected="false">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="devices" aria-controls="devices" aria-selected="false">{{ ui_lang.admin_tab_devices|default('Devices') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="crowdsourcing" aria-controls="crowdsourcing" aria-selected="false">{{ ui_lang.admin_tab_crowdsourcing|default('Crowdsourcing') }}</button>
           {% if bws_enabled %}
-          <div class="admin-tab" data-tab="bws-scoring">{{ ui_lang.admin_tab_bws|default('BWS Scoring') }}</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="bws-scoring" aria-controls="bws-scoring" aria-selected="false">{{ ui_lang.admin_tab_bws|default('BWS Scoring') }}</button>
           {% endif %}
           {% if mace_enabled %}
-          <div class="admin-tab" data-tab="mace">{{ ui_lang.admin_tab_mace|default('MACE') }}</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="mace" aria-controls="mace" aria-selected="false">{{ ui_lang.admin_tab_mace|default('MACE') }}</button>
           {% endif %}
           {% if embedding_viz_enabled %}
-          <div class="admin-tab" data-tab="embedding-viz">{{ ui_lang.admin_tab_embeddings|default('Embeddings') }}</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="embedding-viz" aria-controls="embedding-viz" aria-selected="false">{{ ui_lang.admin_tab_embeddings|default('Embeddings') }}</button>
           {% endif %}
-          <div class="admin-tab" data-tab="config">{{ ui_lang.admin_tab_configuration|default('Configuration') }}</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="config" aria-controls="config" aria-selected="false">{{ ui_lang.admin_tab_configuration|default('Configuration') }}</button>
         </div>
 
         <!-- Overview Tab -->
-        <div class="admin-tab-content active" id="overview">
-          <div class="dashboard-grid" id="overviewGrid">
-            <!-- Overview cards will be loaded here -->
-          </div>
+        <div class="admin-tab-content active" id="overview" role="tabpanel">
+          <!-- One dense row of figures rather than a grid of hero cards: a
+               researcher reads these together, and the number they came for
+               (agreement) sits directly under them. -->
+          <dl class="admin-summary" id="overviewGrid" aria-live="polite">
+            <!-- Overview figures are loaded here -->
+          </dl>
 
-          <div class="config-form">
-            <h3>{{ ui_lang.admin_section_system_info|default('System Information') }}</h3>
-            <div id="systemInfo">
-              <!-- System info will be loaded here -->
+          <section class="admin-panel" id="agreementPanel" aria-labelledby="agreementHeading">
+            <div class="admin-panel-header">
+              <h3 id="agreementHeading">Agreement</h3>
+              <a href="{{ url_prefix }}/admin/iaa" class="admin-panel-link">Full report →</a>
             </div>
-          </div>
+            <div id="agreementSummary">
+              <p class="admin-muted">Loading…</p>
+            </div>
+          </section>
+
+          <section class="admin-panel">
+            <h3>{{ ui_lang.admin_section_system_info|default('System Information') }}</h3>
+            <dl class="admin-dl" id="systemInfo">
+              <!-- System info will be loaded here -->
+            </dl>
+          </section>
         </div>
 
         <!-- Annotators Tab -->
@@ -107,7 +129,7 @@
           <div class="table-controls">
             <button
               onclick="refreshAnnotators()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
@@ -134,9 +156,7 @@
             </table>
           </div>
 
-          <div class="pagination" id="annotatorsPagination">
-            <!-- Pagination will be added here if needed -->
-          </div>
+          <div class="pagination" id="annotatorsPagination"></div>
         </div>
 
         <!-- Instances Tab -->
@@ -169,7 +189,7 @@
 
             <button
               onclick="refreshInstances()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh
             </button>
@@ -183,8 +203,10 @@
                   <th>{{ ui_lang.admin_th_text_preview|default('Text Preview') }}</th>
                   <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
                   <th>{{ ui_lang.admin_th_completion_pct|default('Completion %') }}</th>
-                  <th>{{ ui_lang.admin_th_most_frequent_label|default('Most Frequent Label') }}</th>
-                  <th>{{ ui_lang.admin_th_disagreement|default('Disagreement') }}</th>
+                  <th title="The most common answer to each question, with how many of the annotators gave it">{{ ui_lang.admin_th_most_frequent_label|default('Most Frequent Label') }}</th>
+                  <th title="Share of annotations that did not pick the most common answer, pooled over all questions: 0 is unanimous, values near 1 mean the votes are spread out.">
+                    <span class="admin-th-defined">{{ ui_lang.admin_th_disagreement|default('Disagreement') }}</span>
+                  </th>
                   <th>{{ ui_lang.admin_th_avg_time|default('Avg Time') }}</th>
                   <th>{{ ui_lang.admin_th_annotators|default('Annotators') }}</th>
                   <th>{{ ui_lang.admin_th_num_ai_used|default('Num AI Used') }}</th>
@@ -206,7 +228,7 @@
           <div class="table-controls">
             <button
               onclick="refreshQuestions()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
@@ -223,7 +245,7 @@
           <div class="table-controls">
             <button
               onclick="loadDevices()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
@@ -262,16 +284,16 @@
           <div class="table-controls">
             <button
               onclick="refreshBehavioral()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
           </div>
 
           <!-- Summary Cards -->
-          <div class="dashboard-grid" id="behavioralGrid">
-            <!-- Behavioral summary cards will be loaded here -->
-          </div>
+          <dl class="admin-summary" id="behavioralGrid">
+            <!-- Behavioral summary figures are loaded here -->
+          </dl>
 
           <!-- AI Usage Section -->
           <div class="question-card" id="aiUsageSection" style="margin-bottom: 1.5rem;">
@@ -332,16 +354,16 @@
           <div class="table-controls">
             <button
               onclick="refreshCrowdsourcing()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
           </div>
 
           <!-- Summary Cards -->
-          <div class="dashboard-grid" id="crowdsourcingGrid">
-            <!-- Crowdsourcing summary cards will be loaded here -->
-          </div>
+          <dl class="admin-summary" id="crowdsourcingGrid">
+            <!-- Crowdsourcing summary figures are loaded here -->
+          </dl>
 
           <!-- Platform Sections -->
           <div id="crowdsourcingDetails">
@@ -371,7 +393,7 @@
             <div style="flex: 2; min-width: 600px;">
               <div class="dashboard-card" style="position: relative; min-height: 500px;">
                 <div id="embedding-viz-loader" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); z-index: 10; justify-content: center; align-items: center;">
-                  <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6;"></div>
+                  <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary);"></div>
                 </div>
                 <div id="embedding-viz-error" style="display: none;"></div>
                 <div id="embedding-viz-chart" style="width: 100%; height: 500px;"></div>
@@ -403,7 +425,7 @@
               <div class="dashboard-card" style="margin-top: 1rem;">
                 <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; color: var(--muted-foreground);">CONTROLS</h3>
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                  <button class="shadcn-button shadcn-button-primary" onclick="embeddingViz && embeddingViz.refresh(true)" style="width: 100%;">
+                  <button class="shadcn-button shadcn-button-outline" onclick="embeddingViz && embeddingViz.refresh(true)" style="width: 100%;">
                     Refresh Visualization
                   </button>
                   <select id="embedding-viz-label-source" onchange="changeEmbeddingVizLabelSource()" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius);">
@@ -512,32 +534,38 @@
           <div class="config-form">
             <h3>{{ ui_lang.admin_section_system_config|default('System Configuration') }}</h3>
             <form id="configForm">
+              <!-- "No limit" is a checkbox, not the magic number -1: the
+                   Overview said "Unlimited" while this form said -1, and
+                   typing -1 to mean "no limit" is not discoverable. The
+                   API still takes -1; the form translates. -->
               <div class="config-group">
                 <label for="maxAnnotationsPerUser"
                   >{{ ui_lang.admin_label_max_per_user|default('Max Annotations per User') }}</label
                 >
-                <input
-                  type="number"
-                  id="maxAnnotationsPerUser"
-                  name="maxAnnotationsPerUser"
-                  min="-1"
-                  value="-1"
-                />
-                <small>{{ ui_lang.admin_hint_unlimited|default('Use -1 for unlimited') }}</small>
+                <div class="admin-limit-control">
+                  <input type="number" id="maxAnnotationsPerUser" name="maxAnnotationsPerUser"
+                         min="1" step="1" inputmode="numeric" />
+                  <label class="admin-check">
+                    <input type="checkbox" id="maxAnnotationsPerUserUnlimited"
+                           data-limit-for="maxAnnotationsPerUser" />
+                    No limit
+                  </label>
+                </div>
               </div>
 
               <div class="config-group">
                 <label for="maxAnnotationsPerItem"
                   >{{ ui_lang.admin_label_max_per_item|default('Max Annotations per Item') }}</label
                 >
-                <input
-                  type="number"
-                  id="maxAnnotationsPerItem"
-                  name="maxAnnotationsPerItem"
-                  min="-1"
-                  value="-1"
-                />
-                <small>Use -1 for unlimited</small>
+                <div class="admin-limit-control">
+                  <input type="number" id="maxAnnotationsPerItem" name="maxAnnotationsPerItem"
+                         min="1" step="1" inputmode="numeric" />
+                  <label class="admin-check">
+                    <input type="checkbox" id="maxAnnotationsPerItemUnlimited"
+                           data-limit-for="maxAnnotationsPerItem" />
+                    No limit
+                  </label>
+                </div>
               </div>
 
               <div class="config-group">
@@ -573,6 +601,10 @@
       </main>
     </div>
 
+    <!-- Status messages. These were alert() dialogs, which block the page
+         and read as errors even when they report a success. -->
+    <div class="admin-toast" id="adminToast" role="status" aria-live="polite" hidden></div>
+
     <script>window.UI_LANG = {{ ui_lang|tojson }};</script>
     <script>
       // Localized UI strings (falls back to the English literal if a key is absent)
@@ -584,33 +616,75 @@
       let currentSortBy = "annotation_count";
       let currentSortOrder = "desc";
       let currentFilter = "";
+      const ADJUDICATION_ENABLED = {{ 'true' if adjudication_enabled else 'false' }};
 
       // Initialize dashboard
       document.addEventListener("DOMContentLoaded", function () {
         initializeTabs();
-        loadOverview();
+        initializeLimitControls();
+        // A reload or a shared link lands on the tab it named, not Overview.
+        const fromHash = decodeURIComponent((window.location.hash || "").slice(1));
+        if (fromHash && document.querySelector(`.admin-tab[data-tab="${CSS.escape(fromHash)}"]`)) {
+          switchTab(fromHash);
+        } else {
+          loadOverview();
+        }
         loadConfig();
       });
 
       // Tab functionality
       function initializeTabs() {
-        const tabs = document.querySelectorAll(".admin-tab");
-        tabs.forEach((tab) => {
+        const tabs = Array.from(document.querySelectorAll(".admin-tab"));
+        tabs.forEach((tab, index) => {
+          tab.tabIndex = tab.classList.contains("active") ? 0 : -1;
           tab.addEventListener("click", function () {
-            const tabName = this.getAttribute("data-tab");
-            switchTab(tabName);
+            switchTab(this.getAttribute("data-tab"));
+          });
+          // Arrow keys move between tabs, as on any tablist.
+          tab.addEventListener("keydown", function (e) {
+            let next = null;
+            if (e.key === "ArrowRight") next = tabs[(index + 1) % tabs.length];
+            else if (e.key === "ArrowLeft") next = tabs[(index - 1 + tabs.length) % tabs.length];
+            else if (e.key === "Home") next = tabs[0];
+            else if (e.key === "End") next = tabs[tabs.length - 1];
+            if (next) {
+              e.preventDefault();
+              next.focus();
+              switchTab(next.getAttribute("data-tab"));
+            }
           });
         });
+        updateTabOverflow();
+        const strip = document.querySelector(".admin-tabs");
+        strip.addEventListener("scroll", updateTabOverflow, { passive: true });
+        window.addEventListener("resize", updateTabOverflow);
+      }
+
+      // On a phone the tab strip scrolls sideways. Mark which edges have
+      // more tabs past them so the fade says "there is more here".
+      function updateTabOverflow() {
+        const strip = document.querySelector(".admin-tabs");
+        if (!strip) return;
+        const max = strip.scrollWidth - strip.clientWidth;
+        strip.classList.toggle("overflow-start", strip.scrollLeft > 2);
+        strip.classList.toggle("overflow-end", max - strip.scrollLeft > 2);
       }
 
       function switchTab(tabName) {
         // Update active tab
         document.querySelectorAll(".admin-tab").forEach((tab) => {
           tab.classList.remove("active");
+          tab.setAttribute("aria-selected", "false");
+          tab.tabIndex = -1;
         });
-        document
-          .querySelector(`[data-tab="${tabName}"]`)
-          .classList.add("active");
+        const activeTab = document.querySelector(`.admin-tab[data-tab="${tabName}"]`);
+        activeTab.classList.add("active");
+        activeTab.setAttribute("aria-selected", "true");
+        activeTab.tabIndex = 0;
+        activeTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+        if (history.replaceState) {
+          history.replaceState(null, "", tabName === "overview" ? window.location.pathname : `#${tabName}`);
+        }
 
         // Update active content
         document.querySelectorAll(".admin-tab-content").forEach((content) => {
@@ -673,16 +747,18 @@
       }
 
       async function makeApiRequest(endpoint, options = {}) {
-        const defaultOptions = {
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": "{{ admin_api_key }}",
-          },
+        // Headers are merged, not replaced: a caller passing its own
+        // `headers` used to drop X-API-Key, so the request only worked when
+        // the session happened to authorise it.
+        const headers = {
+          "Content-Type": "application/json",
+          "X-API-Key": "{{ admin_api_key }}",
+          ...(options.headers || {}),
         };
 
         const response = await fetch(endpoint, {
-          ...defaultOptions,
           ...options,
+          headers,
         });
 
         if (!response.ok) {
@@ -703,77 +779,122 @@
         }
       }
 
+      // "7m", "1h 12m", "45s". The server's string printed "0.0h 7.0m".
+      function formatDuration(seconds) {
+        seconds = Math.max(0, Math.round(Number(seconds) || 0));
+        if (seconds < 60) return `${seconds}s`;
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return h ? `${h}h ${m}m` : `${m}m`;
+      }
+
+      function summaryItem(label, value, sub, extraClass) {
+        return `<div class="admin-summary-item${extraClass ? " " + extraClass : ""}">
+                  <dt>${escapeHtml(label)}</dt>
+                  <dd><span class="admin-summary-value">${escapeHtml(value)}</span>${
+                    sub ? `<span class="admin-summary-sub">${escapeHtml(sub)}</span>` : ""}</dd>
+                </div>`;
+      }
+
+      function limitText(value) {
+        const n = Number(value);
+        return value === null || value === undefined || value === "Unlimited" || n < 0
+          ? "No limit" : String(value);
+      }
+
       function displayOverview(data) {
         const overviewGrid = document.getElementById("overviewGrid");
         const systemInfo = document.getElementById("systemInfo");
+        const o = data.overview;
 
-        // Display overview cards
-        overviewGrid.innerHTML = `
-                <div class="dashboard-card">
-                    <h3>Total Users</h3>
-                    <div class="value">${data.overview.total_users}</div>
-                    <div class="description">Registered annotators</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Active Users</h3>
-                    <div class="value">${data.overview.active_users}</div>
-                    <div class="description">Currently annotating</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Total Annotations</h3>
-                    <div class="value">${data.overview.total_annotations}</div>
-                    <div class="description">Completed annotations</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Completion</h3>
-                    <div class="value">${data.overview.completion_percentage}%</div>
-                    <div class="description">Items with annotations</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Total Items</h3>
-                    <div class="value">${data.overview.total_items}</div>
-                    <div class="description">Items in dataset</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Working Time</h3>
-                    <div class="value">${data.overview.total_working_time}</div>
-                    <div class="description">Total time spent</div>
-                </div>
-            `;
+        const parts = [
+          summaryItem("Items", o.total_items,
+            `${o.items_with_annotations} annotated (${o.completion_percentage}%)`),
+          summaryItem("Annotations", o.total_annotations,
+            `${o.average_annotations_per_item} per item`),
+          // "Active users / currently annotating" counted everyone in the
+          // annotation phase, including people who stopped hours ago. Say
+          // what is actually counted.
+          summaryItem("Annotators", o.total_users,
+            `${o.active_users} in annotation phase · ${o.completed_users} finished`),
+          summaryItem("Working time",
+            o.total_working_seconds !== undefined ? formatDuration(o.total_working_seconds) : o.total_working_time,
+            "summed over annotators"),
+        ];
+        if (o.over_collected_items > 0) {
+          parts.push(summaryItem("Over-collected", o.over_collected_items,
+            "items with more annotations than the per-item cap", "is-warning"));
+        }
+        overviewGrid.innerHTML = parts.join("");
 
-        // Display system info
-        systemInfo.innerHTML = `
-                <div class="config-group">
-                    <label>Task Name</label>
-                    <input type="text" value="${
-                      data.config.annotation_task_name
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Max Annotations per User</label>
-                    <input type="text" value="${
-                      data.config.max_annotations_per_user
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Max Annotations per Item</label>
-                    <input type="text" value="${
-                      data.config.max_annotations_per_item
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Assignment Strategy</label>
-                    <input type="text" value="${
-                      data.config.assignment_strategy
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Debug Mode</label>
-                    <input type="text" value="${
-                      data.config.debug_mode ? "Enabled" : "Disabled"
-                    }" readonly>
-                </div>
-            `;
+        const c = data.config;
+        const rows = [
+          ["Task name", c.annotation_task_name],
+          ["Max annotations per user", limitText(c.max_annotations_per_user)],
+          ["Max annotations per item", limitText(c.max_annotations_per_item)],
+          ["Assignment strategy", c.assignment_strategy],
+          ["Debug mode", c.debug_mode ? "Enabled" : "Disabled"],
+        ];
+        systemInfo.innerHTML = rows
+          .map(([k, v]) => `<div class="admin-dl-row"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
+          .join("");
+
+        loadAgreementSummary();
+      }
+
+      const METRIC_NAMES = {
+        alpha_nominal: "Krippendorff's α (nominal)",
+        alpha_ordinal: "Krippendorff's α (ordinal)",
+        alpha_interval: "Krippendorff's α (interval)",
+        alpha_masi: "Krippendorff's α (MASI)",
+        cohen_kappa: "Cohen's κ",
+        fleiss_kappa: "Fleiss' κ",
+        weighted_kappa_linear: "Weighted κ (linear)",
+        weighted_kappa_quadratic: "Weighted κ (quadratic)",
+        spearman_rho: "Spearman ρ",
+        pearson_r: "Pearson r",
+        icc_2_k: "ICC(2,k)",
+        mean_jaccard: "Mean Jaccard",
+      };
+
+      async function loadAgreementSummary() {
+        const box = document.getElementById("agreementSummary");
+        if (!box) return;
+        try {
+          const data = await makeApiRequest("/admin/api/iaa_summary");
+          const schemas = data.schemas || [];
+          if (!schemas.length) {
+            box.innerHTML = `<p class="admin-muted">This task has no annotation schemes to compare.</p>`;
+            return;
+          }
+          if (!data.n_overlap_items) {
+            box.innerHTML = `<p class="admin-muted">No item has two or more annotators yet, so there is nothing to compare. Agreement appears here once items are annotated by more than one person.</p>`;
+            return;
+          }
+          const bandText = { strong: "strong", weak: "weak" };
+          box.innerHTML = `
+            <div class="admin-table-container admin-table-flat">
+              <table class="admin-table">
+                <thead><tr>
+                  <th>Schema</th><th>Measure</th><th class="num">Value</th>
+                  <th class="num">Items</th><th class="num">Annotators</th>
+                </tr></thead>
+                <tbody>${schemas.map((r) => `
+                  <tr>
+                    <td><strong>${escapeHtml(r.schema)}</strong> <span class="admin-muted">${escapeHtml(r.annotation_type || "")}</span></td>
+                    <td>${r.metric ? escapeHtml(METRIC_NAMES[r.metric] || r.metric) : `<span class="admin-muted">${escapeHtml(r.note || "Not computable yet")}</span>`}</td>
+                    <td class="num">${r.metric ? `<span class="agreement-value band-${r.band || "none"}">${escapeHtml(r.display)}</span>${
+                      bandText[r.band] ? ` <span class="agreement-band band-${r.band}">${bandText[r.band]}</span>` : ""}` : "—"}</td>
+                    <td class="num">${r.n_items ?? "—"}</td>
+                    <td class="num">${r.n_annotators ?? "—"}</td>
+                  </tr>`).join("")}
+                </tbody>
+              </table>
+            </div>`;
+        } catch (error) {
+          console.error("Error loading agreement summary:", error);
+          box.innerHTML = `<p class="admin-muted">Agreement could not be computed: ${escapeHtml(error.message)}. The full report at /admin/iaa may say more.</p>`;
+        }
       }
 
       // Annotators functions
@@ -803,17 +924,17 @@
         summary.innerHTML = `
           <p><strong>${s.n_touch_users || 0}</strong> of <strong>${s.n_users_seen || 0}</strong>
           users seen so far have visited from a phone or tablet.</p>
-          <p style="color:#666;">${routingLine}</p>`;
+          <p class="admin-muted">${routingLine}</p>`;
 
         const tbody = document.getElementById("devicesTableBody");
         const rows = data.users || [];
         if (!rows.length) {
-          tbody.innerHTML = `<tr><td colspan="7" style="color:#666;">No visits recorded yet.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="7" class="admin-muted">No visits recorded yet.</td></tr>`;
           return;
         }
         tbody.innerHTML = rows
           .map((u) => `
-                <tr${u.used_touch_device ? ' style="background:#fdf6ec;"' : ""}>
+                <tr${u.used_touch_device ? ' class="admin-row-flagged"' : ""}>
                     <td>${u.username}</td>
                     <td>${u.last_device || "—"}${u.used_touch_device ? " 📱" : ""}</td>
                     <td>${u.mobile_visits}</td>
@@ -866,11 +987,18 @@
                     <td>${Math.round(annotator.annotations_per_hour)}/hr</td>
                     <td>${annotator.completion_percentage.toFixed(1)}%</td>
                     <td>
-                      <div style="display:flex;align-items:center;gap:4px;">
-                        <button onclick="adjustUserInstances('${annotator.user_id}', -5)" style="padding:2px 6px;cursor:pointer;">-</button>
-                        <span id="max-inst-${annotator.user_id}">${annotator.max_assignments < 0 ? '∞' : annotator.max_assignments}</span>
-                        <button onclick="adjustUserInstances('${annotator.user_id}', 5)" style="padding:2px 6px;cursor:pointer;">+</button>
-                      </div>
+                      <!-- A typed number and an explicit Set, replacing
+                           20px -/+ buttons that changed a live quota by 5
+                           on every click with no way back. Empty = no limit. -->
+                      <form class="admin-quota" data-user="${escapeHtml(annotator.user_id)}"
+                            onsubmit="setUserInstances(this); return false;">
+                        <input type="number" min="0" step="1" inputmode="numeric"
+                               aria-label="Max instances for ${escapeHtml(annotator.user_id)}"
+                               placeholder="No limit"
+                               value="${annotator.max_assignments < 0 ? "" : annotator.max_assignments}"
+                               data-current="${annotator.max_assignments}">
+                        <button type="submit" class="shadcn-button shadcn-button-outline admin-quota-set">Set</button>
+                      </form>
                     </td>
                     <td>${
                       annotator.last_activity
@@ -883,25 +1011,44 @@
           .join("");
       }
 
-      async function adjustUserInstances(userId, delta) {
+      async function postUserInstances(userId, value) {
+        return makeApiRequest(`/admin/api/user/${encodeURIComponent(userId)}/set_instances`, {
+          method: "POST",
+          body: JSON.stringify({ max_instances: value }),
+        });
+      }
+
+      async function setUserInstances(form) {
+        const userId = form.dataset.user;
+        const input = form.querySelector("input");
+        const previous = parseInt(input.dataset.current, 10);
+        const raw = input.value.trim();
+        const next = raw === "" ? -1 : parseInt(raw, 10);
+        if (raw !== "" && (!Number.isFinite(next) || next < 0)) {
+          showError(`Max instances for ${userId} must be a whole number, or empty for no limit.`);
+          return;
+        }
+        if (next === previous) return;
         try {
-          // First get current value
-          const span = document.getElementById(`max-inst-${userId}`);
-          let current = span.textContent === '∞' ? -1 : parseInt(span.textContent);
-          let newVal = current < 0 ? delta : current + delta;
-          if (newVal < 0) newVal = -1; // Switch to unlimited
-
-          const response = await makeApiRequest(`/admin/api/user/${encodeURIComponent(userId)}/set_instances`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({max_instances: newVal})
+          const result = await postUserInstances(userId, next);
+          if (!result.success) throw new Error(result.error || "not saved");
+          input.dataset.current = result.max_instances;
+          input.value = result.max_instances < 0 ? "" : result.max_instances;
+          const describe = (v) => (v < 0 ? "no limit" : `${v} instances`);
+          const clamped = next >= 0 && result.max_instances > next
+            ? ` (not below the ${result.current_annotations} already annotated)` : "";
+          showSuccess(`${userId}: ${describe(previous)} → ${describe(result.max_instances)}${clamped}.`, {
+            label: "Undo",
+            run: async () => {
+              const undone = await postUserInstances(userId, previous);
+              input.dataset.current = undone.max_instances;
+              input.value = undone.max_instances < 0 ? "" : undone.max_instances;
+              showSuccess(`${userId}: back to ${describe(undone.max_instances)}.`);
+            },
           });
-
-          if (response.success) {
-            span.textContent = response.max_instances < 0 ? '∞' : response.max_instances;
-          }
         } catch (err) {
-          console.error('Failed to adjust instances:', err);
+          console.error("Failed to set instances:", err);
+          showError(`Could not change max instances for ${userId}: ${err.message}`);
         }
       }
 
@@ -940,24 +1087,38 @@
       function displayInstances(data) {
         const tbody = document.getElementById("instancesTableBody");
         const pagination = document.getElementById("instancesPagination");
-        console.log(data.instances);
         // Display instances
         tbody.innerHTML = data.instances
-          .map(
-            (instance) => `
+          .map((instance) => {
+            // Per question, so a topic and a sentiment are never in one
+            // column without saying which is which.
+            const perSchema = instance.label_summary_by_schema || [];
+            const labels = perSchema.length
+              ? perSchema.map((l) => `<div class="admin-label-line">${
+                  l.schema ? `<span class="admin-muted">${escapeHtml(l.schema)}:</span> ` : ""
+                }${escapeHtml(l.label)} <span class="admin-muted">(${l.count}/${l.total})</span></div>`).join("")
+              : `<span class="admin-muted">${escapeHtml(instance.most_frequent_label || "—")}</span>`;
+            const d = Number(instance.label_disagreement) || 0;
+            const level = instance.annotation_count < 2 ? "none" : d >= 0.5 ? "high" : d > 0 ? "some" : "agree";
+            const disagreement = `<span class="disagreement disagreement-${level}">${
+              instance.annotation_count < 2 ? "—" : d.toFixed(2)}</span>`;
+            const linked = ADJUDICATION_ENABLED && instance.annotation_count >= 2
+              ? `<a class="admin-row-link" href="${window.potatoUrl ? window.potatoUrl("/adjudicate") : "/adjudicate"}?instance=${encodeURIComponent(instance.id)}"
+                    title="Open this item in adjudication">${disagreement}</a>`
+              : disagreement;
+            return `
                 <tr>
-                    <td>${instance.id}</td>
-                    <td title="${instance.text}">${instance.text}</td>
+                    <td>${escapeHtml(instance.id)}</td>
+                    <td title="${escapeHtml(instance.text)}">${escapeHtml(instance.text)}</td>
                     <td>${instance.annotation_count}</td>
                     <td>${instance.completion_percentage}%</td>
-                    <td>${instance.most_frequent_label || "N/A"}</td>
-                    <td>${instance.label_disagreement}</td>
-                    <td>${instance.average_time_per_annotation || "N/A"}</td>
-                    <td>${instance.annotators.join(", ") || "None"}</td>
+                    <td>${labels}</td>
+                    <td>${linked}</td>
+                    <td>${escapeHtml(instance.average_time_per_annotation || "—")}</td>
+                    <td>${escapeHtml(instance.annotators.join(", ")) || "None"}</td>
                     <td>${instance.num_ai_instance}</td>
-                </tr>
-            `
-          )
+                </tr>`;
+          })
           .join("");
 
         // Display pagination
@@ -1104,30 +1265,29 @@
         }
       }
 
+      // Dense horizontal bars: label on the left where it can be read, the
+      // count and share on the right. The old vertical bars were full-width
+      // purple blocks with 12px labels hanging underneath them.
+      function generateBars(labels, counts, percentages) {
+        const maxCount = Math.max(1, ...counts);
+        return `<div class="admin-hbars">${labels.map((label, i) => {
+          const pct = percentages && percentages[i] !== undefined ? ` · ${Number(percentages[i]).toFixed(0)}%` : "";
+          return `<div class="admin-hbar-row">
+              <span class="admin-hbar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+              <span class="admin-hbar-track"><span class="admin-hbar-fill" style="width:${(counts[i] / maxCount) * 100}%"></span></span>
+              <span class="admin-hbar-value">${counts[i]}${pct}</span>
+            </div>`;
+        }).join("")}</div>`;
+      }
+
       function generateHistogram(analysis) {
         const { labels, counts, percentages } = analysis.data;
-        const maxCount = Math.max(...counts);
 
         let html = "<h4>Response Distribution</h4>";
-        html += '<div class="histogram">';
-
-        labels.forEach((label, index) => {
-          const count = counts[index];
-          const percentage = percentages[index];
-          const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-          html += `
-                    <div class="histogram-bar" style="height: ${height}%">
-                        <div class="histogram-value">${count}</div>
-                        <div class="histogram-label">${label}</div>
-                    </div>
-                `;
-        });
-
-        html += "</div>";
+        html += generateBars(labels, counts, percentages);
 
         if (analysis.most_common) {
-          html += `<p><strong>Most common:</strong> ${analysis.most_common[0]} (${analysis.most_common[1]} times)</p>`;
+          html += `<p><strong>Most common:</strong> ${escapeHtml(analysis.most_common[0])} (${analysis.most_common[1]} times)</p>`;
         }
 
         if (analysis.agreement_score !== undefined) {
@@ -1254,25 +1414,8 @@
         // Sent beside `data`, not inside it; reading it from `data` showed
         // "undefined".
         const average_labels_per_item = analysis.average_labels_per_item;
-        const maxCount = Math.max(...counts);
-
         let html = "<h4>Label Frequency</h4>";
-        html += '<div class="histogram">';
-
-        labels.forEach((label, index) => {
-          const count = counts[index];
-          const percentage = percentages[index];
-          const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-          html += `
-                    <div class="histogram-bar" style="height: ${height}%">
-                        <div class="histogram-value">${count}</div>
-                        <div class="histogram-label">${label}</div>
-                    </div>
-                `;
-        });
-
-        html += "</div>";
+        html += generateBars(labels, counts, percentages);
 
         html += `<p><strong>Average labels per answer:</strong> ${average_labels_per_item}</p>`;
 
@@ -1450,28 +1593,12 @@
         const details = document.getElementById("crowdsourcingDetails");
 
         // Display summary cards
-        grid.innerHTML = `
-          <div class="dashboard-card">
-            <h3>Total Workers</h3>
-            <div class="value">${data.summary.total_workers}</div>
-            <div class="description">All crowdsourcing workers</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Prolific Workers</h3>
-            <div class="value">${data.summary.prolific_workers}</div>
-            <div class="description">${data.summary.prolific_studies} study/studies</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>MTurk Workers</h3>
-            <div class="value">${data.summary.mturk_workers}</div>
-            <div class="description">${data.summary.mturk_hits} HIT(s)</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Other Workers</h3>
-            <div class="value">${data.summary.other_workers}</div>
-            <div class="description">Direct or non-platform</div>
-          </div>
-        `;
+        grid.innerHTML = [
+          summaryItem("Workers", data.summary.total_workers, "all platforms"),
+          summaryItem("Prolific", data.summary.prolific_workers, `${data.summary.prolific_studies} study/studies`),
+          summaryItem("MTurk", data.summary.mturk_workers, `${data.summary.mturk_hits} HIT(s)`),
+          summaryItem("Other", data.summary.other_workers, "direct or non-platform"),
+        ].join("");
 
         // Display platform details
         let detailsHtml = "";
@@ -1580,7 +1707,7 @@
           const phaseClass = phase.includes("done") ? "status-completed" :
                             phase.includes("annotation") ? "status-active" : "status-login";
           const suspiciousClass = worker.suspicious_level === "High" || worker.suspicious_level === "Very High" ?
-                                 "color: var(--error-color);" : "";
+                                 "color: var(--destructive-text);" : "";
 
           html += `
                   <tr>
@@ -1647,7 +1774,7 @@
         section.style.display = "";
 
         if (wp.error) {
-          content.innerHTML = `<p style="color: var(--destructive, #b91c1c);">Could not read typing sessions: ${escapeHtml(wp.error)}</p>`;
+          content.innerHTML = `<p style="color: var(--destructive-text);">Could not read typing sessions: ${escapeHtml(wp.error)}</p>`;
           return;
         }
         if (!wp.users || wp.users.length === 0) {
@@ -1697,7 +1824,7 @@
           // Colour tracks risk, but the number is always shown next to it so the
           // colour is never the only thing an admin acts on.
           const risk = u.writing_process_risk || 0;
-          const colour = risk >= 0.3 ? "#b91c1c" : (risk > 0 ? "#b45309" : "inherit");
+          const colour = risk >= 0.3 ? "var(--destructive-text)" : (risk > 0 ? "var(--warning-text)" : "inherit");
           const mobile = u.any_virtual_keyboard
             ? ` <span title="Some sessions used a mobile keyboard, where keystroke-count rules do not apply" style="font-size:0.8em; color: var(--muted-foreground);">(mobile)</span>`
             : "";
@@ -1741,38 +1868,26 @@
 
         // Display summary cards
         const stats = data.aggregate_stats;
-        grid.innerHTML = `
-          <div class="dashboard-card">
-            <h3>Users with Data</h3>
-            <div class="value">${stats.total_users}</div>
-            <div class="description">Users with behavioral tracking</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Total Instances</h3>
-            <div class="value">${stats.total_instances}</div>
-            <div class="description">Tracked annotation sessions</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Avg Time</h3>
-            <div class="value">${stats.avg_time_per_instance_sec.toFixed(1)}s</div>
-            <div class="description">Per annotation instance</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Total Interactions</h3>
-            <div class="value">${stats.total_interactions}</div>
-            <div class="description">Clicks, focus, navigation</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Annotation Changes</h3>
-            <div class="value">${stats.total_changes}</div>
-            <div class="description">Label modifications</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>AI Requests</h3>
-            <div class="value">${stats.total_ai_requests}</div>
-            <div class="description">AI assistance requests</div>
-          </div>
-        `;
+        // Interactions are only counted where an interaction log exists.
+        // Imported or pre-seeded annotations have label changes but no
+        // click log, and showing "0 interactions" beside "48 changes" read
+        // as a contradiction. Say it was not recorded instead.
+        const logged = stats.instances_with_interaction_log;
+        const interactionsRecorded = logged === undefined || logged > 0;
+        grid.innerHTML = [
+          summaryItem("Users with data", stats.total_users, "with behavioral tracking"),
+          summaryItem("Instances", stats.total_instances, "tracked annotation sessions"),
+          summaryItem("Avg time", `${stats.avg_time_per_instance_sec.toFixed(1)}s`, "per instance"),
+          interactionsRecorded
+            ? summaryItem("Interactions", stats.total_interactions,
+                logged !== undefined && logged < stats.total_instances
+                  ? `clicks, focus, navigation · over ${logged} of ${stats.total_instances} instances`
+                  : "clicks, focus, navigation")
+            : summaryItem("Interactions", "Not recorded",
+                "these annotations were imported or seeded without an interaction log"),
+          summaryItem("Annotation changes", stats.total_changes, "label modifications"),
+          summaryItem("AI requests", stats.total_ai_requests, "AI assistance requests"),
+        ].join("");
 
         // Display AI usage section
         const ai = data.ai_usage;
@@ -1807,7 +1922,7 @@
 
         // Display quality indicators
         const quality = data.quality_summary;
-        const suspicionColor = quality.high_suspicion_users > 0 ? "var(--error-color)" : "var(--success-color)";
+        const suspicionColor = quality.high_suspicion_users > 0 ? "var(--destructive-text)" : "var(--success-text)";
         qualityContent.innerHTML = `
           <div class="question-stats">
             <div class="question-stat">
@@ -1847,14 +1962,16 @@
 
         // Display per-user table
         tbody.innerHTML = data.users.map(user => {
-          const suspicionClass = user.suspicion_score > 0.5 ? "color: var(--error-color); font-weight: bold;" :
-                                user.suspicion_score > 0.3 ? "color: orange;" : "";
+          const suspicionClass = user.suspicion_score > 0.5 ? "color: var(--destructive-text); font-weight: bold;" :
+                                user.suspicion_score > 0.3 ? "color: var(--warning-text);" : "";
           return `
             <tr>
               <td>${user.user_id}</td>
               <td>${user.total_instances}</td>
               <td>${user.avg_time_sec == null ? 'n/a' : user.avg_time_sec.toFixed(1)}</td>
-              <td>${user.total_interactions}</td>
+              <td>${user.instances_with_interaction_log === 0
+                    ? '<span class="admin-muted" title="No interaction log for this annotator: imported or seeded annotations">not recorded</span>'
+                    : user.total_interactions}</td>
               <td>${user.total_changes}</td>
               <td>${user.ai_requests}</td>
               <td>${user.ai_accept_rate == null ? 'N/A' : (user.ai_accept_rate * 100).toFixed(0) + '%'}</td>
@@ -1879,11 +1996,39 @@
         }
       }
 
+      // The API speaks -1 for "no limit"; the form shows a checkbox.
+      function setLimitField(id, value) {
+        const input = document.getElementById(id);
+        const box = document.getElementById(id + "Unlimited");
+        const n = Number(value);
+        const unlimited = value === null || value === undefined || !Number.isFinite(n) || n < 0;
+        box.checked = unlimited;
+        input.disabled = unlimited;
+        input.value = unlimited ? "" : n;
+      }
+
+      function readLimitField(id) {
+        if (document.getElementById(id + "Unlimited").checked) return -1;
+        return parseInt(document.getElementById(id).value, 10);
+      }
+
+      function initializeLimitControls() {
+        document.querySelectorAll("[data-limit-for]").forEach((box) => {
+          box.addEventListener("change", () => {
+            const input = document.getElementById(box.dataset.limitFor);
+            input.disabled = box.checked;
+            if (box.checked) {
+              input.value = "";
+            } else {
+              input.focus();
+            }
+          });
+        });
+      }
+
       function displayConfig(data) {
-        document.getElementById("maxAnnotationsPerUser").value =
-          data.max_annotations_per_user;
-        document.getElementById("maxAnnotationsPerItem").value =
-          data.max_annotations_per_item;
+        setLimitField("maxAnnotationsPerUser", data.max_annotations_per_user);
+        setLimitField("maxAnnotationsPerItem", data.max_annotations_per_item);
         document.getElementById("assignmentStrategy").value =
           data.assignment_strategy;
       }
@@ -1895,15 +2040,18 @@
           e.preventDefault();
 
           const formData = {
-            max_annotations_per_user: parseInt(
-              document.getElementById("maxAnnotationsPerUser").value
-            ),
-            max_annotations_per_item: parseInt(
-              document.getElementById("maxAnnotationsPerItem").value
-            ),
+            max_annotations_per_user: readLimitField("maxAnnotationsPerUser"),
+            max_annotations_per_item: readLimitField("maxAnnotationsPerItem"),
             assignment_strategy:
               document.getElementById("assignmentStrategy").value,
           };
+          for (const [key, label] of [["max_annotations_per_user", "Max annotations per user"],
+                                      ["max_annotations_per_item", "Max annotations per item"]]) {
+            if (!Number.isFinite(formData[key]) || (formData[key] !== -1 && formData[key] < 1)) {
+              showError(`${label}: enter a number of 1 or more, or tick "No limit".`);
+              return;
+            }
+          }
 
           try {
             const result = await makeApiRequest("/admin/api/config", {
@@ -2076,7 +2224,7 @@
             let color = 'var(--success-color)';
             let label = 'High';
             if (score < 0.5) { color = 'var(--error-color)'; label = 'Low'; }
-            else if (score < 0.7) { color = 'orange'; label = 'Moderate'; }
+            else if (score < 0.7) { color = 'var(--warning-text)'; label = 'Moderate'; }
 
             return `
               <tr>
@@ -2135,7 +2283,7 @@
                       const entPct = (ent * 100).toFixed(1);
                       let entColor = 'var(--success-color)';
                       if (ent > 0.5) entColor = 'var(--error-color)';
-                      else if (ent > 0.1) entColor = 'orange';
+                      else if (ent > 0.1) entColor = 'var(--warning-text)';
 
                       return `
                         <tr>
@@ -2165,21 +2313,58 @@
       }
 
       // Utility functions
+      // One status line at the bottom of the screen, replacing alert().
+      // An optional action (Undo) rides along with a success.
+      let toastTimer = null;
+      function showToast(message, kind, action) {
+        const toast = document.getElementById("adminToast");
+        if (!toast) return;
+        clearTimeout(toastTimer);
+        toast.className = `admin-toast admin-toast-${kind}`;
+        toast.setAttribute("role", kind === "error" ? "alert" : "status");
+        toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+        if (action) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "admin-toast-action";
+          btn.textContent = action.label;
+          btn.addEventListener("click", () => {
+            toast.hidden = true;
+            action.run().catch((e) => showError(`${action.label} failed: ${e.message}`));
+          });
+          toast.appendChild(btn);
+        }
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "admin-toast-close";
+        close.setAttribute("aria-label", "Dismiss");
+        close.textContent = "×";
+        close.addEventListener("click", () => { toast.hidden = true; });
+        toast.appendChild(close);
+        toast.hidden = false;
+        // Errors stay until dismissed; a success with an Undo stays long
+        // enough to use it.
+        if (kind !== "error") {
+          toastTimer = setTimeout(() => { toast.hidden = true; }, action ? 10000 : 4000);
+        }
+      }
+
       function showError(message) {
-        // Simple error display - could be enhanced with a toast notification
-        alert("Error: " + message);
+        showToast(message, "error");
       }
 
-      function showSuccess(message) {
-        // Simple success display - could be enhanced with a toast notification
-        alert("Success: " + message);
+      function showSuccess(message, action) {
+        showToast(message, "success", action);
       }
 
-      function logout() {
-        // Clear admin session and redirect to login
-        fetch("/admin", { method: "GET" }).then(() => {
+      async function logout() {
+        // Drop the admin key from this browser session, then go back to the
+        // key form. GETting /admin, which this used to do, signed nobody out.
+        try {
+          await fetch(window.potatoUrl("/admin/logout"), { method: "POST" });
+        } finally {
           window.location.href = window.potatoUrl("/admin");
-        });
+        }
       }
 
       // =============================================

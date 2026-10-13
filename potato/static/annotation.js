@@ -5027,8 +5027,9 @@ function aggressiveFirefoxInstanceIdFix() {
             }
         }
 
-        // Method 4: If we still don't have it, try to get it from the server via API
-        if (!correctInstanceId) {
+        // Method 4: If we still don't have it, try to get it from the server via API.
+        // Not on phase pages: they have no instance and the request only 404s.
+        if (!correctInstanceId && !(window.config && window.config.is_annotation_page === false)) {
             debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id found, trying API call');
 
             // Make an API call to get the current instance info

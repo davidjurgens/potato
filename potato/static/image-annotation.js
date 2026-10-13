@@ -169,10 +169,15 @@ class ImageAnnotationManager {
 
         const legacy = {bbox: 'b', polygon: 'p', freeform: 'f', landmark: 'l',
                         brush: 'm', fill: 'g', eraser: 'e'};
+        // The names on the toolbar buttons, not the config's tool ids: the
+        // annotator never sees "bbox", only "Box".
+        const toolNames = {bbox: 'Box', polygon: 'Polygon', freeform: 'Freeform',
+                           landmark: 'Landmark', brush: 'Brush', fill: 'Fill',
+                           eraser: 'Eraser'};
         const keys = this.config.toolKeys || {};
         const moved = (this.config.tools || [])
             .filter(t => legacy[t] && keys[t] && legacy[t] !== keys[t])
-            .map(t => `${t}: ${legacy[t].toUpperCase()} → ${keys[t].toUpperCase()}`);
+            .map(t => ({name: toolNames[t] || t, key: keys[t].toUpperCase()}));
         if (!moved.length) return;
 
         const container = document.querySelector(
@@ -189,24 +194,22 @@ class ImageAnnotationManager {
         note.setAttribute('role', 'status');
 
         const lead = document.createElement('strong');
-        lead.textContent = 'Shortcuts changed';
+        lead.textContent = 'New shortcut keys:';
         note.appendChild(lead);
-        note.appendChild(document.createTextNode(' (V7/CVAT): '));
-
-        moved.forEach((m, i) => {
-            if (i) note.appendChild(document.createTextNode(', '));
-            const code = document.createElement('code');
-            code.textContent = m;
-            note.appendChild(code);
-        });
+        note.appendChild(document.createTextNode(' '));
 
         // Terse on purpose: the banner's height pushes the Next button down a
-        // page that already overflows a laptop viewport.
-        note.appendChild(document.createTextNode('. Admins can restore them with '));
-        const opt = document.createElement('code');
-        opt.textContent = 'keybinding_profile: legacy';
-        note.appendChild(opt);
-        note.appendChild(document.createTextNode(' '));
+        // page that already overflows a laptop viewport. It names the new key
+        // only -- the annotator needs what to press now, and the config option
+        // that restores the old keys is the researcher's business, not theirs.
+        moved.forEach((m, i) => {
+            if (i) note.appendChild(document.createTextNode(', '));
+            note.appendChild(document.createTextNode(`${m.name} is `));
+            const kbd = document.createElement('kbd');
+            kbd.textContent = m.key;
+            note.appendChild(kbd);
+        });
+        note.appendChild(document.createTextNode('.'));
 
         const dismiss = document.createElement('button');
         dismiss.type = 'button';

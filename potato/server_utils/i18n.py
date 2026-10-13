@@ -53,6 +53,8 @@ UI_LANG_DEFAULTS = {
     'logout': 'Logout',
     'jump_prev_unannotated': 'Previous unannotated',
     'jump_next_unannotated': 'Next unannotated',
+    # Visible caption between the two jump buttons above.
+    'jump_unannotated_label': 'Unlabeled',
     # Status indicators
     'labeled_badge': 'Labeled',
     'in_progress_badge': 'In Progress',
@@ -67,6 +69,7 @@ UI_LANG_DEFAULTS = {
     'text_to_annotate': 'Text to Annotate:',
     'video_to_annotate': 'Video to Annotate:',
     'audio_to_annotate': 'Audio to Annotate:',
+    'image_to_annotate': 'Image to Annotate:',
     # Login / registration page
     'login_title': 'Annotation Platform',
     'login_subtitle_password': 'Sign in to continue',

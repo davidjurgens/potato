@@ -45,11 +45,15 @@
         }
 
         .admin-login-input {
+            /* content-box let the padding push the field 26px past the
+               button under it. */
+            box-sizing: border-box;
             width: 100%;
             padding: 0.75rem;
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            font-size: 0.875rem;
+            font-family: inherit;
+            font-size: var(--text-dense);
             transition: var(--transition);
         }
 
@@ -61,7 +65,9 @@
 
         .admin-login-button {
             background-color: var(--primary);
-            color: white;
+            color: var(--primary-foreground);
+            font-family: inherit;
+            font-size: var(--text-dense);
             border: none;
             padding: 0.75rem 1.5rem;
             border-radius: var(--radius);
@@ -75,8 +81,8 @@
         }
 
         .admin-login-error {
-            color: var(--destructive);
-            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--destructive-text);
+            background-color: var(--destructive-tint);
             border: 1px solid var(--destructive);
             border-radius: var(--radius);
             padding: 0.75rem;
@@ -92,7 +98,7 @@
 
         .admin-login-hint {
             color: var(--muted-foreground);
-            font-size: 0.75rem;
+            font-size: var(--text-sm);
             text-align: left;
             margin: -0.5rem 0 0 0;
         }
@@ -118,13 +124,9 @@
 <body>
     <div class="admin-login-container">
         <div class="admin-login-card">
-            <h1 class="admin-login-title"><span aria-hidden="true">🔐</span> {{ ui_lang.admin_login_title|default('Admin Access') }}</h1>
+            <h1 class="admin-login-title">{{ ui_lang.admin_login_title|default('Admin Access') }}</h1>
             <p class="admin-login-description">
-                This area requires administrator privileges. Enter your API key to access the admin dashboard.
-            </p>
-            <p class="admin-login-description" style="font-size: 0.85em; opacity: 0.8;">
-                Your admin key is saved to <code>admin_api_key.txt</code> in the task
-                directory (it is also printed in the server log at startup).
+                Enter the admin API key to open the dashboard.
             </p>
 
             <form class="admin-login-form" id="adminLoginForm">
@@ -139,8 +141,17 @@
                     autocomplete="current-password"
                     required
                 >
+                {# Says where THIS server's key comes from. It used to name
+                   admin_api_key.txt unconditionally, twice, including when
+                   the config set the key inline and no file existed. #}
                 <p id="apiKeyHint" class="admin-login-hint">
-                    The key is stored in <code>admin_api_key.txt</code> in your task directory.
+                    {% if key_source == 'config' %}
+                    It is the <code>admin_api_key</code> value in this project's config file.
+                    {% elif key_source == 'env' %}
+                    It is the value of the <code>POTATO_ADMIN_API_KEY</code> environment variable the server was started with.
+                    {% else %}
+                    It is in <code>admin_api_key.txt</code> in the task directory, and in the server log at startup.
+                    {% endif %}
                 </p>
                 <button type="submit" class="admin-login-button" id="adminLoginSubmit">
                     {{ ui_lang.admin_login_submit|default('Access Dashboard') }}
@@ -187,7 +198,7 @@
                         return;
                     }
                     if (response.status === 401 || response.status === 403) {
-                        showError("That API key wasn't recognized. Double-check the value in admin_api_key.txt.");
+                        showError("That API key wasn't recognized. Check it against the source named below the field.");
                     } else if (response.status === 429) {
                         showError("Too many sign-in attempts. Wait a moment and try again.");
                     } else if (response.status >= 500) {

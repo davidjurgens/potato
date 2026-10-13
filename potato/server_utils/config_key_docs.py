@@ -979,6 +979,15 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     # predates the coverage ratchet and sits on the legacy exemption list;
     # new ones are documented here so the published JSON Schema, the config
     # reference and describe_config_key all know about them.
+    "ui_language.jump_unannotated_label": _D(
+        "Caption between the header's jump-to-unlabeled buttons (shown at "
+        "1200px and wider)",
+        type="string", default="Unlabeled", category=UI,
+    ),
+    "ui_language.image_to_annotate": _D(
+        "Heading above an item whose text field embeds an image",
+        type="string", default="Image to Annotate:", category=UI,
+    ),
     "ui_language.iaa_drift_title": _D(
         "Heading of the agreement-over-time section on /admin/iaa",
         type="string", category=UI,

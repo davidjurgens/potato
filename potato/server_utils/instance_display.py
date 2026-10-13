@@ -410,15 +410,21 @@ class InstanceDisplayRenderer:
         from potato.server_utils.displays.base import css_length
 
         display_options = field.get("display_options", {})
-        max_height = display_options.get("max_height", 500)
+        max_height = display_options.get("max_height")
         min_height = display_options.get("min_height", 100)
 
         # Both lengths go through `css_length`: `px` used to be appended
         # unconditionally, so `max_height: "220px"` produced `220pxpx` --
         # invalid, dropped, and the field simply never clamped.
-        style = (f"max-height: {css_length(max_height, '500px')}; "
-                 f"min-height: {css_length(min_height, '100px')}; "
-                 f"position: relative;")
+        #
+        # No max-height unless the config asks for one. The old 500px default
+        # boxed every field into a scroll pane, so an agent trace was cut off
+        # mid-sentence in a box smaller than the questions under it; the
+        # stylesheet's 80vh cap applies instead, and instance-display.js adds
+        # a "Show all" control whenever the content still overflows.
+        style = f"min-height: {css_length(min_height, '100px')}; position: relative;"
+        if max_height is not None:
+            style = f"max-height: {css_length(max_height, '500px')}; " + style
 
         return f'''<div class="display-field-resizable" style="{style}">
             {inner_html}

@@ -20,6 +20,7 @@ retry_button: "إعادة المحاولة"
 logout: "تسجيل الخروج"
 jump_prev_unannotated: "السابق غير المُعلَّق"
 jump_next_unannotated: "التالي غير المُعلَّق"
+jump_unannotated_label: "غير المُعلَّق"
 
 # Status indicators
 labeled_badge: "مُصنَّف"
@@ -36,6 +37,7 @@ instructions_heading: "التعليمات"
 text_to_annotate: "النص المراد تعليقه:"
 video_to_annotate: "الفيديو المراد تعليقه:"
 audio_to_annotate: "الصوت المراد تعليقه:"
+image_to_annotate: "الصورة المراد تعليقها:"
 
 # Login / registration
 login_title: "منصة التعليق"

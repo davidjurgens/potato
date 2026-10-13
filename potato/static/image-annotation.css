@@ -48,16 +48,23 @@
    label to draw with and hiding that label are different intentions, and
    conflating them would make the common action risky. */
 .label-visibility-toggle {
-    margin-left: 6px;
-    padding: 0 2px;
-    font-size: 11px;
+    margin-left: 2px;
+    /* A 24px target (WCAG 2.5.8). It was 18x11: the glyph's own box. The
+       negative block margin keeps the label button its old height. */
+    padding: 0 4px;
+    margin-block: -6px;
+    font-size: var(--text-xs);
     line-height: 1;
     cursor: pointer;
     opacity: 0.55;
     /* Keep the button width stable as the glyph swaps, or the toolbar reflows
        every time a class is hidden. */
-    display: inline-block;
-    min-width: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    border-radius: 3px;
     text-align: center;
 }
 
@@ -66,16 +73,16 @@
     opacity: 1;
 }
 
-/* On the armed label the button turns solid blue. The glyph is an emoji, so it
+/* On the armed label the button turns solid purple. The glyph is an emoji, so it
    keeps its own colours instead of inheriting the button's white text — at 55%
-   opacity it muddies into the blue and reads as a smudge. Show it at full
+   opacity it muddies into the fill and reads as a smudge. Show it at full
    strength there. */
 .label-btn.active .label-visibility-toggle {
     opacity: 1;
 }
 
 .label-visibility-toggle:focus-visible {
-    outline: 2px solid #0b5ed7;
+    outline: 2px solid var(--ring);
     outline-offset: 1px;
     border-radius: 2px;
 }
@@ -130,21 +137,23 @@
        already overflows a laptop viewport. It is transient information, and
        it must not cost the annotator a scroll on every item to advance. */
     padding: 5px 10px;
-    border: 1px solid #b6d4fe;
-    border-left: 3px solid #0d6efd;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
     border-radius: 4px;
-    background: #eff6ff;
-    color: #1e3a5f;
-    font-size: 12px;
+    background: var(--primary-tint);
+    color: var(--foreground);
+    font-size: var(--text-xs);
     line-height: 1.35;
 }
 
-.image-annotation-container .keybinding-notice code {
+.image-annotation-container .keybinding-notice kbd {
     padding: 1px 5px;
+    border: 1px solid var(--muted-foreground);
     border-radius: 3px;
-    background: #dbeafe;
-    color: #1d4ed8;
-    font-size: 12px;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
     white-space: nowrap;
 }
 
@@ -154,22 +163,22 @@
        a 24px target is the WCAG 2.5.8 floor, not a comfortable size. */
     min-height: 32px;
     padding: 6px 12px;
-    border: 1px solid #0d6efd;
+    border: 1px solid var(--primary);
     border-radius: 4px;
-    background: #fff;
-    color: #0d6efd;
-    font-size: 12px;
+    background: var(--background);
+    color: var(--primary);
+    font-size: var(--text-xs);
     font-weight: 600;
     cursor: pointer;
 }
 
 .keybinding-notice-dismiss:hover {
-    background: #0d6efd;
-    color: #fff;
+    background: var(--primary);
+    color: var(--primary-foreground);
 }
 
 .keybinding-notice-dismiss:focus-visible {
-    outline: 2px solid #0b5ed7;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
 }
 
@@ -184,7 +193,7 @@
     color: #e2e8f0;
 }
 
-.image-annotation-container.dark-mode .keybinding-notice code {
+.image-annotation-container.dark-mode .keybinding-notice kbd {
     background: #2f4569;
     color: #bfdbfe;
 }
@@ -210,11 +219,11 @@
     justify-content: center;
     gap: 4px;
     padding: 6px 12px;
-    border: 1px solid #ced4da;
+    border: 1px solid var(--input);
     border-radius: 4px;
-    background: #fff;
-    color: #495057;
-    font-size: 13px;
+    background: var(--background);
+    color: var(--foreground);
+    font-size: var(--text-dense);
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -223,15 +232,17 @@
 .label-btn:hover,
 .zoom-btn:hover,
 .edit-btn:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
+    background: var(--muted);
+    border-color: var(--muted-foreground);
 }
 
+/* The armed tool and label take the product accent. They were Bootstrap blue
+   (#0d6efd), the only blue on an otherwise purple surface. */
 .tool-btn.active,
 .label-btn.active {
-    background: #0d6efd;
-    border-color: #0d6efd;
-    color: #fff;
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-foreground);
     /* Which tool and label are armed is the whole mode of this UI — drawing
        with the wrong one silently produces wrong data. Colour alone does not
        convey that to a colour-blind annotator (WCAG 1.4.1), so the active
@@ -250,9 +261,9 @@
 .label-btn:focus,
 .zoom-btn:focus,
 .edit-btn:focus {
-    outline: 2px solid #0b5ed7;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.3);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ring) 30%, transparent);
 }
 
 .tool-btn:focus:not(:focus-visible),
@@ -267,13 +278,21 @@
 .label-btn.active:focus {
     /* Keep the inset ring from the active state alongside the focus ring. */
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65),
-                0 0 0 4px rgba(13, 110, 253, 0.3);
+                0 0 0 4px color-mix(in srgb, var(--ring) 30%, transparent);
+}
+
+/* The tool glyphs (□ ⬡ ...) are spans, and a generic form rule colours spans
+   with --text-color. On the armed (purple) button that left the glyph at
+   1.9:1; it follows the button's own text colour instead. */
+.tool-btn > span,
+.label-btn > span:not(.label-color-dot):not(.label-visibility-toggle) {
+    color: inherit;
 }
 
 /* The canvas is focusable (tabindex="0") so keyboard users can reach the
    drawing surface; it needs a visible ring of its own. */
 .annotation-canvas:focus-visible {
-    outline: 2px solid #0b5ed7;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
 }
 
@@ -311,13 +330,14 @@
 }
 
 .edit-btn.delete-btn {
-    color: #dc3545;
-    border-color: #dc3545;
+    color: var(--destructive-text);
+    border-color: var(--destructive-text);
 }
 
+/* White on --destructive is 3.8:1; the text colour as a fill clears 7:1. */
 .edit-btn.delete-btn:hover {
-    background: #dc3545;
-    color: #fff;
+    background: var(--destructive-text);
+    color: var(--primary-foreground);
 }
 
 .edit-btn:disabled {
@@ -538,8 +558,8 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 14px;
-    color: #dc3545;
+    font-size: var(--text-dense);
+    color: var(--destructive-text);
 }
 
 /* Annotation highlight on hover */
@@ -689,7 +709,7 @@
 }
 
 .image-annotation-container .critique-info {
-    border-left-color: #2563eb;
+    border-left-color: var(--primary);
 }
 
 .image-annotation-container .critique-muted {
@@ -805,7 +825,7 @@
 .image-annotation-container .critique-btn:focus,
 .image-annotation-container .critique-disclosure:focus,
 .image-annotation-container .critique-close:focus {
-    outline: 2px solid #0b5ed7;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
 }
 

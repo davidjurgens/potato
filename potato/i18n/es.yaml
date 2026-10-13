@@ -17,6 +17,7 @@ retry_button: "Reintentar"
 logout: "Cerrar sesión"
 jump_prev_unannotated: "Anterior sin anotar"
 jump_next_unannotated: "Siguiente sin anotar"
+jump_unannotated_label: "Sin anotar"
 
 # Status indicators
 labeled_badge: "Etiquetado"
@@ -33,6 +34,7 @@ instructions_heading: "Instrucciones"
 text_to_annotate: "Texto para anotar:"
 video_to_annotate: "Vídeo para anotar:"
 audio_to_annotate: "Audio para anotar:"
+image_to_annotate: "Imagen para anotar:"
 
 # Login / registration
 login_title: "Plataforma de anotación"

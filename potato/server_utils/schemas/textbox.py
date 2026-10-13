@@ -151,6 +151,13 @@ def _generate_textbox_layout_internal(annotation_scheme):
         # Placeholder attribute
         placeholder_attr = f'placeholder="{placeholder}"' if placeholder else ''
 
+        # With the default label there is no <label>, and a legend names the
+        # fieldset, not the field: screen readers announced a bare "edit
+        # text". Name the field after the question instead.
+        name_attr = "" if label_text else (
+            f'aria-label="{escape_html_content(annotation_scheme.get("description", ""))}"'
+        )
+
         schematic += f"""
             <div class="shadcn-textbox-item">
                 {f'<label for="{identifiers["id"]}" schema="{identifiers["schema"]}" class="shadcn-textbox-label">{escape_html_content(label_text)}</label>' if label_text else ''}
@@ -167,6 +174,7 @@ def _generate_textbox_layout_internal(annotation_scheme):
                           label_name="{identifiers['label_name']}"
                           {textarea_attrs}
                           {placeholder_attr}
+                          {name_attr}
                           style="{custom_css}"
                           {paste_setting}></textarea>
             """
@@ -181,6 +189,7 @@ def _generate_textbox_layout_internal(annotation_scheme):
                        schema="{identifiers['schema']}"
                        label_name="{identifiers['label_name']}"
                        {placeholder_attr}
+                       {name_attr}
                        style="{custom_css}"
                        {paste_setting}>
             """

@@ -21,6 +21,34 @@ function audioDebugLog(...args) {
 }
 
 /**
+ * The accent as an "r, g, b" triple, read from the --primary token so the
+ * waveform (painted on a canvas, where CSS variables do not reach) follows the
+ * palette instead of carrying its own blue.
+ */
+function audioAccentRgb() {
+    try {
+        const raw = getComputedStyle(document.documentElement)
+            .getPropertyValue('--primary').trim();
+        const m = /^#([0-9a-f]{6})$/i.exec(raw);
+        if (m) {
+            const n = parseInt(m[1], 16);
+            return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+        }
+    } catch (e) { /* no computed style: use the default below */ }
+    return '110, 86, 207';
+}
+
+/** A CSS custom property's value, or `fallback` when it is unset. */
+function audioToken(name, fallback) {
+    try {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+/**
  * Color maps for spectrogram visualization
  * Each color map is an array of RGB arrays for gradient interpolation
  */
@@ -622,6 +650,8 @@ class AudioAnnotationManager {
             ? { dataUri: { arraybuffer: waveformUrl } }
             : { webAudio: { audioContext: new (window.AudioContext || window.webkitAudioContext)() } };
 
+        const accent = audioAccentRgb();
+
         // Peaks.js options
         const peaksOptions = {
             containers: {
@@ -639,24 +669,24 @@ class AudioAnnotationManager {
             segmentOptions: {
                 markers: true,
                 overlay: true,
-                startMarkerColor: '#4a90d9',
-                endMarkerColor: '#4a90d9',
-                waveformColor: 'rgba(74, 144, 217, 0.4)'
+                startMarkerColor: `rgb(${accent})`,
+                endMarkerColor: `rgb(${accent})`,
+                waveformColor: `rgba(${accent}, 0.4)`
             },
             zoomview: {
                 container: this.waveformEl,
-                waveformColor: 'rgba(74, 144, 217, 0.7)',
-                playedWaveformColor: 'rgba(74, 144, 217, 1.0)',
-                axisGridlineColor: '#ccc',
-                axisLabelColor: '#666',
+                waveformColor: `rgba(${accent}, 0.55)`,
+                playedWaveformColor: `rgba(${accent}, 1.0)`,
+                axisGridlineColor: audioToken('--border', 'rgb(228, 228, 231)'),
+                axisLabelColor: audioToken('--muted-foreground', 'rgb(113, 113, 122)'),
                 fontFamily: 'inherit',
                 fontSize: 11,
                 fontStyle: 'normal'
             },
             overview: {
                 container: this.overviewEl,
-                waveformColor: 'rgba(74, 144, 217, 0.5)',
-                playedWaveformColor: 'rgba(74, 144, 217, 0.8)',
+                waveformColor: `rgba(${accent}, 0.4)`,
+                playedWaveformColor: `rgba(${accent}, 0.8)`,
                 highlightColor: 'rgba(255, 255, 255, 0.5)',
                 highlightOffset: 1
             }
@@ -689,12 +719,122 @@ class AudioAnnotationManager {
 
         } catch (error) {
             console.error('Failed to initialize Peaks.js:', error);
-            this._showError('Failed to load audio waveform. Please try refreshing the page.');
+            // Say what actually failed. The old message ("Please try
+            // refreshing the page") blamed a transient fault for a file that
+            // was missing or unreachable, so a refresh never helped.
+            const reason = await this._describeLoadFailure(audioUrl);
+            this.showLoadFailure(reason);
             // Still resolve the promise but with false
             this.isReady = false;
             if (this._resolveReady) {
                 this._resolveReady(false);
             }
+        }
+    }
+
+    /**
+     * Find out why the audio did not load, without guessing.
+     *
+     * A media element reports one opaque code for "404", "502" and "this
+     * codec is unsupported" alike, so ask the server directly first. Only
+     * when it answered with the file does a media error mean the format.
+     *
+     * @param {string} audioUrl
+     * @returns {Promise<string>} one sentence naming the failure
+     */
+    async _describeLoadFailure(audioUrl) {
+        let outcome = 'unknown';  // 'ok' | 'unreachable' | 'unknown' | "HTTP ..."
+        if (audioUrl && typeof fetch === 'function') {
+            try {
+                const response = await fetch(audioUrl, {headers: {Range: 'bytes=0-0'}});
+                outcome = response.ok
+                    ? 'ok'
+                    : `HTTP ${response.status}${response.statusText ? ' ' + response.statusText : ''}`;
+                try { if (response.body) response.body.cancel(); } catch (e) { /* ignore */ }
+            } catch (e) {
+                // A network failure, or a cross-origin answer this page is not
+                // allowed to read. Either way the cause is not known here.
+                outcome = 'unreachable';
+            }
+        }
+        const code = this.audioEl && this.audioEl.error ? this.audioEl.error.code : null;
+
+        if (outcome.startsWith('HTTP')) {
+            return `The audio file could not be loaded: the server answered ${outcome}.`;
+        }
+        if (outcome === 'ok' && (code === 4 || code === 3)) {
+            return 'The audio file was downloaded, but this browser cannot play its format.';
+        }
+        if (outcome === 'unreachable') {
+            return 'The audio file could not be reached from this browser.';
+        }
+        return 'The audio file could not be loaded.';
+    }
+
+    /**
+     * Wire the Help button: toggles the usage panel and remembers the choice
+     * per schema, so the panel stays out of the way once it has been read.
+     * Storage can be missing or throw (private windows); the toggle still
+     * works, it just forgets.
+     */
+    setupHelpToggle() {
+        if (!this.container) return;
+        const btn = this.container.querySelector('.help-toggle-btn');
+        const panel = this.container.querySelector('.help-panel');
+        if (!btn || !panel) return;
+        const key = `potato.audioHelp.${this.config.schemaName || 'audio'}`;
+        const apply = (open) => {
+            panel.classList.toggle('collapsed', !open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+        let open = true;
+        try {
+            const stored = localStorage.getItem(key);
+            if (stored !== null) open = stored === 'open';
+        } catch (e) { /* no storage: default to open */ }
+        apply(open);
+        btn.addEventListener('click', () => {
+            open = panel.classList.contains('collapsed');
+            apply(open);
+            try { localStorage.setItem(key, open ? 'open' : 'closed'); } catch (e) { /* best effort */ }
+        });
+    }
+
+    /**
+     * Put a load failure where the annotator is looking -- in the waveform
+     * pane -- and switch off the controls that cannot work without audio.
+     *
+     * Before, the message went to the page-wide status line (unstyled, above
+     * the instructions, gone after three seconds) while the play, zoom and
+     * segment buttons stayed live over two empty grey boxes.
+     *
+     * @param {string} reason - what failed, from _describeLoadFailure()
+     */
+    showLoadFailure(reason) {
+        this.loadFailed = true;
+        console.error(reason);
+        if (this.container) {
+            this.container.classList.add('audio-load-failed');
+            this.container.querySelectorAll(
+                '.playback-btn, .zoom-btn, .segment-btn, .playback-rate-select'
+            ).forEach(el => { el.disabled = true; });
+        }
+        if (this.waveformEl) {
+            let box = this.waveformEl.querySelector('.audio-load-error');
+            if (!box) {
+                box = document.createElement('div');
+                box.className = 'audio-load-error';
+                box.setAttribute('role', 'alert');
+                this.waveformEl.appendChild(box);
+            }
+            box.textContent = '';
+            const strong = document.createElement('strong');
+            strong.textContent = reason;
+            box.appendChild(strong);
+            const next = document.createElement('span');
+            next.textContent = ' The other questions on this page still work, '
+                + 'and Next moves on to the following item.';
+            box.appendChild(next);
         }
     }
 
@@ -901,6 +1041,11 @@ class AudioAnnotationManager {
      * Handle keyboard events
      */
     _handleKeydown(event) {
+        // Nothing to play, zoom or segment once the audio failed to load.
+        if (this.loadFailed) {
+            return;
+        }
+
         // Don't handle if focus is in an input/textarea
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
             return;

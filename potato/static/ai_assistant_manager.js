@@ -178,7 +178,7 @@ class AIAssistantManager {
             const response = await fetch('/api/colors');
             if (response.ok) {
                 this.colors = await response.json();
-                console.log('[AIAssistant] Colors loaded:', this.colors);
+                aiDebugLog('[AIAssistant] Colors loaded:', this.colors);
             }
         } catch (error) {
             console.warn('[AIAssistant] Error loading colors:', error);
@@ -224,7 +224,7 @@ class AIAssistantManager {
                 // Query tooltip fresh each time - it may have been replaced by getAiAssistantName()
                 const tooltip = node.querySelector('.tooltip');
 
-                console.log('[AIAssistant] Click detected on ai-help:', {
+                aiDebugLog('[AIAssistant] Click detected on ai-help:', {
                     target: event.target.className,
                     clickedHint: !!clickedHint,
                     clickKeyword: !!clickKeyword,
@@ -289,16 +289,16 @@ class AIAssistantManager {
     positionTooltip(tooltip) {
         // Get the parent ai-help element to position relative to
         const aiHelp = tooltip.closest('.ai-help');
-        console.log('[AIAssistant] positionTooltip called, aiHelp:', aiHelp);
+        aiDebugLog('[AIAssistant] positionTooltip called, aiHelp:', aiHelp);
         if (!aiHelp) {
-            console.log('[AIAssistant] No aiHelp found, cannot position');
+            aiDebugLog('[AIAssistant] No aiHelp found, cannot position');
             return;
         }
 
         const rect = aiHelp.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
-        console.log('[AIAssistant] aiHelp rect:', rect);
-        console.log('[AIAssistant] tooltip rect:', tooltipRect);
+        aiDebugLog('[AIAssistant] aiHelp rect:', rect);
+        aiDebugLog('[AIAssistant] tooltip rect:', tooltipRect);
 
         // Position below the button, centered
         let top = rect.bottom + 8; // 8px gap below the button
@@ -319,10 +319,10 @@ class AIAssistantManager {
             top = rect.top - tooltipRect.height - 8;
         }
 
-        console.log('[AIAssistant] Setting tooltip position:', { top, left });
+        aiDebugLog('[AIAssistant] Setting tooltip position:', { top, left });
         tooltip.style.top = `${top}px`;
         tooltip.style.left = `${left}px`;
-        console.log('[AIAssistant] Tooltip computed style:', window.getComputedStyle(tooltip).cssText.substring(0, 200));
+        aiDebugLog('[AIAssistant] Tooltip computed style:', window.getComputedStyle(tooltip).cssText.substring(0, 200));
     }
 
     startLoading(tooltip, assistantType) {
@@ -355,7 +355,7 @@ class AIAssistantManager {
     }
 
     toggleAssistant(assistantType, annotationId, tooltip) {
-        console.log('[AIAssistant] toggleAssistant called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+        aiDebugLog('[AIAssistant] toggleAssistant called:', { assistantType, annotationId, hasTooltip: !!tooltip });
 
         // Check if this assistant type is supported for the current content
         if (!this.shouldShowButton(assistantType)) {
@@ -389,7 +389,7 @@ class AIAssistantManager {
         }
 
         if (assistantType == "keyword") {
-            console.log('[AIAssistant] Keyword clicked, checking spanManager:', {
+            aiDebugLog('[AIAssistant] Keyword clicked, checking spanManager:', {
                 spanManagerExists: !!window.spanManager,
                 inAiSpans: window.spanManager?.inAiSpans?.(annotationId)
             });
@@ -417,7 +417,7 @@ class AIAssistantManager {
 
 
     async getAiAssistantDefault(assistantType, annotationId, tooltip) {
-        console.log('[AIAssistant] getAiAssistantDefault called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+        aiDebugLog('[AIAssistant] getAiAssistantDefault called:', { assistantType, annotationId, hasTooltip: !!tooltip });
 
         if (!tooltip) {
             console.error('Tooltip element not found');
@@ -431,9 +431,9 @@ class AIAssistantManager {
 
         try {
             this.startLoading(tooltip, assistantType);
-            console.log('[AIAssistant] Fetching data for:', assistantType);
+            aiDebugLog('[AIAssistant] Fetching data for:', assistantType);
             const data = await this.fetchAssistantData(assistantType, annotationId);
-            console.log('[AIAssistant] Received data:', data);
+            aiDebugLog('[AIAssistant] Received data:', data);
 
             // Track AI response
             if (window.interactionTracker) {
@@ -523,14 +523,14 @@ class AIAssistantManager {
         }
 
 
-        console.log('[AIAssistant] Setting tooltip content:', content);
+        aiDebugLog('[AIAssistant] Setting tooltip content:', content);
         tooltip.innerHTML = `
             <button class="tooltip-close" title="Close">&times;</button>
             <div class="assistant-content">
                 ${content}
             </div>
         `;
-        console.log('[AIAssistant] Tooltip innerHTML set, tooltip element:', tooltip);
+        aiDebugLog('[AIAssistant] Tooltip innerHTML set, tooltip element:', tooltip);
 
         // Add close button event listener
         const closeBtn = tooltip.querySelector('.tooltip-close');
@@ -542,7 +542,7 @@ class AIAssistantManager {
         }
 
         this.activeTooltips.add(tooltip);
-        console.log(this.activeTooltips);
+        aiDebugLog(this.activeTooltips);
     }
 
     renderHint(data) {
@@ -563,7 +563,7 @@ class AIAssistantManager {
     }
 
     renderKeyword(data, annotationId) {
-        console.log('[AIAssistant] renderKeyword called:', { data, annotationId });
+        aiDebugLog('[AIAssistant] renderKeyword called:', { data, annotationId });
 
         // Get the text-content element (not instance-text) to match positioning calculations
         // #instance-text contains both #text-content and #span-overlays, which causes offset mismatches
@@ -574,7 +574,7 @@ class AIAssistantManager {
         }
 
         const text = textContent.textContent || textContent.innerText;
-        console.log('[AIAssistant] Text content length:', text.length);
+        aiDebugLog('[AIAssistant] Text content length:', text.length);
 
         // Get the annotation form to find the schema name
         // The form's id attribute is the schema name (e.g., "sentiment")
@@ -600,7 +600,7 @@ class AIAssistantManager {
                 if (!s || typeof s.text !== 'string' || !s.text.trim()) return;
                 const at = text.toLowerCase().indexOf(s.text.toLowerCase().trim());
                 if (at === -1) {
-                    console.log('[AIAssistant] keyword not found in displayed text:', s.text);
+                    aiDebugLog('[AIAssistant] keyword not found in displayed text:', s.text);
                     return;
                 }
                 resolved.push({
@@ -612,7 +612,7 @@ class AIAssistantManager {
                 });
             });
             if (resolved.length === 0) {
-                console.log('[AIAssistant] No usable keyword spans in response:', data);
+                aiDebugLog('[AIAssistant] No usable keyword spans in response:', data);
                 return;
             }
             this.insertKeywordHighlights(resolved, annotationId);
@@ -628,15 +628,15 @@ class AIAssistantManager {
 
         // Find keywords in text and create highlight data
         const highlights = [];
-        console.log('[AIAssistant] Processing label_keywords:', labelKeywords);
+        aiDebugLog('[AIAssistant] Processing label_keywords:', labelKeywords);
 
         labelKeywords.forEach(({ label, keywords }) => {
             if (!keywords || !Array.isArray(keywords)) {
-                console.log('[AIAssistant] Skipping label with no keywords:', label);
+                aiDebugLog('[AIAssistant] Skipping label with no keywords:', label);
                 return;
             }
 
-            console.log(`[AIAssistant] Finding keywords for label "${label}":`, keywords);
+            aiDebugLog(`[AIAssistant] Finding keywords for label "${label}":`, keywords);
 
             keywords.forEach(keyword => {
                 if (!keyword || typeof keyword !== 'string') return;
@@ -648,7 +648,7 @@ class AIAssistantManager {
 
                 while ((startIndex = lowerText.indexOf(lowerKeyword, startIndex)) !== -1) {
                     const foundText = text.substring(startIndex, startIndex + keyword.length);
-                    console.log(`[AIAssistant] Found "${foundText}" at position ${startIndex}-${startIndex + keyword.length}`);
+                    aiDebugLog(`[AIAssistant] Found "${foundText}" at position ${startIndex}-${startIndex + keyword.length}`);
                     highlights.push({
                         label: label,
                         start: startIndex,
@@ -661,10 +661,10 @@ class AIAssistantManager {
             });
         });
 
-        console.log('[AIAssistant] Total highlights found:', highlights.length, highlights);
+        aiDebugLog('[AIAssistant] Total highlights found:', highlights.length, highlights);
 
         if (highlights.length === 0) {
-            console.log('[AIAssistant] No keywords found in text');
+            aiDebugLog('[AIAssistant] No keywords found in text');
             return;
         }
 
@@ -733,8 +733,8 @@ class AIAssistantManager {
     }
 
     renderRationale(data) {
-        console.log('[AIAssistant] renderRationale called with data:', data);
-        console.log('[AIAssistant] rationales:', data.rationales);
+        aiDebugLog('[AIAssistant] renderRationale called with data:', data);
+        aiDebugLog('[AIAssistant] rationales:', data.rationales);
 
         // Handle error responses
         if (data.error) {
@@ -876,7 +876,7 @@ class AIAssistantManager {
         // Store the highlighted elements for later cleanup
         if (highlightedElements.length > 0) {
             this.highlightedLabels.set(annotationId, highlightedElements);
-            console.log(`[AIAssistant] Highlighted ${highlightedElements.length} elements for annotation ${annotationId}`);
+            aiDebugLog(`[AIAssistant] Highlighted ${highlightedElements.length} elements for annotation ${annotationId}`);
         }
     }
 
@@ -913,9 +913,9 @@ class AIAssistantManager {
     }
 
     async getAiAssistantName() {
-        console.log('[AIAssistant] getAiAssistantName() called');
+        aiDebugLog('[AIAssistant] getAiAssistantName() called');
         const forms = document.querySelectorAll('.annotation-form');
-        console.log('[AIAssistant] Found annotation forms:', forms.length);
+        aiDebugLog('[AIAssistant] Found annotation forms:', forms.length);
 
         forms.forEach(async (node) => {
             const aiHelp = node.querySelector(".ai-help");

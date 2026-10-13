@@ -62,6 +62,17 @@
      put the page's actual content below the floor. 5.5:1 on white, 5.1:1 on
      the scrim. */
   --success-text: #047857;
+  /* Fills behind the three *-text colours above. Badges and chips kept
+     inventing their own tints (amber #fef3c7, red #fee2e2, Bootstrap's
+     rgba(220,53,69,.1) ...). On its own tint: destructive 6.9:1, warning
+     7.1:1, success 4.9:1 -- AA for badge text, not the 7:1 reading bar. */
+  --destructive-tint: #fdecea;
+  --warning-tint: #fdf3e2;
+  --success-tint: #e7f5ef;
+  /* The accent at the same weight, for a selected/armed state that should
+     not shout: chips, selected rows, the armed tool in a toolbar. Text on
+     it uses --foreground (17:1); --primary on it is only 4.6:1. */
+  --primary-tint: #efecfa;
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #6e56cf;
@@ -991,7 +1002,9 @@ input[type="range"]::-moz-range-thumb {
   width: 1rem;
   height: 1rem;
   border-radius: 0.25rem;
-  border: 1px solid var(--border);
+  /* --border measures about 1.2:1 on white, so an empty box all but
+     disappeared; a control's outline needs 3:1 (WCAG 1.4.11). */
+  border: 1px solid var(--muted-foreground);
   background-color: var(--background);
   cursor: pointer;
   margin-right: 0.75rem;
@@ -1143,7 +1156,7 @@ input[type="range"]::-moz-range-thumb {
   width: 1rem;
   height: 1rem;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--muted-foreground); /* 3:1 minimum, as above */
   background-color: var(--background);
   cursor: pointer;
   margin-right: 0.5rem;
@@ -1619,24 +1632,33 @@ input[type="range"]::-moz-range-thumb {
 
 /* Multirate Styles */
 .shadcn-multirate-container {
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  margin: 1rem auto;
+  font-family: var(--font-sans);
+  /* Left-aligned like every other schema. `margin: 1rem auto` centred the
+     matrix and inset it about 64px from the card edge the questions above and
+     below start at. */
+  margin: 0;
   max-width: 100%;
   overflow-x: auto;
-  color: #374151;
+  color: var(--text-color);
 }
 
 .shadcn-multirate-title {
   font-size: 1rem;
   font-weight: 500;
   margin-bottom: 0.5rem;
-  color: #f3f4f6;
+  color: var(--heading-color);
+}
+
+/* The legend's inherited 12px inset put the question to the right of the
+   table it heads. */
+.annotation-form fieldset .shadcn-multirate-title {
+  padding-left: 0;
 }
 
 .shadcn-multirate-table {
   border-collapse: collapse;
   width: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -1644,14 +1666,35 @@ input[type="range"]::-moz-range-thumb {
 .shadcn-multirate-table td {
   padding: 0.75rem 1rem;
   text-align: center;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   font-size: var(--text-base);
 }
 
 .shadcn-multirate-table th {
-  background-color: #f9fafb;
+  background-color: var(--muted);
   font-weight: 500;
-  color: #6b7280;
+  /* --muted-foreground on --muted is 4.4:1, under AA; these are the scale
+     points the annotator reads on every row. */
+  color: var(--text-color);
+}
+
+/* The whole cell is the target, not the 20px circle in the middle of it: the
+   label fills the cell and carries the cell's padding. Table layout only; the
+   stacked phone layout (max-width: 640px, below) styles the label itself. */
+@media (min-width: 641px) {
+  .shadcn-multirate-table td.shadcn-radio-cell {
+    padding: 0;
+  }
+
+  .shadcn-multirate-table td.shadcn-radio-cell > .shadcn-multirate-choice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    margin: 0;
+    cursor: pointer;
+  }
 }
 
 .shadcn-multirate-table thead th:first-child,
@@ -1663,7 +1706,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .shadcn-multirate-table tbody tr:hover {
-  background-color: #f9fafb;
+  background-color: var(--muted);
 }
 
 .shadcn-multirate-radio {
@@ -1672,8 +1715,8 @@ input[type="range"]::-moz-range-thumb {
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 50%;
-  border: 2px solid #d1d5db;
-  background-color: #fff;
+  border: 2px solid var(--muted-foreground);
+  background-color: var(--background);
   cursor: pointer;
   margin: 0 auto;
   vertical-align: middle;
@@ -1682,8 +1725,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .shadcn-multirate-radio:checked {
-  border-color: #3b82f6;
-  background-color: #3b82f6;
+  border-color: var(--primary);
+  background-color: var(--primary);
 }
 
 .shadcn-multirate-radio:checked::after {
@@ -1699,12 +1742,12 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .shadcn-multirate-radio:hover:not(:checked) {
-  border-color: #3b82f6;
+  border-color: var(--primary);
 }
 
 .shadcn-multirate-radio:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-radio-cell {
@@ -2760,6 +2803,46 @@ fieldset[schema] {
   overflow: auto;
 }
 
+/* "Show all" lifts the height cap (instance-display.js initResizableExpand).
+   !important because a config max_height arrives as an inline style. */
+.display-field-resizable.is-expanded {
+  max-height: none !important;
+}
+
+.display-field-expand {
+  display: block;
+  margin: calc(-1 * var(--space-sm)) 0 var(--space-md) auto;
+  min-height: 32px;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-dense);
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.display-field-expand[hidden] {
+  display: none;
+}
+
+.display-field-expand:hover {
+  background: var(--secondary);
+}
+
+.display-field-expand:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .display-field-expand {
+    min-height: 44px;
+  }
+}
+
 /* Resize handle indicator */
 .display-field-resizable::after {
   content: "";
@@ -2930,8 +3013,9 @@ fieldset[schema] {
 }
 
 .display-type-video .video-error {
-  color: var(--destructive, #ef4444);
-  background: #fef2f2;
+  /* --destructive is a fill (3.8:1 as text); this is a sentence to read. */
+  color: var(--destructive-text);
+  background: var(--destructive-tint);
 }
 
 /* Audio display styles */
@@ -3045,17 +3129,23 @@ fieldset[schema] {
 .per-turn-rating {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
 }
 
 .ptr-values {
   display: flex;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
+/* Per-turn ratings are a radio group (role=radio on each value; see
+   dialogue_display.py). The old #e2e8f0 ring and #94a3b8 numerals measured
+   1.2:1 and 2.56:1 on white, so an unrated turn was close to invisible. The
+   numerals and end labels use --text-color, not --muted-foreground: muted is
+   4.8:1 on white but 4.4:1 on the #f1f5f9 alternating turn shading. */
 .ptr-value {
   display: inline-flex;
   align-items: center;
@@ -3063,30 +3153,44 @@ fieldset[schema] {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid #e2e8f0;
-  background: white;
-  font-size: 12px;
+  border: 2px solid var(--muted-foreground);
+  background: var(--card);
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--text-color);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   user-select: none;
 }
 
 .ptr-value:hover {
-  border-color: #8b5cf6;
-  color: #8b5cf6;
+  border-color: var(--primary);
+  color: var(--foreground);
 }
 
 .ptr-value.ptr-selected {
-  background: #8b5cf6;
-  border-color: #7c3aed;
-  color: white;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.ptr-value:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Touch: 44px targets on the annotation surface. */
+@media (pointer: coarse) {
+  .ptr-value {
+    width: 44px;
+    height: 44px;
+    font-size: var(--text-sm);
+  }
 }
 
 .ptr-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: var(--text-xs);
+  color: var(--text-color);
   white-space: nowrap;
 }
 
@@ -3094,10 +3198,10 @@ fieldset[schema] {
 .per-turn-rating-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
 }
 
 .per-turn-rating-group .per-turn-rating {
@@ -3107,48 +3211,15 @@ fieldset[schema] {
 }
 
 .ptr-schema-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
-  color: #64748b;
+  color: var(--foreground);
   white-space: nowrap;
   min-width: 80px;
 }
 
-/* Dark mode per-turn ratings */
-@media (prefers-color-scheme: dark) {
-  .per-turn-rating {
-    border-top-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .per-turn-rating-group {
-    border-top-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .ptr-schema-label {
-    color: #94a3b8;
-  }
-
-  .ptr-value {
-    border-color: #475569;
-    background: #1e293b;
-    color: #64748b;
-  }
-
-  .ptr-value:hover {
-    border-color: #a78bfa;
-    color: #a78bfa;
-  }
-
-  .ptr-value.ptr-selected {
-    background: #7c3aed;
-    border-color: #6d28d9;
-    color: white;
-  }
-
-  .ptr-label {
-    color: #64748b;
-  }
-}
+/* No dark-mode block: the product is light-only (.impeccable.md), so a
+   dark-scheme OS used to get slate circles on the white card. */
 
 /* Screen-reader-only text.
  *
@@ -3611,6 +3682,16 @@ body.has-pairwise-display #instance-text {
   vertical-align: middle;
 }
 
+/* Tiles and the tie/neither buttons share one box: same height, border and
+   padding. The tie button was 2px taller with a thinner border and sat 4px
+   higher than the A/B tiles beside it. */
+.pairwise-tile,
+.pairwise-tie-btn,
+.pairwise-neither-btn {
+  box-sizing: border-box;
+  min-height: 48px;
+}
+
 .pairwise-tile {
   flex: 0 0 auto;
   min-width: 80px;
@@ -3651,17 +3732,20 @@ body.has-pairwise-display #instance-text {
 
 .pairwise-tile.selected {
   border-color: var(--primary);
-  background-color: rgba(110, 86, 207, 0.05);
+  background-color: var(--primary-tint);
   box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.15);
 }
 
+/* The check sits on the tile's corner, over the border, not inside it: at
+   top/right 8px it landed on the [1]/[2] hotkey chip and covered it. */
 .pairwise-tile.selected::after {
   content: '\2713';
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
+  top: -10px;
+  right: -10px;
+  width: 22px;
+  height: 22px;
+  box-shadow: 0 0 0 2px var(--card);
   background-color: var(--primary);
   color: white;
   border-radius: 50%;
@@ -3690,14 +3774,19 @@ body.has-pairwise-display #instance-text {
 .pairwise-extra-options {
   display: inline-flex;
   gap: 12px;
-  margin-left: 12px;
+  /* Same block margin as .pairwise-selection-container, so the two inline
+     groups share a baseline box. */
+  margin: 8px 0 8px 12px;
   vertical-align: middle;
 }
 
 .pairwise-tie-btn,
 .pairwise-neither-btn {
-  padding: 10px 24px;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
   cursor: pointer;
@@ -4129,6 +4218,9 @@ body > .container-fluid {
   margin: 0 auto;
   padding-left: var(--space-lg);
   padding-right: var(--space-lg);
+  /* The card used to start flush under the sticky bar, its top border hidden
+     behind it. */
+  padding-top: var(--space-lg);
 }
 
 /* ===== NAVBAR ===== */
@@ -4257,7 +4349,26 @@ body > .container-fluid {
 
 .potato-navbar .nav-controls {
   display: flex;
+  align-items: center;
   gap: 3px;
+}
+
+/* Caption between the two jump-to-unlabeled buttons. Without it the pair read
+   as plain previous/next, which they are not. Hidden where the centre row is
+   already tight; the buttons keep their aria-label either way. */
+.potato-navbar .nav-controls-label {
+  display: none;
+  color: var(--light-color);
+  font-size: var(--text-xs);
+  opacity: 0.9;
+  padding: 0 var(--space-xs);
+  white-space: nowrap;
+}
+
+@media (min-width: 1200px) {
+  .potato-navbar .nav-controls-label {
+    display: inline;
+  }
 }
 
 .potato-navbar .nav-control-btn {
@@ -4306,7 +4417,8 @@ body > .container-fluid {
 }
 
 .potato-navbar .goto-section input::placeholder {
-  color: rgba(255,255,255,0.35);
+  /* 0.35 put the "#" hint at about 1.5:1 on the bar. */
+  color: rgba(255,255,255,0.75);
 }
 
 .potato-navbar .goto-section input:focus {
@@ -4322,7 +4434,7 @@ body > .container-fluid {
   background: rgba(255,255,255,0.88);
   color: var(--primary-color);
   border: none;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
@@ -4381,7 +4493,7 @@ body > .container-fluid {
   border-radius: 5px;
   background: rgba(255,255,255,0.88);
   color: var(--primary-color);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-decoration: none;
   transition: background 0.15s ease;
@@ -4513,6 +4625,10 @@ body > .container-fluid {
   color: var(--primary);
   text-decoration: none;
   transition: color 0.15s ease;
+  /* A 24px line box: the links were 16px tall, under the WCAG 2.2 minimum. */
+  display: inline-block;
+  min-height: 24px;
+  line-height: 24px;
 }
 
 .potato-footer a:hover {
@@ -4741,11 +4857,17 @@ body > .container-fluid {
   align-items: flex-start;
 }
 
-/* Fit-content schemas flow side-by-side; full-width schemas break the row */
+/* Compact schemas flow side-by-side; full-width schemas break the row.
+   They used to be width: fit-content, so every card was as wide as its
+   longest label and the rows came out ragged -- on the agent-trace example
+   two cards stopped 130px short of the edge, then the next row was a single
+   card of a third width. A shared basis with grow lets each row fill the
+   card: two compact schemas split it, an odd one out takes the whole row. */
 #annotation-forms .shadcn-radio-container,
 #annotation-forms .shadcn-multiselect-container,
 #annotation-forms .shadcn-likert-container {
-  width: fit-content;
+  flex: 1 1 17.5rem;
+  width: auto;
   max-width: 100%;
   align-items: flex-start;
 }
@@ -6769,6 +6891,16 @@ body > .container-fluid {
   border-bottom: 1px solid var(--border);
 }
 
+/* When nothing in the instance area is showing (image annotation, a media-path
+   item, a pairwise item its scheme draws), the padding and rule above opened
+   the card on an empty band and a line. :has() re-evaluates live, so a script
+   that later reveals #instance-text brings the separator back. */
+#main-content > .instance-area:not(:has(> :not([style*="display: none"]))) {
+  margin-bottom: 0 !important;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 /* Annotation form schemas — moderate gap, tighter within groups */
 #annotation-forms {
   gap: var(--space-lg);
@@ -6788,7 +6920,7 @@ body > .container-fluid {
 }
 .annotation-form fieldset label:has(input[type="radio"]):hover,
 .annotation-form fieldset label:has(input[type="checkbox"]):hover {
-  background-color: #f5f3ff;
+  background-color: var(--primary-tint);
 }
 
 /* Keybinding badges — more subtle, less visual weight */
