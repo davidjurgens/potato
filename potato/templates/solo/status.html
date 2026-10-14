@@ -777,6 +777,38 @@
             {% endif %}
         </div>
 
+        {# Blind-agreement Card: agreement split by whether the annotator could
+           see the LLM's suggestion when answering (solo_mode.suggestions). #}
+        {% if anchoring %}
+        {% macro pct(v) %}{% if v is none %}not yet{% else %}{{ (v * 100)|round|int }}%{% endif %}{% endmacro %}
+        <div class="dashboard-card" id="anchoring-card">
+            <h3>Blind Agreement</h3>
+            <p class="card-value" id="ov-blind-agreement">{{ pct(anchoring.blind.agreement_rate) }}</p>
+            <p class="card-description" id="ov-blind-desc">on items labeled without seeing the suggestion</p>
+            <div class="metric-row">
+                <span>Blind</span>
+                <strong id="ov-blind-n">{{ pct(anchoring.blind.agreement_rate) }} of {{ anchoring.blind.compared }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Suggestion shown</span>
+                <strong id="ov-shown-n">{{ pct(anchoring.shown.agreement_rate) }} of {{ anchoring.shown.compared }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Gap (shown − blind)</span>
+                <strong id="ov-anchoring-gap">{% if anchoring.gap is none %}needs {{ anchoring.min_for_gap or 5 }} of each{% else %}{{ '%+d'|format((anchoring.gap * 100)|round|int) }} pts{% endif %}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Accepted with button</span>
+                <strong id="ov-accept-rate">{{ pct(anchoring.accept_rate) }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Handoff reads</span>
+                <strong id="ov-handoff-basis">{{ {'blind': 'blind agreement', 'all': 'all agreement', 'waiting': 'waiting for blind items', 'blind_short': 'every blind item there is'}.get(anchoring.handoff_basis, anchoring.handoff_basis) }}</strong>
+            </div>
+            <p class="card-description" id="ov-anchoring-note"></p>
+        </div>
+        {% endif %}
+
         {# LLM Labeling Card #}
         <div class="dashboard-card">
             <h3>LLM Labeling</h3>
@@ -882,6 +914,48 @@
                     Extract Functions
                 </button>
             </div>
+        </div>
+
+        {# AI Spend Card: filled from /solo/api/spend (ai_budget.cap_usd). #}
+        <div class="dashboard-card" id="spend-card">
+            <h3>AI Spend</h3>
+            <p class="card-value" id="ov-spend-total">$0.00</p>
+            <p class="card-description" id="ov-spend-desc">estimated, recorded per batch</p>
+            <div class="metric-row">
+                <span>Cap</span>
+                <strong id="ov-spend-cap">none set</strong>
+            </div>
+            <div class="metric-row">
+                <span>Tokens so far</span>
+                <strong id="ov-spend-tokens">0</strong>
+            </div>
+            <p class="card-description" id="ov-spend-remaining"></p>
+            <p class="card-description text-danger" id="ov-spend-refusal" role="alert" hidden></p>
+        </div>
+
+        {# Gold Set Card: prompt versions scored on items with known answers. #}
+        <div class="dashboard-card" id="gold-card">
+            <h3>Gold Set</h3>
+            <p class="card-value" id="ov-gold-accuracy">not scored</p>
+            <p class="card-description" id="ov-gold-desc">accuracy of the current prompt</p>
+            <div id="ov-gold-versions"></div>
+            <button type="button" class="btn btn-secondary" id="ov-gold-btn"
+                    style="width: 100%; font-size: 0.75rem; padding: 0.375rem;"
+                    onclick="soloDashboard.runGold()" hidden>Score current prompt</button>
+        </div>
+
+        {# Prompt Sensitivity Card: labels under paraphrases of the prompt. #}
+        <div class="dashboard-card" id="sensitivity-card">
+            <h3>Prompt Sensitivity</h3>
+            <p class="card-value" id="ov-sens-flip">not run</p>
+            <p class="card-description" id="ov-sens-desc">items whose label changes when the prompt is reworded</p>
+            <div class="metric-row">
+                <span>Agreement across wordings (κ)</span>
+                <strong id="ov-sens-kappa">not run</strong>
+            </div>
+            <button type="button" class="btn btn-secondary" id="ov-sens-btn"
+                    style="width: 100%; font-size: 0.75rem; padding: 0.375rem;"
+                    onclick="soloDashboard.runSensitivity()">Reword 4 times, label 20 items</button>
         </div>
 
         {# Confidence Routing Card #}
@@ -1289,7 +1363,7 @@
 {% block extra_js %}
 <script src="{{ url_for('static', filename='vendor/d3-7.9.0.min.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/solo-viz.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}?v=20261014" defer></script>
 <script defer>
     document.addEventListener('DOMContentLoaded', function() {
         window.soloDashboard = new SoloDashboard();

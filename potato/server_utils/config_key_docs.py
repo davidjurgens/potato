@@ -2252,7 +2252,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "solo_mode.labeling_models": _D(
         "Endpoints that label the corpus. Each is endpoint_type plus model, and "
-        "optionally api_key, base_url, max_tokens, temperature, think, timeout",
+        "optionally api_key, base_url, max_tokens, temperature, think, timeout. "
+        "A decision model (endpoint_type systemone or laya) labels radio, "
+        "select, likert and slider schemes in one pass and needs a generative "
+        "model under revision_models",
         type="array", category=ASSIGN,
     ),
     "solo_mode.revision_models": _D(
@@ -2280,7 +2283,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Weights that decide what you are shown next: low_confidence_weight "
         "(0.4), diversity_weight (0.3), random_weight (0.2), "
         "disagreement_weight (0.1), and the opt-in edge_case_rule, cartography "
-        "and llm_predicted weights",
+        "and llm_predicted weights. A `curriculum` block (enabled: false, "
+        "warmup_items: 20, ramp_items: 30, difficulty_signal: confidence, "
+        "window: 5) shows the easiest items first and then ramps up the "
+        "difficulty",
         type="object", category=ASSIGN,
     ),
     "solo_mode.batches": _D(
@@ -2309,6 +2315,83 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "solo_mode.confusion_analysis": _D(
         "Confusion-pair analysis over model-versus-human disagreements",
         type="object", category=ASSIGN,
+    ),
+    "solo_mode.suggestions": _D(
+        "When the annotator sees the LLM's suggestion: display (before_label, "
+        "after_label or blind_sample), blind_rate (0.2) and "
+        "minimum_blind_sample (20). Agreement is split into blind and shown, "
+        "and the handoff to the LLM reads blind agreement once there is enough",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.cache": _D(
+        "Reuse the stored reply for an identical labeling call: enabled "
+        "(true). Kept in state_dir",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.gold": _D(
+        "Items with known answers for scoring prompt versions: file (JSON, "
+        "JSONL, CSV or TSV inside the project), id_key (id), label_key "
+        "(label), and text_key for items outside the corpus",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.jury": _D(
+        "Several models vote on each item and the plurality label wins: "
+        "enabled (false), models (two or more), early_stop (true). Not with "
+        "confidence_routing",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.suggestions.display": _D(
+        "before_label shows the LLM's suggestion before the annotator answers; "
+        "after_label never does, and a disagreement then opens the resolution "
+        "page; blind_sample hides it on a blind_rate fraction of items",
+        type="string", default="before_label", category=ASSIGN,
+        example="blind_sample",
+    ),
+    "solo_mode.suggestions.blind_rate": _D(
+        "Fraction of items labelled without the suggestion under blind_sample. "
+        "Which items is fixed per study, so a reload keeps them blind",
+        type="number", default=0.2, category=ASSIGN,
+    ),
+    "solo_mode.suggestions.minimum_blind_sample": _D(
+        "Blind comparisons needed before the handoff to the LLM reads blind "
+        "agreement. Under after_label and blind_sample the handoff waits for them",
+        type="integer", default=20, category=ASSIGN,
+    ),
+    "solo_mode.cache.enabled": _D(
+        "Reuse the stored reply for a labeling call with the same model, "
+        "temperature, prompt, item and response schema. Turn off to measure "
+        "run-to-run variation",
+        type="boolean", default=True, category=ASSIGN,
+    ),
+    "solo_mode.gold.file": _D(
+        "Gold-label file inside the project: JSON, JSONL, CSV or TSV",
+        type="string", category=ASSIGN, example="data/gold.jsonl",
+    ),
+    "solo_mode.gold.id_key": _D(
+        "Field holding the item id; it matches the corpus's id_key",
+        type="string", default="id", category=ASSIGN,
+    ),
+    "solo_mode.gold.label_key": _D(
+        "Field holding the known answer", type="string", default="label",
+        category=ASSIGN,
+    ),
+    "solo_mode.gold.text_key": _D(
+        "Field holding the item text, for gold items that are not in the corpus",
+        type="string", category=ASSIGN,
+    ),
+    "solo_mode.jury.enabled": _D(
+        "Label each item by a vote of jury.models instead of the first "
+        "labeling model that answers",
+        type="boolean", default=False, category=ASSIGN,
+    ),
+    "solo_mode.jury.models": _D(
+        "Two or more endpoints, in the same shape as labeling_models",
+        type="array", category=ASSIGN,
+    ),
+    "solo_mode.jury.early_stop": _D(
+        "Skip the remaining jurors once their votes could not change the "
+        "winner. Not applied to multiselect",
+        type="boolean", default=True, category=ASSIGN,
     ),
     "solo_mode.state_dir": _D(
         "Where solo-mode state is persisted", type="string", category=ASSIGN,

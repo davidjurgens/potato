@@ -74,6 +74,208 @@ class SoloDashboard {
     }
     this._loadRefinementStatus();
     this._loadLabelingFunctionStatus();
+    this._loadSpend();
+    this._loadGold();
+    this._loadSensitivity();
+  }
+
+  async _loadGold() {
+    try {
+      const resp = await fetch('/solo/api/gold');
+      if (!resp.ok) return;
+      this._renderGold(await resp.json());
+    } catch (e) {
+      console.warn('Solo dashboard: failed to load gold set', e);
+    }
+  }
+
+  _renderGold(g) {
+    const card = document.getElementById('gold-card');
+    if (!card) return;
+    const pct = v => (v === null || v === undefined) ? 'not given' : Math.round(v * 100) + '%';
+    const btn = document.getElementById('ov-gold-btn');
+    if (!g.configured) {
+      this._setText('ov-gold-accuracy', 'none set');
+      this._setText('ov-gold-desc', 'Set solo_mode.gold.file to score prompt versions on known answers.');
+      if (btn) btn.hidden = true;
+      return;
+    }
+    if (btn) btn.hidden = false;
+    if (g.load_error) {
+      this._setText('ov-gold-accuracy', 'unreadable');
+      this._setText('ov-gold-desc', g.load_error);
+      return;
+    }
+    const results = g.results_by_version || {};
+    const current = results[String(g.current_prompt_version)];
+    this._setText('ov-gold-accuracy', current ? pct(current.accuracy) : 'not scored');
+    this._setText('ov-gold-desc', current
+      ? `prompt v${g.current_prompt_version} on ${current.n_items} items, macro F1 ${pct(current.macro_f1)}`
+      : `${g.n_items} gold items; the current prompt (v${g.current_prompt_version}) is not scored yet`);
+    const box = document.getElementById('ov-gold-versions');
+    if (box) {
+      box.replaceChildren();
+      for (const [version, r] of Object.entries(results)) {
+        const row = document.createElement('div');
+        row.className = 'metric-row';
+        const name = document.createElement('span');
+        name.textContent = `Prompt v${version}`;
+        const value = document.createElement('strong');
+        value.textContent = `${pct(r.accuracy)} accuracy`;
+        row.append(name, value);
+        box.appendChild(row);
+      }
+    }
+    const job = g.latest_job;
+    if (job && job.status === 'running') {
+      this._setText('ov-gold-desc', `Scoring: ${job.done} of ${job.total} labelled…`);
+    } else if (job && job.status === 'failed') {
+      this._setText('ov-gold-desc', 'Last run failed: ' + (job.error || 'unknown error'));
+    }
+  }
+
+  async _startJob(url, body, btnId) {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.disabled = true;
+    try {
+      const resp = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+      for (;;) {
+        await new Promise(r => setTimeout(r, 1500));
+        const jr = await fetch(`/solo/api/jobs/${data.job.id}`);
+        if (!jr.ok) throw new Error(`Job status ${jr.status}`);
+        const job = await jr.json();
+        if (job.status !== 'running') return job;
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async runGold() {
+    try {
+      await this._startJob('/solo/api/gold/evaluate', {}, 'ov-gold-btn');
+    } catch (e) {
+      this._setText('ov-gold-desc', e.message);
+    }
+    this._loadGold();
+  }
+
+  async _loadSensitivity() {
+    try {
+      const resp = await fetch('/solo/api/sensitivity/latest');
+      if (!resp.ok) return;
+      this._renderSensitivity((await resp.json()).job);
+    } catch (e) {
+      console.warn('Solo dashboard: failed to load sensitivity', e);
+    }
+  }
+
+  _renderSensitivity(job) {
+    if (!job) return;
+    if (job.status === 'running') {
+      this._setText('ov-sens-flip', 'running');
+      this._setText('ov-sens-desc', `${job.done} of ${job.total} labelled…`);
+      return;
+    }
+    if (job.status === 'failed') {
+      this._setText('ov-sens-flip', 'failed');
+      this._setText('ov-sens-desc', job.error || 'unknown error');
+      return;
+    }
+    const r = job.result || {};
+    const pct = v => (v === null || v === undefined) ? 'not given' : Math.round(v * 100) + '%';
+    this._setText('ov-sens-flip', pct(r.flip_rate));
+    this._setText('ov-sens-desc',
+      `of ${r.n_items} items change label across ${r.n_variants} wordings of prompt v${r.prompt_version}`);
+    this._setText('ov-sens-kappa', r.fleiss_kappa === null || r.fleiss_kappa === undefined
+      ? 'undefined (one label throughout)' : r.fleiss_kappa.toFixed(2));
+  }
+
+  async runSensitivity() {
+    try {
+      const job = await this._startJob('/solo/api/sensitivity',
+                                       { n_variants: 4, n_items: 20 }, 'ov-sens-btn');
+      this._renderSensitivity(job);
+    } catch (e) {
+      this._setText('ov-sens-flip', 'failed');
+      this._setText('ov-sens-desc', e.message);
+    }
+  }
+
+  async _loadSpend() {
+    try {
+      const resp = await fetch('/solo/api/spend');
+      if (!resp.ok) return;
+      this._renderSpend(await resp.json());
+    } catch (e) {
+      console.warn('Solo dashboard: failed to load spend', e);
+    }
+  }
+
+  _renderSpend(d) {
+    const spent = d.spent || {};
+    const usd = v => '$' + (v || 0).toFixed(2);
+    this._setText('ov-spend-total', usd(spent.cost_usd));
+    this._setText('ov-spend-desc', spent.n_unpriced_runs
+      ? `estimated; ${spent.n_unpriced_runs} batch(es) used a model with no price on record`
+      : 'estimated, recorded per batch');
+    this._setText('ov-spend-cap', d.cap_usd === null || d.cap_usd === undefined
+      ? 'none set' : usd(d.cap_usd));
+    this._setText('ov-spend-tokens', (spent.total_tokens || 0).toLocaleString());
+    this._setText('ov-spend-remaining', d.remaining_summary
+      ? 'Still to label: ' + d.remaining_summary : '');
+    const refusal = document.getElementById('ov-spend-refusal');
+    if (refusal) {
+      refusal.textContent = d.refusal || '';
+      refusal.hidden = !d.refusal;
+    }
+  }
+
+  // Agreement split by whether the suggestion was visible (solo_mode.suggestions).
+  _renderAnchoring(a) {
+    if (!a) return;
+    const pct = v => (v === null || v === undefined) ? 'not yet' : Math.round(v * 100) + '%';
+    const blind = a.blind || {};
+    const shown = a.shown || {};
+    this._setText('ov-blind-agreement', pct(blind.agreement_rate));
+    this._setText('ov-blind-n', `${pct(blind.agreement_rate)} of ${blind.compared || 0}`);
+    this._setText('ov-shown-n', `${pct(shown.agreement_rate)} of ${shown.compared || 0}`);
+    if (a.gap === null || a.gap === undefined) {
+      this._setText('ov-anchoring-gap', `needs ${a.min_for_gap || 5} of each`);
+    } else {
+      const pts = Math.round(a.gap * 100);
+      this._setText('ov-anchoring-gap', (pts > 0 ? '+' : '') + pts + ' pts');
+    }
+    this._setText('ov-accept-rate', pct(a.accept_rate));
+    const basisText = {
+      blind: 'blind agreement',
+      all: 'all agreement',
+      waiting: 'waiting for blind items',
+      blind_short: 'every blind item there is',
+    }[a.handoff_basis] || a.handoff_basis;
+    this._setText('ov-handoff-basis', basisText);
+
+    let note = '';
+    const missing = Math.max(0, (a.minimum_blind_sample || 0) - (blind.compared || 0));
+    if (a.display === 'before_label' && !(blind.compared > 0)) {
+      note = 'Suggestions are shown before every answer, so anchoring is not ' +
+             'measured. Set solo_mode.suggestions.display to blind_sample to measure it.';
+    } else if (a.handoff_basis === 'blind_short') {
+      note = `This dataset has fewer blind items than minimum_blind_sample ` +
+             `(${a.minimum_blind_sample}), so the handoff reads the ${blind.compared || 0} there are.`;
+    } else if (a.handoff_basis === 'waiting') {
+      note = `The LLM takes over only after ${missing} more blind ` +
+             `item${missing === 1 ? '' : 's'}.`;
+    } else if (a.gap !== null && a.gap !== undefined && a.gap >= 0.1) {
+      note = 'You agree with the LLM noticeably more often when you can see ' +
+             'its suggestion. The handoff reads blind agreement for this reason.';
+    }
+    this._setText('ov-anchoring-note', note);
   }
 
   _renderOverview(data) {
@@ -127,6 +329,8 @@ class SoloDashboard {
         statusEl.className = 'status-badge status-inactive';
       }
     }
+
+    this._renderAnchoring(data.anchoring);
 
     // Phase
     const phaseName = (data.phase_name || data.phase || '').replace(/_/g, ' ');

@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Solo Mode with a decision model as the fast first tier.
+#
+# Laya labels every item in one forward pass on CPU; only the items it is
+# unsure about go on to the LLM. Also shows blind suggestions, a gold set,
+# the spend cap and curriculum ordering.
+#
+#   pip install 'potato-annotation[decision]'   # Laya
+#   ollama serve && ollama pull llama3.2:3b      # the LLM tier and the reviser
+#   python potato/flask_server.py start examples/advanced/solo-mode/config-decision-model.yaml -p 8000
+
+task_dir: .
+port: 8000
+
+annotation_task_name: "sentiment-solo-decision-model"
+output_annotation_dir: "annotations_decision_model"
+
+# Self-hosted models cost nothing, so this cap only binds if you swap in a
+# hosted model. It refuses a run before it starts rather than halfway.
+ai_budget:
+  cap_usd: 5
+
+solo_mode:
+  enabled: true
+
+  labeling_models:
+    - endpoint_type: "laya"
+      model: "convaiinnovations/laya"
+      device: "cpu"
+
+  # Decision models cannot write text, so prompt synthesis and revision
+  # need a generative model of their own.
+  revision_models:
+    - endpoint_type: "ollama"
+      model: "llama3.2:3b"
+      endpoint_url: "http://localhost:11434"
+
+  confidence_routing:
+    enabled: true
+    tiers:
+      - name: "laya"
+        confidence_threshold: 0.9
+        model:
+          endpoint_type: "laya"
+          model: "convaiinnovations/laya"
+          device: "cpu"
+      - name: "llm"
+        confidence_threshold: 0.5
+        model:
+          endpoint_type: "ollama"
+          model: "llama3.2:3b"
+          endpoint_url: "http://localhost:11434"
+          max_tokens: 256
+
+  # Hide the suggestion on a fifth of the items, and hand over to the LLM on
+  # agreement measured on those.
+  suggestions:
+    display: "blind_sample"
+    blind_rate: 0.2
+    minimum_blind_sample: 5
+
+  # Items with known answers: score each prompt version before trusting it.
+  gold:
+    file: "data/sentiment-gold.json"
+
+  instance_selection:
+    curriculum:
+      enabled: true
+      warmup_items: 5
+      ramp_items: 5
+
+  thresholds:
+    end_human_annotation_agreement: 0.90
+    minimum_validation_sample: 10
+
+  state_dir: "solo_state_decision_model"
+
+data_files:
+  - "data/sentiment-examples.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+annotation_schemes:
+  - name: "sentiment"
+    annotation_type: "radio"
+    description: "Classify the sentiment of the text"
+    labels:
+      - name: "positive"
+        description: "Text expresses positive sentiment, satisfaction, or happiness"
+        key_value: "1"
+      - name: "negative"
+        description: "Text expresses negative sentiment, dissatisfaction, or complaints"
+        key_value: "2"
+      - name: "neutral"
+        description: "Text is factual or objective without clear sentiment"
+        key_value: "3"
+
+user_config:
+  allow_all_users: true

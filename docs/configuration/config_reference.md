@@ -291,7 +291,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `random_seed` |  | integer |  | Seed for assignment shuffling, so an ordering can be reproduced |  |
 | `scheme_sets` |  | object |  | Named, reusable lists of annotation schemes. A batch_assignment group names one in its `schemes` key to give that cohort its own questions |  |
 | `sessions` |  | object |  | Group items into sessions by session_id or thread_id and score the whole session at /sessions. Schemes opt in with `session_level: true` | `attributes`, `enabled`, `key` |
-| `solo_mode` |  | object |  | Single-coder loop. An LLM labels the corpus, you review where it is least sure, and the prompt is refined from your corrections | `batches`, `confidence_routing`, `confusion_analysis`, `edge_case_rules`, `embedding`, `enabled`, `instance_selection`, `labeling_functions`, `labeling_models`, `prompt_optimization`, `refinement_loop`, `revision_models`, `state_dir`, `thresholds`, `uncertainty` |
+| `solo_mode` |  | object |  | Single-coder loop. An LLM labels the corpus, you review where it is least sure, and the prompt is refined from your corrections | `batches`, `cache`, `confidence_routing`, `confusion_analysis`, `edge_case_rules`, `embedding`, `enabled`, `gold`, `instance_selection`, `jury`, `labeling_functions`, `labeling_models`, `prompt_optimization`, `refinement_loop`, `revision_models`, `state_dir`, `suggestions`, `thresholds`, `uncertainty` |
 
 ## Annotation Types
 

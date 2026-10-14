@@ -245,6 +245,21 @@ POST /solo/api/resume-labeling
 POST /solo/api/optimize-prompt
 ```
 
+### Spend, evaluation and jobs
+```
+GET  /solo/api/spend
+GET  /solo/api/gold
+POST /solo/api/gold/evaluate
+POST /solo/api/prompt/try
+POST /solo/api/sensitivity
+GET  /solo/api/sensitivity/latest
+GET  /solo/api/jobs/<id>
+```
+The POST routes start a background job and return it with HTTP 202. Poll
+`/solo/api/jobs/<id>` for `done` of `total` and the result. See
+[Gold Set and Trials](solo_mode_advanced.md#gold-set-and-trials) and
+[Prompt Sensitivity](solo_mode_advanced.md#prompt-sensitivity).
+
 ### Export
 ```
 GET /solo/api/export
@@ -287,6 +302,12 @@ Key advanced capabilities include:
 - **Confidence routing** for cascading instances through cheap-to-expensive model tiers
 - **Automated refinement loops** that analyze confusion patterns and revise prompts
 - **Schema-specific agreement thresholds** for Likert, multiselect, text, and span annotations
+- **Blind suggestions**, which measure how much seeing the LLM's answer moves yours, and hand over on blind agreement
+- **A spend cap** that refuses a labeling run before it would pass `ai_budget.cap_usd`, and a **response cache** so a repeated call is not paid for twice
+- **Decision models** (Laya, Jev, OpenJev) that label fixed-choice schemes in one pass, as a fast first tier
+- **Gold-set scoring and trials** of a prompt before the full run, and a **prompt-sensitivity** check
+- **A labeling jury**, in which several models vote on each item
+- **Curriculum ordering**, which starts you on the items the LLM found easiest
 
 For full configuration details, see [Solo Mode Advanced Features](solo_mode_advanced.md).
 

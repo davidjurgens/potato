@@ -627,6 +627,10 @@ KNOWN_CONFIG_KEYS = {
         "labeling_functions": None,
         "confidence_routing": None,
         "confusion_analysis": None,
+        "suggestions": {"display", "blind_rate", "minimum_blind_sample"},
+        "cache": {"enabled"},
+        "gold": {"file", "id_key", "label_key", "text_key"},
+        "jury": {"enabled", "models", "early_stop"},
         "state_dir": None,
         "refinement_loop": {
             "enabled",
@@ -1534,6 +1538,38 @@ def validate_machine_annotators_config(config_data: Dict[str, Any]) -> None:
         )
 
 
+def validate_solo_mode_config(config_data: Dict[str, Any]) -> None:
+    """Refuse to start on an invalid ``solo_mode`` block.
+
+    The manager used to log these errors and leave solo mode off, so a typo
+    started a study whose solo pages said "Solo Mode is not enabled" with the
+    reason only in the server log.
+    """
+    sm = config_data.get("solo_mode")
+    if not isinstance(sm, dict) or not sm.get("enabled"):
+        return
+
+    from potato.solo_mode.config import parse_solo_mode_config
+
+    try:
+        cfg = parse_solo_mode_config(config_data)
+    except (TypeError, ValueError, AttributeError) as e:
+        raise ConfigValidationError(f"solo_mode is invalid: {e}") from e
+    errors = cfg.validate(config_data.get("annotation_schemes"))
+    if cfg.gold.file:
+        from potato.solo_mode.evaluation import resolve_gold_path
+        try:
+            gold_path = resolve_gold_path(cfg.gold.file, config_data.get("task_dir", "."))
+        except ConfigSecurityError as e:
+            errors.append(f"solo_mode.gold.file: {e}")
+        else:
+            if not os.path.isfile(gold_path):
+                errors.append(f"solo_mode.gold.file not found: {gold_path}")
+    if errors:
+        raise ConfigValidationError(
+            "Invalid solo_mode configuration:\n  - " + "\n  - ".join(errors))
+
+
 def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``judge_calibration`` block when enabled.
 
@@ -2358,6 +2394,8 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate judge_calibration configuration if present
     validate_judge_calibration_config(config_data)
+
+    validate_solo_mode_config(config_data)
 
     # Validate declared machine annotators if present.
     validate_machine_annotators_config(config_data)
@@ -7673,6 +7711,15 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     endpoint_type = ai_config["endpoint_type"]
     if not isinstance(endpoint_type, str):
         raise ConfigValidationError("ai_support.endpoint_type must be a string")
+
+    # Decision models (systemone, laya) answer one-of-N questions and cannot
+    # generate the text hints, keywords and rationales ai_support produces.
+    if endpoint_type in ("systemone", "laya"):
+        raise ConfigValidationError(
+            f"ai_support.endpoint_type {endpoint_type!r} is a decision model, "
+            f"which picks a label but cannot write text, and ai_support's "
+            f"assistants all write text. Use it under solo_mode.labeling_models "
+            f"or as a solo_mode.confidence_routing tier instead.")
 
     valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm",
                             "yolo", "ollama_vision", "openai_vision", "anthropic_vision"]

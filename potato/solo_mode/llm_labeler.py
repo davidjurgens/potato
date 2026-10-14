@@ -98,6 +98,8 @@ class LLMLabelingThread(threading.Thread):
         self.solo_config = solo_config
         self.prompt_getter = prompt_getter
         self.examples_getter = examples_getter
+        #: Set by the manager when solo_mode.cache is on (label_cache.py)
+        self.label_cache = None
         self.result_callback = result_callback
         self.prompt_version_getter = prompt_version_getter
 
@@ -284,14 +286,19 @@ class LLMLabelingThread(threading.Thread):
         text: str,
         schema_name: str,
         endpoint=None,
+        prompt_override: Optional[str] = None,
     ) -> Optional[LabelingResult]:
-        """Label a single instance."""
+        """Label a single instance.
+
+        ``prompt_override`` labels with a prompt other than the current one:
+        a gold-set evaluation of an earlier version, or a trial of a draft.
+        """
         if endpoint is None:
             endpoint = self._get_endpoint()
         if endpoint is None:
             return None
 
-        prompt = self.prompt_getter()
+        prompt = prompt_override if prompt_override is not None else self.prompt_getter()
         if not prompt:
             logger.warning("No prompt available for labeling")
             return None
@@ -306,6 +313,10 @@ class LLMLabelingThread(threading.Thread):
             if not schema_info:
                 logger.warning(f"Schema {schema_name} not found")
                 return None
+
+            if getattr(endpoint, 'is_decision_model', False) is True:
+                return self._label_with_decision_model(
+                    instance_id, text, schema_name, schema_info, prompt, endpoint)
 
             # Build labeling prompt
             labels = self._extract_labels(schema_info)
@@ -377,15 +388,16 @@ Respond with JSON:
 }}
 """
 
-            # Query endpoint
-            from pydantic import BaseModel
-
-            class LabelResponse(BaseModel):
-                label: str
-                confidence: float = 50.0
-                reasoning: str = ""
-
-            response = endpoint.query(full_prompt, LabelResponse)
+            # Query endpoint. The response schema names the scheme's labels,
+            # so a backend that enforces it (vLLM, OpenAI, Gemini, Ollama)
+            # cannot answer outside the label set.
+            query_endpoint = endpoint
+            if self.label_cache is not None:
+                from .label_cache import CachingEndpoint
+                query_endpoint = CachingEndpoint(endpoint, self.label_cache)
+            response = query_endpoint.query(
+                full_prompt,
+                self._response_model(schema_info, request_edge_case))
 
             # Parse response
             if isinstance(response, str):
@@ -487,12 +499,16 @@ Respond with JSON:
             if estimator:
                 try:
                     logger.debug(f"Running uncertainty estimation ({estimator.__class__.__name__}) for {instance_id}")
+                    # The one-question estimators are deterministic and are
+                    # cached with the label. Sampling needs fresh samples.
+                    cache_estimate = self.solo_config.uncertainty.strategy in (
+                        'direct_confidence', 'direct_uncertainty')
                     estimate = estimator.estimate_uncertainty(
                         instance_id=instance_id,
                         text=text,
                         prompt=full_prompt,
                         predicted_label=label,
-                        endpoint=endpoint,
+                        endpoint=query_endpoint if cache_estimate else endpoint,
                         schema_info=schema_info
                     )
                     uncertainty = estimate.uncertainty_score
@@ -555,6 +571,97 @@ Respond with JSON:
                 model_name='',
                 error=str(e)
             )
+
+    def _response_model(self, schema_info: Dict[str, Any], request_edge_case: bool):
+        """The JSON reply the labeling prompt asks for, as a Pydantic model.
+
+        Backends that enforce a response schema produce only the fields it
+        names. The schema used to have label, confidence and reasoning alone,
+        so under vLLM's guided decoding the is_edge_case and edge_case_rule
+        fields the prompt asked for never came back, and edge-case discovery
+        during labeling did nothing.
+
+        Every field is listed as required in the JSON schema, so guided
+        decoding cannot omit one. The Pydantic defaults stay, so a backend
+        that does not enforce the schema can still omit them.
+        """
+        from typing import List, Literal
+        from pydantic import ConfigDict, create_model
+
+        atype = schema_info.get('annotation_type')
+        valid = self._get_valid_labels(schema_info)
+        if not valid:
+            label_type, label_default = str, ''
+        elif atype == 'span':
+            span_model = create_model(
+                'SpanResponse',
+                text=(str, ...),
+                label=(Literal[tuple(valid)], ...),
+            )
+            label_type, label_default = List[span_model], []
+        elif atype == 'multiselect':
+            label_type, label_default = List[Literal[tuple(valid)]], []
+        else:
+            # The edge-case prompt allows -1 for "unclassifiable".
+            choices = tuple(valid) + (('-1',) if request_edge_case else ())
+            label_type, label_default = Literal[choices], valid[0]
+
+        fields = {
+            'label': (label_type, label_default),
+            'confidence': (float, 50.0),
+            'reasoning': (str, ''),
+        }
+        if request_edge_case:
+            fields['is_edge_case'] = (bool, False)
+            fields['edge_case_rule'] = (str, '')
+        return create_model(
+            'LabelResponse',
+            __config__=ConfigDict(json_schema_extra={'required': list(fields)}),
+            **fields,
+        )
+
+    def _label_with_decision_model(self, instance_id, text, schema_name,
+                                   schema_info, prompt, endpoint):
+        """Label with a decision model (systemone, laya): one forward pass.
+
+        The model returns a probability for every option, so its confidence
+        is the probability of the chosen one and no uncertainty estimator
+        runs: those ask a generative model a follow-up question, which a
+        decision model cannot answer.
+        """
+        from potato.ai.decision_endpoint import (
+            UnsupportedSchemeError, questions_for_scheme)
+
+        model_name = getattr(endpoint, 'model', '')
+        prompt_version = 0
+        if self.prompt_version_getter:
+            try:
+                prompt_version = self.prompt_version_getter()
+            except Exception:
+                pass
+        try:
+            questions = questions_for_scheme(schema_info, instructions=prompt)
+            answer = endpoint.decide(text, questions)[0]
+        except UnsupportedSchemeError as e:
+            return LabelingResult(
+                instance_id=instance_id, schema_name=schema_name, label=None,
+                confidence=0, uncertainty=1, reasoning='', prompt_version=0,
+                model_name=model_name, error=str(e))
+
+        top = sorted(answer.probabilities.items(), key=lambda kv: -kv[1])[:3]
+        reasoning = 'Decision model probabilities: ' + ', '.join(
+            f'{label} {p:.2f}' for label, p in top)
+        confidence = max(0.0, min(1.0, float(answer.confidence)))
+        return LabelingResult(
+            instance_id=instance_id,
+            schema_name=schema_name,
+            label=str(answer.value),
+            confidence=confidence,
+            uncertainty=1.0 - confidence,
+            reasoning=reasoning,
+            prompt_version=prompt_version,
+            model_name=model_name,
+        )
 
     def _extract_labels(self, schema_info: Dict[str, Any]) -> str:
         """Extract label names from schema (for the prompt)."""

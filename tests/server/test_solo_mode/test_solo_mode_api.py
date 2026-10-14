@@ -163,6 +163,10 @@ class TestSoloModeAPIStatus:
         data = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
         assert 'validation_progress' in data
 
+    def test_reports_curriculum_off_by_default(self, solo_server, authed_session):
+        data = authed_session.get(f"{solo_server.base_url}/solo/api/status").json()
+        assert data['curriculum'] == {'enabled': False}
+
 
 class TestSoloModeAPIPrompts:
     """Tests for /solo/api/prompts endpoint."""

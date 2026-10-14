@@ -145,6 +145,11 @@
           data-annotation-type="{{ atype }}">
         <input type="hidden" name="instance_id" value="{{ instance.id }}">
         <input type="hidden" name="annotation" id="selected-label" value="">
+        {# Whether the LLM's suggestion was on screen when the human answered,
+           and whether the answer came from Accept. They split agreement into
+           blind and shown, which is how anchoring is measured. #}
+        <input type="hidden" name="suggestion_visible" value="{{ '1' if llm_prediction else '0' }}">
+        <input type="hidden" name="accepted_suggestion" id="accepted-suggestion" value="0">
 
         {% if atype == 'span' %}
         <div class="instance-text" id="instance-text" style="position: relative;">
@@ -199,6 +204,11 @@
                 </div>
             </div>
         </div>
+        {% elif show_suggestion is defined and not show_suggestion %}
+        <p class="form-help blind-note" id="blind-note">
+            The LLM's suggestion is hidden for this item, so your answer can be
+            compared with it blind. If you disagree, you'll see its label next.
+        </p>
         {% else %}
         {# No LLM prediction for this instance yet. The background labeler may
            still be working (LLMs can be slow); show a live indicator and poll
@@ -309,14 +319,18 @@
 {% block stats %}
 {# Drop redundant "Phase" row; lead with progress, which is what the user wants here. #}
 {% if stats %}
-{% set total = stats.human_labeled + stats.remaining %}
+{# The human's own progress against the full dataset. `remaining` counts items
+   neither the human nor the LLM has labelled, so once the LLM had pre-labelled
+   everything it read "0 / 0" with "Remaining 0" on the first item -- the same
+   collapse the header counter had. #}
+{% set total = stats.total if stats.total is defined else stats.human_labeled + stats.remaining %}
 <div class="stat-item">
     <span class="stat-label">Progress</span>
     <span class="stat-value">{{ stats.human_labeled }} / {{ total }}</span>
 </div>
 <div class="stat-item">
-    <span class="stat-label">Remaining</span>
-    <span class="stat-value">{{ stats.remaining }}</span>
+    <span class="stat-label">Left for you</span>
+    <span class="stat-value">{{ [total - stats.human_labeled, 0]|max }}</span>
 </div>
 <div class="stat-item">
     <span class="stat-label">LLM labeled</span>
@@ -440,6 +454,8 @@
     if (acceptBtn) {
         acceptBtn.addEventListener('click', () => {
             const llm = acceptBtn.dataset.llmLabel;
+            const acceptedField = document.getElementById('accepted-suggestion');
+            if (acceptedField) acceptedField.value = '1';
             if ((atype === 'text' || atype === 'textbox') && textboxInput) {
                 textboxInput.value = llm;
                 textboxInput.dispatchEvent(new Event('input'));

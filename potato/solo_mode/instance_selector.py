@@ -3,10 +3,13 @@ Instance Selector for Solo Mode
 
 Weighted instance selection for human annotation, combining LLM confidence,
 diversity, disagreements and randomness to decide what the annotator sees next.
+An optional curriculum (Annotation Curricula, CL 2022) overrides the pools for
+the human's first labels so they start on the items the LLM found easiest.
 """
 
 import logging
 import random
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 import threading
@@ -97,6 +100,21 @@ class InstanceSelector:
         # Cache predictions for use in _select_lowest_confidence
         self._predictions_cache: Dict[str, Dict[str, Any]] = {}
 
+        # Curriculum state. ``curriculum`` is a CurriculumConfig (or None when
+        # off); progress is the human label count the manager last reported.
+        self.curriculum = None
+        self._human_labeled_count = 0
+        self._cartography_cache: Dict[str, float] = {}
+        self._curriculum_label_counts: Counter = Counter()
+
+    def configure_curriculum(self, curriculum) -> None:
+        """Turn curriculum ordering on (a CurriculumConfig) or off (None)."""
+        with self._lock:
+            self.curriculum = (
+                curriculum if curriculum is not None and curriculum.enabled
+                else None)
+            self._curriculum_label_counts.clear()
+
     def configure(
         self,
         low_confidence_weight: float = 0.4,
@@ -135,6 +153,7 @@ class InstanceSelector:
         edge_case_rule_ids: Optional[Set[str]] = None,
         cartography_scores: Optional[Dict[str, float]] = None,
         revisit_ids: Optional[Set[str]] = None,
+        human_labeled_count: Optional[int] = None,
     ) -> None:
         """
         Refresh the selection pools based on current state.
@@ -150,12 +169,17 @@ class InstanceSelector:
                 re-review. They are not in ``available_ids`` (which holds
                 unlabelled items), so the disagreement pool is built from
                 these directly.
+            human_labeled_count: How many items the human has labelled so
+                far. Drives the curriculum; omitted, the last value stands.
         """
         with self._lock:
             available_list = list(available_ids)
 
             # Cache predictions for use in _select_lowest_confidence
             self._predictions_cache = llm_predictions or {}
+            self._cartography_cache = dict(cartography_scores or {})
+            if human_labeled_count is not None:
+                self._human_labeled_count = human_labeled_count
 
             # Clear pools
             self._low_confidence_pool = []
@@ -331,6 +355,16 @@ class InstanceSelector:
             # Select pool based on weights
             selected_pool, pool_name = self._weighted_pool_selection(pools)
 
+            # The curriculum replaces the pick among fresh items. A revisit of
+            # an earlier disagreement keeps its turn: deferring every re-review
+            # until the curriculum ends would hide the human's first
+            # disagreements for its whole length.
+            if pool_name != 'disagreement':
+                instance_id = self._select_by_curriculum(available_ids, exclude)
+                if instance_id is not None:
+                    self._record_selection(instance_id, 'curriculum')
+                    return instance_id
+
             if not selected_pool:
                 # Fallback to any available instance
                 remaining = [iid for iid in available_ids if iid not in exclude]
@@ -412,6 +446,137 @@ class InstanceSelector:
         # Fallback to last
         return candidates[-1]
 
+    # === Curriculum ===
+
+    def curriculum_target(
+        self, human_labeled_count: Optional[int] = None,
+    ) -> Optional[float]:
+        """Target difficulty quantile for the next pick, or None when inactive.
+
+        0.0 during warm-up (easiest first), rising linearly to 1.0 across the
+        ramp, and None once the ramp is over or the curriculum is off.
+        ``human_labeled_count`` defaults to the count from the last refresh.
+        """
+        c = self.curriculum
+        if c is None:
+            return None
+        n = (self._human_labeled_count if human_labeled_count is None
+             else human_labeled_count)
+        if n < c.warmup_items:
+            return 0.0
+        if n < c.warmup_items + c.ramp_items:
+            return (n - c.warmup_items) / c.ramp_items
+        return None
+
+    def _difficulty(self, instance_id: str) -> Optional[float]:
+        """Estimated difficulty in [0, 1], or None when there is no signal.
+
+        ``confidence`` is one minus the lowest LLM confidence across the item's
+        schemas. Under confidence routing that includes the confidence of
+        every tier the item passed through, so an item the first tier
+        escalated is not ranked easy because the tier that accepted it was
+        sure. ``cartography`` is the item's confidence variability across
+        prompt versions, scaled by the largest variability seen. ``combined``
+        averages whichever of the two the item has.
+        """
+        signal = self.curriculum.difficulty_signal
+        parts = []
+        if signal in ('confidence', 'combined'):
+            preds = self._predictions_cache.get(instance_id)
+            if preds:
+                lowest = min(
+                    min(float(p.get('confidence_score', 1.0)),
+                        float(p.get('routing_min_confidence', 1.0)))
+                    for p in preds.values())
+                parts.append(1.0 - max(0.0, min(1.0, lowest)))
+        if signal in ('cartography', 'combined'):
+            score = self._cartography_cache.get(instance_id)
+            if score is not None:
+                top = max(self._cartography_cache.values())
+                parts.append(score / top if top > 0 else 0.0)
+        if not parts:
+            return None
+        return sum(parts) / len(parts)
+
+    def _predicted_label_key(self, instance_id: str) -> str:
+        preds = self._predictions_cache.get(instance_id) or {}
+        return '|'.join(
+            f"{schema}={preds[schema].get('predicted_label')}"
+            for schema in sorted(preds))
+
+    def _select_by_curriculum(
+        self,
+        available_ids: Set[str],
+        exclude: Set[str],
+    ) -> Optional[str]:
+        """Pick the fresh item nearest the curriculum's target difficulty.
+
+        Returns None when the curriculum is inactive or no fresh item has a
+        difficulty signal yet (cold start), so the weighted pools decide.
+        """
+        target = self.curriculum_target()
+        if target is None:
+            return None
+
+        # Fresh items only: _random_pool is every unlabelled item at refresh.
+        scored = []
+        for iid in self._random_pool:
+            if iid not in available_ids or iid in exclude:
+                continue
+            difficulty = self._difficulty(iid)
+            if difficulty is not None:
+                scored.append((iid, difficulty))
+        if not scored:
+            return None
+
+        # Shuffle before the stable sort so equal difficulties (common with
+        # self-reported confidence, which bunches near 1.0) come out in a
+        # random order rather than in data-file order.
+        self.random.shuffle(scored)
+        scored.sort(key=lambda pair: pair[1])
+
+        centre = round(target * (len(scored) - 1))
+        half = self.curriculum.window // 2
+        lo = max(0, min(centre - half, len(scored) - self.curriculum.window))
+        window = scored[lo:lo + self.curriculum.window]
+
+        # Within the window, rotate the LLM's predicted label so a warm-up on
+        # a skewed dataset is not twenty copies of the obvious class. Ties go
+        # to the item closest to the target.
+        def rank(indexed):
+            offset, (iid, _) = indexed
+            return (self._curriculum_label_counts[self._predicted_label_key(iid)],
+                    abs(lo + offset - centre))
+        _, (chosen, _) = min(enumerate(window), key=rank)
+        self._curriculum_label_counts[self._predicted_label_key(chosen)] += 1
+        return chosen
+
+    def get_curriculum_status(
+        self, human_labeled_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Curriculum stage and progress, for the dashboard and the API."""
+        with self._lock:
+            c = self.curriculum
+            if c is None:
+                return {'enabled': False}
+            n = (self._human_labeled_count if human_labeled_count is None
+                 else human_labeled_count)
+            if n < c.warmup_items:
+                stage = 'warmup'
+            elif n < c.warmup_items + c.ramp_items:
+                stage = 'ramp'
+            else:
+                stage = 'done'
+            return {
+                'enabled': True,
+                'stage': stage,
+                'human_labeled': n,
+                'warmup_items': c.warmup_items,
+                'ramp_items': c.ramp_items,
+                'target_difficulty': self.curriculum_target(n),
+                'difficulty_signal': c.difficulty_signal,
+            }
+
     def _select_lowest_confidence(self, pool: List[str]) -> str:
         """Select the instance with lowest LLM confidence from cached predictions."""
         min_conf = float('inf')
@@ -492,6 +657,7 @@ class InstanceSelector:
                     'cartography': self.weights.cartography,
                     'llm_predicted': self.weights.llm_predicted,
                 },
+                'curriculum': self.get_curriculum_status(),
             }
 
     def clear_history(self) -> None:

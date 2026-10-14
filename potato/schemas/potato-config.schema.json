@@ -5050,6 +5050,10 @@
           "description": "Batch sizes for LLM labeling: llm_labeling_batch (50) and max_parallel_labels (200)",
           "type": "object"
         },
+        "cache": {
+          "description": "Reuse the stored reply for an identical labeling call: enabled (true). Kept in state_dir",
+          "type": "object"
+        },
         "confidence_routing": {
           "description": "Where an item goes by confidence band: auto-accept, review, or human",
           "type": "object"
@@ -5071,8 +5075,16 @@
           "description": "Turn solo mode on",
           "type": "boolean"
         },
+        "gold": {
+          "description": "Items with known answers for scoring prompt versions: file (JSON, JSONL, CSV or TSV inside the project), id_key (id), label_key (label), and text_key for items outside the corpus",
+          "type": "object"
+        },
         "instance_selection": {
-          "description": "Weights that decide what you are shown next: low_confidence_weight (0.4), diversity_weight (0.3), random_weight (0.2), disagreement_weight (0.1), and the opt-in edge_case_rule, cartography and llm_predicted weights",
+          "description": "Weights that decide what you are shown next: low_confidence_weight (0.4), diversity_weight (0.3), random_weight (0.2), disagreement_weight (0.1), and the opt-in edge_case_rule, cartography and llm_predicted weights. A `curriculum` block (enabled: false, warmup_items: 20, ramp_items: 30, difficulty_signal: confidence, window: 5) shows the easiest items first and then ramps up the difficulty",
+          "type": "object"
+        },
+        "jury": {
+          "description": "Several models vote on each item and the plurality label wins: enabled (false), models (two or more), early_stop (true). Not with confidence_routing",
           "type": "object"
         },
         "labeling_functions": {
@@ -5080,7 +5092,7 @@
           "type": "object"
         },
         "labeling_models": {
-          "description": "Endpoints that label the corpus. Each is endpoint_type plus model, and optionally api_key, base_url, max_tokens, temperature, think, timeout",
+          "description": "Endpoints that label the corpus. Each is endpoint_type plus model, and optionally api_key, base_url, max_tokens, temperature, think, timeout. A decision model (endpoint_type systemone or laya) labels radio, select, likert and slider schemes in one pass and needs a generative model under revision_models",
           "type": "array"
         },
         "prompt_optimization": {
@@ -5098,6 +5110,10 @@
         "state_dir": {
           "description": "Where solo-mode state is persisted",
           "type": "string"
+        },
+        "suggestions": {
+          "description": "When the annotator sees the LLM's suggestion: display (before_label, after_label or blind_sample), blind_rate (0.2) and minimum_blind_sample (20). Agreement is split into blind and shown, and the handoff to the LLM reads blind agreement once there is enough",
+          "type": "object"
         },
         "thresholds": {
           "description": "The stopping and agreement thresholds -- including end_human_annotation_agreement (0.90) and minimum_validation_sample (50) -- plus the per-scheme-type match tolerances",

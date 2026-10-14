@@ -42,6 +42,23 @@
         margin-right: 10px;
     }
 
+    .trial-panel {
+        margin: 0 0 20px;
+        padding: 12px 14px;
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: 6px;
+    }
+    .trial-panel h2 { font-size: 1rem; margin: 0 0 6px; }
+    .trial-summary { margin: 8px 0; font-size: 14px; }
+    .trial-table-wrap { overflow-x: auto; }
+    .trial-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .trial-table th, .trial-table td {
+        text-align: left; padding: 6px 8px; vertical-align: top;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+    }
+    .trial-table td.trial-text { max-width: 28rem; }
+    .trial-error { color: var(--destructive, #b91c1c); }
+
     .source-tag {
         display: inline-block;
         background: #6c757d;
@@ -75,6 +92,25 @@
         <button type="button" class="btn btn-secondary" onclick="savePrompt()">Save Changes</button>
         <span id="save-status" style="margin-left: 10px; color: #28a745;"></span>
     </div>
+
+    {# Try the prompt in the editor on a few items before the full run. #}
+    <section class="trial-panel" aria-labelledby="trial-heading">
+        <h2 id="trial-heading">Try before running</h2>
+        <p class="form-help" style="margin: 0 0 8px;">
+            Label 10 unlabelled items with the prompt above, as written, without saving it.
+        </p>
+        <button type="button" class="btn btn-secondary" id="trial-btn" onclick="tryPrompt()">Try on 10 items</button>
+        {% if gold_configured %}
+        <button type="button" class="btn btn-secondary" id="gold-btn" onclick="scoreOnGold()">Score saved prompt on gold set</button>
+        {% endif %}
+        <p class="trial-summary" id="trial-status" role="status" aria-live="polite"></p>
+        <div class="trial-table-wrap">
+            <table class="trial-table" id="trial-table" hidden>
+                <thead><tr><th scope="col">Text</th><th scope="col">Label</th><th scope="col">Confidence</th><th scope="col">Reason</th></tr></thead>
+                <tbody id="trial-rows"></tbody>
+            </table>
+        </div>
+    </section>
 
     <div class="solo-nav">
         <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-secondary">&larr; Back to Setup</a>
@@ -162,6 +198,90 @@
     function skipToAnnotation() {
         document.getElementById('form-action').value = 'skip_to_annotation';
         document.getElementById('prompt-form').submit();
+    }
+
+    async function pollJob(jobId, onProgress) {
+        for (;;) {
+            const resp = await fetch(`/solo/api/jobs/${jobId}`);
+            if (!resp.ok) throw new Error(`Job status ${resp.status}`);
+            const job = await resp.json();
+            if (job.status !== 'running') return job;
+            onProgress(job);
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+
+    function pct(v) {
+        return (v === null || v === undefined) ? 'not given' : Math.round(v * 100) + '%';
+    }
+
+    async function startJob(url, body, button, label) {
+        const status = document.getElementById('trial-status');
+        button.disabled = true;
+        status.classList.remove('trial-error');
+        status.textContent = 'Starting…';
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+            const job = await pollJob(data.job.id, j => {
+                status.textContent = `${label}: ${j.done} of ${j.total} labelled…`;
+            });
+            if (job.status === 'failed') throw new Error(job.error || 'The job failed');
+            return job.result;
+        } catch (err) {
+            status.classList.add('trial-error');
+            status.textContent = err.message;
+            return null;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function tryPrompt() {
+        const prompt = document.getElementById('prompt').value;
+        const result = await startJob('/solo/api/prompt/try', { n: 10, prompt },
+                                      document.getElementById('trial-btn'), 'Trial');
+        if (!result) return;
+        const dist = Object.entries(result.label_distribution || {})
+            .map(([label, n]) => `${label} ${n}`).join(', ') || 'no labels';
+        let summary = `Labels: ${dist}. Mean confidence ${pct(result.mean_confidence)}.`;
+        if (result.n_errors) summary += ` ${result.n_errors} item(s) failed.`;
+        if (result.full_run_estimate) summary += ` Full run: ${result.full_run_estimate}`;
+        document.getElementById('trial-status').textContent = summary;
+
+        const tbody = document.getElementById('trial-rows');
+        tbody.replaceChildren();
+        for (const row of result.rows || []) {
+            const tr = document.createElement('tr');
+            const cells = [row.text, row.error ? 'failed' : String(row.label),
+                           row.error ? '' : pct(row.confidence),
+                           row.error || row.reasoning];
+            cells.forEach((value, i) => {
+                const td = document.createElement('td');
+                td.textContent = value;
+                if (i === 0) td.className = 'trial-text';
+                if (row.error && i > 0) td.classList.add('trial-error');
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        }
+        document.getElementById('trial-table').hidden = false;
+    }
+
+    async function scoreOnGold() {
+        const result = await startJob('/solo/api/gold/evaluate', {},
+                                      document.getElementById('gold-btn'), 'Gold set');
+        if (!result) return;
+        let summary = `Prompt v${result.prompt_version} on ${result.n_items} gold item(s): ` +
+            `accuracy ${pct(result.accuracy)}, macro F1 ${pct(result.macro_f1)}.`;
+        if (result.n_errors) summary += ` ${result.n_errors} item(s) failed and count as wrong.`;
+        if (result.n_missing_text) summary += ` ${result.n_missing_text} gold item(s) had no text and were skipped.`;
+        document.getElementById('trial-status').textContent = summary;
     }
 
     function loadVersion(version) {

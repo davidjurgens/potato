@@ -29,6 +29,10 @@ class ModelConfig:
     # `!= 60` guard below, so writing the documented default was the one way
     # to NOT set it -- `timeout: 61` gave you 61 and `timeout: 60` gave you 30.
     timeout: Optional[int] = None  # Request timeout in seconds (raise for thinking models)
+    #: Endpoint-specific options passed through to ai_config unchanged:
+    #: device/batch_size for laya, state_key for systemone, max_options for
+    #: both. Only the keys in ENDPOINT_OPTION_KEYS are read from a config.
+    options: Dict[str, Any] = field(default_factory=dict)
 
     def to_endpoint_config(self, temperature_override: Optional[float] = None) -> Dict[str, Any]:
         """Build the full endpoint config dict for AIEndpointFactory.
@@ -56,6 +60,8 @@ class ModelConfig:
             ai_config['think'] = self.think
         if self.timeout is not None:
             ai_config['timeout'] = self.timeout
+        for key, value in self.options.items():
+            ai_config.setdefault(key, value)
         return {
             'ai_support': {
                 'enabled': True,
@@ -97,6 +103,83 @@ class ThresholdConfig:
     span_overlap_threshold: float = 0.5
 
 
+CURRICULUM_DIFFICULTY_SIGNALS = ('confidence', 'cartography', 'combined')
+SUGGESTION_DISPLAY_MODES = ('before_label', 'after_label', 'blind_sample')
+
+#: Endpoint types that pick an option but cannot write text (potato/ai/
+#: decision_endpoint.py). They can label; they cannot revise a prompt.
+DECISION_ENDPOINT_TYPES = ('systemone', 'laya')
+#: Scheme types a decision model can answer (one-of-N questions).
+DECISION_SCHEME_TYPES = ('radio', 'select', 'likert', 'slider')
+
+
+@dataclass
+class SuggestionsConfig:
+    """When the annotator sees the LLM's suggestion, and how agreement is read.
+
+    A suggestion shown before the human answers anchors the answer: labels
+    shift toward it and agreement with the LLM is inflated (Schroeder, Roy &
+    Kabbara, Findings of ACL 2025). Agreement measured on those labels is what
+    hands the corpus to the LLM, so the handoff can come too early.
+
+    ``before_label`` shows it first (the original behaviour). ``after_label``
+    never shows it before the human answers; a disagreement then opens the
+    resolution page, which shows the LLM's label. ``blind_sample`` hides it on
+    a deterministic ``blind_rate`` fraction of items, which measures the
+    anchoring gap while keeping the speed-up on the rest.
+
+    Once ``minimum_blind_sample`` blind comparisons exist, the handoff gate
+    reads blind agreement only. Under ``after_label`` and ``blind_sample`` it
+    waits for them; under ``before_label`` it falls back to all comparisons.
+    """
+    display: str = 'before_label'
+    blind_rate: float = 0.2
+    minimum_blind_sample: int = 20
+
+
+@dataclass
+class JuryConfig:
+    """Several labeling models vote on each item (jury.py)."""
+    enabled: bool = False
+    models: List['ModelConfig'] = field(default_factory=list)
+    early_stop: bool = True
+
+
+@dataclass
+class GoldConfig:
+    """Items with known answers, for scoring prompt versions (evaluation.py)."""
+    file: Optional[str] = None
+    id_key: str = 'id'
+    label_key: str = 'label'
+    #: Set when the gold file carries its own text (items outside the corpus).
+    text_key: Optional[str] = None
+
+
+@dataclass
+class CacheConfig:
+    """Reuse a stored reply for an identical labeling call (label_cache.py)."""
+    enabled: bool = True
+
+
+@dataclass
+class CurriculumConfig:
+    """Easy-first ordering for the human's first labels (Annotation Curricula, CL 2022).
+
+    For the first ``warmup_items`` human labels the selector shows the items
+    the LLM found easiest, so human and model agree on the clear cases before
+    either is judged on the hard ones. Over the next ``ramp_items`` labels the
+    target difficulty rises from easiest to hardest, after which the weighted
+    pools take over. ``window`` is how many neighbours of the target difficulty
+    are considered at once, so the predicted label can be rotated rather than
+    showing the same obvious class over and over.
+    """
+    enabled: bool = False
+    warmup_items: int = 20
+    ramp_items: int = 30
+    difficulty_signal: str = 'confidence'
+    window: int = 5
+
+
 @dataclass
 class InstanceSelectionConfig:
     """Configuration for instance selection weights."""
@@ -107,6 +190,7 @@ class InstanceSelectionConfig:
     edge_case_rule_weight: float = 0.0  # Instances matching edge case rule patterns
     cartography_weight: float = 0.0     # Instances with high confidence variability
     llm_predicted_weight: float = 0.0   # Instances with LLM predictions needing human comparison
+    curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
 
     def validate(self) -> None:
         """Validate that weights sum to 1.0."""
@@ -284,17 +368,76 @@ class SoloModeConfig:
     # Iterative guideline refinement loop
     refinement_loop: RefinementLoopConfig = field(default_factory=RefinementLoopConfig)
 
+    # When the LLM suggestion is shown, and blind-vs-shown agreement
+    suggestions: SuggestionsConfig = field(default_factory=SuggestionsConfig)
+
+    # Response cache for labeling calls
+    cache: CacheConfig = field(default_factory=CacheConfig)
+
+    # Gold set for scoring prompt versions
+    gold: GoldConfig = field(default_factory=GoldConfig)
+
+    # Several models vote on each item
+    jury: JuryConfig = field(default_factory=JuryConfig)
+
     # Output directory for Solo Mode state
     state_dir: Optional[str] = None
 
-    def validate(self) -> List[str]:
+    def validate(self, annotation_schemes: Optional[List[Dict[str, Any]]] = None) -> List[str]:
         """
         Validate the configuration.
+
+        Args:
+            annotation_schemes: The study's schemes, for the checks that depend
+                on what is being labelled. Omitted, those checks are skipped.
 
         Returns:
             List of validation error messages (empty if valid)
         """
         errors = []
+
+        # Decision models label; prompt synthesis, revision and edge-case
+        # synthesis all need a model that writes text. revision_models
+        # defaults to labeling_models, so this is also the check for a study
+        # that set a decision model as its only model.
+        decision_revisers = [m.model for m in self.revision_models
+                             if m.endpoint_type in DECISION_ENDPOINT_TYPES]
+        if decision_revisers:
+            errors.append(
+                "solo_mode.revision_models must be models that write text, but "
+                f"{', '.join(map(repr, decision_revisers))} is a decision model "
+                "(systemone/laya). Set solo_mode.revision_models to a generative "
+                "model; it defaults to labeling_models when unset")
+        labelers = list(self.labeling_models) + (
+            [t.model for t in self.confidence_routing.tiers]
+            if self.confidence_routing.enabled else []) + (
+            list(self.jury.models) if self.jury.enabled else [])
+
+        if self.jury.enabled:
+            from .jury import JURY_SCHEME_TYPES
+            if len(self.jury.models) < 2:
+                errors.append("solo_mode.jury needs at least two models")
+            if self.confidence_routing.enabled:
+                errors.append(
+                    "solo_mode.jury and solo_mode.confidence_routing both decide "
+                    "which model labels an item; enable one of them")
+            if annotation_schemes:
+                first = annotation_schemes[0] if isinstance(annotation_schemes[0], dict) else {}
+                if first.get('annotation_type') not in JURY_SCHEME_TYPES:
+                    errors.append(
+                        f"solo_mode.jury aggregates {', '.join(JURY_SCHEME_TYPES)} "
+                        f"schemes; {first.get('name')!r} is "
+                        f"{first.get('annotation_type')!r}")
+        if annotation_schemes and any(
+                m.endpoint_type in DECISION_ENDPOINT_TYPES for m in labelers):
+            first = annotation_schemes[0] if isinstance(annotation_schemes[0], dict) else {}
+            atype = first.get('annotation_type')
+            if atype not in DECISION_SCHEME_TYPES:
+                errors.append(
+                    f"A decision model (systemone/laya) can label "
+                    f"{', '.join(DECISION_SCHEME_TYPES)} schemes, but the scheme "
+                    f"solo mode labels ({first.get('name')!r}) is {atype!r}. Use a "
+                    f"generative model for it")
 
         if self.enabled:
             if not self.labeling_models:
@@ -320,6 +463,57 @@ class SoloModeConfig:
         if self.thresholds.confidence_low >= self.thresholds.confidence_high:
             errors.append("confidence_low must be less than confidence_high")
 
+        curriculum = self.instance_selection.curriculum
+        curriculum_errors = []
+        if not isinstance(curriculum.enabled, bool):
+            curriculum_errors.append(
+                "instance_selection.curriculum.enabled must be true or false")
+        for key in ('warmup_items', 'ramp_items', 'window'):
+            value = getattr(curriculum, key)
+            if isinstance(value, bool) or not isinstance(value, int):
+                curriculum_errors.append(
+                    f"instance_selection.curriculum.{key} must be an integer, "
+                    f"got {value!r}")
+        if curriculum.difficulty_signal not in CURRICULUM_DIFFICULTY_SIGNALS:
+            curriculum_errors.append(
+                f"Invalid instance_selection.curriculum.difficulty_signal: "
+                f"{curriculum.difficulty_signal!r} (expected one of "
+                f"{', '.join(CURRICULUM_DIFFICULTY_SIGNALS)})")
+        if self.gold.file is not None and annotation_schemes:
+            from .evaluation import GOLD_SCHEME_TYPES
+            first = annotation_schemes[0] if isinstance(annotation_schemes[0], dict) else {}
+            if first.get('annotation_type') not in GOLD_SCHEME_TYPES:
+                errors.append(
+                    f"solo_mode.gold scores {', '.join(GOLD_SCHEME_TYPES)} schemes; "
+                    f"{first.get('name')!r} is {first.get('annotation_type')!r}")
+
+        if not isinstance(self.cache.enabled, bool):
+            errors.append("solo_mode.cache.enabled must be true or false")
+
+        suggestions = self.suggestions
+        if suggestions.display not in SUGGESTION_DISPLAY_MODES:
+            errors.append(
+                f"Invalid suggestions.display: {suggestions.display!r} "
+                f"(expected one of {', '.join(SUGGESTION_DISPLAY_MODES)})")
+        if (isinstance(suggestions.blind_rate, bool)
+                or not isinstance(suggestions.blind_rate, (int, float))
+                or not 0 < suggestions.blind_rate <= 1):
+            errors.append("suggestions.blind_rate must be a number in (0, 1]")
+        if (isinstance(suggestions.minimum_blind_sample, bool)
+                or not isinstance(suggestions.minimum_blind_sample, int)
+                or suggestions.minimum_blind_sample < 1):
+            errors.append("suggestions.minimum_blind_sample must be an integer of at least 1")
+
+        if not curriculum_errors:  # the range checks need integers
+            if curriculum.warmup_items < 0 or curriculum.ramp_items < 0:
+                curriculum_errors.append(
+                    "instance_selection.curriculum.warmup_items and ramp_items "
+                    "must be 0 or more")
+            if curriculum.window < 1:
+                curriculum_errors.append(
+                    "instance_selection.curriculum.window must be at least 1")
+        errors.extend(curriculum_errors)
+
         # Validate uncertainty strategy
         valid_strategies = [
             'direct_confidence', 'direct_uncertainty',
@@ -329,6 +523,12 @@ class SoloModeConfig:
             errors.append(f"Invalid uncertainty strategy: {self.uncertainty.strategy}")
 
         return errors
+
+
+#: Model-config keys that are specific to one endpoint type and are passed to
+#: it as they are (see ModelConfig.options).
+ENDPOINT_OPTION_KEYS = ('device', 'batch_size', 'head_max_len', 'max_options',
+                        'state_key')
 
 
 def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
@@ -350,6 +550,30 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         temperature=model_data.get('temperature', 0.1),
         think=model_data.get('think'),  # None = endpoint default, True/False = override
         timeout=model_data.get('timeout'),  # absent = endpoint default, see ModelConfig
+        options={k: model_data[k] for k in ENDPOINT_OPTION_KEYS if k in model_data},
+    )
+
+
+def _parse_suggestions_config(data: Dict[str, Any]) -> SuggestionsConfig:
+    defaults = SuggestionsConfig()
+    return SuggestionsConfig(
+        display=data.get('display', defaults.display),
+        blind_rate=data.get('blind_rate', defaults.blind_rate),
+        minimum_blind_sample=data.get(
+            'minimum_blind_sample', defaults.minimum_blind_sample),
+    )
+
+
+def _parse_curriculum_config(data: Dict[str, Any]) -> CurriculumConfig:
+    defaults = CurriculumConfig()
+    # Values pass through unconverted; validate() names a wrong type instead
+    # of int("twenty") raising out of the parser.
+    return CurriculumConfig(
+        enabled=data.get('enabled', defaults.enabled),
+        warmup_items=data.get('warmup_items', defaults.warmup_items),
+        ramp_items=data.get('ramp_items', defaults.ramp_items),
+        difficulty_signal=data.get('difficulty_signal', defaults.difficulty_signal),
+        window=data.get('window', defaults.window),
     )
 
 
@@ -417,6 +641,7 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         edge_case_rule_weight=sel_data.get('edge_case_rule_weight', 0.0),
         cartography_weight=sel_data.get('cartography_weight', 0.0),
         llm_predicted_weight=sel_data.get('llm_predicted_weight', 0.0),
+        curriculum=_parse_curriculum_config(sel_data.get('curriculum') or {}),
     )
 
     # Parse batch config
@@ -528,5 +753,14 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         confidence_routing=confidence_routing,
         confusion_analysis=confusion_analysis,
         refinement_loop=refinement_loop,
+        suggestions=_parse_suggestions_config(sm.get('suggestions') or {}),
+        cache=CacheConfig(enabled=(sm.get('cache') or {}).get('enabled', True)),
+        gold=GoldConfig(**{k: v for k, v in (sm.get('gold') or {}).items()
+                           if k in ('file', 'id_key', 'label_key', 'text_key')}),
+        jury=JuryConfig(
+            enabled=(sm.get('jury') or {}).get('enabled', False),
+            models=[_parse_model_config(m) for m in (sm.get('jury') or {}).get('models', [])],
+            early_stop=(sm.get('jury') or {}).get('early_stop', True),
+        ),
         state_dir=state_dir,
     )

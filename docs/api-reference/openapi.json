@@ -434,6 +434,29 @@
         ]
       }
     },
+    "/admin/api/alt-test": {
+      "get": {
+        "operationId": "get_admin_api_alt_test",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The alt-test: can a declared machine annotator replace a human here?",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/api/annotation_history": {
       "get": {
         "operationId": "get_admin_api_annotation_history",
@@ -10227,6 +10250,77 @@
         ]
       }
     },
+    "/solo/api/gold": {
+      "get": {
+        "operationId": "get_solo_mode_api_gold_status",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The gold set, and each prompt version's score against it.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
+        ]
+      }
+    },
+    "/solo/api/gold/evaluate": {
+      "post": {
+        "operationId": "post_solo_mode_api_gold_evaluate",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Score a prompt version (default: the current one) against the gold set.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required"
+        ]
+      }
+    },
+    "/solo/api/jobs/{job_id}": {
+      "get": {
+        "operationId": "get_solo_mode_api_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Progress and result of a gold evaluation or trial.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
+        ]
+      }
+    },
     "/solo/api/labeling-functions": {
       "get": {
         "operationId": "get_solo_mode_api_labeling_functions",
@@ -10378,6 +10472,27 @@
         ],
         "x-potato-auth": [
           "api_login_required"
+        ]
+      }
+    },
+    "/solo/api/prompt/try": {
+      "post": {
+        "operationId": "post_solo_mode_api_prompt_try",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Label a few unlabelled items with a prompt before the full run.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required"
         ]
       }
     },
@@ -10729,6 +10844,67 @@
           }
         },
         "summary": "Return 2D-projected rule embeddings for D3 scatter plot visualization.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
+        ]
+      }
+    },
+    "/solo/api/sensitivity": {
+      "post": {
+        "operationId": "post_solo_mode_api_sensitivity",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Label the same items under paraphrases of the prompt and compare.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required"
+        ]
+      }
+    },
+    "/solo/api/sensitivity/latest": {
+      "get": {
+        "operationId": "get_solo_mode_api_sensitivity_latest",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The most recent sensitivity check, or null.",
+        "tags": [
+          "solo_mode"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
+        ]
+      }
+    },
+    "/solo/api/spend": {
+      "get": {
+        "operationId": "get_solo_mode_api_spend",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "AI spend for this project: total, cap, estimate for what is left.",
         "tags": [
           "solo_mode"
         ],

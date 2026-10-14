@@ -197,6 +197,7 @@ def prompt_editor():
         current_prompt=manager.get_current_prompt_text(),
         prompt_history=prompt_history,
         phase=manager.get_current_phase().name.lower(),
+        gold_configured=bool(manager.config.gold.file),
     )
 
 
@@ -285,8 +286,15 @@ def annotate():
         annotation = request.form.get('annotation')
 
         if instance_id and annotation:
-            # Record human annotation
-            manager.record_human_annotation(instance_id, annotation, user_id)
+            # The page says whether it showed the LLM's suggestion before this
+            # answer, and whether the answer came from the Accept button. An
+            # older page that sends neither leaves the blind/shown split alone.
+            visible = request.form.get('suggestion_visible')
+            manager.record_human_annotation(
+                instance_id, annotation, user_id,
+                suggestion_visible=(None if visible is None else visible == '1'),
+                accepted_suggestion=request.form.get('accepted_suggestion') == '1',
+            )
 
             # Check for disagreements
             if manager.check_for_disagreement(instance_id, annotation):
@@ -372,14 +380,18 @@ def annotate():
             phase=manager.get_current_phase().name.lower(),
         )
 
-    # Get LLM prediction if available
-    llm_prediction = manager.get_llm_prediction_for_instance(instance_id)
+    # Get LLM prediction if available. A blind item withholds it until the
+    # human has answered (solo_mode.suggestions).
+    show_suggestion = manager.suggestion_visible_before_label(instance_id)
+    llm_prediction = (manager.get_llm_prediction_for_instance(instance_id)
+                      if show_suggestion else None)
 
     return render_template(
         'solo/annotate.html',
         instance=instance,
         instance_id=instance_id,
         llm_prediction=llm_prediction,
+        show_suggestion=show_suggestion,
         labels=labels,
         annotation_type=manager.get_annotation_type(),
         phase=manager.get_current_phase().name.lower(),
@@ -700,6 +712,7 @@ def status():
         agreement_metrics=manager.get_agreement_metrics(),
         llm_stats=manager.get_llm_labeling_stats(),
         validation_progress=manager.get_validation_progress(),
+        anchoring=manager.get_anchoring_stats(),
         edge_case_rule_stats=edge_case_rule_stats,
         pending_categories=pending_categories,
         approved_count=approved_count,
@@ -726,6 +739,9 @@ def api_status():
         'llm_stats': manager.get_llm_labeling_stats(),
         'validation_progress': manager.get_validation_progress(),
         'should_end_human_annotation': manager.should_end_human_annotation(),
+        'curriculum': manager.get_curriculum_status(),
+        'anchoring': manager.get_anchoring_stats(),
+        'spend_refusal': manager.get_spend_refusal(),
     })
 
 
@@ -870,7 +886,19 @@ def api_start_labeling():
     success = manager.start_background_labeling()
     if success:
         return jsonify({'success': True, 'message': 'LLM labeling started'})
+    refusal = manager.get_spend_refusal()
+    if refusal:
+        # 402: refused for money, so the page's response.ok check sees it.
+        return jsonify({'success': False, 'message': refusal}), 402
     return jsonify({'success': False, 'message': 'Already running or failed to start'})
+
+
+@solo_mode_bp.route('/api/spend')
+@api_login_required
+@solo_mode_required
+def api_spend():
+    """AI spend for this project: total, cap, estimate for what is left."""
+    return jsonify(get_solo_mode_manager().get_spend_summary())
 
 @solo_mode_bp.route('/api/optimize-prompt', methods=['POST'])
 @api_login_required
@@ -1472,6 +1500,83 @@ def api_disagreement_timeline():
     except Exception as e:
         logger.error("Disagreement timeline failed: %s", traceback.format_exc())
         return jsonify({'error': 'An internal error occurred'}), 500
+
+
+@solo_mode_bp.route('/api/gold')
+@api_login_required
+@solo_mode_required
+def api_gold_status():
+    """The gold set, and each prompt version's score against it."""
+    return jsonify(get_solo_mode_manager().get_gold_status())
+
+
+@solo_mode_bp.route('/api/gold/evaluate', methods=['POST'])
+@api_login_required
+@same_origin_required
+@solo_mode_required
+def api_gold_evaluate():
+    """Score a prompt version (default: the current one) against the gold set."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    version = data.get('prompt_version')
+    try:
+        job = manager.start_gold_evaluation(
+            None if version in (None, '') else int(version))
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'job': job.to_dict()}), 202
+
+
+@solo_mode_bp.route('/api/prompt/try', methods=['POST'])
+@api_login_required
+@same_origin_required
+@solo_mode_required
+def api_prompt_try():
+    """Label a few unlabelled items with a prompt before the full run."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    prompt_text = data.get('prompt')
+    if prompt_text is not None and not str(prompt_text).strip():
+        return jsonify({'error': 'The prompt is empty'}), 400
+    try:
+        job = manager.start_prompt_trial(int(data.get('n', 10)), prompt_text)
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'job': job.to_dict()}), 202
+
+
+@solo_mode_bp.route('/api/sensitivity', methods=['POST'])
+@api_login_required
+@same_origin_required
+@solo_mode_required
+def api_sensitivity():
+    """Label the same items under paraphrases of the prompt and compare."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = get_solo_mode_manager().start_sensitivity_check(
+            int(data.get('n_variants', 4)), int(data.get('n_items', 20)))
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'job': job.to_dict()}), 202
+
+
+@solo_mode_bp.route('/api/sensitivity/latest')
+@api_login_required
+@solo_mode_required
+def api_sensitivity_latest():
+    """The most recent sensitivity check, or null."""
+    return jsonify({'job': get_solo_mode_manager().get_latest_job('sensitivity')})
+
+
+@solo_mode_bp.route('/api/jobs/<job_id>')
+@api_login_required
+@solo_mode_required
+def api_job(job_id):
+    """Progress and result of a gold evaluation or trial."""
+    job = get_solo_mode_manager().get_job(job_id)
+    if job is None:
+        return jsonify({'error': 'No such job'}), 404
+    return jsonify(job)
 
 
 @solo_mode_bp.route('/api/export')

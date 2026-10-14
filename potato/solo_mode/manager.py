@@ -8,7 +8,7 @@ instance selection, and validation tracking.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 import json
 import logging
@@ -245,6 +245,24 @@ class SoloModeManager:
         # measure whether a refinement actually improved accuracy
         self._per_version_agreement: Dict[int, Dict[str, int]] = {}  # version -> {compared, agreements}
 
+        #: Lowest confidence any routing tier gave an item. An escalated item
+        #: was hard for the tier below even when the tier that accepted it
+        #: reports full confidence, and the curriculum ranks by this.
+        self._routing_min_confidence: Dict[str, float] = {}
+
+        # Why background labeling last refused to run (ai_budget.cap_usd)
+        self._spend_refusal: Optional[str] = None
+
+        # Gold-set scores per prompt version, and background evaluation jobs
+        from .evaluation import JobRegistry
+        self._gold_results: Dict[int, Dict[str, Any]] = {}
+        self._jobs = JobRegistry()
+
+        # Blind-versus-shown agreement (see anchoring.py)
+        from .anchoring import AnchoringTracker
+        self.anchoring = AnchoringTracker(
+            config.suggestions, salt=str(app_config.get('annotation_task_name', '')))
+
         # Validated refinement framework state
         self._refinement_consecutive_failures: int = 0
         self._pending_refinements: List[Dict[str, Any]] = []
@@ -320,6 +338,8 @@ class SoloModeManager:
                 llm_predicted=self.config.instance_selection.llm_predicted_weight,
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
+            self._instance_selector.configure_curriculum(
+                self.config.instance_selection.curriculum)
         return self._instance_selector
 
     @property
@@ -343,6 +363,9 @@ class SoloModeManager:
                 prompt_version_getter=lambda: self.current_prompt_version,
                 examples_getter=self.get_icl_examples,
             )
+            if self.config.cache.enabled:
+                from .label_cache import LabelCache
+                self._llm_labeling_thread.label_cache = LabelCache(self.config.state_dir)
         return self._llm_labeling_thread
 
     @property
@@ -1982,7 +2005,9 @@ class SoloModeManager:
         instance_id: str,
         schema_name: str,
         label: Any,
-        user_id: str
+        user_id: str,
+        suggestion_visible: Optional[bool] = None,
+        accepted_suggestion: bool = False,
     ) -> Optional[bool]:
         """
         Record a human label and compare with LLM prediction.
@@ -1992,12 +2017,18 @@ class SoloModeManager:
             schema_name: The annotation schema
             label: The human's label
             user_id: The annotator ID
+            suggestion_visible: Whether the LLM's suggestion was on screen
+                when the human answered. None (a caller that does not know)
+                leaves the comparison out of the blind/shown split.
+            accepted_suggestion: The label came from the Accept button.
 
         Returns:
             True if agrees with LLM, False if disagrees, None if no LLM prediction
         """
         with self._lock:
             self.human_labeled_ids.add(instance_id)
+            if suggestion_visible:
+                self.anchoring.mark_shown(instance_id)
 
             prediction = self.get_llm_prediction(instance_id, schema_name)
             if prediction is None:
@@ -2044,6 +2075,11 @@ class SoloModeManager:
                     schema_name=schema_name,
                     agrees=agrees,
                 )
+                if suggestion_visible is not None:
+                    self.anchoring.record(
+                        f"{instance_id}:{schema_name}", agrees,
+                        shown=suggestion_visible,
+                        accepted=accepted_suggestion)
             else:
                 # Re-label of an already-counted instance: the newest label
                 # replaces the old one in every count. Only the disagreement
@@ -2284,6 +2320,13 @@ class SoloModeManager:
                 agrees=agrees,
             )
 
+            # The LLM labelled this after the human did, so the human answered
+            # without this suggestion. They may still have seen an earlier
+            # prompt version's suggestion for the same item.
+            self.anchoring.record(
+                f"{instance_id}:{schema_name}", agrees,
+                shown=self.anchoring.was_shown(instance_id))
+
             logger.debug(
                 f"Retroactive comparison for {instance_id}: "
                 f"llm={prediction.predicted_label}, human={human_label}, "
@@ -2453,6 +2496,10 @@ class SoloModeManager:
                 pred_dicts[iid] = {
                     s: p.to_dict() for s, p in schemas.items()
                 }
+                routed = self._routing_min_confidence.get(iid)
+                if routed is not None:
+                    for d in pred_dicts[iid].values():
+                        d['routing_min_confidence'] = routed
 
             # Get edge case rule IDs if available
             edge_case_rule_ids = None
@@ -2483,6 +2530,7 @@ class SoloModeManager:
                 confidence_threshold=self.config.thresholds.confidence_low,
                 edge_case_rule_ids=edge_case_rule_ids,
                 cartography_scores=cartography_variability,
+                human_labeled_count=len(self.human_labeled_ids),
             )
 
             # Select next instance
@@ -2493,6 +2541,12 @@ class SoloModeManager:
             if chosen in revisit:
                 self._reviewed_disagreements.add(self._revisit_key(chosen))
             return chosen
+
+    def get_curriculum_status(self) -> Dict[str, Any]:
+        """Curriculum stage, counted against the human labels saved so far."""
+        with self._lock:
+            return self.instance_selector.get_curriculum_status(
+                len(self.human_labeled_ids))
 
     def get_cartography_scores(self) -> Dict[str, Dict[str, float]]:
         """Compute cartography signals for each instance.
@@ -2540,14 +2594,51 @@ class SoloModeManager:
         minimum validation sample size is met.
         """
         with self._lock:
-            metrics = self.agreement_metrics
-            threshold = self.config.thresholds.end_human_annotation_agreement
-            min_sample = self.config.thresholds.minimum_validation_sample
+            return self._handoff_agreement_reached()
 
-            if metrics.total_compared < min_sample:
-                return False
+    def _handoff_agreement_reached(self) -> bool:
+        """Whether agreement is high enough, on enough items, to hand over.
 
-            return metrics.agreement_rate >= threshold
+        Reads blind agreement once there is enough of it (see
+        AnchoringTracker.handoff_basis). The minimum sample still applies to
+        every comparison, blind or not.
+        """
+        metrics = self.agreement_metrics
+        threshold = self.config.thresholds.end_human_annotation_agreement
+        min_sample = self.config.thresholds.minimum_validation_sample
+        if metrics.total_compared < min_sample:
+            return False
+        basis = self.anchoring.handoff_basis(self._blind_items_left())
+        if basis == 'waiting':
+            return False
+        if basis == 'blind':
+            return self.anchoring.blind_agreement_rate() >= threshold
+        if basis == 'blind_short' and self.anchoring.blind_count() > 0:
+            # Fewer blind items exist than the minimum: read the ones there are
+            # rather than wait for comparisons that cannot arrive.
+            return self.anchoring.blind_agreement_rate() >= threshold
+        return metrics.agreement_rate >= threshold
+
+    def _blind_items_left(self) -> Optional[int]:
+        """Blind items the human has not labelled yet, i.e. blind comparisons
+        still to come from the annotate page. None when the corpus cannot be
+        read, which keeps the handoff waiting rather than guessing "none"."""
+        try:
+            from potato.item_state_management import get_item_state_manager
+            ids = get_item_state_manager().instance_id_ordering
+        except Exception:
+            return None
+        return sum(1 for i in ids
+                   if i not in self.human_labeled_ids and self.anchoring.is_blind(i))
+
+    def get_anchoring_stats(self) -> Dict[str, Any]:
+        """Blind-versus-shown agreement, for the dashboard and the API."""
+        with self._lock:
+            return self.anchoring.stats(self._blind_items_left())
+
+    def suggestion_visible_before_label(self, instance_id: str) -> bool:
+        """Whether the annotate page may show this item's suggestion up front."""
+        return not self.anchoring.is_blind(instance_id)
 
     def check_and_advance_to_autonomous(self) -> bool:
         """
@@ -2560,14 +2651,7 @@ class SoloModeManager:
             True if phase was advanced to AUTONOMOUS_LABELING
         """
         with self._lock:
-            metrics = self.agreement_metrics
-            threshold = self.config.thresholds.end_human_annotation_agreement
-            min_sample = self.config.thresholds.minimum_validation_sample
-
-            if metrics.total_compared < min_sample:
-                return False
-
-            if metrics.agreement_rate < threshold:
+            if not self._handoff_agreement_reached():
                 return False
 
             # Only the human-annotation phases hand over. From a review or
@@ -2688,6 +2772,13 @@ class SoloModeManager:
                 logger.warning("Background labeling already running")
                 return False
 
+            # Refuse up front rather than halfway: a run stopped by the cap
+            # leaves a part-labelled corpus and a bill for it. Without a cap
+            # there is nothing to check, and the estimate reads every text.
+            if (self._spend_cap() is not None
+                    and not self._spend_allows(self.estimate_remaining_labeling_cost())):
+                return False
+
             self._stop_labeling.clear()
             self._pause_labeling.clear()
             self._labeling_thread = threading.Thread(
@@ -2698,6 +2789,341 @@ class SoloModeManager:
             self._labeling_thread.start()
             logger.info("Started background LLM labeling")
             return True
+
+    # === AI spend (ai_budget.cap_usd) ===
+
+    def _spend_cap(self) -> Optional[float]:
+        from potato.ai.cost import cap_for
+        return cap_for(self.app_config)
+
+    def _spend_model(self):
+        """The model a labeling call goes to first: tier 0, or the primary."""
+        routing = self.config.confidence_routing
+        if routing.enabled and routing.tiers:
+            return routing.tiers[0].model
+        if self.config.jury.enabled and self.config.jury.models:
+            return self.config.jury.models[0]
+        return self.config.labeling_models[0] if self.config.labeling_models else None
+
+    def _current_prompt_chars(self) -> int:
+        prompt = self.get_current_prompt()
+        return len(prompt.prompt_text) if prompt else 0
+
+    def estimate_remaining_labeling_cost(self, texts: Optional[List[str]] = None,
+                                         model_config=None):
+        """CostEstimate for the items the LLM has still to label, or None."""
+        from . import spend
+        model_config = model_config or self._spend_model()
+        if model_config is None:
+            return None
+        if texts is None:
+            texts = [inst['text'] for inst in self._get_instances_for_labeling(
+                self._get_total_instance_count() or 0)]
+        calls = None  # spend.estimate picks the per-item count for the model
+        if self.config.jury.enabled and self.config.jury.models:
+            # Every juror may be asked. Priced at the first juror's rate; an
+            # early stop makes the real figure lower.
+            calls = spend.calls_per_item(self.config) * len(self.config.jury.models)
+        return spend.estimate(texts, model_config, self._current_prompt_chars(),
+                              self.config, self.app_config, calls=calls)
+
+    def _spend_allows(self, projected) -> bool:
+        """Check ``projected`` against the cap; remember and log a refusal."""
+        from potato.ai.cost import SpendCapExceeded
+        from . import spend
+        if projected is None:
+            return True
+        try:
+            spend.check(self.app_config, projected)
+        except SpendCapExceeded as e:
+            self._spend_refusal = str(e)
+            logger.error("[Spend] Background labeling refused: %s", e)
+            return False
+        self._spend_refusal = None
+        return True
+
+    def get_spend_refusal(self) -> Optional[str]:
+        """Why background labeling last refused to run, or None."""
+        return self._spend_refusal
+
+    def get_spend_summary(self) -> Dict[str, Any]:
+        """Spent so far, the cap, the estimate for what is left, any refusal.
+
+        The estimate reads the text of every unlabelled item, and the
+        dashboard asks on every refresh, so it is reused until the number of
+        LLM-labelled items or the prompt version changes.
+        """
+        from . import spend
+        key = (len(self.llm_labeled_ids), self.current_prompt_version)
+        cached = getattr(self, '_remaining_estimate_cache', None)
+        if cached is None or cached[0] != key:
+            cached = (key, self.estimate_remaining_labeling_cost())
+            self._remaining_estimate_cache = cached
+        return spend.summary(self.app_config, remaining=cached[1],
+                             refusal=self._spend_refusal)
+
+    def _record_batch_spend(self, instances, routing_results=None) -> None:
+        """Charge the project for one batch's LLM calls.
+
+        With confidence routing each tier an item reached was called, so each
+        tier is charged for its own attempts at its own price. A tier whose
+        endpoint could not be built made no call and is not charged.
+        """
+        from . import spend
+        if not instances:
+            return
+        texts = [inst['text'] for inst in instances]
+        prompt_chars = self._current_prompt_chars()
+        try:
+            if routing_results is None:
+                model_config = self._spend_model()
+                if model_config is not None:
+                    projected = spend.estimate(texts, model_config, prompt_chars,
+                                               self.config, self.app_config)
+                    spend.record(self.app_config, projected, len(instances))
+                return
+            attempts_per_tier: Dict[int, int] = {}
+            for result in routing_results:
+                for attempt in result.attempts:
+                    if attempt.get('error') == 'Failed to create endpoint':
+                        continue
+                    i = attempt.get('tier_index', 0)
+                    attempts_per_tier[i] = attempts_per_tier.get(i, 0) + 1
+            tiers = self.config.confidence_routing.tiers
+            for i, n in attempts_per_tier.items():
+                if i < len(tiers):
+                    projected = spend.estimate(texts, tiers[i].model, prompt_chars,
+                                               self.config, self.app_config)
+                    spend.record(self.app_config, projected, n)
+        except Exception:
+            logger.exception("[Spend] Could not record batch spend")
+
+    # === Prompt evaluation: gold set and trials (evaluation.py) ===
+
+    def _primary_schema(self) -> Dict[str, Any]:
+        schemes = self.app_config.get('annotation_schemes', [])
+        return schemes[0] if schemes else {}
+
+    def _label_items_with_prompt(self, items, prompt_text: str, job,
+                                 action_check: bool = True) -> Dict[str, Any]:
+        """Label ``items`` ({instance_id, text}) with ``prompt_text``.
+
+        Goes through the labeling thread's endpoint and response cache, and
+        through the spend cap like background labeling. Returns
+        instance_id -> LabelingResult.
+        """
+        schema_name = self._primary_schema().get('name', 'default')
+        instances = [{'instance_id': i['instance_id'], 'text': i['text'],
+                      'schema_name': schema_name} for i in items]
+        if action_check and self._spend_cap() is not None:
+            model = self._spend_model()
+            if model is not None:
+                from . import spend
+                projected = spend.estimate([i['text'] for i in instances], model,
+                                           len(prompt_text), self.config, self.app_config)
+                if not self._spend_allows(projected):
+                    raise RuntimeError(self._spend_refusal)
+        results, attempted = {}, []
+        try:
+            for inst in instances:
+                attempted.append(inst)
+                results[inst['instance_id']] = self.llm_labeling_thread._label_instance(
+                    inst['instance_id'], inst['text'], schema_name,
+                    prompt_override=prompt_text)
+                job.done += 1
+        finally:
+            self._record_batch_spend(attempted)
+        return results
+
+    def _prompt_text_for(self, prompt_version: Optional[int]) -> tuple:
+        if prompt_version is None:
+            prompt_version = self.current_prompt_version
+        pv = self.get_prompt_version(prompt_version)
+        if pv is None:
+            raise ValueError(f"No prompt version {prompt_version}")
+        return prompt_version, pv.prompt_text
+
+    def gold_items(self):
+        """The configured gold set as GoldItems, or [] when there is none."""
+        from .evaluation import load_gold
+        gold = self.config.gold
+        if not gold.file:
+            return []
+        return load_gold(gold.file, self.app_config.get('task_dir', '.'),
+                         gold.id_key, gold.label_key, gold.text_key)
+
+    def start_gold_evaluation(self, prompt_version: Optional[int] = None):
+        """Score a prompt version against the gold set in the background."""
+        from .evaluation import score
+        version, prompt_text = self._prompt_text_for(prompt_version)
+        gold = self.gold_items()
+        if not gold:
+            raise ValueError("No gold set: set solo_mode.gold.file")
+        items = [{'instance_id': g.instance_id,
+                  'text': g.text if g.text is not None
+                  else self._get_instance_text(g.instance_id)} for g in gold]
+        missing = [i['instance_id'] for i in items if not i['text']]
+        items = [i for i in items if i['text']]
+        atype = self._primary_schema().get('annotation_type', 'radio')
+
+        def work(job):
+            results = self._label_items_with_prompt(items, prompt_text, job)
+            predictions = {iid: (r.label if r is not None and not r.error else None)
+                           for iid, r in results.items()}
+            report = score(predictions, {g.instance_id: g.label for g in gold
+                                         if g.instance_id not in missing}, atype)
+            report.update({
+                'prompt_version': version,
+                'model': getattr(self._spend_model(), 'model', ''),
+                'missing_text': missing[:50], 'n_missing_text': len(missing),
+                'finished_at': datetime.now().isoformat(),
+            })
+            with self._lock:
+                self._gold_results[version] = report
+            self._save_state()
+            return report
+
+        return self._jobs.start('gold', len(items), work)
+
+    def start_prompt_trial(self, n: int = 10, prompt_text: Optional[str] = None):
+        """Label ``n`` unlabelled items with a prompt and return what came back."""
+        import random
+        if prompt_text is None:
+            _, prompt_text = self._prompt_text_for(None)
+        n = max(1, min(int(n), 50))
+        try:
+            from potato.item_state_management import get_item_state_manager
+            ids = list(get_item_state_manager().instance_id_ordering)
+        except Exception:
+            ids = []
+        pool = [i for i in ids if i not in self.human_labeled_ids] or ids
+        chosen = random.Random(len(pool)).sample(pool, min(n, len(pool)))
+        items = [{'instance_id': i, 'text': self._get_instance_text(i)} for i in chosen]
+        items = [i for i in items if i['text']]
+
+        def work(job):
+            results = self._label_items_with_prompt(items, prompt_text, job)
+            rows, labels = [], Counter()
+            for item in items:
+                r = results.get(item['instance_id'])
+                ok = r is not None and not r.error
+                if ok:
+                    labels[str(r.label)] += 1
+                rows.append({
+                    'instance_id': item['instance_id'],
+                    'text': item['text'][:300],
+                    'label': r.label if ok else None,
+                    'confidence': r.confidence if ok else None,
+                    'reasoning': (r.reasoning or '')[:300] if ok else '',
+                    'error': None if ok else (r.error if r is not None else 'no result'),
+                })
+            confs = [row['confidence'] for row in rows if row['confidence'] is not None]
+            remaining = self.estimate_remaining_labeling_cost()
+            return {
+                'rows': rows,
+                'label_distribution': dict(labels),
+                'n_errors': sum(1 for row in rows if row['error']),
+                'mean_confidence': sum(confs) / len(confs) if confs else None,
+                'full_run_estimate': remaining.summary() if remaining else None,
+            }
+
+        return self._jobs.start('trial', len(items), work)
+
+    def start_sensitivity_check(self, n_variants: int = 4, n_items: int = 20):
+        """How much the labels move when the prompt is reworded.
+
+        A revision model writes ``n_variants`` paraphrases of the current
+        prompt that keep its labels and criteria; the labeling model labels
+        the same items under each (Baumann et al. 2025, "Large Language Model
+        Hacking"). Items come from the gold set when there is one, else from
+        what the human has labelled, else from anywhere in the corpus.
+        """
+        import random
+        from .prompt_sensitivity import generate_paraphrases, run_sensitivity
+
+        version, base_prompt = self._prompt_text_for(None)
+        n_variants = max(1, min(int(n_variants), 8))
+        n_items = max(2, min(int(n_items), 100))
+        ids = [g.instance_id for g in self.gold_items()] or sorted(self.human_labeled_ids)
+        if not ids:
+            try:
+                from potato.item_state_management import get_item_state_manager
+                ids = list(get_item_state_manager().instance_id_ordering)
+            except Exception:
+                ids = []
+        chosen = random.Random(len(ids)).sample(ids, min(n_items, len(ids)))
+        items = [(i, self._get_instance_text(i)) for i in chosen]
+        items = [(i, t) for i, t in items if t]
+        reviser = self.prompt_manager._get_revision_endpoint()
+        if reviser is None:
+            raise ValueError("No revision model to write paraphrases")
+        schema = self._primary_schema()
+        schema_name = schema.get('name', 'default')
+        label_names = self.llm_labeling_thread._get_valid_labels(schema)
+
+        def work(job):
+            def generate(request_text):
+                reply = reviser.query(request_text)
+                return reply if isinstance(reply, str) else json.dumps(reply)
+
+            variants = generate_paraphrases(base_prompt, n_variants, generate,
+                                            preserve_terms=label_names)
+            job.total = (len(variants) + 1) * len(items)
+            if self._spend_cap() is not None and self._spend_model() is not None:
+                from . import spend
+                projected = spend.estimate(
+                    [t for _, t in items] * (len(variants) + 1), self._spend_model(),
+                    len(base_prompt), self.config, self.app_config)
+                if not self._spend_allows(projected):
+                    raise RuntimeError(self._spend_refusal)
+
+            attempted = []
+
+            def label(prompt, instance_id, text):
+                attempted.append({'instance_id': instance_id, 'text': text})
+                result = self.llm_labeling_thread._label_instance(
+                    instance_id, text, schema_name, prompt_override=prompt)
+                job.done += 1
+                return None if result is None or result.error else result.label
+
+            try:
+                report = run_sensitivity(base_prompt, variants, items, label)
+            finally:
+                self._record_batch_spend(attempted)
+            out = report.to_dict()
+            out['prompt_version'] = version
+            out['variants'] = variants
+            return out
+
+        return self._jobs.start('sensitivity', (n_variants + 1) * len(items), work)
+
+    def get_latest_job(self, kind: str) -> Optional[Dict[str, Any]]:
+        """The most recent job of ``kind`` (gold, trial, sensitivity), or None."""
+        job = self._jobs.latest(kind)
+        return job.to_dict() if job is not None else None
+
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        job = self._jobs.get(job_id)
+        return job.to_dict() if job is not None else None
+
+    def get_gold_status(self) -> Dict[str, Any]:
+        """Whether a gold set is configured, and each prompt version's score."""
+        latest = self._jobs.latest('gold')
+        try:
+            n_items = len(self.gold_items())
+            load_error = None
+        except Exception as e:
+            n_items, load_error = 0, str(e)
+        with self._lock:
+            by_version = {str(v): r for v, r in sorted(self._gold_results.items())}
+        return {
+            'configured': bool(self.config.gold.file),
+            'n_items': n_items,
+            'load_error': load_error,
+            'results_by_version': by_version,
+            'current_prompt_version': self.current_prompt_version,
+            'latest_job': latest.to_dict() if latest is not None else None,
+        }
 
     def stop_background_labeling(self) -> None:
         """Stop background LLM labeling thread."""
@@ -2878,30 +3304,131 @@ class SoloModeManager:
                 self._retroactive_compare(result.instance_id, schema_name)
                 labeled += 1
 
+        if not remaining:
+            return labeled
+
+        # The cap is checked per batch as well as at start: the start-up
+        # estimate assumed no labeling-function hits and one tier per item.
+        if self._spend_cap() is not None and not self._spend_allows(
+                self.estimate_remaining_labeling_cost(
+                    texts=[inst['text'] for inst in remaining])):
+            self.pause_background_labeling()
+            return labeled
+
+        if self.config.jury.enabled:
+            return labeled + self._label_with_jury(remaining)
+
         # Label remaining with LLM
         router = self.confidence_router
-        if router is not None:
-            for inst in remaining:
-                result = router.route_instance(
-                    inst['instance_id'], inst['text'], inst['schema_name']
-                )
-                if result.accepted and result.labeling_result:
-                    self._handle_labeling_result(result.labeling_result)
-                    labeled += 1
-                elif result.labeling_result and result.labeling_result.error:
+        attempted = []
+        routing_results = [] if router is not None else None
+        try:
+            if router is not None:
+                for inst in remaining:
+                    attempted.append(inst)
+                    result = router.route_instance(
+                        inst['instance_id'], inst['text'], inst['schema_name']
+                    )
+                    routing_results.append(result)
+                    tier_confidences = [a['confidence'] for a in result.attempts
+                                        if 'confidence' in a]
+                    if tier_confidences:
+                        self._routing_min_confidence[inst['instance_id']] = min(
+                            tier_confidences)
+                    if result.accepted and result.labeling_result:
+                        self._handle_labeling_result(result.labeling_result)
+                        labeled += 1
+                    elif result.labeling_result and result.labeling_result.error:
+                        self._labeling_error_count += 1
+                        self._last_labeling_error = result.labeling_result.error
+            else:
+                for inst in remaining:
+                    attempted.append(inst)
+                    result = self.llm_labeling_thread._label_instance(
+                        inst['instance_id'], inst['text'], inst['schema_name']
+                    )
+                    if result and not result.error:
+                        self._handle_labeling_result(result)
+                        labeled += 1
+                    elif result and result.error:
+                        self._labeling_error_count += 1
+                        self._last_labeling_error = result.error
+        finally:
+            # A batch that dies partway still paid for every call before it.
+            self._record_batch_spend(attempted, routing_results)
+        return labeled
+
+    def _jury_endpoints(self) -> List[Any]:
+        """One endpoint per jury model, built once. A model whose endpoint
+        cannot be built is left out and logged."""
+        if getattr(self, '_jury_endpoint_cache', None) is None:
+            from .llm_labeler import LLMLabelingThread
+            built = []
+            for model_config in self.config.jury.models:
+                try:
+                    ep = LLMLabelingThread.create_endpoint_from_model_config(model_config)
+                except Exception as e:
+                    logger.error("[Jury] Could not build %s: %s", model_config.model, e)
+                    ep = None
+                if ep is not None:
+                    built.append((model_config, ep))
+            self._jury_endpoint_cache = built
+        return self._jury_endpoint_cache
+
+    def _label_with_jury(self, instances: List[Dict[str, Any]]) -> int:
+        """Label ``instances`` by jury vote (jury.py). Returns the number labelled."""
+        from . import spend
+        from .jury import run_jury
+        from .llm_labeler import LabelingResult
+
+        jurors = self._jury_endpoints()
+        if len(jurors) < 2:
+            self._labeling_error_count += 1
+            self._last_labeling_error = (
+                f"Jury needs two working models; {len(jurors)} could be built")
+            return 0
+        atype = self.get_annotation_type()
+        labeled = 0
+        calls_per_juror = Counter()
+        texts = {}
+        try:
+            for inst in instances:
+                texts[inst['instance_id']] = inst['text']
+                verdict = run_jury(
+                    [ep for _, ep in jurors],
+                    lambda ep: self.llm_labeling_thread._label_instance(
+                        inst['instance_id'], inst['text'], inst['schema_name'],
+                        endpoint=ep),
+                    atype, early_stop=self.config.jury.early_stop)
+                calls_per_juror.update(verdict['calls'].keys())
+                if verdict['label'] is None:
                     self._labeling_error_count += 1
-                    self._last_labeling_error = result.labeling_result.error
-        else:
-            for inst in remaining:
-                result = self.llm_labeling_thread._label_instance(
-                    inst['instance_id'], inst['text'], inst['schema_name']
-                )
-                if result and not result.error:
-                    self._handle_labeling_result(result)
-                    labeled += 1
-                elif result and result.error:
-                    self._labeling_error_count += 1
-                    self._last_labeling_error = result.error
+                    self._last_labeling_error = 'No juror returned a valid label'
+                    continue
+                vote_text = '; '.join(
+                    f"{v['model']}: {v['label']}" for v in verdict['votes'])
+                self._handle_labeling_result(LabelingResult(
+                    instance_id=inst['instance_id'],
+                    schema_name=inst['schema_name'],
+                    label=verdict['label'],
+                    confidence=verdict['confidence'],
+                    uncertainty=1.0 - verdict['confidence'],
+                    reasoning=f"Jury of {len(verdict['votes'])}: {vote_text}",
+                    prompt_version=self.current_prompt_version,
+                    model_name='jury:' + ','.join(m.model for m, _ in jurors),
+                ))
+                labeled += 1
+        finally:
+            prompt_chars = self._current_prompt_chars()
+            for i, n in calls_per_juror.items():
+                model_config = jurors[i][0]
+                try:
+                    projected = spend.estimate(
+                        list(texts.values()), model_config, prompt_chars,
+                        self.config, self.app_config)
+                    spend.record(self.app_config, projected, n)
+                except Exception:
+                    logger.exception("[Spend] Could not record jury spend")
         return labeled
 
     def _get_instances_for_labeling(self, batch_size: int) -> List[Dict[str, Any]]:
@@ -3010,6 +3537,9 @@ class SoloModeManager:
                     },
                     'reannotation_counts': self._reannotation_counts,
                     'per_version_agreement': self._per_version_agreement,
+                    'anchoring': self.anchoring.to_dict(),
+                    'routing_min_confidence': self._routing_min_confidence,
+                    'gold_results': {str(k): v for k, v in self._gold_results.items()},
                     'refinement_consecutive_failures': self._refinement_consecutive_failures,
                     'pending_refinements': self._pending_refinements,
                     'refinement_log': self._refinement_log[-50:],  # Keep last 50
@@ -3107,6 +3637,11 @@ class SoloModeManager:
                 self._per_version_agreement = {
                     int(k): v for k, v in raw_pva.items()
                 }
+                self.anchoring.load(state.get('anchoring'))
+                self._routing_min_confidence = dict(
+                    state.get('routing_min_confidence') or {})
+                self._gold_results = {
+                    int(k): v for k, v in (state.get('gold_results') or {}).items()}
 
                 # Restore validated refinement state
                 self._refinement_consecutive_failures = state.get(
@@ -3274,13 +3809,18 @@ class SoloModeManager:
         self,
         instance_id: str,
         annotation: Any,
-        user_id: str
+        user_id: str,
+        suggestion_visible: Optional[bool] = None,
+        accepted_suggestion: bool = False,
     ) -> None:
         """Record a human annotation (simplified interface for routes)."""
         # Get first schema name
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
-        self.record_human_label(instance_id, schema_name, annotation, user_id)
+        self.record_human_label(
+            instance_id, schema_name, annotation, user_id,
+            suggestion_visible=suggestion_visible,
+            accepted_suggestion=accepted_suggestion)
 
         # Check if refinement loop should trigger
         self._maybe_trigger_refinement()
@@ -3304,10 +3844,16 @@ class SoloModeManager:
                 ),
             }
             stats['confidence_routing'] = (
-                self._confidence_router.get_stats()
-                if self._confidence_router is not None
+                # The property builds the router when routing is configured, so
+                # a restart with nothing left to label still reports it.
+                self.confidence_router.get_stats()
+                if self.confidence_router is not None
                 else {'enabled': False}
             )
+            cache = (self._llm_labeling_thread.label_cache
+                     if self._llm_labeling_thread is not None else None)
+            stats['cache'] = cache.stats() if cache is not None else {
+                'enabled': self.config.cache.enabled}
             return stats
 
     def get_validation_progress(self) -> Dict[str, Any]:
@@ -3445,14 +3991,16 @@ class SoloModeManager:
                 'edge_cases': {
                     'count': len(self.edge_case_ids),
                 },
+                'curriculum': self.get_curriculum_status(),
+                'anchoring': self.get_anchoring_stats(),
                 'edge_case_rules': (
                     self.edge_case_rule_manager.get_stats()
                     if self._edge_case_rule_manager is not None
                     else {'total_rules': 0, 'total_categories': 0}
                 ),
                 'confidence_routing': (
-                    self._confidence_router.get_stats()
-                    if self._confidence_router is not None
+                    self.confidence_router.get_stats()
+                    if self.confidence_router is not None
                     else {'enabled': False}
                 ),
                 'thresholds': {
@@ -3492,7 +4040,7 @@ def init_solo_mode_manager(config_data: Dict[str, Any]) -> Optional[SoloModeMana
                 return None
 
             # Validate config
-            errors = solo_config.validate()
+            errors = solo_config.validate(config_data.get('annotation_schemes'))
             if errors:
                 for error in errors:
                     logger.error(f"Solo Mode config error: {error}")
