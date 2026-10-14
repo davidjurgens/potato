@@ -298,6 +298,26 @@ assignment_strategy: priority
 `signal_field` is read as items are added, before any annotation exists, so it
 works for a batch import: the contested items are served first and a human never opens the ones every tool already agreed on.
 
+## Can the machine replace an annotator?
+
+Agreement between a machine and your annotators does not answer this on its own: a model can agree with the majority 80% of the time while each person agrees with the rest even more often. The Alternative Annotator Test (Calderon, Reichart and Dror, ACL 2025) asks the question directly. For each human annotator in turn, it compares how well the machine matches the *other* annotators with how well that annotator does, and tests whether the machine is at least as good, within a margin ε. The machine passes when it does as well as at least half the annotators after a Benjamini–Yekutieli correction across them.
+
+```
+GET /admin/api/alt-test?annotator=<machine user id>&schema=<scheme name>&epsilon=0.2
+```
+
+The request needs the `X-API-Key` header with `admin_api_key`. Called without `annotator` or `schema`, it returns HTTP 400 with the declared machine annotators and the scheme names to choose from.
+
+| Parameter | Meaning |
+|-----------|---------|
+| `annotator` | The machine's user id. It has to be a declared machine annotator; a person is refused |
+| `schema` | The scheme to test on: `radio` and `select` are scored by exact match, `likert`, `slider` and `number` by negative RMSE |
+| `epsilon` | How much better than the machine an annotator has to be before the machine fails against them. The paper suggests 0.2 for experts, 0.15 for skilled annotators and 0.1 for crowd workers. Default 0.2 |
+
+The response gives `passed`, the winning rate `winning_rate` (the share of annotators the machine matched), the average advantage probability `advantage_probability`, and a row per annotator with their item count, p-value and adjusted p-value. It reads labels the same way `/admin/iaa` does.
+
+The test needs enough data to mean anything. By default each human annotator needs at least 30 items that the machine also labelled, and at least three annotators have to qualify. Below that, `passed` is null and `insufficient` says what is missing; annotators with too few items are listed under `skipped_annotators`. A Solo Mode study has one human annotator and cannot run the test. Its [blind agreement](../solo-mode/solo_mode_advanced.md#blind-suggestions) is the measure there.
+
 ## Example project
 
 `examples/advanced/machine-annotators/` is a synthetic gene-function curation

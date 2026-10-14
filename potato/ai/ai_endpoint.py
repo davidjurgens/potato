@@ -862,6 +862,11 @@ for _type, _module, _class, _hint in [
     ("sam3", ".sam3_endpoint", "SAM3Endpoint", "onnxruntime"),
     # Alias kept for configs written against the old AICacheManager name.
     ("open_router", ".openrouter_endpoint", "OpenRouterEndpoint", None),
+    # Decision ("System One") models: probabilities over options, no text.
+    # systemone is plain HTTP (Jev, OpenJev, laya-serve); laya runs in
+    # process and imports torch only when a model is first loaded.
+    ("systemone", ".systemone_endpoint", "SystemOneEndpoint", None),
+    ("laya", ".laya_endpoint", "LayaEndpoint", "'potato-annotation[decision]'"),
 ]:
     AIEndpointFactory.register_lazy_endpoint(_type, _module, _class, _hint)
 del _type, _module, _class, _hint

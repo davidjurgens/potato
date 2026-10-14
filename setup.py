@@ -128,6 +128,12 @@ _TRANSCRIBE_DEPS = [
     "faster-whisper>=1.0.0",
     "sherpa-onnx>=1.10.0",
 ]
+# In-process Laya decision model (endpoint_type: laya). Pulls torch and
+# transformers, so like `vision` it stays out of `all`. The systemone HTTP
+# endpoint needs only `requests`.
+_DECISION_DEPS = [
+    "laya>=0.4.7",
+]
 # `potato deploy` to a VM provider. Only the SSH transport is extra: the API
 # clients use `requests` and the templates use Jinja2, both core dependencies.
 # paramiko 3.0+ is required for Ed25519Key.generate.
@@ -207,6 +213,7 @@ setup(
         "deploy-openstack": _DEPLOY_DEPS + ["openstacksdk>=3.0.0"],
         "vision": _VISION_DEPS,
         "transcribe": _TRANSCRIBE_DEPS,
+        "decision": _DECISION_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
         "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _MYSQL_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,

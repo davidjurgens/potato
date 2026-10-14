@@ -3680,6 +3680,44 @@ def admin_api_iaa_summary():
     }))
 
 
+@app.route("/admin/api/alt-test", methods=["GET"])
+def admin_api_alt_test():
+    """The alt-test: can a declared machine annotator replace a human here?
+
+    ``annotator`` is the machine's user id, ``schema`` the scheme, ``epsilon``
+    the cost-benefit allowance (paper: 0.2 experts, 0.15 skilled, 0.1 crowd).
+    Without ``annotator`` the response lists the machines to choose from.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    from potato.server_utils import alt_test_report
+    from potato.server_utils.iaa.dispatcher import json_safe
+    annotator = request.args.get("annotator")
+    schema = request.args.get("schema")
+    if not annotator or not schema:
+        return jsonify({
+            "error": "Pass annotator=<machine user id> and schema=<scheme name>",
+            "machine_annotators": alt_test_report.declared_machines(
+                get_user_state_manager()),
+            "schemas": [s.get("name") for s in config.get("annotation_schemes", [])],
+        }), 400
+    try:
+        epsilon = float(request.args.get("epsilon", 0.2))
+    except ValueError:
+        return jsonify({"error": "epsilon must be a number"}), 400
+    try:
+        report = alt_test_report.build_report(
+            get_item_state_manager(), get_user_state_manager(), config,
+            annotator, schema, epsilon=epsilon)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Failed to compute the alt-test")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(json_safe(report))
+
+
 def _record_judge_comparison_if_enabled(username, instance_id):
     """On human save, log the human↔judge comparison if inline mode is on."""
     ja = config.get("judge_alignment", {}) or {}
@@ -10281,6 +10319,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
     app.add_url_rule("/admin/api/iaa_summary", "admin_api_iaa_summary", admin_api_iaa_summary, methods=["GET"])
+    app.add_url_rule("/admin/api/alt-test", "admin_api_alt_test", admin_api_alt_test, methods=["GET"])
     app.add_url_rule("/admin/logout", "admin_logout", admin_logout, methods=["POST"])
     app.add_url_rule("/admin/iaa/drift", "admin_iaa_drift", admin_iaa_drift,
                      methods=["GET"])

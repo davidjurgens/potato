@@ -31,6 +31,8 @@ FORBIDDEN_AT_BOOT = [
     "ollama", "openai", "anthropic", "google.genai", "huggingface_hub",
     # The backup's S3 client and the deploy-side cloud SDKs.
     "boto3", "botocore", "openstack", "paramiko",
+    # The in-process decision model (potato/ai/laya_endpoint.py).
+    "laya",
 ]
 
 # Optional packages a core-only `pip install potato-annotation` does NOT have.

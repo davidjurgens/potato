@@ -148,7 +148,7 @@ PRICE_TABLE: Dict[str, tuple] = {
 #: Endpoint types that run on hardware you already pay for. Zero is the right
 #: marginal price, not a missing one, so these are priced rather than unknown.
 LOCAL_ENDPOINTS = frozenset({"vllm", "ollama", "huggingface", "yolo", "sam",
-                             "sam2", "sam3"})
+                             "sam2", "sam3", "laya"})
 
 #: Characters per token. A rule of thumb, and stated as one: real tokenizers
 #: vary by 20-30% and by language, so this is for deciding "is this run
