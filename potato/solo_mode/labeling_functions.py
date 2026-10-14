@@ -366,11 +366,26 @@ class LabelingFunctionExtractor:
 
         return None
 
-    def _parse_json_array(self, response: str) -> Optional[list]:
-        """Parse a JSON array from LLM response."""
+    def _parse_json_array(self, response: Any) -> Optional[list]:
+        """Parse a JSON array from LLM response.
+
+        The vllm, ollama and openrouter endpoints return the reply already
+        parsed, so a list (or a dict wrapping one) arrives here as well as a
+        string. Calling .strip() on it raised, and LLM extraction fell back to
+        keyword counting on every one of those backends.
+        """
         import json
 
         if not response:
+            return None
+        if isinstance(response, list):
+            return response
+        if isinstance(response, dict):
+            inner = next((v for v in response.values() if isinstance(v, list)), None)
+            if inner is not None:
+                return inner
+            response = json.dumps(response)
+        if not isinstance(response, str):
             return None
 
         # Try direct parse

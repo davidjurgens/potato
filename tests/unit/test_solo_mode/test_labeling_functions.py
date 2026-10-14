@@ -745,3 +745,20 @@ class TestSoloModeManagerLabelingFunctions:
         assert result['success'] is True
         # Should extract something from keyword patterns
         assert result['total'] >= 0
+
+
+class TestParseAlreadyParsedReplies:
+    """vllm/ollama/openrouter return parsed JSON; extraction must accept it."""
+
+    def _ext(self):
+        from potato.solo_mode.labeling_functions import LabelingFunctionExtractor
+        return LabelingFunctionExtractor.__new__(LabelingFunctionExtractor)
+
+    def test_list_reply(self):
+        assert self._ext()._parse_json_array([{'label': 'a'}]) == [{'label': 'a'}]
+
+    def test_dict_wrapping_a_list(self):
+        assert self._ext()._parse_json_array({'functions': [{'label': 'a'}]}) == [{'label': 'a'}]
+
+    def test_string_reply_still_parses(self):
+        assert self._ext()._parse_json_array('[{"label": "a"}]') == [{'label': 'a'}]
