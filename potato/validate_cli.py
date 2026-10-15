@@ -149,7 +149,13 @@ def validate_config_file(config_file: str) -> ValidationReport:
         validate_file_paths(config_data, config_file_dir, config_file_dir)
     except (ConfigValidationError, ConfigSecurityError) as e:
         report.ok = False
-        report.errors.append(str(e))
+        # A block validated as a whole (labeling_engine) carries its own list
+        # of problems; one bullet each, not its heading as a bullet.
+        items = getattr(e, "errors", None) or getattr(e.__cause__, "errors", None)
+        if isinstance(items, list) and items:
+            report.errors.extend(str(x) for x in items)
+        else:
+            report.errors.append(str(e))
     except Exception as e:
         # Surface unexpected errors but do not crash the CLI
         report.ok = False

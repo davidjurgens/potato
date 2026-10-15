@@ -46,8 +46,13 @@ class SystemOneEndpoint(DecisionModelEndpoint):
                 "systemone endpoint needs ai_config.base_url, e.g. https://api.typesafe.ai "
                 "or http://localhost:8000 for laya-serve")
         self.base_url = raw_base.rstrip("/")
-        if self.base_url.endswith("/v1"):
-            self.base_url = self.base_url[: -len("/v1")]
+        # The server root is wanted; the route is added per call. A URL
+        # copied with the route on (".../v1/systemone") would otherwise
+        # become ".../v1/systemone/v1/systemone".
+        for suffix in ("/v1/systemone", "/v1"):
+            if self.base_url.endswith(suffix):
+                self.base_url = self.base_url[: -len(suffix)]
+                break
         self.api_key = self.ai_config.get("api_key") or ""
         self.timeout = self.ai_config.get("timeout", 30)
         self.state_key = self.ai_config.get("state_key", "text")

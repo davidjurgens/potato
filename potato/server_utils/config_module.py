@@ -613,6 +613,43 @@ KNOWN_CONFIG_KEYS = {
         "auto_enroll": None,
         "routing": None,
     },
+    # In-tool model training (potato/training). Read by training/manager.py
+    # and training/writeback.py.
+    "model_training": {
+        "enabled": None,
+        "retain_runs": None,
+        "grace_seconds": None,
+        "split_seed": None,
+        "splits": None,
+        "aggregation": None,
+        "auto_retrain": None,
+        "max_wall_seconds": None,
+        "max_ram_mb": None,
+        "device": None,
+        "num_threads": None,
+        "writeback": {"schemas", "min_confidence", "field"},
+    },
+    # The labeling engine (potato/labeling_engine): machines label, humans
+    # calibrate and certify. Sources, cascade and contracts are lists of
+    # mappings validated by labeling_engine.config.parse_engine_config.
+    "labeling_engine": {
+        "enabled": None,
+        "schemas": None,
+        "sources": None,
+        "cascade": None,
+        "contracts": None,
+        "humans": {"pools", "dev_fraction", "calibration_rate",
+                   "min_calibration_per_class", "audit_rate", "overlap",
+                   "overlap_k", "verify_visibility", "distribution_k", "truth"},
+        "crowd": {"provider", "study_id", "reward_usd", "per_worker_quota"},
+        "budgets": {"model_usd", "human_usd", "human_labels"},
+        "runtime": {"batch_size", "concurrency", "cache", "retries",
+                    "planner_interval", "hold_minutes"},
+        "features": {"distill", "optimize", "drift", "crowd_recruit",
+                     "crowd_live_spend", "pii_redaction", "payload_capture"},
+        "redaction": {"categories"},
+        "distill": {"trainer", "min_labels", "every", "include_silver"},
+    },
     "solo_mode": {
         "enabled": None,
         "labeling_models": None,
@@ -1050,7 +1087,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
-    "batch", "priority", "psychometric", "model_review",
+    "batch", "priority", "psychometric", "model_review", "engine",
 ]
 
 
@@ -1568,6 +1605,115 @@ def validate_solo_mode_config(config_data: Dict[str, Any]) -> None:
     if errors:
         raise ConfigValidationError(
             "Invalid solo_mode configuration:\n  - " + "\n  - ".join(errors))
+
+
+def _warn_engine_budget_too_small(engine_cfg) -> None:
+    """Warn when budgets.human_labels cannot certify a selective_risk contract
+    even if every machine answer were right: such a study can only stall.
+    The first look's test needs n held-out labels with (1 - error)^n at most
+    its level, and as many again go to dev."""
+    import math
+    cap = engine_cfg.budgets.get("human_labels")
+    if cap is None:
+        return
+    dev = float(getattr(engine_cfg.humans, "dev_fraction", 0.5) or 0.5)
+    for c in engine_cfg.contracts:
+        if c.kind != "selective_risk" or not c.error or c.error >= 1:
+            continue
+        alpha = (1.0 - float(c.confidence)) * 6 / math.pi ** 2
+        cert = math.ceil(math.log(alpha) / math.log(1.0 - float(c.error)))
+        need = math.ceil(cert / max(1e-9, 1.0 - dev))
+        if cap < need:
+            logger.warning(
+                f"budgets.human_labels {cap:g} cannot certify {c.id} (error {c.error:g}, "
+                f"confidence {c.confidence:g}) even with no machine errors: it needs at "
+                f"least {need} human labels ({cert} held out, the rest for choosing the "
+                "threshold). Raise the budget or loosen the target.")
+
+
+#: Deprecation notes already printed in this process.
+_DEPRECATION_NOTES_SHOWN = set()
+
+def validate_labeling_engine_config(config_data: Dict[str, Any]) -> None:
+    """Refuse to start on an invalid ``labeling_engine`` block.
+
+    Every problem is reported at once. An absent block, or one with
+    ``enabled: false``, is still parsed so a typo is caught before someone
+    turns it on.
+    """
+    block = config_data.get("labeling_engine")
+    engine_on = isinstance(block, dict) and bool(block.get("enabled", False))
+    if config_data.get("assignment_strategy") == "engine" and not engine_on:
+        # Otherwise every annotator is told the items already have enough
+        # annotators, which names the wrong cause.
+        raise ConfigValidationError(
+            "assignment_strategy: engine serves the labeling engine's requests, but "
+            + ("labeling_engine.enabled is false." if isinstance(block, dict)
+               else "there is no labeling_engine block.")
+            + " Turn the engine on, or choose another assignment_strategy.")
+    if block is None:
+        # Not a warning: `validate --strict` fails on any warning, and every
+        # config using these keys would start failing it.
+        # Printed rather than logged: this runs before logging is configured,
+        # so a logger.info here reached nobody (potato-skill O1). Once per
+        # process, since a config can be validated more than once.
+        from potato.labeling_engine.config.translate import deprecation_warnings
+        for note in deprecation_warnings(config_data):
+            if note not in _DEPRECATION_NOTES_SHOWN:
+                _DEPRECATION_NOTES_SHOWN.add(note)
+                print(f"NOTE: {note}", file=sys.stderr)
+        return
+    from potato.labeling_engine.config import EngineConfigError, parse_engine_config
+    try:
+        engine_cfg = parse_engine_config(config_data)
+    except EngineConfigError as e:
+        raise ConfigValidationError(str(e)) from e
+    if engine_cfg.enabled:
+        # A contract on a scheme type with no family (free text, pairwise)
+        # can never be scored: its calibration requests opened and never
+        # closed, and it read as an ordinary "insufficient".
+        from potato.labeling_engine.families import Unsupported, family_for
+        from potato.labeling_engine.schemes import scheme_specs
+        specs = {sp.name: sp for sp in scheme_specs(config_data)}
+        unscorable = [f"{c.id} ({c.schema}: {specs[c.schema].annotation_type})"
+                      for c in engine_cfg.contracts
+                      if c.schema in specs and isinstance(family_for(specs[c.schema]),
+                                                          Unsupported)]
+        if unscorable:
+            raise ConfigValidationError(
+                "labeling_engine: these contracts are on schemes the engine cannot "
+                "score machine answers for: " + ", ".join(unscorable) + ". Free text "
+                "and pairwise schemes have no loss: take them out of the contracts "
+                "and labeling_engine.schemas (people then answer them on the items "
+                "the engine sends them), or judge them with an LLM-judge scheme.")
+        _warn_engine_budget_too_small(engine_cfg)
+        if config_data.get("assignment_strategy") == "engine":
+            # People are served the engine's requests only, so a scheme the
+            # engine does not handle (left out of labeling_engine.schemas, or
+            # one no source can label, such as free text) is answered on
+            # those items and no others. The second case needed no
+            # `schemas` key, the commonest shape, and said nothing (A6).
+            from potato.labeling_engine.service import unsupported_schemes as _no_source
+            left_out = [s.get("name") for s in (config_data.get("annotation_schemes") or [])
+                        if isinstance(s, dict) and engine_cfg.schemas
+                        and s.get("name") not in engine_cfg.schemas]
+            left_out += [n for n in _no_source(config_data, engine_cfg, every_scheme=True)
+                         if n not in left_out]
+            if left_out:
+                logger.warning(
+                    f"assignment_strategy: engine serves only the engine's requests, and "
+                    f"the engine does not label {', '.join(map(str, left_out))}, so people "
+                    "will answer them only on the items the engine sends them for the "
+                    "other schemes, not on every item. If every item needs them, use "
+                    "another assignment_strategy.")
+        # A contract on a scheme no cascade source can label never runs, and
+        # its scheme drops out of the engine without a word.
+        from potato.labeling_engine.service import unsupported_schemes
+        bad = unsupported_schemes(config_data, engine_cfg)
+        if bad:
+            raise ConfigValidationError(
+                "labeling_engine: no cascade source can label "
+                + "; ".join(f"{name!r} ({'; '.join(why)})" for name, why in bad.items()))
 
 
 def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
@@ -2397,6 +2543,8 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     validate_solo_mode_config(config_data)
 
+    validate_labeling_engine_config(config_data)
+
     # Validate declared machine annotators if present.
     validate_machine_annotators_config(config_data)
 
@@ -2471,6 +2619,9 @@ _CLAIM_INCOMPATIBLE_STRATEGIES = {
     # Serves items in a confidence order the annotator did not choose, so a
     # search-and-claim flow would silently reorder the review queue.
     "model_review",
+    # The engine's calibration sample is random; an annotator who picked
+    # their own items would make it a sample of what people chose to label.
+    "engine",
 }
 
 
@@ -6728,6 +6879,7 @@ _LLM_ENV_SUBSTITUTION_BLOCKS = (
     "live_agent",
     "live_coding_agent",
     "solo_mode",
+    "labeling_engine",
     "judge_calibration",
     "agent_proxy",
     "chat_support",
@@ -7056,7 +7208,7 @@ def init_config(args):
         # if the .yaml config file is given, directly use it
         if args.config_file[-5:] == '.yaml':
             if os.path.exists(args.config_file):
-                print("INFO: when you run the server directly from a .yaml file, please make sure your config file is put in the annotation project folder")
+                print("INFO: when you run the server directly from a .yaml file, please make sure your config file is put in the annotation project folder", file=sys.stderr)
                 config_file = args.config_file
                 # For direct YAML file usage, we'll determine the project_dir from the config file content
                 # after loading it, not from the file path structure
@@ -7718,8 +7870,9 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
         raise ConfigValidationError(
             f"ai_support.endpoint_type {endpoint_type!r} is a decision model, "
             f"which picks a label but cannot write text, and ai_support's "
-            f"assistants all write text. Use it under solo_mode.labeling_models "
-            f"or as a solo_mode.confidence_routing tier instead.")
+            f"assistants all write text. Use it under solo_mode.labeling_models, "
+            f"as a solo_mode.confidence_routing tier, or as a labeling_engine "
+            f"source with kind: decision instead.")
 
     valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm",
                             "yolo", "ollama_vision", "openai_vision", "anthropic_vision"]
@@ -8001,6 +8154,14 @@ def validate_mcp_config(config_data: Dict[str, Any]) -> None:
             f"mcp.destructive lists {', '.join(ungranted)}, which mcp.tools does "
             f"not grant. A destructive tool must appear in both."
         )
+
+    engine_block = config_data.get("labeling_engine")
+    engine_tools = [t for t in tools if str(t).startswith("engine_")]
+    if engine_tools and not (isinstance(engine_block, dict)
+                             and engine_block.get("enabled", False)):
+        logger.warning(
+            f"mcp.tools grants {', '.join(engine_tools)}, but the labeling engine is "
+            f"off (labeling_engine.enabled), so every call to them is refused.")
 
     scope = mcp_config.get("scope")
     if scope is not None and not isinstance(scope, dict):

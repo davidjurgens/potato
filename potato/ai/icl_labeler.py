@@ -613,7 +613,10 @@ class ICLLabeler:
                     self.predictions[instance_id] = {}
                 self.predictions[instance_id][schema_name] = prediction
                 self.labeled_instance_ids.add(instance_id)
-
+            from potato.labeling_engine.integration.mirror import mirror
+            mirror("icl_labeling", prediction.model_name, "icl", instance_id, schema_name,
+                   predicted_label, prediction.confidence_score, reasoning)
+            with self._lock:
                 # Maybe add to verification queue
                 if self.verification_enabled and random.random() < self.verification_sample_rate:
                     self.verification_queue.append((instance_id, schema_name))
@@ -637,12 +640,9 @@ class ICLLabeler:
         return valid_labels
 
     def _fuzzy_match_label(self, predicted: str, valid_labels: List[str]) -> Optional[str]:
-        """Try to match predicted label to a valid label."""
-        predicted_lower = predicted.lower().strip()
-        for label in valid_labels:
-            if label.lower().strip() == predicted_lower:
-                return label
-        return None
+        """Try to match predicted label to a valid label (the engine's matcher)."""
+        from potato.labeling_engine.schemes import normalize_label
+        return normalize_label(predicted, [str(v) for v in valid_labels])
 
     def should_pause_labeling(self) -> Tuple[bool, str]:
         """

@@ -59,6 +59,13 @@
     .trial-table td.trial-text { max-width: 28rem; }
     .trial-error { color: var(--destructive, #b91c1c); }
 
+    .source-note {
+        font-size: 12px;
+        color: var(--muted-foreground, #555);
+        margin-top: 5px;
+        overflow-wrap: anywhere;
+    }
+
     .source-tag {
         display: inline-block;
         background: #6c757d;
@@ -73,7 +80,7 @@
 {% block content %}
 <h1>Review Annotation Prompt</h1>
 
-<p>Review and edit the generated annotation prompt. This prompt will guide both you and the LLM during annotation.</p>
+<p>Review and edit the generated annotation prompt. This prompt will guide both you and the model during annotation.</p>
 
 <form id="prompt-form" method="POST" action="{{ url_for('solo_mode.prompt_editor') }}">
     <input type="hidden" name="action" id="form-action" value="update">
@@ -137,6 +144,9 @@
             <div class="history-item" onclick="loadVersion({{ revision.version }})">
                 <span class="version-tag">v{{ revision.version }}</span>
                 <span class="source-tag">{{ revision.source }}</span>
+                {% if revision.note %}
+                <div class="source-note">{{ revision.note }}</div>
+                {% endif %}
                 <div style="font-size: 12px; color: #666; margin-top: 5px;">
                     {{ revision.timestamp[:19] }}
                 </div>

@@ -243,8 +243,10 @@ class SoloDashboard {
     const blind = a.blind || {};
     const shown = a.shown || {};
     this._setText('ov-blind-agreement', pct(blind.agreement_rate));
-    this._setText('ov-blind-n', `${pct(blind.agreement_rate)} of ${blind.compared || 0}`);
-    this._setText('ov-shown-n', `${pct(shown.agreement_rate)} of ${shown.compared || 0}`);
+    // "not yet of 0" read as a broken sentence; an empty bucket is "none yet".
+    const ofN = (bucket) => bucket.compared ? `${pct(bucket.agreement_rate)} of ${bucket.compared}` : 'none yet';
+    this._setText('ov-blind-n', ofN(blind));
+    this._setText('ov-shown-n', ofN(shown));
     if (a.gap === null || a.gap === undefined) {
       this._setText('ov-anchoring-gap', `needs ${a.min_for_gap || 5} of each`);
     } else {
@@ -256,7 +258,8 @@ class SoloDashboard {
       blind: 'blind agreement',
       all: 'all agreement',
       waiting: 'waiting for blind items',
-      blind_short: 'every blind item there is',
+      // Below the minimum: say how far, rather than read as if it were met.
+      blind_short: `${blind.compared || 0} blind items, below the minimum of ${a.minimum_blind_sample}`,
     }[a.handoff_basis] || a.handoff_basis;
     this._setText('ov-handoff-basis', basisText);
 
@@ -269,10 +272,10 @@ class SoloDashboard {
       note = `This dataset has fewer blind items than minimum_blind_sample ` +
              `(${a.minimum_blind_sample}), so the handoff reads the ${blind.compared || 0} there are.`;
     } else if (a.handoff_basis === 'waiting') {
-      note = `The LLM takes over only after ${missing} more blind ` +
+      note = `The model takes over only after ${missing} more blind ` +
              `item${missing === 1 ? '' : 's'}.`;
     } else if (a.gap !== null && a.gap !== undefined && a.gap >= 0.1) {
-      note = 'You agree with the LLM noticeably more often when you can see ' +
+      note = 'You agree with the model noticeably more often when you can see ' +
              'its suggestion. The handoff reads blind agreement for this reason.';
     }
     this._setText('ov-anchoring-note', note);
@@ -555,7 +558,7 @@ class SoloDashboard {
       .attr('y', -75)
       .attr('text-anchor', 'middle')
       .attr('font-weight', '600')
-      .text('LLM Predicted');
+      .text('Model predicted');
   }
 
   _renderPatternsTable(patterns) {
@@ -1055,7 +1058,7 @@ class SoloDashboard {
           .html(`
             <div class="tooltip-label">${self._esc(d.instance_id)}</div>
             <div class="tooltip-meta">
-              LLM: ${self._esc(d.llm_label)}
+              Model: ${self._esc(d.llm_label)}
               ${d.human_label ? ' | Human: ' + self._esc(d.human_label) : ''}
               <br>Confidence: ${Math.round(d.confidence * 100)}%
               | ${d.agrees ? 'Agrees' : 'Disagrees'}
@@ -1199,7 +1202,7 @@ class SoloDashboard {
 
       return `<div class="disagree-item${resolvedClass}">
         <div class="disagree-labels">
-          <span class="label-pill llm">LLM: ${this._esc(d.llm_label)}</span>
+          <span class="label-pill llm">Model: ${this._esc(d.llm_label)}</span>
           <span class="label-pill human">Human: ${this._esc(d.human_label)}</span>
           <span style="font-size: 0.6875rem; color: var(--muted-foreground);">Confidence: ${conf}%</span>
           ${d.resolved ? '<span style="font-size: 0.6875rem; color: var(--success-color, #10b981);">Resolved' + (d.resolution_label ? ': ' + this._esc(d.resolution_label) : '') + '</span>' : ''}

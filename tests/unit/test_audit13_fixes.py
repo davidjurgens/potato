@@ -189,12 +189,22 @@ def test_save_user_state_accepts_a_username():
 
 
 def test_mcp_submit_annotation_saves_the_state_object():
-    import inspect
+    """MCP submit_annotation ends in ``finish_annotation_write``, which must
+    hand ``save_user_state`` the state object it just wrote to (a username
+    there reloaded a stale copy and dropped the write)."""
+    from unittest.mock import MagicMock, patch
 
-    from potato.mcp_server import routes
+    from potato import annotation_commit
 
-    src = inspect.getsource(routes.tool_submit_annotation)
-    assert "usm.save_user_state(state)" in src
+    state = MagicMock()
+    state.has_annotated.return_value = True
+    usm, ism = MagicMock(), MagicMock()
+    with patch("potato.user_state_management.get_user_state_manager", return_value=usm), \
+            patch("potato.item_state_management.get_item_state_manager", return_value=ism), \
+            patch("potato.labeling_engine.integration.hooks.on_human_save"):
+        annotation_commit.finish_annotation_write(state, "i1", "rev1", register_always=True)
+    usm.save_user_state.assert_called_once_with(state)
+    ism.register_annotator.assert_called_once_with("i1", "rev1")
 
 
 # --------------------------------------------------------------------------

@@ -6,14 +6,17 @@
 <style>
     .comparison-view {
         display: flex;
+        flex-wrap: wrap;
         gap: 20px;
         margin: 20px 0;
     }
 
     .comparison-panel {
-        flex: 1;
+        flex: 1 1 200px;
+        min-width: 0;
         padding: 20px;
         border-radius: 8px;
+        overflow-wrap: anywhere;
     }
 
     .human-panel {
@@ -67,7 +70,7 @@
 
     .resolution-btn {
         flex: 1;
-        min-width: 200px;
+        min-width: min(200px, 100%);
         padding: 15px 20px;
         border: 2px solid #ddd;
         background: white;
@@ -101,7 +104,7 @@
 {% block content %}
 <h1>Resolve Disagreement</h1>
 
-<p>You and the LLM disagree on the label for this instance. Please review both labels and decide which is correct.</p>
+<p>You and the model disagree on the label for this instance. Please review both labels and decide which is correct.</p>
 
 {% if disagreement %}
 <form method="POST" action="{{ url_for('solo_mode.disagreements') }}">
@@ -124,7 +127,7 @@
         <div class="comparison-panel llm-panel">
             <div class="panel-header">
                 <span class="panel-icon llm-icon">AI</span>
-                LLM Label
+                Model label
             </div>
             <div class="panel-label">{{ disagreement.llm_label }}</div>
             {% if disagreement.llm_reasoning %}
@@ -143,7 +146,7 @@
         </button>
 
         <button type="button" class="resolution-btn" data-resolution="llm" onclick="selectResolution('llm')">
-            <h4>Accept LLM Label</h4>
+            <h4>Accept the model's label</h4>
             <p>Use "{{ disagreement.llm_label }}" as the final label</p>
         </button>
 

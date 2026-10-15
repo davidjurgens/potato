@@ -312,7 +312,8 @@ def tool_get_item(record, payload):
         return _refuse("instance_id is required", 400)
 
     ism = get_item_state_manager()
-    item = ism.get_item(instance_id)
+    # get_item raises KeyError on an unknown id, so the 404 never ran.
+    item = ism.find_item(instance_id)
     if item is None:
         return _refuse(f"No such item: {instance_id}", 404)
 
@@ -347,7 +348,102 @@ def tool_get_config(record, payload):
     return jsonify({"config": redacted})
 
 
+def _engine_or_refusal():
+    from potato.labeling_engine.integration.hooks import get_engine
+    engine = get_engine()
+    if engine is None:
+        return None, _refuse("The labeling engine is not enabled for this study", 404)
+    return engine, None
+
+
+def _safe(obj):
+    from potato.server_utils.iaa.dispatcher import json_safe
+    return jsonify(json_safe(obj))
+
+
+@mcp_bp.route("/api/mcp/tools/engine_status", methods=["POST"])
+@mcp_tool("engine_status")
+def tool_engine_status(record, payload):
+    engine, refusal = _engine_or_refusal()
+    if refusal is not None:
+        return refusal
+    return _safe(engine.status())
+
+
+@mcp_bp.route("/api/mcp/tools/engine_requests", methods=["POST"])
+@mcp_tool("engine_requests")
+def tool_engine_requests(record, payload):
+    engine, refusal = _engine_or_refusal()
+    if refusal is not None:
+        return refusal
+    from potato.labeling_engine.model.records import PURPOSES, REQUEST_STATUSES
+    filters = {}
+    for key, allowed in (("purpose", PURPOSES), ("status", REQUEST_STATUSES)):
+        raw = payload.get(key)
+        values = raw if isinstance(raw, list) else str(raw or "").split(",")
+        values = [str(v).strip() for v in values if str(v).strip()]
+        unknown = [v for v in values if v not in allowed]
+        if unknown:
+            return _refuse(f"unknown {key} {', '.join(map(repr, unknown))}; expected "
+                           f"one of: {', '.join(allowed)}", 400)
+        filters[key] = values or None
+    try:
+        limit = min(1000, max(1, int(payload.get("limit") or 100)))
+    except (TypeError, ValueError):
+        return _refuse(f"limit must be an integer, got {payload.get('limit')!r}", 400)
+    rows = engine.store.requests(purpose=filters["purpose"], status=filters["status"],
+                                 limit=limit)
+    return _safe({"counts": engine.store.request_counts(),
+                  "requests": [r.__dict__ for r in rows]})
+
+
 # -------------------------------------------------------------------- write --
+
+
+@mcp_bp.route("/api/mcp/tools/engine_run", methods=["POST"])
+@mcp_tool("engine_run")
+def tool_engine_run(record, payload):
+    from potato.labeling_engine.integration.hooks import get_planner
+    engine, refusal = _engine_or_refusal()
+    if refusal is not None:
+        return refusal
+    planner = get_planner()
+    if planner is None:
+        return _refuse("No labeling engine planner is running", 409)
+    report = planner.tick()
+    audit("engine_run", agent=record.name)
+    return _safe(report)
+
+
+@mcp_bp.route("/api/mcp/tools/engine_certify", methods=["POST"])
+@mcp_tool("engine_certify")
+def tool_engine_certify(record, payload):
+    engine, refusal = _engine_or_refusal()
+    if refusal is not None:
+        return refusal
+    retest = payload.get("retest") is True
+    out = {s.name: engine.certify(s, retest=retest) for s in engine.schemes()}
+    audit("engine_certify", agent=record.name)
+    return _safe(out)
+
+
+@mcp_bp.route("/api/mcp/tools/engine_certificate", methods=["POST"])
+@mcp_tool("engine_certificate")
+def tool_engine_certificate(record, payload):
+    from potato.labeling_engine.certificate import (build_certificate, render_html,
+                                                    render_markdown)
+    engine, refusal = _engine_or_refusal()
+    if refusal is not None:
+        return refusal
+    fmt = payload.get("format") or "json"
+    if fmt not in ("json", "md", "html"):
+        return _refuse(f"format must be json, md or html, got {fmt!r}", 400)
+    cert = build_certificate(engine, save=False)
+    if fmt == "md":
+        return jsonify({"markdown": render_markdown(cert)})
+    if fmt == "html":
+        return jsonify({"html": render_html(cert)})
+    return _safe(cert)
 
 @mcp_bp.route("/api/mcp/tools/add_items", methods=["POST"])
 @mcp_tool("add_items")
@@ -546,17 +642,8 @@ def tool_submit_annotation(record, payload):
     # This is exactly where MCP is meant to earn its keep: the reason to have
     # an agent label beside people is to compare them, and the comparison was
     # the one thing blind to it.
-    try:
-        get_item_state_manager().register_annotator(instance_id, username)
-    except Exception as e:  # noqa: BLE001 - bookkeeping must not lose the write
-        logger.warning(
-            "Stored %s's annotation of %s but could not register them as an "
-            "annotator of it, so agreement and progress will undercount: %s",
-            username, instance_id, e)
-
-    # The STATE, not the username: every other caller passes the object, and
-    # handing over the string raised AttributeError inside save_user_state.
-    usm.save_user_state(state)
+    from potato.annotation_commit import finish_annotation_write
+    finish_annotation_write(state, instance_id, username, register_always=True)
     audit("annotation_submitted", agent=record.name, target=username,
           instance_id=instance_id, labels=written, spans=spans_written)
     return jsonify({"status": "ok", "instance_id": instance_id,

@@ -410,3 +410,17 @@ def test_pocket_off_is_quiet():
              "description": "Mark the cue", "labels": ["cue"]}],
     })
     assert not _pocket_warnings(report), report.other_warnings
+
+
+class TestEndOfBatch:
+    """Found by potato-skill (E1, and its Pocket double-tap note)."""
+
+    def test_the_end_of_a_batch_asks_for_more_before_saying_caught_up(self):
+        r = _harness("topup")
+        assert r["batch_fetches"] == 2
+        assert "second card" in r["main_deep"] and "All caught up" not in r["main_deep"]
+
+    def test_a_double_tap_saves_once_and_skips_nothing(self):
+        r = _harness("double_tap")
+        assert r["sent_ids"].count("q1") == 1 and "q2" not in r["sent_ids"]
+        assert "second card" in r["main_deep"]

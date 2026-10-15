@@ -100,8 +100,8 @@ class TestSnapshot:
         assert snapshot_sqlite(str(tmp_path / "nope.sqlite"),
                                str(tmp_path / "out.sqlite")) is False
 
-    def test_both_databases_are_covered(self):
-        assert set(DATABASES) == {"project.sqlite", "datasets.sqlite"}
+    def test_every_database_is_covered(self):
+        assert set(DATABASES) == {"project.sqlite", "datasets.sqlite", "engine.sqlite"}
 
 
 class TestArchiveContents:

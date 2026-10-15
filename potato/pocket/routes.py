@@ -300,6 +300,11 @@ def _bound_batch_to_qc_frequency(username, requested):
     return max(1, min(requested, min(due)))
 
 
+def _engine_assigns(ism) -> bool:
+    from potato.item_state_management import AssignmentStrategy
+    return getattr(ism, "assignment_strategy", None) == AssignmentStrategy.ENGINE
+
+
 @pocket_bp.route("/api/batch", methods=["GET"])
 @pocket_required
 @api_login_required
@@ -318,7 +323,26 @@ def batch():
     ism = get_item_state_manager()
     # Users auto-routed here on their first visit have never run through
     # /annotate's assignment step — assign now or the card stack is empty.
-    if not user_state.has_assignments():
+    engine_on = _engine_assigns(ism)
+    held = set()
+    if engine_on:
+        # Under the engine the stack is the person's engine requests. Top it
+        # up to a full batch by claiming requests directly: the generic
+        # assignment step hands out one item per call when there is no
+        # per-user cap, so the phone said "All caught up" after 3 cards with
+        # 168 requests still open.
+        from potato.labeling_engine.integration.hooks import (
+            claim_for_user, held_item_ids_for_user)
+        held = set(held_item_ids_for_user(user_state))
+        pending = [i for i in user_state.instance_id_ordering
+                   if i in held or not user_state.get_label_annotations(i)]
+        if len(pending) < n:
+            for iid in claim_for_user(user_state, n - len(pending),
+                                      exclude=user_state.get_assigned_instance_ids()):
+                if ism.has_item(iid):
+                    user_state.assign_instance(ism.get_item(iid))
+            held = set(held_item_ids_for_user(user_state))
+    elif not user_state.has_assignments():
         ism.assign_instances_to_user(user_state)
 
     # Quality control, which used to happen only on /annotate.
@@ -333,7 +357,9 @@ def batch():
     for instance_id in user_state.instance_id_ordering:
         total += 1
         existing = user_state.get_label_annotations(instance_id)
-        annotated = bool(existing)
+        # An engine request the person still holds is open work even if they
+        # saved some other question on the item.
+        annotated = bool(existing) and instance_id not in held
         if annotated:
             done += 1
         if annotated or len(items) >= n:
@@ -345,11 +371,30 @@ def batch():
         text = data.get(text_key)
         if not isinstance(text, str) or not text.strip():
             text = item.get_text()
-        items.append({
+        if engine_on:
+            # Pocket never shows a machine answer: record that.
+            from potato.labeling_engine.integration.hooks import served_without_prediction
+            served_without_prediction(username, instance_id)
+        entry = {
             "instance_id": str(instance_id),
             "text": text,
             "annotations": _serialize_annotations(existing),
-        })
+        }
+        if engine_on:
+            # The desktop note, where it changes what the answer means. Pocket
+            # never shows a machine answer, so blind needs no note.
+            from potato.labeling_engine.integration.hooks import request_context
+            er = request_context(username, instance_id) or {}
+            many = len(_app_config.get("annotation_schemes") or []) > 1
+            about = f"For “{er.get('schema_label')}”, t" if many and er.get("schema_label") else "T"
+            if er.get("purpose") == "adjudicate":
+                entry["note"] = (f"{about}he people disagreed on this item. "
+                                 "Your answer settles it.") if many else (
+                    "People disagreed on this item. Your answer settles it.")
+            elif er.get("purpose") == "resolve":
+                entry["note"] = (f"{about}he models could not settle this item, so your "
+                                 "answer is the label.")
+        items.append(entry)
 
     return jsonify({"items": items, "total": total, "done": done})
 

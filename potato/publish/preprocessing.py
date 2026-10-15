@@ -58,6 +58,49 @@ def _strip_internal_fields(rows: List[dict]) -> None:
                 del row[key]
 
 
+def _machine_raters(annotations: List[dict]) -> set:
+    """User ids of declared machine raters, from each record's ``_origin``."""
+    from potato.export.origin_columns import record_origin
+    from potato.annotator_origin import HUMAN
+    return {a.get("user_id") for a in annotations
+            if record_origin(a).get("kind") != HUMAN}
+
+
+def _gold_overrides(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Labels that beat the vote: adjudication decisions, then the labeling
+    engine's resolved labels (human, adjudicated, or certified machine)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        from potato.adjudication import get_adjudication_manager
+        adj = get_adjudication_manager()
+        for iid, d in (getattr(adj, "decisions", None) or {}).items():
+            for schema, value in (d.label_decisions or {}).items():
+                out.setdefault(str(iid), {})[schema] = (value, "adjudicated")
+    except Exception:
+        logger.debug("no adjudication decisions for gold", exc_info=True)
+    if (config.get("labeling_engine") or {}).get("enabled"):
+        import os
+        if os.path.exists(os.path.join(config.get("task_dir") or ".", "engine.sqlite")):
+            try:
+                from potato.labeling_engine.store import EngineStore
+                store = EngineStore(config.get("task_dir") or ".")
+                kinds = {r[0]: r[1] for r in store.conn.execute(
+                    "SELECT id, kind FROM contract_version")}
+                for lab in store.resolved(status=["accepted"]):
+                    if lab.origin == "auto":
+                        certified = kinds.get(lab.contract_version_id) == "selective_risk"
+                        src = "machine (certified)" if certified else "machine (uncertified)"
+                    else:
+                        src = {"human": "engine human labels",
+                               "adjudicated": "adjudicated"}.get(lab.origin, lab.origin)
+                    out.setdefault(str(lab.item_id), {}).setdefault(lab.schema,
+                                                                    (lab.value, src))
+            except Exception:
+                logger.warning("Could not read labeling engine labels for gold",
+                               exc_info=True)
+    return out
+
+
 def _filter_min_annotators(annotation_rows: List[dict], minimum: int) -> List[dict]:
     if minimum <= 1:
         return annotation_rows
@@ -143,7 +186,9 @@ def run_pipeline(config_path: str,
         gold_rows = bundle_mod.build_gold_rows(
             annotations, aggregation=str(opts.get("aggregation", "majority")),
             schemas=context.config.get("annotation_schemes") or [],
-            instance_ids={r.get("instance_id") for r in ann_rows})
+            instance_ids={r.get("instance_id") for r in ann_rows},
+            exclude_users=_machine_raters(annotations),
+            overrides=_gold_overrides(context.config))
 
     # --- spans / items ---------------------------------------------------------
     span_rows = bundle_mod.build_span_rows(annotations) \

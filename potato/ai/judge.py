@@ -22,6 +22,7 @@ so it works with any configured provider.
 import hashlib
 import json
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -108,12 +109,19 @@ class JudgeService:
         self.judge_config = self.config.get("judge_alignment", {}) or {}
         self._endpoint = None
         self._endpoint_initialized = False
+        # Several threads judge at once (the labeling engine runs a source at
+        # its concurrency). Marking the endpoint initialized before it existed
+        # handed every thread but the first None, a silent abstain each.
+        self._endpoint_lock = threading.Lock()
 
     # ----- endpoint -------------------------------------------------------
 
     def _get_endpoint(self):
-        if not self._endpoint_initialized:
-            self._endpoint_initialized = True
+        if self._endpoint_initialized:
+            return self._endpoint
+        with self._endpoint_lock:
+            if self._endpoint_initialized:
+                return self._endpoint
             try:
                 from potato.ai.ai_endpoint import AIEndpointFactory
                 # The judge endpoint config lives under judge_alignment, but
@@ -139,6 +147,7 @@ class JudgeService:
             except Exception as e:
                 logger.error(f"Judge: failed to create endpoint: {e}")
                 self._endpoint = None
+            self._endpoint_initialized = True
         return self._endpoint
 
     # ----- prompt ---------------------------------------------------------
@@ -456,18 +465,18 @@ class JudgeService:
         prompt = "\n".join(p for p in parts if p != "")
 
         # Long CoT + per-step verdicts need a generous token budget (the endpoint
-        # default is ~100). Raise it for this call, then restore.
-        prev_max = getattr(endpoint, "max_tokens", None)
-        try:
+        # default is ~100). Only ever raised, never restored: the endpoint is
+        # shared by concurrent calls, and one call restoring the old budget cut
+        # another's reply short mid-flight.
+        with self._endpoint_lock:
+            prev_max = getattr(endpoint, "max_tokens", None)
             if isinstance(prev_max, int):
                 endpoint.max_tokens = max(prev_max, 512, 24 * len(steps))
+        try:
             data = _robust_query_json(endpoint, prompt)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Judge steps: query/parse failed for {instance_id}: {e}")
             return None
-        finally:
-            if isinstance(prev_max, int):
-                endpoint.max_tokens = prev_max
 
         if not isinstance(data, dict):
             return None

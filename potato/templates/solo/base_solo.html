@@ -306,6 +306,10 @@
             color: var(--muted-foreground, #71717a);
         }
 
+        /* Padding and border inside the width: at 100% plus 2rem of padding
+           every Solo text box ran 34px past its card on a phone. */
+        textarea, input[type="text"] { box-sizing: border-box; max-width: 100%; }
+
         .form-group textarea,
         .form-group input[type="text"] {
             width: 100%;
@@ -466,7 +470,10 @@
 
         /* ── Responsive ─────────────────────────────────────────── */
         @media (max-width: 900px) {
-            .solo-main { flex-direction: column; }
+            /* Stretch, not flex-start: stacked, a flex-start column took its
+               widest child's width and the page scrolled sideways. */
+            .solo-main { flex-direction: column; align-items: stretch; }
+            .solo-content { padding: var(--space-md, 1rem); }
             .solo-sidebar {
                 width: 100%;
                 border-left: none;

@@ -215,8 +215,11 @@ class TestAnUnknownAssistantIsRefusedNotCrashed:
             routes, "get_ai_prompt",
             lambda: {"radio": {"hint": {}, "keyword": {}, "rationale": {}}},
             raising=False)
+        # The handler asks for the current item first: the labeling engine's
+        # blind check runs before any argument is read.
+        user_state = type("U", (), {"get_current_instance_id": lambda self: "i1"})()
         monkeypatch.setattr(routes, "get_user_state",
-                            lambda _u: object(), raising=False)
+                            lambda _u: user_state, raising=False)
 
         handler = getattr(routes.get_ai_suggestion, "__wrapped__",
                           routes.get_ai_suggestion)

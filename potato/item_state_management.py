@@ -904,6 +904,10 @@ class AssignmentStrategy(Enum):
       human QC of model output. Items the model predicted NOTHING on are
       excluded -- they have no confidence to rank and reviewing them is a
       separate job (see potato/model_review.py)
+    - ENGINE: Serves the labeling engine's human requests (calibration,
+      verification, audit, adjudication) in the engine's priority order. The
+      engine decides which items need a person and how they were sampled;
+      see potato/labeling_engine/
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -917,6 +921,7 @@ class AssignmentStrategy(Enum):
     PRIORITY = 'priority'
     PSYCHOMETRIC = 'psychometric'
     MODEL_REVIEW = 'model_review'
+    ENGINE = 'engine'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -1909,6 +1914,14 @@ class ItemStateManager:
             # redirect-loops between "you have work" and "there is none".
             return bool(self._model_review_candidates(user_state))
 
+        if self.assignment_strategy == AssignmentStrategy.ENGINE:
+            # The engine's ledger is the queue: work exists exactly when it
+            # holds a request this person may take. Without this branch the
+            # generic loop below would report the whole dataset as available.
+            from potato.labeling_engine.integration.hooks import has_work_for_user
+            return has_work_for_user(user_state,
+                                     exclude=user_state.get_assigned_instance_ids())
+
         if self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
             # Early-stopped (resolved) items are excluded from assignment, so
             # they must not count as available either — otherwise users spin
@@ -2306,6 +2319,20 @@ class ItemStateManager:
             for item_id in to_assign:
                 user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.ENGINE:
+            from potato.labeling_engine.integration.hooks import claim_for_user
+            held = user_state.get_assigned_instance_ids()
+            claimed = claim_for_user(user_state, instances_to_assign, exclude=held)
+            n = 0
+            for item_id in claimed:
+                item = self._store.get(item_id)
+                if item is None:
+                    self.logger.warning(
+                        f"Labeling engine requested {item_id}, which is not loaded")
+                    continue
+                user_state.assign_instance(item)
+                n += 1
+            return n
         elif self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
             candidates = self._model_review_candidates(user_state)
             if not candidates:
@@ -3230,6 +3257,15 @@ class ItemStateManager:
         """
         assigned = set(user_state.get_assigned_instance_ids())
         pending = [iid for iid in assigned if not user_state.has_annotated(iid)]
+
+        if getattr(self, "assignment_strategy", None) == AssignmentStrategy.ENGINE:
+            # The engine asks people for a sample, not the corpus: counting
+            # the pool showed "0/481" to someone who would be asked for 20.
+            from potato.labeling_engine.integration.hooks import work_item_ids_for_user
+            seen = set(pending)
+            pending += [iid for iid in work_item_ids_for_user(user_state)
+                        if iid not in seen and not user_state.has_annotated(iid)]
+            return pending
 
         for iid in self.remaining_instance_ids:
             if iid in assigned:

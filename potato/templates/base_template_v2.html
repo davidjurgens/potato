@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=37">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=38">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=3">
@@ -374,7 +374,26 @@
                 </div>
 
                 <!-- Main content area -->
-                <div id="main-content" style="display: none;">
+                {%- set er = engine_request | default(none) %}
+                <div id="main-content" style="display: none;"{% if er %} data-engine-visibility="{{ er.visibility }}"{% endif %}>
+                    {#- The labeling engine's request on this item. Blind: the
+                        server already withheld every machine answer; the note
+                        says why the AI help is gone. Shown: the machine's
+                        answer is pre-filled and the note says so. -#}
+                    {% if er %}
+                    <p class="engine-request-note" data-purpose="{{ er.purpose }}" role="note">
+                      {%- set many = (annotation_schemes | default([]) | length) > 1 %}
+                      {%- if er.visibility == 'blind' %}
+                        {% if many %}Answer “{{ er.schema_label | default(er.schema) }}” yourself{% else %}Label this one yourself{% endif %}. Suggestions are off for this item.
+                      {%- elif er.shown %}
+                        {% if many %}For “{{ er.schema_label | default(er.schema) }}”, a model's answer is filled in{% else %}A model's answer is filled in{% endif %}. Keep it if it is right; change it if it is not.
+                      {%- elif er.purpose == 'adjudicate' %}
+                        People disagreed on this item. Your answer settles it.
+                      {%- else %}
+                        {% if many %}For “{{ er.schema_label | default(er.schema) }}”, the models could not settle this item{% else %}The models could not settle this item{% endif %}, so your answer is the label.
+                      {%- endif %}
+                    </p>
+                    {% endif %}
                     {% if annotation_instructions | default('') %}
                     <details class="annotation-instructions-banner" open>
                         <summary>{{ ui_lang.instructions_heading|default('Instructions') }}</summary>
@@ -774,7 +793,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=39"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=43"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -805,9 +824,9 @@
          project should pay for. The runtime itself is fetched lazily on first
          use, not here. -->
     {% if frontend_assets.segmentation | default(false) %}
-    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='segmentation/sam-preprocess.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='segmentation/sam-session.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-session.js') }}?v=6"></script>
     <script src="{{ url_for('static', filename='segmentation/sam-tool.js') }}?v=2"></script>
     {% endif %}
 
@@ -817,10 +836,10 @@
          and the condition covers both. -->
     {% if frontend_assets.text_prompt | default(false) %}
     {% if not frontend_assets.segmentation | default(false) %}
-    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=2"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='segmentation/wordpiece.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='segmentation/gdino-session.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/gdino-session.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='segmentation/text-prompt-tool.js') }}?v=2"></script>
     {% endif %}
 

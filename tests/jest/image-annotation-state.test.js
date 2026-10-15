@@ -902,6 +902,26 @@ describe('handleResize', () => {
         return m;
     }
 
+    test('a resize is a relayout, not an edit', () => {
+        // Found with the labeling engine: the layout settling after load
+        // announced a change, so a pre-filled verify answer was autosaved
+        // as the annotator's own before they touched it.
+        const m = resizeManager(900);
+        const seen = [];
+        m._updateAnnotationData = () => seen.push(m._hydrating);
+        m.handleResize();
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every(Boolean)).toBe(true);
+        expect(m._hydrating).toBeFalsy();
+    });
+
+    test('a failed relayout does not leave saving switched off', () => {
+        const m = resizeManager(900);
+        m._deserializeAnnotations = () => { throw new Error('boom'); };
+        expect(() => m.handleResize()).toThrow('boom');
+        expect(m._hydrating).toBeFalsy();
+    });
+
     test('resizes the canvas to the container width', () => {
         const m = resizeManager(900);
         m.handleResize();

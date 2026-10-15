@@ -142,6 +142,7 @@ def _register_builtin_exporters():
     from .annotation_telemetry_exporter import AnnotationTelemetryExporter
     from .episode_exporter import EpisodeJsonlExporter
     from .adjudication_exporter import AdjudicationExporter
+    from .labeling_engine_exporter import LabelingEngineExporter
 
     exporters = [
         COCOExporter(),
@@ -194,6 +195,9 @@ def _register_builtin_exporters():
         # parquet all read per-annotator state, so an export shipped the
         # disagreements and not the resolution.
         AdjudicationExporter(),
+        # The labeling engine's deliverable: resolved labels (machine and
+        # human) with provenance, and the quality certificate.
+        LabelingEngineExporter(),
     ]
 
     # Optional exporters with external dependencies

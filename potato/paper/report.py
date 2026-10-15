@@ -127,6 +127,10 @@ def description_paragraph(m: Dict[str, Any], s: Style) -> str:
         f"In total, {m['n_annotators']} annotator{'s' if m['n_annotators'] != 1 else ''} "
         f"produced {m['n_label_records']:,} label decisions "
         f"(mean {m['mean_annotations_per_instance']} labels per annotated item)."
+        + (f" {m['n_machine_raters_excluded']} declared machine rater"
+           f"{'s were' if m['n_machine_raters_excluded'] != 1 else ' was'} left out of "
+           f"these counts and of the agreement statistics."
+           if m.get("n_machine_raters_excluded") else "")
     )
 
 

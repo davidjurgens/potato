@@ -5,7 +5,7 @@
 {% block content %}
 <h1>Final Validation</h1>
 
-<p>Validate a sample of LLM-only labeled instances to ensure quality. This is the final step before completion.</p>
+<p>Validate a sample of model-only labeled instances to ensure quality. This is the final step before completion.</p>
 
 {% if current_sample %}
 <form method="POST" action="{{ url_for('solo_mode.validation') }}">
@@ -18,7 +18,7 @@
 
     <div class="llm-reasoning">
         <div class="llm-reasoning-header">
-            <strong>LLM Label: {{ current_sample.llm_label }}</strong>
+            <strong>Model label: {{ current_sample.llm_label }}</strong>
             <span>▼</span>
         </div>
         <div class="llm-reasoning-content">

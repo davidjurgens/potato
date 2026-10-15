@@ -45,7 +45,7 @@ from itertools import zip_longest
 import string
 import threading
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
 import numpy as np
@@ -115,6 +115,8 @@ app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
 from potato.judge_calibration.routes import judge_calibration_bp
 app.register_blueprint(judge_calibration_bp)
+from potato.labeling_engine.api.routes import engine_bp
+app.register_blueprint(engine_bp)
 # Note: qda_mode_bp is registered on the *served* app in
 # potato.routes.configure_routes (the module-level `app` here is discarded
 # and rebuilt by create_app), so it is intentionally not registered here.
@@ -2927,7 +2929,7 @@ def init_user_state(username):
     usm.add_user(username)
 
     # Store the session creation time
-    session['created_at'] = datetime.now()
+    session['created_at'] = datetime.now(timezone.utc)
 
     return usm.get_user_state(username)
 
@@ -2943,7 +2945,12 @@ def is_session_valid() -> bool:
     stamped = session.get('last_seen_at') or session.get('created_at')
     if stamped is None:
         return True
-    return datetime.now() - stamped < get_session_timeout()
+    # A cookie session hands datetimes back timezone-aware (UTC); a stamp
+    # written by an older server, or held by a server-side session, may be
+    # naive local time. Compare both in UTC.
+    if stamped.tzinfo is None:
+        stamped = stamped.astimezone(timezone.utc)
+    return datetime.now(timezone.utc) - stamped < get_session_timeout()
 
 
 #: Paths served without a session. Prefixes end in "/" and are matched with
@@ -2986,7 +2993,7 @@ def before_request():
 
     # Idle timeout, not an absolute one: a working annotator is not signed out
     # mid-shift. Stamped per request, so the clock restarts on every action.
-    session['last_seen_at'] = datetime.now()
+    session['last_seen_at'] = datetime.now(timezone.utc)
 
 
 def get_users():
@@ -3589,6 +3596,11 @@ def _annotation_sidebar_flags(cfg) -> dict:
     }
 
 
+def _strip_machine_fields(record, username, instance_id):
+    from potato.labeling_engine.integration.hooks import strip_machine_fields
+    return strip_machine_fields(record, username, instance_id)
+
+
 def render_page_with_annotations(username: str):
     '''
     When annotating, shows the current instance to the user with any annotations
@@ -3633,6 +3645,23 @@ def render_page_with_annotations(username: str):
     # LLM-judge inline suggestion (judge ↔ human alignment). Reads a persisted
     # judge prediction for this instance/schema; optionally computes on demand.
     judge_prediction = _get_inline_judge_prediction(instance_id, item)
+
+    # The labeling engine's request on this item, if this person holds one.
+    # A blind request (calibration, certification, audit) is how the engine
+    # learns how often the machines are wrong, so nothing a machine said may
+    # reach the page: no pre-annotation, no inline judge, no AI assistant. A
+    # shown (verify) request seeds the machine's answer through the same
+    # pre-annotation path, which also records it as a seed.
+    engine_request = None
+    if config.get("labeling_engine", {}).get("enabled"):
+        from potato.labeling_engine.integration.hooks import request_context
+        engine_request = request_context(username, instance_id)
+        if engine_request is not None and engine_request.get("visibility") == "blind":
+            pre_annotation_data = None
+            judge_prediction = None
+        elif engine_request is not None and (engine_request.get("shown") or {}).get("value") is not None:
+            pre_annotation_data = {**(pre_annotation_data or {}),
+                                   engine_request["schema"]: engine_request["shown"]["value"]}
 
     # Signal-based triage: why was this item prioritized in the queue?
     triage_info = _get_triage_info(item)
@@ -3887,6 +3916,8 @@ def render_page_with_annotations(username: str):
 
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
+    if engine_request is not None and engine_request.get("visibility") == "blind":
+        ai_enabled = False
 
     # Check if agent proxy is configured (for conditional loading of agent-chat.js/css).
     # Presence alone used to be enough, so `enabled: false` still loaded the
@@ -3896,6 +3927,9 @@ def render_page_with_annotations(username: str):
 
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
+    if engine_request is not None and engine_request.get("visibility") == "blind":
+        # The chat assistant can be asked for the answer, so it is off too.
+        chat_enabled = False
 
     # Boundary Lab (counterfactual boundary probing): conditional assets + JS config
     boundary_client_config = None
@@ -4011,7 +4045,8 @@ def render_page_with_annotations(username: str):
         # normalized "_transcripts" index attached here, so they accept every
         # format the audio_dialogue display does (see transcripts/binding.py).
         instance_record=enrich_transcript_record(
-            item_data if instance_image else item.get_data(),
+            _strip_machine_fields(item_data if instance_image else item.get_data(),
+                                  username, instance_id),
             config, base_dir=config.get("task_dir")
         ),
         instance_id=instance_id,
@@ -4041,6 +4076,8 @@ def render_page_with_annotations(username: str):
         pre_annotation_config=pre_annotation_config,
         # LLM-judge inline suggestion (judge ↔ human alignment)
         judge_prediction=judge_prediction,
+        # Labeling engine request on this item (blind / verify / resolve note)
+        engine_request=engine_request,
         # Signal-based triage badge (why this item was prioritized)
         triage_info=triage_info,
         # Instance display (new explicit display mode)
@@ -5607,6 +5644,10 @@ def create_app(config_file=None):
     app = Flask(__name__, static_folder=static_folder)
     _apply_url_prefix_from_env(app)
     _apply_proxy_fix_from_env(app)
+    # The idle-session gate is decorated onto the import-time app, which this
+    # rebinding discards; without this line no served app ever timed a
+    # session out, whatever session_timeout_minutes said.
+    app.before_request(before_request)
 
     # Configure Jinja2 to look in both main templates and generated templates directories
     real_templates_dir = os.path.join(cur_program_dir, 'templates')
@@ -5768,6 +5809,27 @@ def _init_rooms_if_enabled(config):
     else:
         logger.info("Multiplayer Rooms initialized successfully")
     return manager
+
+
+def _init_labeling_engine_if_enabled(config):
+    """Start the labeling engine and its planner when the config enables it.
+
+    The planner's first pass registers the study's items, has the cascade
+    label them and draws the first calibration sample, so it runs on its own
+    thread: a large corpus must not hold up the server coming up.
+    """
+    if not (config.get("labeling_engine") or {}).get("enabled", False):
+        return None
+    logger.info("Initializing the labeling engine...")
+    from potato.labeling_engine.integration.hooks import clear_engine, init_engine
+    clear_engine()
+    engine = init_engine(config)
+    if engine is not None:
+        import atexit
+        atexit.register(clear_engine)
+        logger.info("Labeling engine initialized: %d scheme(s), cascade %s",
+                    len(engine.schemes()), ", ".join(engine.cfg.cascade))
+    return engine
 
 
 def _initialize_from_config(config_file):
@@ -5940,6 +6002,9 @@ def _initialize_from_config(config_file):
         from potato.judge_calibration import init_judge_calibration_manager
         init_judge_calibration_manager(config)
         logger.info("Judge Calibration initialized successfully")
+
+    # Initialize the labeling engine if enabled (parity with run_server()).
+    _init_labeling_engine_if_enabled(config)
 
     # Keep ICL prompts restricted to the codebook's current set: a
     # change listener re-syncs live scheme labels on any codebook edit.
@@ -6377,6 +6442,9 @@ def run_server(args):
         init_judge_calibration_manager(config)
         logger.info("Judge Calibration initialized successfully")
 
+    # Initialize the labeling engine if enabled
+    _init_labeling_engine_if_enabled(config)
+
     # Keep ICL prompts restricted to the codebook's current set: a
     # change listener re-syncs live scheme labels on any codebook edit.
     try:
@@ -6623,6 +6691,12 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'mcp':
         from potato.mcp_server.cli import main as mcp_main
         sys.exit(mcp_main(sys.argv[2:]))
+
+    # ``label`` drives the labeling engine headless: run, status, certify,
+    # export, calls. See potato/labeling_engine/cli.py.
+    if len(sys.argv) > 1 and sys.argv[1] == 'label':
+        from potato.labeling_engine.cli import main as label_main
+        sys.exit(label_main(sys.argv[2:]))
 
     # Parse command line arguments
     args = arguments()

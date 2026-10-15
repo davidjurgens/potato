@@ -274,6 +274,24 @@ describe('detection end to end against a mocked runtime', () => {
         expect(s.statusMessage()).toContain('download-models grounding_dino_tiny');
     });
 
+    test('an image the browser will not read names CORS', async () => {
+        // potato-skill P2': a no-CORS image said "could not be prepared".
+        const tainted = () => ({
+            width: 1, height: 1,
+            getContext: () => ({
+                drawImage() {},
+                getImageData() {
+                    const e = new Error('The canvas has been tainted');
+                    e.name = 'SecurityError';
+                    throw e;
+                },
+            }),
+        });
+        const s = session({ runtime: runtimeReturning(output), canvasFactory: tainted });
+        expect(await s.detect({}, 10, 10, ['cat'])).toBe(null);
+        expect(s.statusMessage()).toContain('CORS');
+    });
+
     test('a missing vocabulary says so specifically', async () => {
         const s = new GroundingDinoSession({
             runtime: runtimeReturning(output),

@@ -88,6 +88,10 @@ class OpenAIEndpoint(BaseAIEndpoint):
                     },
                 }
             response = self.client.chat.completions.create(**kwargs)
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._note_usage(getattr(usage, "prompt_tokens", None),
+                                 getattr(usage, "completion_tokens", None))
             self._warn_if_truncated(response.choices[0].finish_reason)
             return response.choices[0].message.content
         except Exception as e:

@@ -46,6 +46,8 @@ class ProjectData:
     # annotator -> list of per-instance seconds (from behavioral data)
     timings: Dict[str, List[float]] = field(default_factory=dict)
     annotators: List[str] = field(default_factory=list)
+    #: Declared machine raters, left out of every statistic about annotators.
+    machine_raters: List[str] = field(default_factory=list)
     instance_ids: List[str] = field(default_factory=list)  # annotated instances
     total_items: Optional[int] = None       # dataset size, if data files readable
     # username -> "passed" | "failed" | "in_progress", from each saved
@@ -228,8 +230,23 @@ def collect_project(config_path: str) -> ProjectData:
                        output_dir)
         return project
 
+    from potato.annotator_origin import HUMAN, origin_of, parse_machine_annotators
+    roster = parse_machine_annotators(config)
     for entry, state in iter_stored_states(output_dir, config, skip_unreadable=True):
         username = state.get("user_id", entry)
+        # The state's own origin, else the config's declaration. Pass the
+        # origin mapping, not the state: origin_of() reads a mapping it is
+        # handed AS the origin, and a whole state has no "kind", so every
+        # person would read as a malformed machine.
+        origin = origin_of(state.get("origin"))
+        if origin.get("kind") == HUMAN and username in roster:
+            origin = {"kind": "machine"}
+        if origin.get("kind") != HUMAN:
+            # A paper's agreement and annotator statistics describe people.
+            # Machine raters are counted separately, so the methods section
+            # can say they were there and were left out.
+            project.machine_raters.append(username)
+            continue
         records = _extract_records(username, state, scheme_types)
         if records:
             project.records.extend(records)

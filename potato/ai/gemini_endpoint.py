@@ -70,6 +70,10 @@ class GeminiEndpoint(BaseAIEndpoint):
             if candidates:
                 self._warn_if_truncated(
                     self._stop_reason(candidates[0], "finish_reason", "finishReason"))
+            meta = getattr(response, "usage_metadata", None)
+            if meta is not None:
+                self._note_usage(getattr(meta, "prompt_token_count", None),
+                                 getattr(meta, "candidates_token_count", None))
             return response.text
         except Exception as e:
             raise AIEndpointRequestError(f"Gemini request failed: {e}")

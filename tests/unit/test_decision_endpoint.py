@@ -225,6 +225,15 @@ class TestSystemOneEndpoint:
         assert body["state"] == {"text": "I was charged twice"}
         assert body["questions"] == build_systemone_questions([CHOICE, SCORE, NOUL])
 
+    @pytest.mark.parametrize("base", ["http://h:8009", "http://h:8009/v1",
+                                      "http://h:8009/v1/systemone/"])
+    def test_base_url_with_or_without_the_route(self, base):
+        ep = _endpoint(base_url=base)
+        with patch("potato.ai.systemone_endpoint.requests.post",
+                   return_value=_ok(JEV_RESPONSE)) as post:
+            ep.decide("x", [NOUL])
+        assert post.call_args.args[0] == "http://h:8009/v1/systemone"
+
     def test_no_auth_header_without_key_and_bare_state(self):
         ep = _endpoint(state_key="", model="openjev", timeout=5)
         with patch("potato.ai.systemone_endpoint.requests.post",
@@ -403,7 +412,21 @@ class TestLayaEndpoint:
         out = ep.decide_batch(["a", "b", "c"], [NOUL])
         assert len(out) == 3
         agent = get_predictor("convaiinnovations/laya", "cpu")
-        assert agent.calls[0] == ("predict_batch", ["a", "b", "c"], 4)
+        assert agent.calls[0] == ("predict_batch",
+                                  [{"text": "a"}, {"text": "b"}, {"text": "c"}], 4)
+
+    @pytest.mark.parametrize("cfg", [{}, {"state_key": ""}, {"state_key": "message"}])
+    def test_in_process_sends_the_state_systemone_sends(self, fake_laya, cfg):
+        """Found by potato-skill (H3): in-process Laya got the bare string and
+        laya-serve got {"text": ...}; one checkpoint labeled 11% of items
+        differently depending on how it was reached."""
+        from potato.ai.laya_endpoint import LayaEndpoint, get_predictor
+        LayaEndpoint({"ai_config": dict(cfg)}).decide("great movie", [NOUL])
+        agent = get_predictor("convaiinnovations/laya", "cpu")
+        with patch("potato.ai.systemone_endpoint.requests.post",
+                   return_value=_ok(JEV_RESPONSE)) as post:
+            _endpoint(**cfg).decide("great movie", [NOUL])
+        assert agent.calls[-1][1] == post.call_args.kwargs["json"]["state"]
 
     def test_errors_wrapped(self, fake_laya):
         from potato.ai.laya_endpoint import LayaEndpoint

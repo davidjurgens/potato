@@ -194,12 +194,17 @@ def ingest_predictions(run, predictions_path: str,
         from potato.item_state_management import get_item_state_manager
         item_manager = get_item_state_manager()
 
+    from potato.labeling_engine.integration.mirror import mirror
     for instance_id, schema_name, payload in to_publish:
         if item_manager.set_prediction(instance_id, schema_name, payload,
                                        field=field_name):
             report.n_written += 1
         else:
             report.n_skipped_missing_item += 1
+        label = payload.get("label") if isinstance(payload, dict) else payload
+        conf = payload.get("confidence") if isinstance(payload, dict) else None
+        mirror("model_training", report.run_id, report.run_id, instance_id, schema_name,
+               label, conf)
 
     logger.info("Write-back for run %s: %s", report.run_id, report.summary)
     return report

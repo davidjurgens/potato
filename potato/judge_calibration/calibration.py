@@ -63,17 +63,12 @@ def expected_calibration_error(
     n_bins: int = 10,
 ) -> Optional[float]:
     """ECE = sum over bins of (n_b/N) * |accuracy_b - mean_confidence_b|."""
-    n_total = len(confidences)
-    if n_total == 0:
-        # No predictions to calibrate: undefined. 0.0 read as perfect
-        # calibration on nothing.
-        return None
-    ece = 0.0
-    for b in reliability_bins(confidences, correctness, n_bins):
-        if b["count"] == 0:
-            continue
-        ece += (b["count"] / n_total) * abs(b["accuracy"] - b["mean_confidence"])
-    return round(ece, 6)
+    # One ECE for the package: labeling_engine/calibrate/metrics.py. None
+    # when there is nothing to calibrate: 0.0 read as perfect calibration on
+    # nothing.
+    from potato.labeling_engine.calibrate import metrics
+    ece = metrics.expected_calibration_error(confidences, correctness, n_bins)
+    return None if ece is None else round(ece, 6)
 
 
 def brier_score(confidences: Sequence[float], correctness: Sequence[int]) -> Optional[float]:

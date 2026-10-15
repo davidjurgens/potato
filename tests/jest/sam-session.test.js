@@ -239,6 +239,25 @@ describe('segmenting', () => {
         expect(result.rle).toBeNull();
     });
 
+    test('an image the browser will not read names CORS', async () => {
+        // potato-skill P2': a no-CORS image said "could not be prepared".
+        const tainted = (width, height) => ({
+            width, height,
+            getContext: () => ({
+                drawImage() {},
+                getImageData() {
+                    const e = new Error('The canvas has been tainted');
+                    e.name = 'SecurityError';
+                    throw e;
+                },
+            }),
+        });
+        const session = fakeCanvasSession(workingRuntime(), { canvasFactory: tainted });
+        await session.encodeImage('a.jpg', SOURCE, 64, 64);
+        expect(session.errorKind).toBe(SAM_ERROR.IMAGE_UNREADABLE);
+        expect(session.statusMessage()).toContain('CORS');
+    });
+
     test('segmenting before encoding fails loudly rather than returning empty', async () => {
         const session = new SAMSession({ runtime: workingRuntime() });
         await session.load();

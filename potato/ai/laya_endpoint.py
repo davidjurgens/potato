@@ -24,6 +24,10 @@ ai_config keys:
     max_options per-question cap, default 100 (laya-serve's one-pass cap;
                 laya's docs note >20 options wants a larger head_max_len)
     head_max_len  optional token budget for the question head
+    state_key   the state is passed as ``{state_key: text}``; default 'text',
+                the same as the systemone client, so one checkpoint gives
+                the same answers in this process and behind laya-serve. An
+                empty value passes the bare string (the default before 2.11).
 """
 
 import logging
@@ -87,6 +91,7 @@ class LayaEndpoint(DecisionModelEndpoint):
         self.batch_size = self.ai_config.get("batch_size")
         self.head_max_len = self.ai_config.get("head_max_len")
         self.max_options = int(self.ai_config.get("max_options", 100))
+        self.state_key = self.ai_config.get("state_key", "text")
         # Fail at config time, not on the first item, when laya is missing.
         # find_spec does not import the package.
         import importlib.util
@@ -103,10 +108,14 @@ class LayaEndpoint(DecisionModelEndpoint):
     def _kwargs(self) -> Dict[str, Any]:
         return {"head_max_len": self.head_max_len} if self.head_max_len else {}
 
+    def _state_payload(self, state: str) -> Any:
+        return {self.state_key: state} if self.state_key else state
+
     def _decide_raw(self, state: str, questions: List[DecisionQuestion]) -> Dict[str, Any]:
         predictor = self._predictor()
         try:
-            return predictor.predict(state, build_systemone_questions(questions), **self._kwargs())
+            return predictor.predict(self._state_payload(state),
+                                     build_systemone_questions(questions), **self._kwargs())
         except (AIEndpointConfigError, AIEndpointRequestError):
             raise
         except Exception as e:
@@ -123,10 +132,12 @@ class LayaEndpoint(DecisionModelEndpoint):
         try:
             if hasattr(predictor, "predict_batch") and not isinstance(
                     predictor, getattr(_import_laya(), "Router", ())):
-                results = predictor.predict_batch(list(states), payload,
-                                                  batch_size=self.batch_size, **self._kwargs())
+                results = predictor.predict_batch([self._state_payload(s) for s in states],
+                                                  payload, batch_size=self.batch_size,
+                                                  **self._kwargs())
             else:
-                results = [predictor.predict(s, payload, **self._kwargs()) for s in states]
+                results = [predictor.predict(self._state_payload(s), payload, **self._kwargs())
+                           for s in states]
         except (AIEndpointConfigError, AIEndpointRequestError):
             raise
         except Exception as e:

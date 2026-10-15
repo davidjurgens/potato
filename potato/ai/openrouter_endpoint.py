@@ -95,6 +95,9 @@ class OpenRouterEndpoint(BaseAIEndpoint):
 
             data = self._post(body)
             self._warn_if_truncated(data["choices"][0].get("finish_reason"))
+            usage = data.get("usage") or {}
+            if usage:
+                self._note_usage(usage.get("prompt_tokens"), usage.get("completion_tokens"))
             if structured:
                 return self.parseStringToJson(data["choices"][0]["message"]["content"])
             return data["choices"][0]["message"]["content"]

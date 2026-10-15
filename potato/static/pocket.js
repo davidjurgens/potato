@@ -218,6 +218,8 @@
     }
 
     function commitCard() {
+        // The card is already on its way out: a second tap is not an answer.
+        if (advancing) return;
         var item = currentItem();
         if (!item || !answersComplete()) return;
         var record = {
@@ -234,9 +236,16 @@
         advance();
     }
 
+    /** True from an advance until the next card is up: a double tap or a
+     * key repeat within the card's exit animation skipped an item unsaved. */
+    var advancing = false;
+
     function advance() {
+        if (advancing) return;
+        advancing = true;
         var card = main.querySelector('.pk-card');
         var go = function () {
+            advancing = false;
             state.idx += 1;
             state.answers = {};
             localStorage.setItem(ITEMS_KEY, JSON.stringify({
@@ -296,6 +305,35 @@
             flushQueue();
             return;
         }
+        // The end of a batch is not the end of the work: ask the server once
+        // (every save has gone up by now) before saying so. A labeling-engine
+        // study hands out requests a batch at a time, and the phone said "All
+        // caught up" after 3 cards with 168 requests open.
+        if (navigator.onLine && !refetchedForBatch) {
+            refetchedForBatch = true;
+            fetchBatch().then(function (batch) {
+                if (batch.items && batch.items.length) {
+                    state.items = batch.items;
+                    state.total = batch.total;
+                    state.done = batch.done;
+                    state.idx = 0;
+                    refetchedForBatch = false;
+                    localStorage.setItem(ITEMS_KEY, JSON.stringify(batch));
+                    renderCard();
+                } else {
+                    showCaughtUp();
+                }
+            }).catch(showCaughtUp);
+            return;
+        }
+        showCaughtUp();
+    }
+
+    /** Whether renderDone has already asked for more since the last batch
+     * with cards in it, so an empty answer is not asked for again in a loop. */
+    var refetchedForBatch = false;
+
+    function showCaughtUp() {
         main.innerHTML =
             '<div class="pk-done">' +
             '  <div class="pk-done-mark">&#10003;</div>' +
@@ -510,6 +548,7 @@
         var card = document.createElement('div');
         card.className = 'pk-card';
         card.innerHTML =
+            (item.note ? '<div class="pk-note" role="note">' + esc(item.note) + '</div>' : '') +
             '<div class="pk-text">' + esc(item.text) + '</div>' +
             '<div class="pk-swipe-hint">swipe to navigate</div>' +
             '<div class="pk-controls"></div>' +
@@ -561,6 +600,7 @@
                 return;
             }
             return fetchBatch().then(function (batch) {
+                refetchedForBatch = !batch.items.length;
                 state.items = batch.items;
                 state.total = batch.total;
                 state.done = batch.done;

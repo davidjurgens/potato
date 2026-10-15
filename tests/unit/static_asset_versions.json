@@ -188,8 +188,8 @@
     "version": "16"
   },
   "image-annotation.js": {
-    "sha256": "d675588ea6bb4d57",
-    "version": "39"
+    "sha256": "43853b4bd709f13c",
+    "version": "43"
   },
   "instance-display.js": {
     "sha256": "1f97e150e3d901c4",
@@ -332,20 +332,20 @@
     "version": "1"
   },
   "segmentation/gdino-session.js": {
-    "sha256": "3fd30dae505c5826",
-    "version": "1"
+    "sha256": "2462eba97632fd34",
+    "version": "2"
   },
   "segmentation/model-session.js": {
-    "sha256": "79988d21e29e6bd0",
-    "version": "1"
+    "sha256": "6f24e03976b0c518",
+    "version": "2"
   },
   "segmentation/sam-preprocess.js": {
     "sha256": "4104e5d1fb9b99cc",
     "version": "1"
   },
   "segmentation/sam-session.js": {
-    "sha256": "af7028bb2ec2044b",
-    "version": "5"
+    "sha256": "ac0a14ce530bcecb",
+    "version": "6"
   },
   "segmentation/sam-tool.js": {
     "sha256": "03ab38561b135f99",
@@ -384,8 +384,8 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "915ab8681101b0ae",
-    "version": "37"
+    "sha256": "976a6477d4a8824f",
+    "version": "38"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

@@ -103,7 +103,9 @@ def _looks_numeric(values: List[Any]) -> bool:
 def build_gold_rows(annotations: List[dict],
                     aggregation: str = "majority",
                     schemas: Optional[List[dict]] = None,
-                    instance_ids: Optional[set] = None) -> List[dict]:
+                    instance_ids: Optional[set] = None,
+                    exclude_users: Optional[set] = None,
+                    overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> List[dict]:
     """One resolved row per instance, with a column per schema.
 
     Each annotator's stored labels are first collapsed to their answer (the
@@ -124,6 +126,14 @@ def build_gold_rows(annotations: List[dict],
 
     ``instance_ids`` limits the rows to instances that survived the coverage
     filter. ``n_annotators`` counts the annotators who answered anything.
+
+    ``exclude_users`` keeps raters out of the vote: declared machine raters,
+    whose labels made the "gold" partly a model's output while the release
+    called it human consensus. ``overrides`` is ``{instance: {schema: (value,
+    source)}}`` and wins over the vote: an adjudicated decision, or a label the
+    labeling engine resolved (a certified machine label is included only
+    because a contract accepted it). Where any row's label did not come from
+    the vote, ``gold_source`` says where it did.
     """
     from potato.server_utils.answer_collapse import (MULTI_SELECT_TYPES,
                                                      collapse_entries)
@@ -137,6 +147,8 @@ def build_gold_rows(annotations: List[dict],
         if instance_ids is not None and iid not in instance_ids:
             continue
         user = ann.get("user_id", "")
+        if exclude_users and user in exclude_users:
+            continue
         for schema, labels in (ann.get("labels") or {}).items():
             if isinstance(labels, dict):
                 answer, _w, _m = collapse_entries(
@@ -149,11 +161,22 @@ def build_gold_rows(annotations: List[dict],
             answers[iid].setdefault(user, {})[schema] = answer
 
     gold = []
-    for iid, by_user in answers.items():
+    overrides = overrides or {}
+    ids = set(answers) | {i for i in overrides
+                          if instance_ids is None or i in instance_ids}
+    for iid in ids:
+        by_user = answers.get(iid, {})
         out: Dict[str, Any] = {"instance_id": iid, "n_annotators": len(by_user)}
         notes: List[str] = []
-        schema_names = sorted({sc for per in by_user.values() for sc in per})
+        sources: Dict[str, str] = {}
+        forced = overrides.get(iid) or {}
+        schema_names = sorted({sc for per in by_user.values() for sc in per} | set(forced))
         for schema in schema_names:
+            if schema in forced:
+                value, source = forced[schema]
+                out[schema] = value
+                sources[schema] = source
+                continue
             given = [per[schema] for per in by_user.values() if schema in per]
             if types.get(schema) in MULTI_SELECT_TYPES or any(isinstance(g, list) for g in given):
                 ticks = Counter(label for g in given
@@ -174,6 +197,8 @@ def build_gold_rows(annotations: List[dict],
             out[schema] = next(g for g in given if str(g) == winner)
         if notes:
             out["gold_notes"] = notes
+        if sources:
+            out["gold_source"] = sources
         gold.append(out)
     gold.sort(key=lambda r: str(r["instance_id"]))
     return gold

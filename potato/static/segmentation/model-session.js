@@ -47,6 +47,9 @@
         MODEL_MISSING: 'model-missing',
         INPUT_FAILED: 'input-failed',
         INFERENCE_FAILED: 'inference-failed',
+        // The browser refused to hand over the image's pixels: it came from
+        // a host that sends no CORS headers (potato-skill P2').
+        IMAGE_UNREADABLE: 'image-unreadable',
     };
 
     class ModelSession {
@@ -224,6 +227,11 @@
                          + `potato download-models ${this.modelLabel()}` + hint;
                 case MODEL_ERROR.INPUT_FAILED:
                     return 'This input could not be prepared for the model.';
+                case MODEL_ERROR.IMAGE_UNREADABLE:
+                    return 'The browser will not let the model read this image: '
+                         + 'its host sends no CORS headers. Serve the image from '
+                         + "the task's media directory to use this tool."
+                         + hint;
                 case MODEL_ERROR.INFERENCE_FAILED:
                     return 'The model could not produce a result for that '
                          + 'input. Try again, or use the manual tools.';

@@ -257,6 +257,10 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
                                     output_format)
             self._warn_if_truncated(response.choices[0].finish_reason,
                                     "image response")
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._note_usage(getattr(usage, "prompt_tokens", None),
+                                 getattr(usage, "completion_tokens", None))
 
             response_content = response.choices[0].message.content
             logger.debug(f"OpenAI vision response: {response_content[:500] if response_content else 'empty'}")

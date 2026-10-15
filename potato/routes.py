@@ -2139,6 +2139,8 @@ def annotate():
             # gives them work once whatever _diagnose_no_work names has
             # been dealt with -- more data, a raised cap, a group they
             # belong to, a quota above zero.
+            if _engine_assigns():
+                return _engine_no_work_page(username, user_state)
             reason, headline, explanation, advice = _diagnose_no_work(
                 username, user_state)
             logger.warning(
@@ -2172,6 +2174,8 @@ def annotate():
                 logger.debug(f"User {username} has no remaining assignments (IBWS complete), advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
+        elif _engine_assigns():
+            return _engine_no_work_page(username, user_state)
         else:
             logger.debug(f"User {username} has no remaining assignments, advancing phase")
             get_user_state_manager().advance_phase(username)
@@ -2255,6 +2259,8 @@ def annotate():
                             logger.debug(f"User {username} completed all IBWS rounds")
                             get_user_state_manager().advance_phase(username)
                             return redirect(url_for("home"))
+                elif _engine_assigns():
+                    return _engine_no_work_page(username, user_state)
                 else:
                     logger.debug(f"User {username} completed all assignments at end-of-list")
                     get_user_state_manager().advance_phase(username)
@@ -2343,6 +2349,8 @@ def annotate():
                 logger.debug(f"User {username} has completed all IBWS assignments, advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
+        elif _engine_assigns():
+            return _engine_no_work_page(username, user_state)
         else:
             logger.debug(f"User {username} has completed all assignments, advancing phase")
             get_user_state_manager().advance_phase(username)
@@ -2374,6 +2382,22 @@ def annotate():
 
     logger.debug("=== ANNOTATE ROUTE END ===")
 
+    # A plain page load under the engine lands on the request the person
+    # holds, not the last item they finished: a returning annotator otherwise
+    # saw their old answer and had to press Next to reach the new request.
+    if (request.method == "GET" and not request.args and _engine_assigns()):
+        try:
+            from potato.labeling_engine.integration.hooks import held_item_ids_for_user
+            held = set(held_item_ids_for_user(user_state))
+            current = user_state.get_current_instance_id()
+            if held and current not in held:
+                ordering = list(getattr(user_state, "instance_id_ordering", []) or [])
+                target = next((i for i, iid in enumerate(ordering) if iid in held), None)
+                if target is not None:
+                    user_state.current_instance_index = target
+        except Exception:
+            logger.debug("engine: could not move to the held request", exc_info=True)
+
     # The annotation page's own navigation buttons load the next page with a
     # separate GET as soon as this answers, so rendering the whole page here
     # only for the browser to discard it cost a full render and a larger
@@ -2395,6 +2419,38 @@ def annotate():
     response.headers['Pragma'] = 'no-cache'
     return response
 
+def _engine_blind_refusal(username, instance_id):
+    """A 403 when the labeling engine has this person labeling this item blind.
+
+    Blind requests (calibration, certification, audit) are what the engine's
+    accuracy estimates and guarantees are computed from. A suggestion seen
+    before answering pulls the answer toward the machine and inflates its
+    measured accuracy, so the server refuses to produce one, whatever the
+    page shows.
+    """
+    from potato.labeling_engine.integration.hooks import is_blind
+    if is_blind(username, instance_id):
+        return jsonify({
+            "html": "", "error": "This item is being labeled blind for the labeling "
+                                 "engine, so no AI suggestion is shown."}), 403
+    return None
+
+
+#: Routes that put a model's view of the current item in front of the
+#: annotator. Each calls ``_engine_blind_refusal`` first;
+#: tests/server/test_labeling_engine_server.py checks every one returns 403 on
+#: a blind item, so a new AI route must be listed here to ship.
+ENGINE_BLIND_ROUTES = (
+    ("GET", "/get_ai_suggestion"),
+    ("GET", "/api/get_ai_suggestion"),
+    ("GET", "/api/ai_assistant"),
+    ("POST", "/api/chat/send"),
+    ("POST", "/api/critique_annotations"),
+    ("GET", "/api/option_highlights/0"),
+    ("GET", "/api/prm/prelabel"),
+)
+
+
 @app.route('/get_ai_suggestion', methods=['GET'])
 def get_ai_suggestion():
     if 'username' not in session:
@@ -2402,6 +2458,9 @@ def get_ai_suggestion():
 
     username = session['username']
     user_state = get_user_state(username)
+    blind = _engine_blind_refusal(username, user_state.get_current_instance_id())
+    if blind is not None:
+        return blind
     ais = get_ai_cache_manager()
 
     if ais is None:
@@ -2476,6 +2535,9 @@ def prm_prelabel():
     schema_name = request.args.get('schema')
     if not instance_id or not schema_name:
         return jsonify({"error": "instance_id and schema are required"}), 400
+    blind = _engine_blind_refusal(session['username'], str(instance_id))
+    if blind is not None:
+        return blind
 
     # Resolve the process_reward scheme by name.
     scheme = None
@@ -2542,6 +2604,9 @@ def get_option_highlights(annotation_id):
 
     username = session['username']
     user_state = get_user_state(username)
+    blind = _engine_blind_refusal(username, user_state.get_current_instance_id())
+    if blind is not None:
+        return blind
     ais = get_ai_cache_manager()
 
     if ais is None:
@@ -3801,6 +3866,33 @@ def admin_judge_alignment():
         except Exception:
             pass
     return jsonify(report)
+
+
+@app.route("/admin/labeling-engine", methods=["GET"])
+def admin_labeling_engine():
+    """The labeling engine's page: contracts, calibration, requests, calls.
+
+    The page reads ``/api/engine/v1``; this route only checks access and
+    hands it each scheme's selective-risk target for the chart's reference
+    line.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        # An HTML page: a browser without an admin session (a bookmark, a
+        # shared link) goes to the dashboard's key form, not a JSON error.
+        return redirect(url_for("admin"))
+    from potato.labeling_engine.integration.hooks import get_engine
+    eng = get_engine()
+    task_name = config.get("annotation_task_name", "Annotation Platform")
+    if eng is None:
+        return render_template("admin/labeling_engine.html", engine_off=True, targets={},
+                               annotation_task_name=task_name), 404
+    targets = {}
+    for c in eng.cfg.contracts:
+        if c.kind == "selective_risk" and c.error is not None:
+            targets[c.schema] = min(float(c.error), targets.get(c.schema, 1.0))
+    return render_template("admin/labeling_engine.html", targets=targets,
+                           annotation_task_name=task_name)
 
 
 @app.route("/admin/api/judge-alignment/run", methods=["POST"])
@@ -5670,20 +5762,6 @@ def critique_annotations():
         return jsonify({"error": "Not authenticated"}), 401
 
     data = request.get_json(silent=True) or {}
-    schema_name = data.get("schema")
-    if not schema_name:
-        return jsonify({"error": "schema is required"}), 400
-
-    scheme = _find_scheme_by_name(schema_name)
-    if scheme is None or scheme.get("annotation_type") != "image_annotation":
-        return jsonify({
-            "error": f"No image_annotation schema named '{schema_name}'"}), 404
-
-    ai_support = scheme.get("ai_support") or {}
-    options = dict(ai_support.get("critique") or {})
-    if ai_support.get("enabled") is False or options.get("enabled") is False:
-        return jsonify({"error": "Critique is not enabled for this schema"}), 400
-
     username = session['username']
     user_state = get_user_state(username)
     if not user_state:
@@ -5697,6 +5775,25 @@ def critique_annotations():
             return jsonify({"error": "No current instance"}), 400
         instance_id = ordering[index]
     instance_id = str(instance_id)
+    # Before any other check, as on every AI route: whether the item is blind
+    # is the first thing a caller learns, not which schema exists.
+    blind = _engine_blind_refusal(username, instance_id)
+    if blind is not None:
+        return blind
+
+    schema_name = data.get("schema")
+    if not schema_name:
+        return jsonify({"error": "schema is required"}), 400
+
+    scheme = _find_scheme_by_name(schema_name)
+    if scheme is None or scheme.get("annotation_type") != "image_annotation":
+        return jsonify({
+            "error": f"No image_annotation schema named '{schema_name}'"}), 404
+
+    ai_support = scheme.get("ai_support") or {}
+    options = dict(ai_support.get("critique") or {})
+    if ai_support.get("enabled") is False or options.get("enabled") is False:
+        return jsonify({"error": "Critique is not enabled for this schema"}), 400
 
     # Prefer the objects the client sent: the annotator expects a critique of
     # what is on screen, and the last edit may not have been saved yet.
@@ -5812,7 +5909,10 @@ def get_current_instance():
 
         # Include raw data for schemas that need access to media URLs
         from potato.server_utils import text_to_image
-        raw_data = text_to_image.record_for_annotator(config, current_instance.get_data())
+        from potato.labeling_engine.integration.hooks import strip_machine_fields
+        raw_data = strip_machine_fields(
+            text_to_image.record_for_annotator(config, current_instance.get_data()),
+            username, instance_id)
 
         return jsonify({
             "instance_id": instance_id,
@@ -5860,7 +5960,10 @@ def get_instance_data():
 
         # Get the raw data from the instance
         from potato.server_utils import text_to_image
-        raw_data = text_to_image.record_for_annotator(config, current_instance.get_data())
+        from potato.labeling_engine.integration.hooks import strip_machine_fields
+        raw_data = strip_machine_fields(
+            text_to_image.record_for_annotator(config, current_instance.get_data()),
+            username, current_instance.get_id())
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)
@@ -6184,6 +6287,12 @@ def update_instance():
             if assigned_ids and instance_id not in assigned_ids:
                 logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
                 return jsonify({"status": "error", "message": "Instance not assigned to user"}), 403
+            # Before the first assignment the check above does not apply, and
+            # a save to an id that is not in the dataset (the string "None",
+            # say) was stored and exported as a row (potato-skill).
+            if not assigned_ids and not get_item_state_manager().has_item(instance_id):
+                logger.warning(f"User {username} tried to update unknown instance {instance_id}")
+                return jsonify({"status": "error", "message": "No such instance"}), 404
 
         # If a synthetic phase-page save arrives while the backend still thinks the user
         # is in annotation, acknowledge it without writing item state. This avoids a
@@ -6807,15 +6916,9 @@ def update_instance():
         if user_state.annotation_history:
             user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
 
-        # Register annotator with item state manager for tracking. A save that
-        # left nothing on the item (every answer cleared) takes it back.
-        if user_state.has_annotated(instance_id):
-            get_item_state_manager().register_annotator(instance_id, username)
-        else:
-            get_item_state_manager().unregister_annotator(instance_id, username)
-
-        # Save state
-        get_user_state_manager().save_user_state(user_state)
+        # Both sides of the record, the save, and the labeling engine.
+        from potato.annotation_commit import finish_annotation_write
+        finish_annotation_write(user_state, instance_id, username)
         logger.debug(f"User state saved for {username}")
 
         # Emit webhook events for annotation save
@@ -6995,6 +7098,48 @@ def poststudy():
         logger.debug("GET <-- POSTSTUDY")
         return get_current_page_html(config, username)
 
+def _engine_assigns() -> bool:
+    """Whether the labeling engine is serving this study's annotators."""
+    from potato.labeling_engine.integration.hooks import get_engine
+    strategy = config.get("assignment_strategy")
+    if isinstance(strategy, dict):
+        strategy = strategy.get("name")
+    return str(strategy or "").lower() == "engine" and get_engine() is not None
+
+
+def _engine_no_work_page(username, user_state):
+    """The engine has nothing for this person now; it may later.
+
+    Under the engine an annotator who has caught up is not finished: the
+    planner opens new requests as items arrive, as contracts need more
+    labels, or as audits come due. Advancing them to the completion page made
+    that permanent -- a returning annotator saw "Thank You!" while 31 open
+    requests waited for someone. They stay in the annotation phase, and a
+    reload serves whatever has been opened since.
+
+    Unless nothing more will come for them (``finished_for_user``): their
+    per-annotator cap is reached, the human-label budget is spent, or every
+    item has its final label. Then the annotation phase ends as usual.
+    """
+    from potato.labeling_engine.integration.hooks import finished_for_user
+    done = finished_for_user(user_state)
+    if done is not None:
+        # Nothing more will come for this person: the normal end of the
+        # annotation phase (post-study, then the thank-you page or a crowd
+        # completion code), not a page telling them to come back forever.
+        logger.info("Labeling engine: %s is finished (%s)", username, done)
+        get_user_state_manager().advance_phase(username)
+        return redirect(url_for("home"))
+    reason, headline, explanation, advice = _diagnose_no_work(username, user_state)
+    return render_template(
+        "no_work_available.html",
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        no_work_reason=reason,
+        no_work_headline=headline,
+        no_work_explanation=explanation,
+    )
+
+
 def _diagnose_no_work(username, user_state):
     """Why did assignment return nothing for this user?
 
@@ -7015,6 +7160,16 @@ def _diagnose_no_work(username, user_state):
     """
     from potato.item_state_management import get_item_state_manager
     ism = get_item_state_manager()
+
+    if _engine_assigns():
+        return (
+            "engine_waiting",
+            "Nothing to label right now",
+            "There is nothing for you to label at the moment. More items will be "
+            "ready soon, so check back later.",
+            "The labeling engine has no open request this annotator can take. "
+            "`potato label status` shows what the contracts are waiting for.",
+        )
 
     total_items = 0
     try:
@@ -7530,6 +7685,9 @@ def _admin_analysis_links():
     if (config.get("judge_alignment") or {}).get("enabled"):
         links.append({"href": "/admin/judge-alignment", "label": "Judge alignment",
                       "title": "LLM judge versus human labels"})
+    if (config.get("labeling_engine") or {}).get("enabled"):
+        links.append({"href": "/admin/labeling-engine", "label": "Labeling engine",
+                      "title": "Machine labels, the people who check them, and what is certified"})
     if categorical:
         links.append({"href": "/admin/annotation-integrity", "label": "Annotation integrity",
                       "title": "Per-annotator low-effort and LLM-copying signals"})
@@ -9937,6 +10095,9 @@ def ai_assistant():
     instance = user_state.get_current_instance_id()
     page_index = user_state.get_current_instance_index()
     annotation_type = _user_schemes[annotation_id]["annotation_type"]
+    blind = _engine_blind_refusal(username, instance)
+    if blind is not None:
+        return blind
 
     result = generate_ai_help_html(instance, annotation_id, annotation_type,
                                    page_index=page_index)
@@ -10332,6 +10493,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
     app.add_url_rule("/admin/api/induce-metrics", "admin_induce_metrics", admin_induce_metrics, methods=["GET"])
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
+    app.add_url_rule("/admin/labeling-engine", "admin_labeling_engine", admin_labeling_engine, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
     app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])
     app.add_url_rule("/admin/api/judge-position-bias", "admin_judge_position_bias",
@@ -10533,6 +10695,14 @@ def configure_routes(flask_app, app_config):
         try:
             from potato.review_workflow import review_bp
             app.register_blueprint(review_bp)
+        except ImportError:
+            pass
+
+    # Register the labeling engine's REST API if not already registered
+    if 'labeling_engine' not in app.blueprints:
+        try:
+            from potato.labeling_engine.api.routes import engine_bp
+            app.register_blueprint(engine_bp)
         except ImportError:
             pass
 
@@ -11926,6 +12096,10 @@ def chat_send():
         current_instance = user_state.get_current_instance()
         if current_instance:
             instance_id = current_instance.get_id()
+
+    blind = _engine_blind_refusal(username, instance_id)
+    if blind is not None:
+        return blind
 
     # Get instance text for context
     instance_text = ""

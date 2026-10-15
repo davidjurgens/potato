@@ -698,7 +698,7 @@ class ImageAnnotationManager {
      * Load an image onto the canvas.
      * @param {string} imageUrl - URL of the image to load
      */
-    loadImage(imageUrl) {
+    loadImage(imageUrl, withoutCors = false) {
         if (!this.canvas) return;
 
         if (this.config.viewer === 'deepzoom') {
@@ -723,6 +723,17 @@ class ImageAnnotationManager {
             }
 
             if (!img || !img.width || !img.height) {
+                // A host that sends no Access-Control-Allow-Origin header
+                // refuses a CORS request, so the image never loads. Try once
+                // more as a plain image: boxes and polygons work on it; only
+                // reading its pixels (colour-aware fill) does not.
+                if (!withoutCors && this._isCrossOrigin(imageUrl)) {
+                    console.warn('[image-annotation] ' + imageUrl + ' did not load with ' +
+                        'CORS; trying without (fill and SAM cannot read an image loaded ' +
+                        'that way).');
+                    this.loadImage(imageUrl, true);
+                    return;
+                }
                 console.error('Failed to load image:', imageUrl);
                 if (container) {
                     container.classList.add('error');
@@ -769,7 +780,16 @@ class ImageAnnotationManager {
             if (this.config.carryOver === 'auto' && this.getAnnotationCount() === 0) {
                 this.copyFromPrevious(false);
             }
-        }, { crossOrigin: 'anonymous' });
+        }, withoutCors ? {} : { crossOrigin: 'anonymous' });
+    }
+
+    /** True when the URL is served from another origin than the page. */
+    _isCrossOrigin(url) {
+        try {
+            return new URL(url, window.location.href).origin !== window.location.origin;
+        } catch (e) {
+            return false;
+        }
     }
 
     /**
@@ -994,29 +1014,42 @@ class ImageAnnotationManager {
             this._resizeMaskCanvas();
         }
 
-        // Rebuild from the stored (normalized) form at the new scale.
-        this.canvas.getObjects().slice().forEach(obj => {
-            if (obj !== this.image && obj.annotationData) this.canvas.remove(obj);
-        });
-        this.masks = {};
-        this._deserializeAnnotations(state);
+        // Rebuild from the stored (normalized) form at the new scale. A
+        // relayout, not an edit: removing and re-adding the shapes must not
+        // announce a change (see the end of this method).
+        const wasHydrating = this._hydrating;
+        this._hydrating = true;
+        try {
+            this.canvas.getObjects().slice().forEach(obj => {
+                if (obj !== this.image && obj.annotationData) this.canvas.remove(obj);
+            });
+            this.masks = {};
+            this._deserializeAnnotations(state);
 
-        this._renderAllMasks();
-        this.canvas.renderAll();
+            this._renderAllMasks();
+            this.canvas.renderAll();
 
-        // Re-apply visibility, which lives outside the serialized annotations.
-        if (this.labelVisibility) {
-            this.applyLabelVisibility(this.labelVisibility.hiddenLabels());
+            // Re-apply visibility, which lives outside the serialized annotations.
+            if (this.labelVisibility) {
+                this.applyLabelVisibility(this.labelVisibility.hiddenLabels());
+            }
+            this.currentTool = activeTool;
+
+            // MUST rewrite the input. Removing the old objects above fires
+            // `object:removed`, whose handler writes the then-empty canvas to the
+            // hidden input; nothing in the restore path writes it back. Without
+            // this line the annotations are still on screen and still in memory
+            // while the field the save path reads says "[]" — so a resize silently
+            // discarded the annotator's work on the next save.
+            //
+            // Written as a restore, not an edit: announcing it made the layout
+            // settling after load autosave a pre-filled answer the annotator had
+            // not touched, which closed a labeling-engine verify request with
+            // the machine's boxes as the person's answer.
+            this._updateAnnotationData();
+        } finally {
+            this._hydrating = wasHydrating;
         }
-        this.currentTool = activeTool;
-
-        // MUST rewrite the input. Removing the old objects above fires
-        // `object:removed`, whose handler writes the then-empty canvas to the
-        // hidden input; nothing in the restore path writes it back. Without
-        // this line the annotations are still on screen and still in memory
-        // while the field the save path reads says "[]" — so a resize silently
-        // discarded the annotator's work on the next save.
-        this._updateAnnotationData();
     }
 
     /**
@@ -1454,9 +1487,11 @@ class ImageAnnotationManager {
      *   "empty" - grow across unpainted mask area, ignoring image content.
      *       Useful for filling a hole inside an existing mask.
      *
-     * Region mode needs to read the image's pixels, which a cross-origin image
-     * forbids; that case falls back to "empty" with a warning rather than
-     * throwing a SecurityError into the console and doing nothing.
+     * Region mode needs to read the image's pixels, which an image from a
+     * host without CORS headers forbids. It used to fall back to "empty",
+     * which on an image with no mask yet filled the whole image and saved
+     * that as the annotation, with nothing said (potato-skill P1'). Now it
+     * fills nothing and says why.
      */
     _floodFill(e) {
         if (!this.image || !this.currentLabel) return;
@@ -1470,7 +1505,10 @@ class ImageAnnotationManager {
         let mode = this.config.fillMode || 'region';
         const pixels = mode === 'region' ? this._getSourcePixels() : null;
         if (mode === 'region' && !pixels) {
-            mode = 'empty';
+            this._notice('Fill cannot read this image: its host does not allow it ' +
+                '(no CORS headers). Outline the area with the brush or a polygon ' +
+                'instead, or serve the image from the task\'s media directory.');
+            return;
         }
 
         const filled = this._floodFillFrom(
@@ -3844,6 +3882,14 @@ class ImageAnnotationManager {
      */
     _createAnnotationObject(ann) {
         if (!this.image) return;
+        // Stored and pre-annotated shapes may carry no colour (a hand-written
+        // pre_annotation file rarely does); without one the shape failed to
+        // build and the item showed "Annotations: 0". Use the label's colour.
+        if (!ann.color) {
+            ann = Object.assign({}, ann, {
+                color: this.colorForLabel(ann.label) || '#FF6B6B',
+            });
+        }
 
         const imgWidth = this.image.width * this.image.scaleX;
         const imgHeight = this.image.height * this.image.scaleY;
@@ -4130,6 +4176,9 @@ class ImageAnnotationManager {
      * Convert hex color to rgba with alpha.
      */
     _colorWithAlpha(hex, alpha) {
+        if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) {
+            return hex || `rgba(255, 107, 107, ${alpha})`;
+        }
         const r = parseInt(hex.slice(1, 3), 16);
         const g = parseInt(hex.slice(3, 5), 16);
         const b = parseInt(hex.slice(5, 7), 16);
@@ -4198,6 +4247,31 @@ class ImageAnnotationManager {
             container.appendChild(region);
         }
         region.textContent = message;
+    }
+
+    /**
+     * A visible, non-blocking note under the canvas (role=status), for a tool
+     * that cannot do what was asked. Unlike _showCanvasMessage it leaves the
+     * image and its annotations alone.
+     */
+    _notice(message) {
+        const container = document.getElementById(this.canvasId)
+            ?.closest('.image-annotation-container');
+        if (!container) return;
+        let note = container.querySelector('.image-annotation-notice');
+        if (!note) {
+            note = document.createElement('p');
+            note.className = 'image-annotation-notice';
+            note.setAttribute('role', 'status');
+            note.style.cssText = 'margin:8px 0 0;padding:8px 12px;border-radius:6px;' +
+                'font-size:14px;line-height:1.4;background:var(--muted,#f4f4f5);' +
+                'color:var(--foreground,#09090b);border:1px solid var(--border,#e4e4e7);';
+            container.appendChild(note);
+        }
+        note.textContent = message;
+        note.hidden = false;
+        clearTimeout(this._noticeTimer);
+        this._noticeTimer = setTimeout(() => { note.hidden = true; }, 8000);
     }
 
     /** Drop a message once there is something real on the canvas. */

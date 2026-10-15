@@ -151,6 +151,9 @@ class VLLMEndpoint(BaseAIEndpoint):
 
             result = response.json()
             self._warn_if_truncated(result["choices"][0].get("finish_reason"))
+            usage = result.get("usage") or {}
+            if usage:
+                self._note_usage(usage.get("prompt_tokens"), usage.get("completion_tokens"))
             message = result["choices"][0]["message"]
             content = message.get("content") or ""
 

@@ -135,7 +135,16 @@ Object.defineProperty(globalThis, 'navigator', {
   value: { onLine: true, vibrate: () => {} },
   configurable: true, writable: true,
 });
-global.setTimeout = ((fn) => { fn(); return 0; });
+// Timers run at once, except in the double-tap scenario, where the card's
+// exit animation must leave a window for the second tap.
+const pendingTimers = [];
+global.setTimeout = SCENARIO === 'double_tap'
+  ? ((fn) => { pendingTimers.push(fn); return pendingTimers.length; })
+  : ((fn) => { fn(); return 0; });
+if (SCENARIO === 'double_tap') {
+  global.window.matchMedia = () => ({ matches: false });
+  global.matchMedia = global.window.matchMedia;
+}
 const intervals = [];
 global.setInterval = ((fn, ms) => { intervals.push({ fn, ms }); return intervals.length; });
 
@@ -164,6 +173,24 @@ global.fetch = (url, opts) => {
   }
   // /pocket/api/batch: an annotator who has reached the end of their batch,
   // which is exactly when there is no next save to piggyback a flush on.
+  batchFetches += 1;
+  if (SCENARIO === 'topup' || SCENARIO === 'double_tap') {
+    // The server hands out one card per fetch, as a labeling-engine study
+    // does while it opens requests: the second fetch has the next card.
+    const cards = [
+      { instance_id: 'q1', text: 'first card', annotations: {} },
+      { instance_id: 'q2', text: 'second card', annotations: {} },
+    ];
+    if (SCENARIO === 'double_tap') {
+      cards.push({ instance_id: 'q3', text: 'third card', annotations: {} });
+      const batch = batchFetches === 1 ? cards.slice(0, 2) : (batchFetches === 2 ? [cards[2]] : []);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(
+        { items: batch, total: 3, done: 0 }) });
+    }
+    const next = cards[batchFetches - 1];
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(
+      { items: next ? [next] : [], total: 2, done: batchFetches - 1 }) });
+  }
   return Promise.resolve({
     ok: true, status: 200,
     json: () => Promise.resolve(
@@ -173,6 +200,7 @@ global.fetch = (url, opts) => {
         : { items: [], total: 6, done: 4 }),
   });
 };
+let batchFetches = 0;
 
 // -------------------------------------------------------------------- run --
 const source = fs.readFileSync(SRC, 'utf8');
@@ -190,6 +218,12 @@ function chipText() {
 
 function mainText() { return stripTags(byId['pk-main'].innerHTML); }
 
+/** Text of a subtree built with createElement as well as innerHTML. */
+function deepText(el) {
+  return [stripTags(el._html || ''), el._text || '',
+          ...el.children.map(deepText)].join(' ');
+}
+
 const RECORD = (n) => ({
   instance_id: 'p' + n,
   annotations: { 'sarcasm:Sarcastic': 'on' },
@@ -199,7 +233,7 @@ const RECORD = (n) => ({
 
 // Seed the queue BEFORE the module boots: this is a phone coming back to a
 // page with unsent work, which is the situation under test.
-if (SCENARIO !== 'done_empty' && SCENARIO !== 'likert') {
+if (!['done_empty', 'likert', 'topup', 'double_tap'].includes(SCENARIO)) {
   global.localStorage.setItem(QUEUE_KEY, JSON.stringify([RECORD(2), RECORD(3)]));
 } else {
   global.localStorage.setItem(QUEUE_KEY, JSON.stringify([]));
@@ -238,6 +272,17 @@ drain(12).then(() => {
     if (buttons.length >= 3) buttons[2].click();
     return drain(12);
   }
+  if (SCENARIO === 'topup' || SCENARIO === 'double_tap') {
+    // Answer the only card. Its save empties the queue; the end of the batch
+    // must ask the server for more before saying "All caught up".
+    const buttons = byId['pk-main'].querySelectorAll('pk-opt');
+    if (buttons.length >= 3) {
+      buttons[2].click();
+      if (SCENARIO === 'double_tap') buttons[3].click();   // within the exit animation
+    }
+    while (pendingTimers.length) pendingTimers.shift()();
+    return drain(40);
+  }
   if (SCENARIO === 'triggers') {
     result.window_events = Object.keys(windowListeners);
     result.document_events = Object.keys(documentListeners);
@@ -259,6 +304,9 @@ drain(12).then(() => {
   result.sent_keys = posted.length ? Object.keys(posted[0]).sort() : [];
   result.sent_annotations = posted.length
     ? posted[posted.length - 1].annotations : null;
+  result.batch_fetches = batchFetches;
+  result.main_deep = deepText(byId['pk-main']).replace(/\s+/g, ' ').trim();
+  result.sent_ids = posted.map((p) => p.instance_id);
 }).then(() => {
   console.log(JSON.stringify(result));
 }).catch((e) => {

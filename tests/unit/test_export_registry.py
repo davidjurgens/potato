@@ -163,6 +163,8 @@ class TestBuiltinExportersRegistered:
             # The adjudicated final label -- the deliverable of an adjudicated
             # workflow, which no per-annotator format above carries.
             "adjudication",
+            # The labeling engine's resolved labels and certificate.
+            "labeling_engine",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}
@@ -246,6 +248,8 @@ class TestTheFormatListIsPinned:
         "trajectory_correction", "annotation_telemetry", "keystrokes",
         # adjudication outcome
         "adjudication",
+        # labeling engine deliverable
+        "labeling_engine",
     }
 
     def test_every_registered_format_is_accounted_for(self):

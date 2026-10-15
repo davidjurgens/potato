@@ -19,6 +19,7 @@ STAGE1_COMMANDS = {
     "preview": "show what a config declares, and render it in a browser",
     "mcp": "run the MCP server for coding agents",
     "import": "build a project from an existing annotation file",
+    "label": "label a dataset with models, and certify the labels",
     "transcripts": "convert transcripts into annotation data",
     "convokit": "build a project from a ConvoKit corpus",
     "deploy": "put a task on a host, and take it down again",

@@ -65,6 +65,7 @@
         VOCAB_MISSING: 'vocab-missing',
         INPUT_FAILED: base.MODEL_ERROR.INPUT_FAILED,
         INFERENCE_FAILED: base.MODEL_ERROR.INFERENCE_FAILED,
+        IMAGE_UNREADABLE: base.MODEL_ERROR.IMAGE_UNREADABLE,
     };
 
     /** Defaults mirror the model zoo entry; the zoo wins when it supplies them. */
@@ -256,7 +257,10 @@
                 pixels = imageToTensor(source, this.inputSize, this.imageMean,
                                        this.imageStd, this.canvasFactory);
             } catch (err) {
-                return this._fail(GDINO_ERROR.INPUT_FAILED,
+                // A SecurityError is the browser refusing a no-CORS image's
+                // pixels; say that rather than "could not be prepared".
+                return this._fail(err && err.name === 'SecurityError'
+                                      ? GDINO_ERROR.IMAGE_UNREADABLE : GDINO_ERROR.INPUT_FAILED,
                                   (err && err.message) || String(err));
             }
 

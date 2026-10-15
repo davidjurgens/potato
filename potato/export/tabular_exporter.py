@@ -12,7 +12,8 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
-from .origin_columns import origin_fields, origin_in_use, record_origin
+from .origin_columns import (engine_fields, engine_in_use, origin_fields, origin_in_use,
+                             record_origin)
 from .single_select import (
     EXEMPT_LABEL_NAMES,
     resolve_final_label,
@@ -62,7 +63,7 @@ def _spans_with_text(ann: dict,
 def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
                         ambiguities: Optional[List[str]] = None,
                         context: Optional[ExportContext] = None,
-                        with_origin: bool = False) -> dict:
+                        with_origin: bool = False, with_engine: bool = False) -> dict:
     """Flatten a single annotation record into a flat dict for tabular output.
 
     ``single_select`` names the schemas that may hold at most one label. When such a
@@ -81,6 +82,8 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
     }
     if with_origin:
         row.update(origin_fields(ann))
+    if with_engine:
+        row.update(engine_fields(ann))
     single_select = single_select or set()
 
     # Flatten labels: schema_name.label_name = value
@@ -207,6 +210,8 @@ class JSONLExporter(BaseExporter):
                     # The whole declaration, not the flattened pair: JSON
                     # has room for the version fields as they are.
                     record["annotator_origin"] = record_origin(ann)
+                if ann.get("_engine"):
+                    record["engine_request"] = ann["_engine"]
                 record.update({
                     "labels": ann.get("labels", {}),
                     # Same slice the csv column gets: a stored span is offsets
@@ -465,8 +470,9 @@ def _write_delimited(context: ExportContext, output_path: str,
     single_select = _single_select_names(context)
     ambiguities = []
     with_origin = origin_in_use(context.annotations)
+    with_engine = engine_in_use(context.annotations)
     rows = [_flatten_annotation(ann, single_select, ambiguities, context,
-                                with_origin=with_origin)
+                                with_origin=with_origin, with_engine=with_engine)
             for ann in context.annotations]
 
     if not rows:

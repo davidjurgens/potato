@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 import os
 from typing import Dict, Any, Optional, List, Type, Union
 import json
+import threading
 from string import Template
 
 from pydantic import BaseModel
@@ -195,6 +196,12 @@ class AIEndpointRequestError(AIEndpointError):
     pass
 
 
+#: Token usage reported by the most recent call made on this thread. Calls are
+#: synchronous, so the call that just returned on a thread is the one that set
+#: it, whichever endpoint instance made it.
+_LAST_USAGE = threading.local()
+
+
 class BaseAIEndpoint(ABC):
     """
     Abstract base class for AI endpoints.
@@ -202,6 +209,34 @@ class BaseAIEndpoint(ABC):
     All AI endpoint implementations should inherit from this class
     and implement the required methods.
     """
+
+    def _note_usage(self, input_tokens, output_tokens) -> None:
+        """Record the token counts the provider reported for this call.
+
+        Never raises: usage is bookkeeping, and a provider that changes its
+        response shape must not turn a good answer into a failed call.
+        """
+        try:
+            _LAST_USAGE.value = {
+                "input_tokens": int(input_tokens) if input_tokens is not None else None,
+                "output_tokens": int(output_tokens) if output_tokens is not None else None,
+            }
+        except (TypeError, ValueError):
+            _LAST_USAGE.value = None
+
+    def query_with_usage(self, prompt: str, output_format: Optional[Type[BaseModel]] = None):
+        """``query()``, plus the provider's token counts when it reported them.
+
+        Returns ``(reply, usage)``, where ``usage`` is ``{"input_tokens",
+        "output_tokens"}`` or None for a provider that reports nothing. The
+        labeling engine's call log records measured usage when there is some
+        and marks the row estimated otherwise.
+        """
+        _LAST_USAGE.value = None
+        reply = self.query(prompt, output_format)
+        usage = getattr(_LAST_USAGE, "value", None)
+        _LAST_USAGE.value = None
+        return reply, usage
 
     def __init__(self, config: Dict[str, Any]):
         """
@@ -405,7 +440,10 @@ class BaseAIEndpoint(ABC):
                 since a provider that reports nothing is not evidence either way.
             where: What was being generated, for the message
         """
-        if not self._is_truncation_reason(finish_reason):
+        # Kept for callers that must not use a cut-off reply at all (a Solo
+        # prompt draft): the salvage step turns one into a plausible dict.
+        self.last_truncated = self._is_truncation_reason(finish_reason)
+        if not self.last_truncated:
             return
         logger.warning(
             "The model hit max_tokens (%s) before finishing this %s, so the "

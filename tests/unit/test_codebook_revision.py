@@ -130,3 +130,17 @@ class TestProvenanceAndStale:
         record_annotation(td, "P", "i1", "alice")
         create_code(td, project="P", name="b", created_by="u")
         assert stale_instances(td, "P", "bob") == []
+
+
+def test_revision_db_works_after_the_registry_is_cleared(td):
+    # A test that calls clear_migrations() leaves the registry empty. The
+    # next revision call re-registered the ALTER on `codes` but not the
+    # migration that creates `codes`, so every later get_db() in that
+    # process failed with "no such table: codes" -- AI spend, jury and
+    # drift tests included.
+    from potato.persistence import get_db
+
+    clear_db_cache()
+    clear_migrations()
+    assert revision.current_revision(td, "p") == 0
+    get_db(td).execute("SELECT created_revision FROM codes").fetchall()

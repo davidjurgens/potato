@@ -91,6 +91,11 @@ class OllamaEndpoint(BaseAIEndpoint):
             logger.debug(f"[Ollama] Full response: {response}")
 
             self._warn_if_truncated(self._stop_reason(response, 'done_reason'))
+            def _field(name):
+                return (response.get(name) if hasattr(response, 'get')
+                        else getattr(response, name, None))
+            if _field('prompt_eval_count') is not None or _field('eval_count') is not None:
+                self._note_usage(_field('prompt_eval_count'), _field('eval_count'))
 
             # Get the message object - handle both dict and object access
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)

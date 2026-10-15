@@ -12,7 +12,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import threading
 
 logger = logging.getLogger(__name__)
@@ -98,6 +98,23 @@ class PromptRevision:
             'failed_cases': self.failed_cases,
             'timestamp': self.timestamp.isoformat(),
         }
+
+
+def _strict_json_object(text: str) -> Optional[Dict[str, Any]]:
+    """The JSON object in a reply (code fences and surrounding prose allowed),
+    or None. No salvage: a cut-off object is not an object."""
+    content = (text or "").strip()
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+    if fence:
+        content = fence.group(1).strip()
+    start, end = content.find("{"), content.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        parsed = json.loads(content[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 class PromptManager:
@@ -196,18 +213,35 @@ class PromptManager:
             The synthesized prompt text, or None if synthesis failed
         """
         self.set_task_description(task_description)
+        drafted = self.draft_prompt(task_description)
+        if drafted is None:
+            return self._create_fallback_prompt()
+        prompt_text, explanation = drafted
+        self._add_prompt_version(
+            prompt_text=prompt_text,
+            created_by='llm_synthesis',
+            source_description=f"Synthesized from task description. {explanation}"
+        )
+        return prompt_text
 
+    def draft_prompt(self, task_description: str) -> Optional[Tuple[str, str]]:
+        """``(prompt, explanation)`` written by the revision model from the
+        task description and the schemes, or None when there is no revision
+        model or it gave no prompt. Stores nothing."""
+        #: Why the last draft_prompt returned None, for the version's note.
+        self.last_draft_failure = None
         endpoint = self._get_revision_endpoint()
         if endpoint is None:
             logger.warning("No endpoint available for prompt synthesis")
-            return self._create_fallback_prompt()
+            self.last_draft_failure = "no revision model is configured"
+            return None
 
         try:
             # Get schema info from config
             schemes = self.config.get('annotation_schemes', [])
             if not schemes:
                 logger.warning("No annotation schemes configured")
-                return self._create_fallback_prompt()
+                return None
 
             schema_info = self._format_schema_info(schemes)
             labels = self._extract_labels(schemes)
@@ -226,32 +260,48 @@ class PromptManager:
                 prompt: str
                 explanation: str = ""
 
+            try:
+                endpoint.last_truncated = False
+            except Exception:
+                pass
             response = endpoint.query(synthesis_prompt, SynthesisResponse)
+            if getattr(endpoint, 'last_truncated', False) is True:
+                # The salvage step makes a cut-off reply look like a whole
+                # one ({"prompt": <half a sentence>}); the finish reason is
+                # the only reliable sign (potato-skill H5, live at 256 tokens).
+                self.last_draft_failure = (
+                    "the revision model's reply was cut off at max_tokens "
+                    f"({getattr(endpoint, 'max_tokens', '?')}); raise it")
+                logger.warning("Prompt synthesis: %s", self.last_draft_failure)
+                return None
 
-            # Parse response
+            # Only the JSON that was asked for counts. A reply that does not
+            # parse (often one cut off at max_tokens) was stored whole as the
+            # prompt, literal "\n"s and all, and labelled as written by the
+            # model (potato-skill H5).
             if isinstance(response, str):
-                response_data = self._parse_json_response(response)
+                response_data = _strict_json_object(response)
             elif hasattr(response, 'model_dump'):
                 response_data = response.model_dump()
             else:
                 response_data = response
+            if not isinstance(response_data, dict) or set(response_data) == {'response'}:
+                response_data = None
 
-            prompt_text = response_data.get('prompt', '')
-            explanation = response_data.get('explanation', '')
-
-            if prompt_text:
-                # Store as first version
-                self._add_prompt_version(
-                    prompt_text=prompt_text,
-                    created_by='llm_synthesis',
-                    source_description=f"Synthesized from task description. {explanation}"
-                )
-                return prompt_text
+            prompt_text = (response_data or {}).get('prompt', '')
+            explanation = (response_data or {}).get('explanation', '')
+            if isinstance(prompt_text, str) and prompt_text.strip():
+                return prompt_text, explanation
+            self.last_draft_failure = (
+                "the revision model's reply was not the JSON prompt asked for "
+                "(a reply cut off at max_tokens looks like this)")
+            logger.warning("Prompt synthesis: %s", self.last_draft_failure)
 
         except Exception as e:
             logger.error(f"Error synthesizing prompt: {e}")
+            self.last_draft_failure = f"the revision model call failed ({type(e).__name__})"
 
-        return self._create_fallback_prompt()
+        return None
 
     def _create_fallback_prompt(self) -> str:
         """Create a basic fallback prompt when synthesis fails."""

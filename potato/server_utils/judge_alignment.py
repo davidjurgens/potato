@@ -86,6 +86,9 @@ def save_prediction(config: Dict[str, Any], pred) -> None:
     version = pred.prompt_version or "default"
     data.setdefault(version, {})[f"{pred.instance_id}::{pred.schema_name}"] = pred.to_dict()
     _save_json(predictions_path(config), data)
+    from potato.labeling_engine.integration.mirror import mirror
+    mirror("judge_alignment", pred.model_name, version, pred.instance_id, pred.schema_name,
+           pred.predicted_label, pred.confidence, pred.reasoning)
 
 
 def _schema_of_key(key: str) -> str:

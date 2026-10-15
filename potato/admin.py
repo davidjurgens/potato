@@ -1662,9 +1662,30 @@ class AdminDashboard:
                     f"partitions."
                 )
 
+            from potato.server_utils.iaa.structured import (
+                SEGMENT_TYPES, SPATIAL_TYPES, TRACE_TYPES)
+            structured = set(SEGMENT_TYPES) | set(SPATIAL_TYPES) | set(TRACE_TYPES)
             for scheme in annotation_schemes:
                 schema_name = scheme.get("name", "Unknown")
                 annotation_type = scheme.get("annotation_type", "unknown")
+
+                # Steps, segments, regions and 3D objects are not label names.
+                # Reduced to names here, every annotator "chose" the scheme
+                # itself and agreed perfectly while /admin/iaa, which matches
+                # the structures, measured 0.56. Point there instead.
+                kind = dispatcher.classify_schema(scheme)
+                if annotation_type in structured or kind in (
+                        dispatcher.SchemaKind.GEOMETRY, dispatcher.SchemaKind.TEMPORAL,
+                        dispatcher.SchemaKind.SPATIAL, dispatcher.SchemaKind.GROUNDING,
+                        dispatcher.SchemaKind.EPISODE, dispatcher.SchemaKind.ROLLOUT,
+                        dispatcher.SchemaKind.CAPTION):
+                    metrics["by_schema"][schema_name] = {
+                        "error": "Structured answers (steps, segments or regions) "
+                                 "are scored in the agreement report at /admin/iaa, "
+                                 "not here.",
+                        "see": "/admin/iaa",
+                    }
+                    continue
 
                 # Collect annotations per item for this schema
                 annotations_by_item = {}

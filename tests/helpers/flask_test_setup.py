@@ -818,6 +818,21 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize the labeling engine (clear always,
+                # so a leaked engine from a prior in-process server cannot
+                # answer for this one).
+                try:
+                    from potato.labeling_engine.integration.hooks import (
+                        clear_engine, init_engine)
+                    clear_engine()
+                    if (config.get('labeling_engine') or {}).get('enabled', False):
+                        init_engine(config)
+                        print("[DEBUG] Labeling engine initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing labeling engine: {e}")
+                    import traceback
+                    traceback.print_exc()
+
                 # Codebook ICL-sync listener (parity with the real init
                 # paths; keeps ICL prompts on the current codebook set).
                 try:

@@ -122,11 +122,29 @@ def setup():
 
         if task_description:
             manager.set_task_description(task_description)
-            manager.create_prompt_version(
-                f"Label the following text according to this task: {task_description}",
-                created_by='user_setup',
-                source_description='Initial prompt from task description'
-            )
+            # "Generate prompt": the revision model writes the first prompt from
+            # the description and the schemes. Without one (or if it gives
+            # nothing back) the description is wrapped as before, and the
+            # version says so.
+            drafted = None
+            try:
+                drafted = manager.prompt_manager.draft_prompt(task_description)
+            except Exception:
+                logger.exception("Solo setup: prompt synthesis failed")
+            if drafted is not None:
+                prompt_text, explanation = drafted
+                manager.create_prompt_version(
+                    prompt_text, created_by='llm_synthesis',
+                    source_description=("Written by the revision model from the task "
+                                        f"description. {explanation}").strip())
+            else:
+                manager.create_prompt_version(
+                    f"Label the following text according to this task: {task_description}",
+                    created_by='user_setup',
+                    source_description=(
+                        'Initial prompt from task description, not rewritten: '
+                        + (getattr(manager.prompt_manager, 'last_draft_failure', None)
+                           or 'no revision model answered')))
             manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
             return redirect(url_for('solo_mode.prompt_editor'))
 
@@ -189,6 +207,9 @@ def prompt_editor():
             'version': pv.version,
             'prompt': pv.prompt_text,
             'source': pv.created_by,
+            # Why this version reads as it does: the editor showed only the
+            # source, so a fallback prompt never said why it was one.
+            'note': pv.source_description,
             'timestamp': pv.created_at.isoformat(),
         })
 

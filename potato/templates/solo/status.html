@@ -741,7 +741,7 @@
                 <strong id="ov-human">{{ annotation_stats.human_labeled }}</strong>
             </div>
             <div class="metric-row">
-                <span>LLM</span>
+                <span>Model</span>
                 <strong id="ov-llm">{{ annotation_stats.llm_labeled }}</strong>
             </div>
             <div class="metric-row">
@@ -787,11 +787,11 @@
             <p class="card-description" id="ov-blind-desc">on items labeled without seeing the suggestion</p>
             <div class="metric-row">
                 <span>Blind</span>
-                <strong id="ov-blind-n">{{ pct(anchoring.blind.agreement_rate) }} of {{ anchoring.blind.compared }}</strong>
+                <strong id="ov-blind-n">{% if anchoring.blind.compared %}{{ pct(anchoring.blind.agreement_rate) }} of {{ anchoring.blind.compared }}{% else %}none yet{% endif %}</strong>
             </div>
             <div class="metric-row">
                 <span>Suggestion shown</span>
-                <strong id="ov-shown-n">{{ pct(anchoring.shown.agreement_rate) }} of {{ anchoring.shown.compared }}</strong>
+                <strong id="ov-shown-n">{% if anchoring.shown.compared %}{{ pct(anchoring.shown.agreement_rate) }} of {{ anchoring.shown.compared }}{% else %}none yet{% endif %}</strong>
             </div>
             <div class="metric-row">
                 <span>Gap (shown − blind)</span>
@@ -803,7 +803,7 @@
             </div>
             <div class="metric-row">
                 <span>Handoff reads</span>
-                <strong id="ov-handoff-basis">{{ {'blind': 'blind agreement', 'all': 'all agreement', 'waiting': 'waiting for blind items', 'blind_short': 'every blind item there is'}.get(anchoring.handoff_basis, anchoring.handoff_basis) }}</strong>
+                <strong id="ov-handoff-basis">{% if anchoring.handoff_basis == 'blind_short' %}{{ anchoring.blind.compared }} blind items, below the minimum of {{ anchoring.minimum_blind_sample }}{% else %}{{ {'blind': 'blind agreement', 'all': 'all agreement', 'waiting': 'waiting for blind items'}.get(anchoring.handoff_basis, anchoring.handoff_basis) }}{% endif %}</strong>
             </div>
             <p class="card-description" id="ov-anchoring-note"></p>
         </div>
@@ -811,7 +811,7 @@
 
         {# LLM Labeling Card #}
         <div class="dashboard-card">
-            <h3>LLM Labeling</h3>
+            <h3>Model labeling</h3>
             {% if llm_stats %}
             <div class="metric-row">
                 <span>Labeled</span>
@@ -838,7 +838,7 @@
                 </strong>
             </div>
             {% else %}
-            <p class="card-description">LLM labeling not started</p>
+            <p class="card-description">Model labeling not started</p>
             {% endif %}
         </div>
 
@@ -1079,7 +1079,7 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>LLM Predicted</th>
+                    <th>Model predicted</th>
                     <th>Human Corrected</th>
                     <th>Count</th>
                     <th>% of Errors</th>
@@ -1363,7 +1363,7 @@
 {% block extra_js %}
 <script src="{{ url_for('static', filename='vendor/d3-7.9.0.min.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/solo-viz.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}?v=20261014" defer></script>
+<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}?v=20261015" defer></script>
 <script defer>
     document.addEventListener('DOMContentLoaded', function() {
         window.soloDashboard = new SoloDashboard();

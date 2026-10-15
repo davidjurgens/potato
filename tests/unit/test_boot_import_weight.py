@@ -64,6 +64,32 @@ def test_flask_server_import_does_not_load_heavy_ml():
         f"These must be lazily imported at point-of-use (see F-051).")
 
 
+def test_labeling_engine_modules_load_no_model_backend():
+    """Every module under potato.labeling_engine imports without a backend.
+
+    The engine is imported at boot to validate config and wire routes; its
+    sources reach model SDKs only when a run builds them. Walking the package
+    covers modules added later without editing this test.
+    """
+    code = (
+        "import sys, importlib, pkgutil, json; import potato.labeling_engine as p; "
+        "names = [m.name for m in pkgutil.walk_packages(p.__path__, p.__name__ + '.')]; "
+        "[importlib.import_module(n) for n in names]; "
+        "print(json.dumps({'n': len(names), 'loaded': [m for m in "
+        f"{FORBIDDEN_AT_BOOT!r} if m in sys.modules]}}))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    import json
+    info = json.loads(result.stdout.strip().splitlines()[-1])
+    assert info["n"] > 0
+    assert info["loaded"] == [], (
+        f"potato.labeling_engine imported model backends at import: {info['loaded']}")
+
+
 #: Every module that decides whether the embedding stack is available.
 #:
 #: All three had the same latent defect: a module-level

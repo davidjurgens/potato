@@ -36,6 +36,9 @@ NON_CV_EXPORTERS = {
     # geometry, when there is any, is whatever the underlying schema stored, so
     # it has no row of its own in a matrix about shapes.
     "adjudication",
+    # The labeling engine's resolved labels and certificate: whatever each
+    # scheme stores, so no shape row of its own.
+    "labeling_engine",
 }
 
 

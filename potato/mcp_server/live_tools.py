@@ -94,6 +94,18 @@ _TOOLS: List[LiveTool] = [
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_agreement"),
     LiveTool("get_config", "The task's current configuration",
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_config"),
+    LiveTool("engine_status", "Labeling engine progress: predictions, requests, "
+             "contracts, spend", Permission.VIEW_ADMIN_DASHBOARD, handler="engine_status"),
+    LiveTool("engine_requests", "The labeling engine's human requests",
+             Permission.VIEW_ADMIN_DASHBOARD, handler="engine_requests",
+             parameters=(
+                 LiveParam("purpose", "string", False,
+                           "calibration, verify, resolve, audit, adjudicate, ...; "
+                           "several separated by commas"),
+                 LiveParam("status", "string", False,
+                           "open, assigned, done, ...; several separated by commas"),
+                 LiveParam("limit", "integer", False, "How many to return", 100),
+             )),
 
     # ---- write ------------------------------------------------------------
     LiveTool("add_items", "Add new items to the task",
@@ -116,6 +128,21 @@ _TOOLS: List[LiveTool] = [
                            "optionally title, value, target_field"),
                  LiveParam("behavioral_data", "object", False,
                            "Interaction telemetry to store with the answer"),
+             )),
+    LiveTool("engine_run", "Run one labeling-engine planner pass now: label new "
+             "items, draw samples, certify, resolve", Permission.MANAGE_ASSIGNMENT,
+             handler="engine_run"),
+    LiveTool("engine_certify", "Evaluate every labeling-engine contract now",
+             Permission.MANAGE_ASSIGNMENT, handler="engine_certify",
+             parameters=(
+                 LiveParam("retest", "boolean", False,
+                           "Also test when only dev labels changed the rule "
+                           "(spends a look)", False),
+             )),
+    LiveTool("engine_certificate", "The labeling engine's quality certificate",
+             Permission.EXPORT_DATA, handler="engine_certificate",
+             parameters=(
+                 LiveParam("format", "string", False, "json, md or html", "json"),
              )),
     LiveTool("assign_items", "Set how many items an annotator may receive",
              Permission.MANAGE_ASSIGNMENT, handler="assign_items",

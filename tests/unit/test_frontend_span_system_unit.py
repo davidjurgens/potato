@@ -519,6 +519,13 @@ class TestSpanErrorHandling:
 
     def create_test_user(self, username="test_user"):
         """Helper method to create a test user state"""
+        # The tests save spans to this item. It was never created here, and
+        # the save went through only because /updateinstance did not check
+        # the id before a user's first assignment.
+        item_manager = get_item_state_manager()
+        if not item_manager.has_item("test_instance_456"):
+            item_manager.add_item("test_instance_456",
+                                  {"id": "test_instance_456", "text": "I love this product!"})
         user_state_manager = get_user_state_manager()
         if not user_state_manager.has_user(username):
             user_state_manager.add_user(username)

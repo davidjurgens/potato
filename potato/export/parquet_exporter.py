@@ -16,7 +16,8 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
-from .origin_columns import ORIGIN_COLUMN, origin_fields, origin_in_use
+from .origin_columns import (ORIGIN_COLUMN, engine_fields, engine_in_use, origin_fields,
+                             origin_in_use)
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,7 @@ class ParquetExporter(BaseExporter):
         """Build flat row dicts for the annotations table."""
         rows = []
         with_origin = origin_in_use(annotations)
+        with_engine = engine_in_use(annotations)
         for ann in annotations:
             row = {
                 "instance_id": ann.get("instance_id", ""),
@@ -180,6 +182,8 @@ class ParquetExporter(BaseExporter):
             }
             if with_origin:
                 row.update(origin_fields(ann))
+            if with_engine:
+                row.update(engine_fields(ann))
 
             labels = ann.get("labels", {})
             for schema_name, value in labels.items():

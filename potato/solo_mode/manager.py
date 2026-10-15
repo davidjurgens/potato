@@ -1928,6 +1928,9 @@ class SoloModeManager:
             self.confidence_history[instance_id].append(
                 (prediction.prompt_version, prediction.confidence_score)
             )
+        from potato.labeling_engine.integration.mirror import mirror
+        mirror("solo_mode", prediction.model_name, prediction.prompt_version, instance_id,
+               schema_name, prediction.predicted_label, prediction.confidence_score)
 
     def _retract_comparison(self, instance_id: str, schema_name: str,
                             previous: LLMPrediction) -> None:

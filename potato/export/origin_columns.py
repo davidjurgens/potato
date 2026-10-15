@@ -35,6 +35,25 @@ def origin_in_use(annotations: Iterable[Dict[str, Any]]) -> bool:
     return any(record_origin(ann).get("kind") != HUMAN for ann in annotations)
 
 
+#: Which labeling-engine request the row answers, per scheme, as JSON:
+#: purpose, inclusion probability, visibility, split, request id.
+ENGINE_COLUMN = "engine_request"
+#: The purposes alone, comma-separated, for filtering without parsing JSON.
+ENGINE_PURPOSE_COLUMN = "engine_purpose"
+
+
+def engine_in_use(annotations: Iterable[Dict[str, Any]]) -> bool:
+    """True when any record answered a labeling-engine request."""
+    return any(ann.get("_engine") for ann in annotations)
+
+
+def engine_fields(ann: Dict[str, Any]) -> Dict[str, str]:
+    info = ann.get("_engine") or {}
+    purposes = sorted({v.get("purpose", "") for v in info.values()})
+    return {ENGINE_PURPOSE_COLUMN: ",".join(p for p in purposes if p),
+            ENGINE_COLUMN: json.dumps(info, sort_keys=True) if info else ""}
+
+
 def origin_fields(ann: Dict[str, Any]) -> Dict[str, str]:
     """The two flat columns for one record."""
     origin = record_origin(ann)

@@ -430,8 +430,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "assignment_strategy": _D(
         "How items are handed out: random, fixed_order, active_learning, "
         "max_diversity, least_annotated, category_based, diversity_clustering, "
-        "batch, priority, model_review or psychometric. `llm_confidence` is "
-        "accepted and assigns at random -- it is not implemented",
+        "batch, priority, model_review, psychometric or engine (the labeling "
+        "engine's human requests). `llm_confidence` is accepted and assigns at "
+        "random -- it is not implemented",
         type="string", default="fixed_order", category=ASSIGN,
     ),
     "automatic_assignment": _D(
@@ -2395,6 +2396,279 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "solo_mode.state_dir": _D(
         "Where solo-mode state is persisted", type="string", category=ASSIGN,
+    ),
+    # === labeling_engine ===================================================
+    "labeling_engine": _D(
+        "Machines label the corpus and human labels calibrate and certify them. "
+        "Each source's predictions are kept per version, every human request "
+        "records how its item was sampled, and contracts state the quality "
+        "guarantee the accepted labels must meet",
+        type="object", category=AI, see_also=("solo_mode", "machine_annotators"),
+    ),
+    "labeling_engine.enabled": _D(
+        "Turn the labeling engine on", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.schemas": _D(
+        "Scheme names the engine labels. Unset means every scheme it supports",
+        type="array", category=AI,
+    ),
+    "labeling_engine.sources": _D(
+        "Machine labelers. Each has an `id` and a `kind` (llm, vlm, decision, "
+        "detector, asr, trained, lf, jury, judge, static, fixture, simulator), "
+        "plus endpoint_type, model, base_url, api_key, temperature, max_tokens, "
+        "prompt and `confidence` (method auto, verbalized, k_sample, logprob or "
+        "native) as the kind needs",
+        type="array", category=AI,
+    ),
+    "labeling_engine.cascade": _D(
+        "Source ids tried in order. An item a tier is not confident enough "
+        "about goes to the next, and after the last one to a human. Defaults "
+        "to the first source",
+        type="array", category=AI,
+    ),
+    "labeling_engine.contracts": _D(
+        "Quality targets. Each has `kind` (selective_risk, ppi, "
+        "no_worse_than_human, budget_first, distributional, threshold_legacy), "
+        "`schema` and `confidence` (0.9), plus the kind's own keys: `error` "
+        "and `per_class` for selective_risk, `estimand`, `by` and `max_width` for "
+        "ppi, "
+        "`epsilon` for no_worse_than_human, `human_labels` or `human_usd` for "
+        "budget_first, `max_distance` and `groups_by` for distributional, "
+        "`threshold` for threshold_legacy",
+        type="array", category=AI,
+    ),
+    "labeling_engine.humans": _D(
+        "Who labels for the engine and how their labels are sampled",
+        type="object", category=AI,
+    ),
+    "labeling_engine.humans.pools": _D(
+        "Any of team, crowd and solo", type="array", default=["team"], category=AI,
+    ),
+    "labeling_engine.humans.dev_fraction": _D(
+        "Share of calibration labels used to fit calibrators and choose "
+        "thresholds. The rest are held out to test the contract",
+        type="number", default=0.5, category=AI,
+    ),
+    "labeling_engine.humans.calibration_rate": _D(
+        "Fraction of items drawn at random for blind calibration, or `auto` to "
+        "let the planner size the sample from the contracts",
+        type="number|string", default="auto", category=AI,
+    ),
+    "labeling_engine.humans.min_calibration_per_class": _D(
+        "Calibration labels each predicted class needs before a per-class "
+        "contract is tested", type="integer", default=10, category=AI,
+    ),
+    "labeling_engine.humans.audit_rate": _D(
+        "Fraction of auto-accepted labels sent back to a human, blind, to "
+        "watch for drift", type="number", default=0.02, category=AI,
+    ),
+    "labeling_engine.humans.overlap": _D(
+        "Fraction of the calibration sample sent to overlap_k people instead "
+        "of one, for the human-human baseline and the no_worse_than_human "
+        "contract", type="number", default=0.0, category=AI,
+    ),
+    "labeling_engine.humans.overlap_k": _D(
+        "People per item on the overlap share of the calibration sample. The "
+        "no_worse_than_human contract needs at least 3",
+        type="integer", default=3, category=AI,
+    ),
+    "labeling_engine.humans.truth": _D(
+        "How several people's labels on one item become the label the contracts "
+        "test against: majority, or dawid_skene to weight each rater by their "
+        "estimated reliability. An adjudicated label always wins",
+        type="string", default="majority", category=AI,
+    ),
+    "labeling_engine.humans.verify_visibility": _D(
+        "Whether the machine label is shown on verify requests (shown or "
+        "blind). Calibration, certification and audit requests are always "
+        "blind", type="string", default="shown", category=AI,
+    ),
+    "labeling_engine.humans.distribution_k": _D(
+        "Human labels per item for a distributional contract",
+        type="integer", default=5, category=AI,
+    ),
+    "labeling_engine.crowd": _D(
+        "Crowd recruitment for the crowd pool. Only Prolific is supported",
+        type="object", category=AI,
+    ),
+    "labeling_engine.crowd.provider": _D(
+        "Crowd provider", type="string", default="prolific", category=AI,
+    ),
+    "labeling_engine.crowd.study_id": _D(
+        "The Prolific study the engine adds places to", type="string", category=AI,
+    ),
+    "labeling_engine.crowd.reward_usd": _D(
+        "Reward per participant, used to cost places against budgets.human_usd",
+        type="number", category=AI,
+    ),
+    "labeling_engine.crowd.per_worker_quota": _D(
+        "Requests one participant is expected to complete",
+        type="integer", default=20, category=AI,
+    ),
+    "labeling_engine.budgets": _D(
+        "Spending limits: `model_usd`, `human_usd` and `human_labels`",
+        type="object", category=AI,
+    ),
+    "labeling_engine.budgets.model_usd": _D(
+        "Most the engine may spend on model calls, in US dollars",
+        type="number", category=AI,
+    ),
+    "labeling_engine.budgets.human_usd": _D(
+        "Most the engine may spend on crowd work, in US dollars. Required "
+        "before features.crowd_live_spend can be turned on",
+        type="number", category=AI,
+    ),
+    "labeling_engine.budgets.human_labels": _D(
+        "Most human labels the engine may request", type="number", category=AI,
+    ),
+    "labeling_engine.runtime": _D(
+        "How model calls are run", type="object", category=AI,
+    ),
+    "labeling_engine.runtime.batch_size": _D(
+        "Items per committed chunk", type="integer", default=32, category=AI,
+    ),
+    "labeling_engine.runtime.concurrency": _D(
+        "Concurrent calls per endpoint unless a source sets its own",
+        type="integer", default=4, category=AI,
+    ),
+    "labeling_engine.runtime.cache": _D(
+        "Reuse a stored reply when the same source version is asked the same "
+        "question", type="boolean", default=True, category=AI,
+    ),
+    "labeling_engine.runtime.retries": _D(
+        "Extra attempts for a call that timed out, lost its connection or got a "
+        "429 or 5xx. Each attempt is logged", type="integer", default=2, category=AI,
+    ),
+    "labeling_engine.runtime.planner_interval": _D(
+        "Seconds between planner passes in a running server",
+        type="number", default=30, category=AI,
+    ),
+    "labeling_engine.runtime.hold_minutes": _D(
+        "Minutes a person may hold a request without answering before it goes back "
+        "to the pool",
+        type="number", default=60, category=AI,
+    ),
+    "labeling_engine.features": _D(
+        "Optional parts of the engine: all off by default except drift",
+        type="object", category=AI,
+    ),
+    "labeling_engine.features.distill": _D(
+        "Train a cheaper model on human and certified labels and add it as the "
+        "first tier", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.optimize": _D(
+        "Each planner pass scores every subset of the cascade on dev labels and "
+        "reports the cheapest that keeps the contracts' coverage; nothing is "
+        "applied", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.drift": _D(
+        "Suspend auto-acceptance when audit labels show accuracy has fallen "
+        "(set false to only report a breach)",
+        type="boolean", default=True, category=AI,
+    ),
+    "labeling_engine.features.crowd_recruit": _D(
+        "Work out how many crowd places open requests need. Without "
+        "crowd_live_spend this only reports what it would do",
+        type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.crowd_live_spend": _D(
+        "Let the engine add crowd places and spend money, within "
+        "budgets.human_usd", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.pii_redaction": _D(
+        "Mask personal data in text sent to remote models and record what was "
+        "masked", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.payload_capture": _D(
+        "Keep the full prompt and reply of each model call next to the call "
+        "log. Off by default because it stores item text",
+        type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.redaction": _D(
+        "PII redaction settings: `categories` to mask", type="object", category=AI,
+    ),
+    "labeling_engine.redaction.categories": _D(
+        "What to mask: email, url, ip, card, ssn, phone, handle (default: all)",
+        type="array", category=AI,
+    ),
+    "labeling_engine.distill": _D(
+        "Distillation settings: `trainer`, `min_labels`, `every`, "
+        "`include_silver`",
+        type="object", category=AI,
+    ),
+    "labeling_engine.distill.trainer": _D(
+        "A trainer from potato/training", type="string", default="sklearn-text",
+        category=AI,
+    ),
+    "labeling_engine.distill.min_labels": _D(
+        "Train only once this many labels exist", type="integer", default=200,
+        category=AI,
+    ),
+    "labeling_engine.distill.every": _D(
+        "Retrain when the label count has grown by this factor", type="number",
+        default=2.0, category=AI,
+    ),
+    "labeling_engine.distill.include_silver": _D(
+        "Also train on machine labels a contract certified", type="boolean",
+        default=True, category=AI,
+    ),
+    # === model_training =====================================================
+    "model_training": _D(
+        "Train models on the study's annotations from the admin Training page, "
+        "and optionally publish their predictions back as prelabels",
+        type="object", category=AI, see_also=("labeling_engine",),
+    ),
+    "model_training.enabled": _D(
+        "Turn model training on", type="boolean", default=False, category=AI,
+    ),
+    "model_training.retain_runs": _D(
+        "Finished runs kept on disk", type="integer", default=5, category=AI,
+    ),
+    "model_training.grace_seconds": _D(
+        "Seconds a cancelled run is given to exit before it is killed",
+        type="integer", category=AI,
+    ),
+    "model_training.split_seed": _D(
+        "Seed for the train/validation/test split", type="integer", default=0,
+        category=AI,
+    ),
+    "model_training.splits": _D(
+        "Split fractions, e.g. train 0.8, validation 0.1, test 0.1",
+        type="object", category=AI,
+    ),
+    "model_training.aggregation": _D(
+        "How several annotators' labels become one training label",
+        type="string", default="consensus", category=AI,
+    ),
+    "model_training.auto_retrain": _D(
+        "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`",
+        type="object", category=AI,
+    ),
+    "model_training.max_wall_seconds": _D(
+        "Time limit for one run", type="number", category=AI,
+    ),
+    "model_training.max_ram_mb": _D(
+        "Memory limit for one run", type="number", category=AI,
+    ),
+    "model_training.device": _D(
+        "auto, cpu, cuda or mps", type="string", default="auto", category=AI,
+    ),
+    "model_training.num_threads": _D(
+        "CPU threads for one run", type="integer", category=AI,
+    ),
+    "model_training.writeback": _D(
+        "Publish a run's predictions as prelabels", type="object", category=AI,
+    ),
+    "model_training.writeback.schemas": _D(
+        "Schemes whose predictions are published", type="array", category=AI,
+    ),
+    "model_training.writeback.min_confidence": _D(
+        "Predictions below this confidence are not published",
+        type="number", default=0.0, category=AI,
+    ),
+    "model_training.writeback.field": _D(
+        "Item field the prelabels are written to", type="string",
+        default="predictions", category=AI,
     ),
     "solo_mode.refinement_loop": _D(
         "The automatic refine-evaluate-keep cycle over the labeling prompt",

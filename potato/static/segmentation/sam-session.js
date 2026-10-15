@@ -59,6 +59,7 @@
         MODEL_MISSING: base.MODEL_ERROR.MODEL_MISSING,
         ENCODE_FAILED: 'encode-failed',
         DECODE_FAILED: 'decode-failed',
+        IMAGE_UNREADABLE: base.MODEL_ERROR.IMAGE_UNREADABLE,
     };
 
     const preprocess = isNode
@@ -156,7 +157,10 @@
                 tensor = preprocess.imageToTensor(
                     source, width, height, this.canvasFactory);
             } catch (err) {
-                return this._fail(SAM_ERROR.ENCODE_FAILED,
+                // A SecurityError is the browser refusing a no-CORS image's
+                // pixels; say that rather than "could not be prepared".
+                return this._fail(err && err.name === 'SecurityError'
+                                      ? SAM_ERROR.IMAGE_UNREADABLE : SAM_ERROR.ENCODE_FAILED,
                                   (err && err.message) || String(err));
             }
 

@@ -104,6 +104,7 @@ register_migration(_REVISION_HISTORY_MIGRATION)
 
 
 def _db(task_dir: str):
+    register_migration(_CB_MIG)
     register_migration(_REVISION_MIGRATION)
     register_migration(_CODES_REV_MIGRATION)
     register_migration(_CONTENT_PROV_MIGRATION)

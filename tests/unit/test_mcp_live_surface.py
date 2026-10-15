@@ -550,3 +550,54 @@ class TestRemoteBridge:
         assert "live_get_status" in text
         assert "[destructive]" in text
         assert "alice" in text
+
+
+def test_a_refused_tool_call_is_an_error_result_over_the_bridge(monkeypatch):
+    """Found by potato-skill (C8): the stdio bridge returned a permission
+    refusal with isError false."""
+    import asyncio
+    import io
+    import urllib.error
+    import urllib.request
+
+    from mcp.server.fastmcp import FastMCP
+
+    from potato.mcp_server.connect import PotatoClient, _register_forwarder
+
+    body = json.dumps({"error": "'x' is not in mcp.tools"}).encode()
+
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(body))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    server = FastMCP("t")
+    _register_forwarder(server, PotatoClient("http://example.test", "tok"),
+                        {"name": "x", "summary": "s", "parameters": []})
+
+    async def call():
+        from mcp.shared.memory import create_connected_server_and_client_session
+        async with create_connected_server_and_client_session(server._mcp_server) as c:
+            return await c.call_tool("live_x", {})
+    result = asyncio.run(call())
+    assert result.isError and "not in mcp.tools" in result.content[0].text
+
+
+def test_get_item_on_an_unknown_id_is_a_404(tmp_path):
+    """Found by potato-skill: the real item store raises KeyError from
+    get_item, so the 404 branch never ran and an agent got an HTML 500."""
+    from potato.item_state_management import (
+        clear_item_state_manager, init_item_state_manager)
+    config = _base_config(tmp_path, tools=["get_item"])
+    config["annotation_schemes"] = []
+    flask_app = Flask(__name__)
+    flask_app.config["mcp_task_config"] = config
+    flask_app.register_blueprint(mcp_bp)
+    token = issue_token("test-agent", role="admin", config=config)
+    clear_item_state_manager()
+    try:
+        init_item_state_manager(config)
+        r = _post(flask_app.test_client(), "get_item", token, {"instance_id": "nope"})
+        assert r.status_code == 404
+        assert "No such item: nope" in r.get_json()["error"]
+    finally:
+        clear_item_state_manager()

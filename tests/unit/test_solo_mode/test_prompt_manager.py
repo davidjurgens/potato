@@ -174,6 +174,94 @@ class TestPromptManagerFallback:
         assert manager.current_version == 1
 
 
+class TestPromptSynthesis:
+    """Found by potato-skill (H5): "Generate prompt" stored the description
+    wrapped in a sentence and never asked the revision model."""
+
+    def _manager(self, reply):
+        config = {'annotation_schemes': [{'name': 'test', 'labels': ['a', 'b']}]}
+        manager = PromptManager(config, _make_mock_solo_config())
+        asked = []
+
+        class Endpoint:
+            def query(self, prompt, fmt=None):
+                asked.append(prompt)
+                return reply
+        manager._get_revision_endpoint = lambda: Endpoint()
+        return manager, asked
+
+    def test_draft_asks_the_revision_model_and_stores_nothing(self):
+        manager, asked = self._manager({"prompt": "Decide a or b.", "explanation": "x"})
+        assert manager.draft_prompt("Label the text") == ("Decide a or b.", "x")
+        assert asked and "Label the text" in asked[0]
+        assert manager.current_version == 0
+
+    def test_no_prompt_back_is_none(self):
+        manager, _ = self._manager({"explanation": "no prompt"})
+        assert manager.draft_prompt("Label the text") is None
+
+    def test_a_reply_cut_off_mid_json_is_not_a_prompt(self):
+        """Found by potato-skill (H5): at max_tokens 256 the reply stopped
+        mid-sentence, was stored whole as the prompt, and was labelled as
+        written by the revision model."""
+        cut = '{"prompt": "You are labeling the sentiment of short reviews.\\nFor each'
+        manager, _ = self._manager(cut)
+        assert manager.draft_prompt("Label the text") is None
+        assert "max_tokens" in manager.last_draft_failure
+
+    def test_a_cut_off_reply_the_salvager_could_rescue_is_still_refused(self):
+        """potato-skill (H5, live at 256 tokens): the salvage step turned
+        '{"prompt": "...", "explanation": "cut' into {"prompt": ...}."""
+        cut = '{"prompt": "Label the sentiment. Sarcastic praise is negative.", "explanation": "Sarcastic praise (e.g., \\"'
+        manager, _ = self._manager(cut)
+        assert manager.draft_prompt("Label the text") is None
+
+    def test_an_endpoint_that_hit_max_tokens_is_refused_whatever_it_returns(self):
+        config = {'annotation_schemes': [{'name': 'test', 'labels': ['a', 'b']}]}
+        manager = PromptManager(config, _make_mock_solo_config())
+
+        class Endpoint:
+            max_tokens = 256
+            last_truncated = False
+
+            def query(self, prompt, fmt=None):
+                self.last_truncated = True          # as _warn_if_truncated records
+                return {"prompt": "Label the sentiment. Sarcastic praise (e.g., "}
+        manager._get_revision_endpoint = lambda: Endpoint()
+        assert manager.draft_prompt("Label the text") is None
+        assert "max_tokens (256)" in manager.last_draft_failure
+
+    def test_a_json_reply_in_a_string_is_read(self):
+        manager, _ = self._manager('```json\n{"prompt": "Decide a or b.", "explanation": "e"}\n```')
+        assert manager.draft_prompt("Label the text") == ("Decide a or b.", "e")
+
+    def test_setup_route_stores_the_models_prompt(self, monkeypatch):
+        from flask import Flask
+        from potato.solo_mode import routes as solo_routes
+        manager, _ = self._manager({"prompt": "Decide a or b.", "explanation": ""})
+        created = []
+
+        class Mgr:
+            prompt_manager = manager
+            def get_current_phase(self):
+                return solo_routes.SoloPhase.SETUP
+            def set_task_description(self, d):
+                pass
+            def create_prompt_version(self, text, created_by, source_description=""):
+                created.append((text, created_by))
+            def advance_to_phase(self, phase):
+                pass
+        monkeypatch.setattr(solo_routes, "get_solo_mode_manager", lambda: Mgr())
+        app = Flask(__name__)
+        app.secret_key = "t"
+        app.register_blueprint(solo_routes.solo_mode_bp)
+        view = solo_routes.setup.__wrapped__.__wrapped__
+        with app.test_request_context("/solo/setup", method="POST",
+                                      data={"task_description": "Label the text"}):
+            view()
+        assert created == [("Decide a or b.", "llm_synthesis")]
+
+
 class TestPromptManagerFormatting:
     """Tests for formatting helper methods."""
 

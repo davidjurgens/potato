@@ -93,10 +93,11 @@ def test_annotate_page_withholds_blind_suggestions(blind_server, manager, sessio
         if blind:
             assert 'id="accept-llm-btn"' not in html
             assert 'id="blind-note"' in html
-            assert 'The LLM suggests' not in html
+            assert 'The model suggests' not in html
             assert _field(html, 'suggestion_visible') == '0'
         else:
             assert 'id="accept-llm-btn"' in html
+            assert 'The model suggests' in html
             assert 'id="blind-note"' not in html
             assert _field(html, 'suggestion_visible') == '1'
         seen['blind' if blind else 'shown'] += 1

@@ -160,6 +160,17 @@ body {
     box-shadow: 0 2px 10px rgba(56, 48, 107, 0.06);
 }
 
+/* A labeling-engine request whose answer means something special. */
+.pk-note {
+    /* Kept to two short lines so the item text keeps its room. */
+    border-left: 3px solid var(--pk-accent, #5b21b6);
+    padding: 2px 8px;
+    margin: 0 0 8px;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: var(--pk-ink, #1f1a2e);
+}
+
 .pk-swipe-hint {
     text-align: center;
     color: var(--pk-ink-faint);

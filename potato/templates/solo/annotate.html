@@ -169,7 +169,7 @@
         <div class="llm-suggestion-row">
             <div>
                 <div class="suggestion-label">
-                    The LLM suggests
+                    The model suggests
                     <span class="suggested-badge">{{ llm_prediction.label }}</span>
                 </div>
                 <div class="confidence-label">
@@ -195,7 +195,7 @@
                 <p style="margin: 0 0 var(--space-sm, 0.5rem);">{{ llm_prediction.reasoning }}</p>
                 {% endif %}
                 <div class="confidence-bar" role="progressbar"
-                     aria-label="LLM confidence"
+                     aria-label="Model confidence"
                      aria-valuenow="{{ conf }}" aria-valuemin="0" aria-valuemax="100">
                     {% set conf_class = 'confidence-low' if llm_prediction.confidence < 0.5
                                         else ('confidence-mid' if llm_prediction.confidence < 0.8 else 'confidence-high') %}
@@ -206,8 +206,8 @@
         </div>
         {% elif show_suggestion is defined and not show_suggestion %}
         <p class="form-help blind-note" id="blind-note">
-            The LLM's suggestion is hidden for this item, so your answer can be
-            compared with it blind. If you disagree, you'll see its label next.
+            The suggestion is hidden for this item, so your answer can be
+            compared with it blind. If you disagree, you'll see the model's label next.
         </p>
         {% else %}
         {# No LLM prediction for this instance yet. The background labeler may
@@ -217,7 +217,7 @@
              data-instance-id="{{ instance.id }}" role="status" aria-live="polite">
             <div class="suggestion-label">
                 <span class="llm-pending-spinner" aria-hidden="true"></span>
-                <span id="llm-pending-text">The LLM is still labeling this item&hellip; its suggestion will appear here in a moment.</span>
+                <span id="llm-pending-text">The model is still labeling this item&hellip; its suggestion will appear here in a moment.</span>
             </div>
         </div>
         {% endif %}
@@ -290,7 +290,7 @@
                 {% if phase == 'completed' %}
                     The workflow is complete. Export your annotations from the dashboard.
                 {% else %}
-                    {{ message }}. The LLM is taking it from here while the dataset finishes labeling.
+                    {{ message }}. The model is taking it from here while the dataset finishes labeling.
                 {% endif %}
             </p>
         {% else %}
@@ -301,7 +301,7 @@
         {% if stats %}
         <dl class="completion-stats">
             <dt>You labeled</dt><dd>{{ stats.human_labeled }}</dd>
-            <dt>LLM labeled</dt><dd>{{ stats.llm_labeled }}</dd>
+            <dt>Model labeled</dt><dd>{{ stats.llm_labeled }}</dd>
             <dt>Agreement</dt><dd>{{ (stats.agreement_rate * 100)|int }}%</dd>
             <dt>Remaining</dt><dd>{{ stats.remaining }}</dd>
         </dl>
@@ -333,7 +333,7 @@
     <span class="stat-value">{{ [total - stats.human_labeled, 0]|max }}</span>
 </div>
 <div class="stat-item">
-    <span class="stat-label">LLM labeled</span>
+    <span class="stat-label">Model labeled</span>
     <span class="stat-value">{{ stats.llm_labeled }}</span>
 </div>
 <div class="stat-item">
@@ -358,7 +358,7 @@
     {% if llm_prediction %}
     <div style="margin-bottom: var(--space-xs, 0.25rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
         <kbd>A</kbd>
-        <span>Accept LLM</span>
+        <span>Accept model</span>
     </div>
     {% endif %}
     <div style="margin-top: var(--space-sm, 0.5rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
@@ -623,7 +623,7 @@
                 if ((!running && attempts >= 2) || attempts >= maxAttempts) {
                     pendingEl.classList.add('pending-failed');
                     if (textEl) textEl.textContent =
-                        'No LLM suggestion for this item yet — go ahead and label it yourself.';
+                        'No model suggestion for this item yet — go ahead and label it yourself.';
                     return;
                 }
             } catch (err) {

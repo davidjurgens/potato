@@ -98,6 +98,10 @@ class AnthropicEndpoint(BaseAIEndpoint):
                            "content": prompt + json_schema_instruction(output_format)}]
             )
             self._warn_if_truncated(response.stop_reason)
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._note_usage(getattr(usage, "input_tokens", None),
+                                 getattr(usage, "output_tokens", None))
             return response.content[0].text
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic request failed: {e}")

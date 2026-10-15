@@ -8,7 +8,7 @@ HTTPS, using the admin API key `potato deploy` already holds.
 
 What goes in is what cannot be recreated: the annotation output directory,
 `project.sqlite` (memos, the codebook, cases, typing sessions, the review
-workflow) and `datasets.sqlite`. What stays out is anything regenerable and
+workflow), `datasets.sqlite` and `engine.sqlite` (the labeling engine). What stays out is anything regenerable and
 anything that is a credential.
 
 The SQLite databases are snapshotted through the connection rather than copied.
@@ -31,7 +31,10 @@ from typing import Dict, Iterator, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Databases worth carrying: neither can be regenerated from the annotations.
-DATABASES = ("project.sqlite", "datasets.sqlite")
+#: engine.sqlite is the labeling engine's ledger, predictions and model-call
+#: log: the record of which labels a machine produced and under what
+#: guarantee, which no other file holds.
+DATABASES = ("project.sqlite", "datasets.sqlite", "engine.sqlite")
 
 # Never archived. `.item_cache.sqlite` is rebuilt from the data files on demand,
 # and `admin_api_key.txt` is the credential guarding this very endpoint.

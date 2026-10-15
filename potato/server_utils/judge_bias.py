@@ -67,23 +67,20 @@ def confidence_calibration(records: List[Tuple[float, bool]], n_buckets: int = 5
     Buckets confidence into ``n_buckets`` bins; ECE is the weighted gap between mean
     confidence and accuracy per bin. Lower is better-calibrated (0 = perfect).
     """
+    # One ECE for the package: labeling_engine/calibrate/metrics.py.
+    from potato.labeling_engine.calibrate.metrics import (
+        expected_calibration_error, reliability_bins)
     pairs = [(min(1.0, max(0.0, float(c))), bool(ok)) for c, ok in records if c is not None]
     n = len(pairs)
     if n == 0:
         return {"n": 0, "ece": None, "buckets": []}
-    buckets = []
-    ece = 0.0
-    for b in range(n_buckets):
-        lo, hi = b / n_buckets, (b + 1) / n_buckets
-        inb = [(c, ok) for c, ok in pairs if (c >= lo and (c < hi or (b == n_buckets - 1 and c <= hi)))]
-        if not inb:
-            continue
-        conf = sum(c for c, _ in inb) / len(inb)
-        acc = sum(1 for _c, ok in inb if ok) / len(inb)
-        ece += (len(inb) / n) * abs(conf - acc)
-        buckets.append({"range": [round(lo, 2), round(hi, 2)], "n": len(inb),
-                        "mean_confidence": _r(conf), "accuracy": _r(acc)})
-    return {"n": n, "ece": _r(ece), "buckets": buckets}
+    confs = [c for c, _ in pairs]
+    oks = [ok for _, ok in pairs]
+    buckets = [{"range": [round(b["lo"], 2), round(b["hi"], 2)], "n": b["n"],
+                "mean_confidence": _r(b["confidence"]), "accuracy": _r(b["accuracy"])}
+               for b in reliability_bins(confs, oks, n_buckets)]
+    return {"n": n, "ece": _r(expected_calibration_error(confs, oks, n_buckets)),
+            "buckets": buckets}
 
 
 def position_swap_consistency(judge_two_orderings: Callable[[str], Tuple[str, str]],

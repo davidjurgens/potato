@@ -147,6 +147,42 @@ def supports_temporal(scheme: Any) -> bool:
     return _annotation_type(scheme) in TEMPORAL_TYPES
 
 
+def segment_records(blob: Any) -> List[dict]:
+    """The raw segment dicts in one stored timeline value, whatever widget
+    wrote it, each with a ``label``:
+
+    - ``{"segments": [...]}``: audio and video;
+    - ``{"events": {index: {start, end}}}``: temporal_grounding, one segment
+      per event, labelled by its event index so two people's segments for the
+      same event are compared with each other;
+    - ``{"annotations": {tier: [{start_time, end_time, ...}]}}``:
+      tiered_annotation, labelled by the annotation's value or its tier.
+
+    Reading only ``segments`` left the other two empty, so the agreement
+    report said nobody had labelled anything and the engine read every human
+    answer as no segments.
+    """
+    if not isinstance(blob, dict):
+        return []
+    out: List[dict] = []
+    for seg in blob.get("segments") or []:
+        if isinstance(seg, dict):
+            out.append(seg)
+    events = blob.get("events")
+    if isinstance(events, dict):
+        for idx, seg in events.items():
+            if isinstance(seg, dict):
+                out.append({**seg, "label": seg.get("label", str(idx))})
+    tiers = blob.get("annotations")
+    if isinstance(tiers, dict):
+        for tier, anns in tiers.items():
+            for seg in anns or []:
+                if isinstance(seg, dict):
+                    out.append({**seg, "label": seg.get("label") or seg.get("value")
+                                or seg.get("tier") or tier})
+    return out
+
+
 def temporal_segments(scheme: Any, stored: Any) -> List[dict]:
     """
     Canonical ``{"start", "end", "label"}`` segments for an audio/video value.
@@ -165,7 +201,7 @@ def temporal_segments(scheme: Any, stored: Any) -> List[dict]:
     for blob in blobs:
         if not isinstance(blob, dict):
             continue
-        raw = blob.get(layer_key) if layer_key else blob.get("segments")
+        raw = blob.get(layer_key) if layer_key else segment_records(blob)
         for seg in raw or []:
             if not isinstance(seg, dict):
                 continue

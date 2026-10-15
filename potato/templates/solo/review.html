@@ -5,7 +5,7 @@
 {% block content %}
 <h1>Periodic Review</h1>
 
-<p>Review these low-confidence LLM labels to ensure quality. You can approve or correct each one.</p>
+<p>Review these low-confidence model labels to ensure quality. You can approve or correct each one.</p>
 
 {% if current_instance %}
 <form method="POST" action="{{ url_for('solo_mode.review') }}">
@@ -19,7 +19,7 @@
 
     <div class="llm-reasoning">
         <div class="llm-reasoning-header">
-            <strong>LLM Label: {{ current_instance.llm_label }}</strong>
+            <strong>Model label: {{ current_instance.llm_label }}</strong>
             <span>▼</span>
         </div>
         <div class="llm-reasoning-content">

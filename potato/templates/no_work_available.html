@@ -36,6 +36,9 @@
             {% elif no_work_reason == "no_data" %}
             Tell whoever sent you the link that this study has no data
             loaded yet.
+            {% elif no_work_reason == "engine_waiting" %}
+            Your answers so far are saved. You have not finished the study:
+            keep this link, and come back to it.
             {% else %}
             If you were asked to take part, tell whoever sent you the link —
             they can raise the number of annotators per item or add more data.
@@ -46,6 +49,8 @@
             {% if no_work_reason in ("no_batch_group", "no_qualified_category",
                                      "zero_quota") %}
             Once that is sorted out, reload this page and you will be given work.
+            {% elif no_work_reason == "engine_waiting" %}
+            Reload this page later to see whether there is more.
             {% else %}
             If more data arrives, reload this page and you will be given work.
             {% endif %}

@@ -223,7 +223,41 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
 
             annotations.append(record)
 
+    _add_engine_provenance(annotations, config)
     return annotations
+
+
+def _add_engine_provenance(annotations: list, config: Optional[Mapping]) -> None:
+    """Attach ``_engine``: which engine request each human label answered.
+
+    A label the engine asked for carries its purpose (calibration, verify,
+    audit, ...), the probability its item was sampled, and whether the
+    machine's suggestion was visible. Without them a reader of the export
+    cannot tell a random blind label from one given while looking at the
+    machine's answer, and only the first kind estimates anything.
+    """
+    if not config or not (config.get("labeling_engine") or {}).get("enabled"):
+        return
+    task_dir = config.get("task_dir") or "."
+    if not os.path.exists(os.path.join(task_dir, "engine.sqlite")):
+        return
+    try:
+        from potato.labeling_engine.store import EngineStore
+        store = EngineStore(task_dir)
+        by_key = {}
+        for r in store.requests(status=["done"]):
+            if r.user_id is None:
+                continue
+            by_key.setdefault((str(r.user_id), str(r.item_id)), {})[r.schema] = {
+                "purpose": r.purpose, "inclusion_prob": r.inclusion_prob,
+                "visibility": r.visibility, "split": r.split, "request_id": r.id}
+    except Exception:
+        logger.warning("Could not read labeling engine provenance", exc_info=True)
+        return
+    for ann in annotations:
+        found = by_key.get((str(ann.get("user_id")), str(ann.get("instance_id"))))
+        if found:
+            ann["_engine"] = found
 
 
 def load_phase_responses_from_output_dir(

@@ -69,9 +69,14 @@ class PotatoClient:
             # and often what would satisfy it, so pass it through rather than
             # replacing it with a status code.
             try:
-                return json.loads(e.read().decode("utf-8"))
+                body = json.loads(e.read().decode("utf-8"))
             except Exception:
                 raise RemoteError(f"HTTP {e.code} from {url}") from e
+            if isinstance(body, dict):
+                # Kept with the body so a forwarder can tell a refusal from
+                # an answer (see _raise_if_refused).
+                body.setdefault("http_status", e.code)
+            return body
         except urllib.error.URLError as e:
             raise RemoteError(f"Could not reach {url}: {e.reason}") from e
 
@@ -159,6 +164,19 @@ def _forwarder_signature(parameters: List[dict]):
     return inspect.Signature(params), annotations
 
 
+def _raise_if_refused(result: Any) -> Any:
+    """A refused call becomes a tool error, so the agent's client sees
+    ``isError: true``. Returned as an ordinary result, a 403 read as a
+    successful call whose payload happened to mention an error."""
+    if isinstance(result, dict) and int(result.get("http_status") or 200) >= 400:
+        try:
+            from mcp.server.fastmcp.exceptions import ToolError
+        except ImportError:  # pragma: no cover - older SDKs
+            ToolError = RuntimeError
+        raise ToolError(str(result.get("error") or result))
+    return result
+
+
 def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
     """Add one remote tool, named `live_<tool>` to keep it distinct."""
     name = entry["name"]
@@ -195,9 +213,10 @@ def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
             # server-side default with None.
             payload = {k: v for k, v in kwargs.items() if v is not None}
             try:
-                return client.call(name, payload)
+                result = client.call(name, payload)
             except RemoteError as e:
-                return {"error": str(e)}
+                return _raise_if_refused({"error": str(e), "http_status": 502})
+            return _raise_if_refused(result)
 
         forwarder.__signature__ = signature
         forwarder.__annotations__ = dict(annotations, **{"return": Any})
@@ -213,9 +232,10 @@ def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
         def forwarder(arguments: Optional[Dict[str, Any]] = None) -> Any:
             """Forward to the remote instance."""
             try:
-                return client.call(name, arguments or {})
+                result = client.call(name, arguments or {})
             except RemoteError as e:
-                return {"error": str(e)}
+                return _raise_if_refused({"error": str(e), "http_status": 502})
+            return _raise_if_refused(result)
 
     forwarder.__name__ = f"live_{name}"
     forwarder.__doc__ = description or f"Call {name} on the connected instance."

@@ -86,6 +86,10 @@
   --light-gray: #f4f4f5;
   --light-bg: #f5f7fb;
   --heading-color: #09090b;
+  /* Chart series, in this fixed order (never cycled). Validated as a pair on
+     the light surface: CVD dE 24.7, normal-vision dE 33.6, >= 3:1 contrast. */
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
   --text-color: #374151;
   --success-color: #10b981;
   --border-radius: 0.5rem;
@@ -4908,6 +4912,22 @@ body > .container-fluid {
 }
 
 /* ===== ANNOTATION INSTRUCTIONS BANNER ===== */
+
+/* Labeling engine note above the item. Quiet by design: the item stays the
+   loudest thing on the page. Foreground on muted keeps AA contrast. */
+.engine-request-note {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-dense);
+  color: var(--foreground);
+  background: var(--muted);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+}
+.engine-request-note[data-purpose="verify"] { border-left-color: var(--primary); }
+/* A blind request has no AI help: the routes refuse it (403), so the
+   buttons that would ask are hidden rather than left to fail. */
+[data-engine-visibility="blind"] .ai-help { display: none !important; }
 
 .annotation-instructions-banner {
   margin-bottom: var(--space-lg);

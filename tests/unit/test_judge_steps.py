@@ -113,13 +113,18 @@ class TestJudgeSteps:
         out = js.judge_steps("i", {"description": "d", "allow_neutral": True}, [{"text": "a"}])
         assert out[0]["reward"] == 0
 
-    def test_max_tokens_raised_then_restored(self):
+    def test_max_tokens_is_raised_and_never_lowered(self):
+        """The endpoint is shared by concurrent calls: restoring the old
+        budget after one call cut another's reply short (potato-skill D3)."""
         payload = {"steps": [{"index": 0, "reward": 1}]}
         ep = FakeEndpoint(payload, max_tokens=100)
         js = _service_with(ep)
         js.judge_steps("i", {"description": "d"}, [{"text": "a"}] * 3)
-        assert ep.seen_max_tokens >= 512  # raised during the call
-        assert ep.max_tokens == 100        # restored afterwards
+        assert ep.seen_max_tokens >= 512   # raised for the call
+        assert ep.max_tokens >= 512        # and left raised
+        ep.max_tokens = 4000
+        js.judge_steps("i", {"description": "d"}, [{"text": "a"}] * 3)
+        assert ep.max_tokens == 4000       # never lowered
 
     def test_anthropic_signature_without_output_format(self):
         payload = {"steps": [{"index": 0, "reward": 1}]}

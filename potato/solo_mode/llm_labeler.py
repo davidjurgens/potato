@@ -694,17 +694,14 @@ Respond with JSON:
         return valid
 
     def _fuzzy_match_label(self, label, valid: List[str]) -> Optional[str]:
-        """Try to match label to valid labels. Handles non-string inputs gracefully."""
-        if label is None:
-            return None
+        """Match a model's label to a valid one (the engine's matcher, which
+        also ignores quotes and a trailing period). Non-strings that are not
+        labels return None."""
+        from potato.labeling_engine.schemes import normalize_label
         try:
-            label_lower = str(label).lower().strip()
+            return normalize_label(label, [str(v) for v in valid])
         except Exception:
             return None
-        for v in valid:
-            if str(v).lower().strip() == label_lower:
-                return v
-        return None
 
     def _parse_edge_case_rule(self, rule_text: str) -> tuple:
         """Parse a rule in 'When <condition> -> <action>' format.
