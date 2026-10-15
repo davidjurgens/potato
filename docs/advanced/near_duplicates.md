@@ -11,9 +11,17 @@ one call.
 
 ## Quick start
 
+The duplicate routes belong to the curation catalog, which is registered only
+when the config enables it:
+
+```yaml
+curation:
+  enabled: true
+```
+
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/duplicates"
+  "http://localhost:8000/admin/catalog/api/duplicates"
 ```
 
 ```json
@@ -38,7 +46,7 @@ Then stop assigning them:
 ```bash
 curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
      -d '{"instance_ids": ["f0013", "f0014"]}' \
-     http://localhost:8000/curation/api/duplicates/exclude
+     http://localhost:8000/admin/catalog/api/duplicates/exclude
 ```
 
 Excluded items stay in the project and stop being assigned. A duplicate is
@@ -59,7 +67,7 @@ telling two different scenes apart. It needs no model, no index and no GPU.
 
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/duplicates?method=phash&max_distance=5"
+  "http://localhost:8000/admin/catalog/api/duplicates?method=phash&max_distance=5"
 ```
 
 `max_distance` is the Hamming distance in bits, out of 64. The default is 5.
@@ -76,7 +84,7 @@ is useless.
 
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/duplicates?method=embedding&min_similarity=0.97"
+  "http://localhost:8000/admin/catalog/api/duplicates?method=embedding&min_similarity=0.97"
 ```
 
 This mode requires a built

@@ -37,11 +37,14 @@ on every endpoint type.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `model` | string | provider default | Model name (e.g., `llama3.2`, `gpt-4o-mini`, `claude-sonnet-4-20250514`) |
-| `temperature` | float | `0.7` | Response creativity (0.0-2.0) |
-| `max_tokens` | int | `500` | Maximum response length |
+| `temperature` | float | `0.1` | Response creativity (0.0-2.0) |
+| `max_tokens` | int | `800` | Maximum response length |
 | `api_key` | string | — | API key (required for cloud providers) |
 | `base_url` | string | — | Custom API base URL (for ollama, vllm) |
-| `timeout` | int | `30` | Request timeout in seconds |
+| `timeout` | int | per endpoint | Request timeout in seconds. Unset, each endpoint uses its own: 30 for `openai`, `anthropic`, `gemini`, `huggingface`, `vllm` and `openrouter`; 60 for `ollama`, `openai_vision` and `anthropic_vision`; 120 for `ollama_vision` |
+
+The `temperature` and `max_tokens` defaults are the ones every AI endpoint
+shares, the same as under `ai_support.ai_config`.
 
 ### `chat_support.system_prompt`
 

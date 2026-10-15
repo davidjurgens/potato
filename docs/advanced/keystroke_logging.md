@@ -357,7 +357,7 @@ per (user, instance, field), with the summary features and the detector verdict.
 ### Raw streams
 
 ```bash
-python -m potato.export.cli <config.yaml> --format keystrokes
+python -m potato.export -c <config.yaml> -f keystrokes -o <dir>
 ```
 
 Writes `keystroke_sessions.parquet` and `keystroke_events.parquet`, falling back

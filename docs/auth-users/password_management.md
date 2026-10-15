@@ -42,7 +42,7 @@ Reset a user's password from the command line:
 # Interactive (prompts for username and password)
 potato reset-password config.yaml
 
-# Non-interactive (prompts for password only)
+# Username on the command line (still prompts for the password)
 potato reset-password config.yaml --username annotator1
 ```
 
@@ -65,12 +65,12 @@ curl -X POST http://localhost:8000/admin/reset_password \
 
 **Response (success):**
 ```json
-{"message": "Password updated successfully"}
+{"status": "success", "message": "Password reset for 'annotator1'"}
 ```
 
-**Response (user not found):**
+**Response (user not found, HTTP 404):**
 ```json
-{"error": "User not found"}
+{"error": "User 'annotator1' does not exist"}
 ```
 
 This endpoint requires the `admin_api_key` configured in your project (see [Admin Dashboard](../administration/admin_dashboard.md)).
@@ -87,7 +87,7 @@ Potato includes a token-based password reset flow for annotators who forget thei
 4. The annotator opens the link (`/reset/<token>`) and sets a new password
 5. The token is consumed (single-use) and the password is updated
 
-> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API or the `potato reset-password` CLI.
+> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API (`POST /admin/create_reset_token`). The `potato reset-password` CLI issues no link: it prompts for the new password and sets it directly.
 
 #### Generating Tokens via API
 
@@ -103,6 +103,7 @@ curl -X POST http://localhost:8000/admin/create_reset_token \
 **Response:**
 ```json
 {
+  "status": "success",
   "reset_link": "http://localhost:8000/reset/abc123...",
   "token": "abc123...",
   "expires_in_hours": 24
@@ -254,7 +255,7 @@ authentication:
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/forgot-password` | GET | None | Show forgot password form |
-| `/forgot-password` | POST | None | Generate reset token for username |
+| `/forgot-password` | POST | None | Show the ask-your-administrator page for any username; creates no token |
 | `/reset/<token>` | GET | None | Show password reset form |
 | `/reset/<token>` | POST | None | Submit new password |
 | `/admin/reset_password` | POST | API Key | Admin password reset |

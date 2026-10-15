@@ -100,7 +100,13 @@ it. Objects go under `potato/<name>/` (change this with `--s3-prefix`):
 ## Configuring it by hand
 
 `potato deploy` writes this block into the bundled config. Outside deploy,
-for example on your own server, add it to the config yourself:
+for example on your own server, add it to the config yourself. The sinks need
+the `hosting` extra (`huggingface_hub`, `boto3`, Authlib), which the published
+image already includes:
+
+```bash
+pip install 'potato-annotation[hosting]'
+```
 
 ```yaml
 backup:
@@ -119,8 +125,9 @@ backup:
 Credentials come from the environment (`HF_TOKEN`, `POTATO_S3_ACCESS_KEY_ID`,
 `POTATO_S3_SECRET_ACCESS_KEY`) or from the sink entry itself, where `${VAR}`
 references are expanded. The older `huggingface_backup:` block still works. It
-is read as one HuggingFace sink with `restore_on_boot` turned off, so an
-existing deployment behaves exactly as before.
+is read as one HuggingFace sink with `restore_on_boot` off by default (set
+`restore_on_boot: true` in that block to turn it on), so an existing deployment
+behaves exactly as before.
 
 ## Getting the project onto the host
 

@@ -35,7 +35,7 @@ solo_mode:
   # Models for labeling (tried in order)
   labeling_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
       api_key: "${ANTHROPIC_API_KEY}"
     - endpoint_type: "openai"
       model: "gpt-4o-mini"
@@ -44,13 +44,14 @@ solo_mode:
   # Models for prompt revision
   revision_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
 
   # Uncertainty estimation strategy
   uncertainty:
     strategy: "direct_confidence"  # Options: direct_confidence, direct_uncertainty, token_entropy, sampling_diversity
-    num_samples: 5                 # For sampling_diversity
-    sampling_temperature: 1.0      # For sampling_diversity
+    sampling_diversity:            # Read only for sampling_diversity, and only under this block
+      num_samples: 5
+      temperature: 1.0
 
   # Thresholds
   thresholds:
@@ -60,7 +61,7 @@ solo_mode:
     confidence_high: 0.8                    # High confidence threshold
     periodic_review_interval: 100           # Review LLM labels every N instances
 
-  # Instance selection weights (must sum to 1.0)
+  # Instance selection weights (normalized to sum to 1.0, with a warning, if they do not)
   instance_selection:
     low_confidence_weight: 0.4    # Prioritize uncertain instances
     diversity_weight: 0.3         # Prioritize diverse instances
@@ -86,8 +87,8 @@ state. The phase machine is `SoloPhase` in `potato/solo_mode/phase_controller.py
 not every path visits every phase.
 
 ### 1. Setup
-- Enter task description
-- Upload data file
+- Enter task description. The setup page has no data upload: items come from
+  the config's `data_files`.
 - Generate initial prompt: a revision model (`revision_models`) writes it from
   the description and the schemes. Without one, or if it gives nothing back,
   the description itself becomes the first prompt, and the prompt history
@@ -189,9 +190,14 @@ Runs the LLM multiple times at high temperature and measures label diversity. Mo
 ```yaml
 uncertainty:
   strategy: "sampling_diversity"
-  num_samples: 5
-  sampling_temperature: 1.0
+  sampling_diversity:
+    num_samples: 5
+    temperature: 1.0
 ```
+
+`num_samples` and `temperature` are read only from the nested
+`sampling_diversity` block. Flat `uncertainty.num_samples` or
+`uncertainty.sampling_temperature` keys are ignored.
 
 ## Instance Selection
 

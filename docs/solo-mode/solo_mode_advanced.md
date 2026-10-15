@@ -175,7 +175,17 @@ Accepts `?bucket_size=<N>` (clamped to [2, 100], default 10).
 
 Orchestrates an automated cycle of confusion analysis → guideline suggestions → prompt revision → re-annotation. Monitors agreement rate trends and stops when metrics plateau.
 
-### One refinement cycle
+`refinement_strategy` picks one of two code paths. The default, `focused_edit`,
+and the other legacy values `generator_critic` and `append` run the cycle
+described below, with no held-out validation. The registered strategies
+`validated_focused_edit`, `principle_icl`, `hybrid_dual_track` and
+`legacy_append` run the validated framework instead: candidates are scored on
+held-out disagreements and applied only if they beat the current prompt. A name
+that is not registered runs the legacy path. See
+[Validated Prompt Refinement](../solo_mode_refinement.md#selecting-a-strategy)
+for the validated framework and the keys it reads.
+
+### One refinement cycle (legacy path)
 
 1. **Trigger**: After every `trigger_interval` human annotations, the loop checks whether a refinement cycle should run.
 2. **Analyze**: Runs confusion analysis on current disagreement patterns.
@@ -210,7 +220,15 @@ solo_mode:
 | `min_improvement` | `0.02` | Minimum agreement rate improvement to count as progress |
 | `max_cycles` | `5` | Maximum number of refinement cycles |
 | `patience` | `2` | Consecutive cycles without improvement before stopping |
-| `auto_apply_suggestions` | `false` | Apply guideline suggestions without human review |
+| `auto_apply_suggestions` | `false` | Apply guideline suggestions without human review. Legacy path only |
+| `refinement_strategy` | `focused_edit` | `focused_edit`, `generator_critic` or `append` (legacy path), or `validated_focused_edit`, `principle_icl`, `hybrid_dual_track` or `legacy_append` (validated framework) |
+
+`max_cycles` and `auto_apply_suggestions` apply to the legacy path only. The
+validated framework adds its own keys (`validation_split_ratio`,
+`eval_sample_size`, `num_candidates`, `min_val_size`,
+`max_consecutive_failures`, `min_val_improvement`, `eval_temperature`,
+`prefer_consistent_disagreements`, `dry_run`, `require_approval`), which the
+legacy path ignores.
 
 ### API
 
@@ -268,7 +286,7 @@ solo_mode:
       - name: "accurate"
         model:
           endpoint_type: "anthropic"
-          model: "claude-3-5-sonnet-20241022"
+          model: "claude-sonnet-4-5"
           api_key: "${ANTHROPIC_API_KEY}"
         confidence_threshold: 0.70
 ```
@@ -697,15 +715,21 @@ solo_mode:
   # LLM models for annotation labeling (tried in order)
   labeling_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
       api_key: "${ANTHROPIC_API_KEY}"
+      base_url: null                   # also read as endpoint_url
       max_tokens: 1000
       temperature: 0.1
+      timeout: null                    # unset = the endpoint's own default
+      think: null                      # unset = the endpoint's default; true/false overrides
+      # Endpoint-specific options, passed to the endpoint unchanged. Only these
+      # five keys are read: device, batch_size, head_max_len, max_options,
+      # state_key (decision models such as laya and systemone use them).
 
   # LLM models for prompt revision (defaults to labeling_models if empty)
   revision_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
 
   # Embedding model for diversity and similarity
   embedding:
@@ -714,8 +738,9 @@ solo_mode:
   # Uncertainty estimation
   uncertainty:
     strategy: "direct_confidence"      # direct_confidence | direct_uncertainty | token_entropy | sampling_diversity
-    num_samples: 5                     # For sampling_diversity
-    sampling_temperature: 1.0          # For sampling_diversity
+    sampling_diversity:                # Read only under this block; flat keys are ignored
+      num_samples: 5
+      temperature: 1.0
 
   # Agreement and quality thresholds
   thresholds:
@@ -799,7 +824,20 @@ solo_mode:
     min_improvement: 0.02
     max_cycles: 5
     patience: 2
-    auto_apply_suggestions: false
+    auto_apply_suggestions: false      # legacy path only
+    refinement_strategy: focused_edit  # legacy path; see solo_mode_refinement.md
+    # Validated framework only (validated_focused_edit, principle_icl,
+    # hybrid_dual_track, legacy_append)
+    validation_split_ratio: 0.3
+    eval_sample_size: 10
+    num_candidates: 3
+    min_val_size: 10
+    max_consecutive_failures: 2
+    min_val_improvement: 0.0
+    eval_temperature: 0.0
+    prefer_consistent_disagreements: true
+    dry_run: false
+    require_approval: false
 
   # When the suggestion is shown; blind vs shown agreement
   suggestions:
@@ -816,6 +854,10 @@ solo_mode:
     file: null
     id_key: id
     label_key: label
+    text_key: null                     # set when the gold file carries its own text
+
+  # Where Solo Mode keeps its state. Unset = <output_annotation_dir>/.solo_mode
+  state_dir: null
 
   # Several models vote on each item
   jury:

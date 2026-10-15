@@ -70,8 +70,6 @@ annotation_schemes:
     left_label: "0%"
     right_label: "100%"
     show_values: true
-    default_low: 25
-    default_high: 75
 ```
 
 ### YAML Example — Sentence Length Acceptability

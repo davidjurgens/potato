@@ -351,6 +351,12 @@ Pre-annotation pre-fills the form with model predictions, which is useful for:
 - Correcting model outputs
 - Bootstrapping from existing annotations
 
+As of 2.11.0, `pre_annotation` still works, but the
+[labeling engine](../labeling-engine/overview.md) is its successor: the same
+predictions become a `static` source, and `potato label migrate-config` writes
+the equivalent `labeling_engine` block (see
+[Migration](../labeling-engine/migration.md)).
+
 ### Configuration
 
 ```yaml
@@ -359,6 +365,10 @@ pre_annotation:
 
   # Field in data items containing predictions
   field: "predictions"
+
+  # Optional: read predictions from a separate file instead (path relative
+  # to task_dir). Used for an item that has no `field` of its own.
+  predictions_file: "data/predictions.json"
 
   # Can annotators change pre-filled values?
   allow_modification: true
@@ -400,12 +410,38 @@ For span annotations:
 }
 ```
 
+To keep predictions out of the data, put them in `predictions_file`. Two
+shapes are accepted, as JSON or (for a `.jsonl`/`.ndjson` file) one record per
+line:
+
+```json
+{"item_001": {"sentiment": "positive"}, "item_002": {"sentiment": "negative"}}
+```
+
+```json
+[{"id": "item_001", "predictions": {"sentiment": "positive"}}]
+```
+
+In the list form each record names its item with `id` (or `instance_id`) and
+holds the predictions under the configured `field`, falling back to
+`predictions`. A missing or unreadable file, or one with no usable records,
+logs a warning and seeds nothing.
+
 ### When predictions are applied
 
 1. When an item is loaded, the predictions field is extracted
 2. If the annotator hasn't already annotated this item, predictions are used to pre-fill the form
 3. Annotators can modify the pre-filled values (if `allow_modification: true`)
 4. Low-confidence items can be visually highlighted
+
+### Acceptance records
+
+When a seed is applied, Potato records it in that item's behavioral data as
+`pre_annotation_seeds` (`{schema: seeded value}`, kept after later saves). Set
+against the saved annotation, it shows which answers the annotator left as the
+model wrote them. For AI-assistant suggestions, each AI usage event's
+`final_annotation` is stamped with what was actually saved for that schema,
+alongside `suggestion_accepted`, which records only the click.
 
 ### Best Practices
 
@@ -511,18 +547,47 @@ Returns:
 {
   "enabled": true,
   "overall": {
-    "average_krippendorff_alpha": 0.75,
-    "interpretation": "Tentative agreement"
+    "average_krippendorff_alpha": 0.82,
+    "schemas_evaluated": 1,
+    "interpretation": "Good agreement",
+    "average_cohen_kappa": 0.79,
+    "average_fleiss_kappa": 0.78
   },
   "by_schema": {
     "sentiment": {
       "krippendorff_alpha": 0.82,
+      "metric_type": "nominal",
       "items_evaluated": 100,
-      "interpretation": "Good agreement"
+      "total_annotations": 300,
+      "interpretation": "Good agreement",
+      "cohen_kappa": {"mean_kappa": 0.79, "pairs": [...], "n_pairs_evaluated": 3, "n_pairs_skipped": 0},
+      "fleiss_kappa": {"kappa": 0.78, "n_items_evaluated": 100, "n_raters": 3, "n_categories": 3, "interpretation": "Substantial"}
+    },
+    "regions": {
+      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "see": "/admin/iaa"
     }
-  }
+  },
+  "warnings": [],
+  "machine_annotators_excluded": [{"user_id": "llm-1", "origin": "gpt-4o (llm)"}]
 }
 ```
+
+- Only human annotators are counted. Declared machine annotators are listed
+  in `machine_annotators_excluded` (present only when there are any), with a
+  matching entry in `warnings`.
+- `cohen_kappa` (pairwise, with the mean) and `fleiss_kappa` are computed for
+  nominal schemas only. A schema scored on an interval scale gets
+  Krippendorff's alpha alone.
+- `overall` averages each figure over the schemas that produced one, and is
+  empty when no schema did.
+- When every annotator gave the same label on every item, chance agreement is
+  1 and alpha and kappa are undefined. The schema then reports
+  `"krippendorff_alpha": null`, `"percent_agreement": 1.0` and
+  `"interpretation": "Undefined"`. That is perfect agreement, not a failed
+  computation.
+- Structured schemes (steps, segments, regions and other non-label answers)
+  are skipped with an `error` pointing to `/admin/iaa`, which scores them.
 
 ---
 
@@ -568,6 +633,8 @@ gold_standards:
     show_correct_answer: true
     show_explanation: true
 
+# Still supported in 2.11.0; the labeling engine's `static` source is its
+# successor (`potato label migrate-config` translates this block).
 pre_annotation:
   enabled: true
   field: "model_prediction"

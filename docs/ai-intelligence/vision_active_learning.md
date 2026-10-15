@@ -38,10 +38,23 @@ learning while being nothing of the kind.
 ```yaml
 active_learning:
   enabled: true
-  strategy: uncertainty        # or diversity, badge, bald, hybrid
-  vectorizer: image            # text (default) | image
-  image_model: clip-ViT-B-32
+  query_strategy: uncertainty  # or diversity, badge, bald, hybrid
+  vectorizer:
+    name: image                # alias: clip; the default is TF-IDF over text
+    hyperparameters:
+      model_name: clip-ViT-B-32
+      cache_dir: annotation_output   # optional; turns on the embedding cache
+      image_root: data/images        # optional; prefix for relative references
 ```
+
+`vectorizer` must be a mapping with a `name`; a bare `vectorizer: image` fails
+config validation. `model_name` defaults to `clip-ViT-B-32`, and `cache_dir` and
+`image_root` are unset by default.
+
+With an image vectorizer, every scheme gets the item's image reference as its
+feature, not only `image_annotation` and `video_annotation`. A `radio` or
+`multiselect` scheme over images (image classification) is ranked by its
+images.
 
 ## Why CLIP rather than DINOv2
 
@@ -63,8 +76,11 @@ re-ranks after **every batch** of annotations, so an uncached embedder would
 re-encode the entire unlabeled pool each time — minutes of GPU-less compute,
 repeated for nothing.
 
-Embeddings are cached under `<output_dir>/.embeddings/<model>/`, one `.npy` per
-image, keyed by **file content**:
+The cache exists only when `cache_dir` is set under
+`vectorizer.hyperparameters`. Without it, nothing is cached and every re-rank
+re-encodes the pool. With it, embeddings are stored under
+`<cache_dir>/.embeddings/<model>/`, one `.npy` per image, keyed by **file
+content**:
 
 - renaming or moving an image does **not** force a re-encode
 - editing an image **does**
@@ -75,13 +91,16 @@ The cache is disposable — delete the directory and it rebuilds.
 
 ```python
 from potato.vision_features import EmbeddingCache
-EmbeddingCache(output_dir).clear()
+EmbeddingCache(cache_dir).clear()
 ```
 
 ## Image references
 
-The vectorizer takes whatever the item stores — `image_url`, `image`,
-`file_name`, or a field you name with `source_field`.
+The feature for an item is the first non-empty value among the scheme's
+`source_field`, then the item fields `image_url`, `image`, `image_path`,
+`file_name`, `video_url` and `url`. When none is set, the item's text (the
+`text_key` field) is used, so `text_key: image_url` also works. Relative
+references are tried as given, then under `image_root`.
 
 **Remote URLs are skipped, not fetched.** Active learning ranks a whole
 unlabeled pool from a background thread; fetching would fire thousands of
@@ -96,14 +115,17 @@ model quirk rather than a bug.
 
 ## What is not here
 
-**Detector retraining is out of scope.** Pre-labelling comes from SAM
+**Detector training is out of scope.** Model training
+([Model training](model_training.md)) fits image *classifiers*: the
+`sklearn-text` trainer uses CLIP embeddings when a radio or multiselect scheme's
+items name image files. It does not train detectors or segmenters.
+Pre-labelling for boxes and masks comes from SAM
 (see [Interactive segmentation](../annotation-types/multimedia/segmentation.md))
-and the existing YOLO endpoint, not from a detector Potato trains. Ordering
-plus pre-labelling is most of the value at a small fraction of the
-infrastructure, and training remains a separable later decision.
+and the existing YOLO endpoint, not from a detector Potato trains.
 
 ## Related
 
 - [Active learning guide](active_learning_guide.md)
+- [Model training](model_training.md)
 - [Interactive segmentation](../annotation-types/multimedia/segmentation.md)
 - [Geometry agreement](../advanced/geometry_agreement.md)

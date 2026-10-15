@@ -1,15 +1,26 @@
 # Using HuggingFace Models in Potato
 
-Potato calls a language model in three places, and **all three use the same endpoint
-configuration shape**. This guide shows how to point any of them at a model hosted on
-HuggingFace — whether through the serverless Inference API, a dedicated Inference
-Endpoint, a self-hosted TGI/vLLM server, or a fully local model.
+This guide shows how to point Potato's language-model features at a model hosted on
+HuggingFace, whether through the serverless Inference API, a dedicated Inference
+Endpoint, a self-hosted TGI/vLLM server, or a fully local model. It walks through
+three of them in detail: AI hints, Solo Mode and judge calibration. The others take the
+same `endpoint_type` / `model` / `api_key` / `base_url` keys, except `active_learning.llm`.
 
 | Feature | What the LLM does | Config block |
 |---------|-------------------|--------------|
 | **AI hints** | Suggests labels inline in the annotation UI | `ai_support` |
+| **Chat** | Answers annotator questions in a sidebar | `chat_support` |
+| **ICL labeling** | Labels items from high-agreement examples | `icl_labeling` (uses the `ai_support` endpoint) |
+| **Annotation critique** | Reviews drawn regions | per-scheme `ai_support.critique` (uses the top-level `ai_support` endpoint) |
 | **Solo mode** | Auto-labels items while you calibrate (human-in-the-loop) | `solo_mode.labeling_models[]` |
 | **Judge calibration** | Acts as an LLM judge you align against blind human labels | `judge_calibration.models[]` |
+| **Labeling engine** | Labels items as `llm` or `judge` sources | `labeling_engine.sources[]` |
+| **Active learning LLM** | Cold-start labels and ICL ensemble | `active_learning.llm` (its own keys: `endpoint_url`, an OpenAI-compatible chat completions URL, and `model_name`) |
+
+`icl_labeling` and `judge_calibration` still work in 2.11 and are planned for removal
+in 3.0; the [labeling engine](../labeling-engine/overview.md) replaces them. See
+[Migrating to the labeling engine](../labeling-engine/migration.md), or run
+`potato label migrate-config config.yaml --out config-engine.yaml`.
 
 See also: [AI support](ai_support.md) · [Solo mode](../solo-mode/solo_mode.md) ·
 [Judge calibration](judge_calibration.md).
@@ -118,6 +129,11 @@ solo_mode:
 ```
 
 ### 3. Judge calibration (`judge_calibration.models[]`)
+
+`judge_calibration` is planned for removal in 3.0. In the labeling engine, the same
+model is a source with `kind: judge` and the same `endpoint_type`, `model` and
+`api_key` keys, under `labeling_engine.sources[]`; see
+[Labeling engine configuration](../labeling-engine/configuration.md#sources).
 
 ```yaml
 judge_calibration:

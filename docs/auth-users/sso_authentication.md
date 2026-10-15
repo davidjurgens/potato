@@ -347,7 +347,7 @@ authentication:
 | `authentication.method` | string | `"in_memory"` | Set to `"oauth"` to enable SSO |
 | `authentication.providers` | dict | (required) | Provider configurations (see below) |
 | `authentication.user_identity_field` | string | `"email"` | Which OAuth field becomes the Potato username: `email`, `username`, `sub`, `name` |
-| `authentication.allow_local_login` | bool | `false` | Show local username/password form alongside SSO buttons |
+| `authentication.allow_local_login` | bool | `false` | Show local username/password form alongside SSO buttons. When `false`, `/register` answers 403 and local registration and password login are refused. An SSO identity never signs in with a password either way |
 | `authentication.auto_register` | bool | `true` | Auto-create Potato user on first OAuth login |
 | `secret_key` | string | (random) | **Must be stable for OAuth** — set via config or `POTATO_SECRET_KEY` env var |
 
@@ -451,7 +451,7 @@ This shows SSO buttons at the top of the login page with an "or" divider and the
 - Allow both institutional (SSO) and external (password) annotators
 - Development/testing with local accounts while production uses SSO
 
-> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset local passwords via the CLI (`potato reset-password`) or the admin API. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
+> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset a local (non-SSO) account's password with `potato reset-password` or the admin reset link (`POST /admin/create_reset_token`). An SSO identity has no password in Potato: its provider manages it, so a password reset for that username is refused. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
 
 ---
 
@@ -582,7 +582,7 @@ A: Yes. Configure multiple providers under `authentication.providers` and each g
 A: They're treated as the same Potato user (when `user_identity_field: "email"`). Their annotations are unified under one identity.
 
 **Q: Can I switch from password-based to OAuth without losing existing annotations?**
-A: Yes, if the OAuth identity (email) matches existing usernames. Set `allow_local_login: true` during the transition period so both methods work.
+A: Yes, if the OAuth identity (email) matches existing usernames: annotations are keyed by username, so they carry over. Set `allow_local_login: true` during the transition so annotators who have not signed in with SSO yet can still use their passwords. Once someone signs in with SSO, that username is an SSO identity: password login and password resets no longer work for it, and they sign in through the provider from then on.
 
 **Q: Do I need HTTPS for local development?**
 A: No. OAuth providers allow `http://localhost` as a redirect URI for development. HTTPS is required only for production.

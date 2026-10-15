@@ -19,7 +19,7 @@ option.
 
 On AWS, use Lightsail (`--provider aws`): it has a flat monthly price that
 includes the IPv4 address and the disk, and the only permissions it needs are
-`lightsail:*`. New AWS accounts get $100–200 of credit, which covers several
+`lightsail:*` and `sts:GetCallerIdentity`. New AWS accounts get $100–200 of credit, which covers several
 months of it. [The AWS page](deploy-aws.md) also covers EC2 and ECS, and when
 you might want them instead.
 
@@ -38,6 +38,14 @@ To use the latest code instead of the latest release:
 git clone https://github.com/davidjurgens/potato.git
 cd potato
 pip install -e .
+```
+
+A server you run yourself that backs up to HuggingFace or S3 (see
+[Backups](deploy-backups.md)) or signs people in with SSO needs the `hosting`
+extra (`huggingface_hub`, `boto3`, Authlib):
+
+```bash
+pip install 'potato-annotation[hosting]'
 ```
 
 Or skip Python entirely and use the published image, which has everything

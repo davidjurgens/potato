@@ -42,9 +42,9 @@ ai_budget:
 
 ---
 
-## The cap refuses before it starts
+## When the cap is checked
 
-A run projected to cross the cap is refused before the first model call, and
+A judge batch or probe projected to cross the cap is refused before the first model call, and
 the endpoint returns `402` with `"ran": false`:
 
 ```json
@@ -58,8 +58,21 @@ the endpoint returns `402` with `"ran": false`:
 }
 ```
 
-Halting halfway leaves a part-labelled dataset and a bill for it, so refusing
-up front is the refusal that saves money.
+For these two the check runs once, so a run either goes ahead in full or does
+not start. Halting
+halfway leaves a part-labelled dataset and a bill for it, so refusing up front
+is the refusal that saves money.
+
+The two corpus-labeling paths are long-running, so they check again as they
+go, and can stop partway:
+
+- **Solo Mode labeling** checks the cap before background labeling starts and
+  again before every batch (`potato/solo_mode/spend.py`). A refusal pauses
+  labeling and records the reason; the items already labelled stay labelled.
+- **The labeling engine** checks the cap before each chunk of
+  `runtime.batch_size` items (`potato/labeling_engine/runtime/runner.py`). A
+  refusal ends the run with status `paused`. Chunks already finished are
+  committed, and a later run resumes with the items that have no prediction.
 
 Money already spent counts toward the cap. Otherwise the cap applies per run,
 which caps nothing.
@@ -69,6 +82,8 @@ Currently enforced on:
 - the judge batch (`/admin/api/judge-alignment/run`)
 - the [position-bias probe](../advanced/presentation_order.md)
   (`/admin/api/judge-position-bias`)
+- Solo Mode background labeling (before it starts and before every batch)
+- labeling engine runs (before every chunk)
 
 ---
 

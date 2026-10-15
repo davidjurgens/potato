@@ -133,6 +133,11 @@ pre_annotation:
   allow_modification: true
 ```
 
+As of 2.11.0 `pre_annotation` still works, but the
+[labeling engine](../../labeling-engine/overview.md) is its successor, with the
+predictions as a `static` source (`potato label migrate-config` translates the
+block).
+
 Every annotator sees them as a starting point. As soon as someone saves, their
 corrections replace the imported ones permanently.
 

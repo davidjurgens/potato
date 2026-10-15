@@ -196,6 +196,18 @@ With `features.distill` on:
 | `min_labels` | `200` | Train only once this many labels exist. |
 | `include_silver` | `true` | Also train on machine labels a contract certified (marked silver). |
 | `every` | `2.0` | Retrain when the label count has grown by this factor. |
+| `modality` | `auto` | `text`, `image`, or `auto`: image when most items name an image file (`.jpg`, `.png`, ...). |
+| `image_field` | the text key | The item field holding the image, when it is not the field the page shows. |
+
+On an image study the distilled model is an image classifier: `sklearn-text`
+fits a classifier over CLIP embeddings (`clip-ViT-B-32`) of each image file,
+where a text model would have read only the image's URL. That needs
+`sentence-transformers` and `pillow` (`pip install sentence-transformers
+pillow`); without them distillation logs the install hint and the cascade
+stays as configured. Images must be stored locally (under `media_directory`,
+or a path relative to `task_dir`): remote URLs are not downloaded, so items
+that point at another host are left out of training and the distilled tier
+gives them no label, which sends them on to the next tier.
 
 Items in the cert and audit splits never go into the training set.
 

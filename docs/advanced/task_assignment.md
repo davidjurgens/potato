@@ -26,9 +26,10 @@ Task assignment controls:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `assignment_strategy` | Strategy for assigning items | `random` |
+| `assignment_strategy` | Strategy for assigning items | `fixed_order` (`priority` when a `triage` block is enabled and no strategy is set) |
 | `max_annotations_per_user` | Maximum items per annotator | unlimited |
-| `max_annotations_per_item` | Target annotations per item | 3 |
+| `num_annotators_per_item` | Cap on how many annotators one item gets. `0` also means unlimited; a negative number is refused | unset (unlimited) |
+| `max_annotations_per_item` | Deprecated spelling of `num_annotators_per_item`, read only when that key gives no number. `-1` means unlimited. Setting both to different numbers is refused | `-1` (unlimited) |
 
 ---
 
@@ -499,6 +500,24 @@ Watch for this if you are paying per completion. Nobody in this state has done
 any work, and until this page existed they were shown the completion screen
 ("Thank You! You have completed the annotation task and your responses are
 saved"), which reads as a finished assignment on both sides.
+
+A full study is one of several reasons assignment can come back empty. The
+page names the reason. The more specific causes are checked first, so
+`saturated` is reported only when none of the others applies. Outside the
+labeling engine, the server also logs a warning with the reason and advice for
+the admin:
+
+| Reason | Page headline | What it means for you |
+|--------|---------------|-----------------------|
+| `engine_waiting` | Nothing to label right now | `assignment_strategy: engine`, and the labeling engine has no open request this annotator can take. `potato label status` shows what the contracts are waiting for. When nothing more will come for the annotator, the engine ends their annotation phase instead of showing this page. |
+| `no_data` | This study has no items yet | No data is loaded. Check `data_files`, or the watched directory if the study ingests data live. |
+| `zero_quota` | Your account is set to zero items | This annotator's quota resolves to 0. Check `per_annotator_quota` (`by_user`, `by_user_role`, `default`) and `max_annotations_per_user`. |
+| `no_batch_group` | You are not in an annotator group for this study | Under `assignment_strategy: batch`, the annotator is in no `batch_assignment` group. Add them to a group's `annotators` list; adding data or raising `num_annotators_per_item` will not help. |
+| `no_qualified_category` | You are not qualified for any category yet | Under `category_based` assignment without dynamic expertise, the annotator has qualified for no category. Static qualification comes only from passing a training phase on categorized questions, so add training or set `category_assignment.dynamic.enabled: true`. |
+| `saturated` | There is no work left for you | Every item is at `num_annotators_per_item`. Raise the cap or add data. |
+
+An adjudicator who gets no annotation items is sent to `/adjudicate` instead of
+this page.
 
 ---
 

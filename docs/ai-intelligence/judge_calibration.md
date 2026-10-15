@@ -9,6 +9,14 @@ produces a report: per-LLM accuracy, inter-annotator agreement (human↔LLM and
 LLM↔LLM), calibration (ECE + reliability), and confusion matrices — plus a file
 of every LLM's labels on your data.
 
+> **Successor in 2.11:** the [labeling engine](../labeling-engine/overview.md)
+> does this job with `judge` sources and `k_sample` confidence; the blind sample
+> becomes calibration requests. `judge_calibration` still works in 2.11 and is
+> planned for removal in 3.0.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
+
 > **Using a HuggingFace model as the judge?** See [Using HuggingFace Models in Potato](huggingface_models.md) for wiring `judge_calibration.models[]` to an HF-hosted model.
 
 It is a deliberately simpler cousin of [Solo Mode](../solo-mode/solo_mode.md)
@@ -188,7 +196,9 @@ All require an admin API key (`X-API-Key` header; bypassed in `--debug`):
 |----------|---------|
 | `GET /judge_calibration/admin` | Setup wizard |
 | `POST /judge_calibration/run` | Apply overrides + start generation |
+| `GET /judge_calibration/status` | Manager status (JSON) |
 | `GET /judge_calibration/progress` | Live progress (JSON) |
+| `GET /judge_calibration/results` | Judge labels generated so far (JSON); `?model=` and `?instance_id=` narrow it |
 | `POST /judge_calibration/report` | Build the report |
 | `GET /judge_calibration/report` | View the HTML report |
 

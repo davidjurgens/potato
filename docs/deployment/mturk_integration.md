@@ -349,10 +349,11 @@ http://localhost:8000/?workerId=test123&assignmentId=assign123&hitId=hit123&turk
 ### Server Recommendations
 
 1. **Use HTTPS**: Many browsers require HTTPS for forms
-2. **Handle Concurrent Users**: Use gunicorn or similar:
+2. **Handle Concurrent Users**: Use gunicorn with one worker and several threads:
    ```bash
-   gunicorn -w 4 -b 0.0.0.0:8080 "potato.flask_server:create_app('config.yaml')"
+   gunicorn -w 1 --threads 8 -b 0.0.0.0:8080 "potato.flask_server:create_app('config.yaml')"
    ```
+   Keep `-w 1`. Potato holds its item pool and user state in memory per process, so a second worker hands out items the first already assigned and can overwrite its annotations. Raise `--threads` for more concurrency. See [Docker](docker.md#one-worker).
 3. **Set Up Logging**: Monitor for errors
 4. **Database Backups**: Regular backups of annotation data
 

@@ -7,6 +7,10 @@ Caddy with a Let's Encrypt certificate for the machine's IP address, and Potato
 running as a systemd service. `deploy logs`, `deploy pull` over SSH and
 `--volume-gb` work on all three.
 
+The Let's Encrypt contact address defaults to your `git config user.email`;
+`--acme-email <address>` sets another one, as on
+[DigitalOcean](deploy-digitalocean.md#how-tls-works-without-a-domain).
+
 | | `--provider hetzner` | `--provider vultr` | `--provider linode` |
 |---|---|---|---|
 | Default size | `cx23`: 2 vCPU, 4 GB | `vc2-1c-2gb`: 1 vCPU, 2 GB | `g6-standard-1`: 1 vCPU, 2 GB |

@@ -78,9 +78,10 @@ labeled. They hold because of how the sample is drawn and used:
 - **Only people certify.** Machine annotators may take part in final-label
   inference, never in the labels a contract tests against.
 - **A change makes the certificate stale.** Changing a source, a prompt, a
-  threshold or the scheme marks every contract `stale` and moves accepted
-  labels to `pending_recert` until it is tested again. The human labels are
-  kept.
+  threshold or the scheme marks the contracts on the schemes it affects
+  `stale` and moves their accepted labels to `pending_recert` until they are
+  tested again. Contracts on other schemes are untouched, and the human labels
+  are kept.
 - **Machines never take a person's place.** Engine predictions do not count
   against per-item annotator caps.
 

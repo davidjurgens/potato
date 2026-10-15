@@ -42,7 +42,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Getting Started Guide](guides/getting-started.md) - First-time setup and your first annotation project
 - [Administrator Guide](guides/admin-guide.md) - Managing annotators, quality control, and monitoring
 - [Developer Guide](guides/developer-guide.md) - Extending Potato, API integration, and custom schemas
-- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and MTurk
+- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and MTurk (for other platforms, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
 - [Agent Evaluation Guide](guides/agent-evaluation-guide.md) - Evaluating AI agents, coding agents, and web agents
 - [AI-Assisted Annotation Guide](guides/ai-assisted-annotation-guide.md) - Using LLMs, active learning, and Solo Mode
 
@@ -60,9 +60,9 @@ Role-based guides that walk you through Potato for your specific use case:
 Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
-- **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
+- **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 419 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 477 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -208,7 +208,8 @@ over prose when writing a config or calling the API.
 
 ## Crowdsourcing
 
-- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Prolific and MTurk integration
+- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Configuring a crowd provider; nine ship, including Prolific and MTurk
+- [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md) - Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker and others compared
 - [MTurk Integration](deployment/mturk_integration.md) - Detailed Amazon MTurk setup guide
 
 ## Administration
@@ -242,7 +243,7 @@ over prose when writing a config or calling the API.
 ## Integrations
 
 - [Webhooks](integrations/webhooks.md) - Outgoing webhook notifications for annotation events
-- [HuggingFace Spaces](data-export/huggingface_spaces.md) - Deploy Potato on HuggingFace Spaces
+- [HuggingFace Spaces](deployment/deploy-huggingface.md) - Deploy Potato on HuggingFace Spaces
 - [LangChain Integration](integrations/langchain_integration.md) - Send LangChain agent traces to Potato
 - [Tracing SDK (`potato_trace`)](integrations/tracing_sdk.md) - Instrument any agent with `@traceable` to capture runs into Potato (OpenTelemetry interop)
 
@@ -260,10 +261,25 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.11.0](releasenotes/v2.11.0.md) - The Labeling Engine
+- [v2.10.3](releasenotes/v2.10.3.md) - Agreement, Deploy Button and Pyodide Fixes
+- [v2.10.2](releasenotes/v2.10.2.md) - Security, MySQL, Agreement and Packaging Fixes
+- [v2.10.1](releasenotes/v2.10.1.md) - Deploy Dry Runs and Price Fixes
+- [v2.10.0](releasenotes/v2.10.0.md) - Eight Hosting Platforms, Backups and Text as Image
+- [v2.9.4](releasenotes/v2.9.4.md) - Password Reset Fix and Phone Usability
+- [v2.9.3](releasenotes/v2.9.3.md) - AI Toolbar Fixes
+- [v2.9.2](releasenotes/v2.9.2.md) - Faster Navigation Between Items
+- [v2.9.1](releasenotes/v2.9.1.md) - Chat and Gemini Fixes
+- [v2.9.0](releasenotes/v2.9.0.md) - Importers, Local Transcription and Provenance
+- [v2.8.2](releasenotes/v2.8.2.md) - The Fixes 2.8.1 Said It Had
+- [v2.8.1](releasenotes/v2.8.1.md) - Security Fixes (see the correction at the top of the page)
+- [v2.8.0](releasenotes/v2.8.0.md) - Vision, and the Statistics to Check It
 - [v2.7.1](releasenotes/v2.7.1.md) - Transcripts In, Without the Reformatting (21 input formats, sidecar files, `potato transcripts` CLI)
 - [v2.7.0](releasenotes/v2.7.0.md) - Seven New Ways to Annotate (Psychometrics, Multiplayer Rooms, Boundary Lab, Truth Serum, Think-Aloud, Paper Mode, Pocket Mode)
+- [v2.6.2](releasenotes/v2.6.2.md) - Agent-Evaluation Differentiation and Multi-Agent & Multimodal Annotation
 - [v2.6.1](releasenotes/v2.6.1.md) - Agentic Evaluation Suite (evaluators, datasets/experiments, automation, CI gating, tracing SDK, curation, arena)
 - [v2.6.0](releasenotes/v2.6.0.md) - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing
+- [v2.4.5](releasenotes/v2.4.5.md) - Validated Refinement, Config Validator & Stability
 - [v2.4.4](releasenotes/v2.4.4.md) - Span Annotation Fixes & UX Improvements
 - [v2.4.3](releasenotes/v2.4.3.md) - Coding Agent Annotation, Localization & Stability
 - [v2.4.1](releasenotes/v2.4.1.md) - Bug Fixes
@@ -321,7 +337,7 @@ over prose when writing a config or calling the API.
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
 | Import COCO annotations (RLE masks included) | [Image Annotation Formats](annotation-types/multimedia/image_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
-| Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
+| Deploy on HuggingFace Spaces | [HuggingFace Spaces](deployment/deploy-huggingface.md) |
 | Run behind a `/app1/` reverse proxy | [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) |
 | Set up webhook notifications | [Webhooks](integrations/webhooks.md) |
 | Use LLM chat assistant for annotators | [Chat Support](ai-intelligence/chat_support.md) |
@@ -348,7 +364,7 @@ python potato/flask_server.py start examples/classification/single-choice/config
 python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 ```
 
-See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) directory for more examples, including:
+See the [examples](https://github.com/davidjurgens/potato/tree/master/examples) directory for more examples, including:
 
 - `classification/` - Classification annotation examples (radio, checkbox, likert, etc.)
 - `span/` - Span annotation examples (NER, linking, coreference, etc.)
@@ -462,7 +478,6 @@ Create a YAML configuration file `config.yaml` in your task directory:
 ```yaml
 # Basic Configuration
 port: 8000
-server_name: My First Annotation Task
 annotation_task_name: Sentiment Analysis
 task_dir: .  # Resolves to the directory containing this config file
 
@@ -523,13 +538,17 @@ alert_time_each_instance: 10000000
 
 ### 4. Start the Server
 
-Start the annotation server with your configuration:
+Step 1 left you inside `my_annotation_task/`. Go back to the directory that
+contains it and start the server:
 
 ```bash
+cd ..
+
 # If you installed from PyPI (Option 1):
 potato start my_annotation_task/config.yaml -p 8000
 
-# If you cloned the repo (Option 2), run from the repo root:
+# If you cloned the repo (Option 2), run from the repo root
+# (with my_annotation_task/ created there):
 python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 ```
 
@@ -697,9 +716,33 @@ OpenTelemetry exporter is also available.
 
 ## Does Potato support crowdsourcing (MTurk, Prolific)?
 
-Yes — native [MTurk and Prolific integration](deployment/crowdsourcing.md) with
-platform-specific authentication, plus quality control, training phases, and
-inter-annotator agreement.
+Yes. Potato ships nine [crowd providers](deployment/crowdsourcing.md): Prolific,
+MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for
+hired experts, a generic provider for any panel that passes a participant ID in
+the URL, and the legacy `url_direct` login. Quality control, training phases and
+inter-annotator agreement do not depend on the provider. See
+[Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md).
+
+## What is the labeling engine?
+
+New in 2.11.0. Models label the dataset, and people label a blind random sample
+of it. The engine tests the machine labels against those human labels under the
+contracts you declare (for example, at most 5% of accepted machine labels wrong,
+with 90% confidence), accepts the machine labels the test supports, sends the
+rest to people, and writes a certificate recording what was tested on how many
+human labels. Run it from the annotation server or with
+`potato label run|status|certify|certificate|export`. See
+[Labeling Engine](labeling-engine/overview.md).
+
+## Does Potato train models?
+
+It trains scikit-learn classifiers on a study's own labels. Features come from
+the text (bag-of-words or sentence embeddings) or, for image classification,
+from CLIP image embeddings. Start a run from the admin Training page
+(`/admin/training`), configured with the `model_training` block; the labeling
+engine's distillation step uses the same trainers. Potato does not train
+detectors or segmenters, and it does not serve models. See
+[Model Training](ai-intelligence/model_training.md).
 
 ## What annotation types does Potato support?
 
@@ -740,7 +783,7 @@ required external service.
 
 ```bash
 pip install potato-annotation
-python potato/flask_server.py start <config.yaml> -p 8000
+potato start <config.yaml> -p 8000
 ```
 
 See [Quick Start](quick-start.md) and [Usage](deployment/usage.md).
@@ -836,7 +879,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/comparison/
 
 # Potato vs. Other Annotation Tools
 
-Potato is a flexible, open-source annotation platform built for NLP and ML researchers. This page compares Potato's capabilities with popular alternatives across text, image, video, 3D, robotics, and model-evaluation annotation. Last updated: August 2026.
+Potato is a flexible, open-source annotation platform built for NLP and ML researchers. This page compares Potato's capabilities with popular alternatives across text, image, video, 3D, robotics, and model-evaluation annotation. Last updated: October 2026.
 
 Most of the tools below are very good at what they were built for, and several beat Potato inside their own specialty; where that is true, this page says so, because the useful outcome is that you pick the right instrument even when it is not this one. Every claim about another product comes from that product's own documentation or changelog, and vendor documentation describes the current version, so re-check anything you plan to rely on.
 
@@ -878,10 +921,10 @@ Most of the tools below are very good at what they were built for, and several b
 | Role-based access control (RBAC) | Yes | Enterprise | Yes | - | - | - | - | - |
 | Per-cohort schema assignment | Yes | Enterprise | - | - | - | - | - | - |
 | Handles 50k+ items | Yes | Yes | Yes | Yes | Yes | - | - | Yes |
-| Crowdsourcing (MTurk, Prolific) | Yes | - | - | - | - | - | - | - |
+| Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 29 | Multiple | 19 | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 32 | Multiple | 19 | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -907,7 +950,7 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Sensor fusion (2D↔3D projection) | Yes | Partial | - | - | - | Yes | Yes |
 | Depth maps with windowing | Yes | - | - | - | Partial | - | - |
 | DICOM / NIfTI / WSI | - | - | - | - | Yes | Yes | - |
-| Model training in the same product | - | Partial | - | Yes | Yes | Yes | - |
+| Model training in the same product | Partial (text and image classifiers) | Partial | - | Yes | Yes | Yes | - |
 | CV format import | 15 formats | Extensive | Partial | Extensive | Partial | Extensive | Partial |
 | **Chance-corrected agreement over geometry** | **Yes** | - | - | - | - | - | - |
 | Robot episode annotation (LeRobot, RLDS, HDF5) | Yes | - | - | - | - | - | - |
@@ -935,7 +978,7 @@ Potato has 61 annotation schemas and 24 display types in one platform. The list 
 
 ### AI and LLM Integration
 
-Potato integrates with 13 AI endpoint types, with no plugin to install: OpenAI, Anthropic, Google Gemini, Ollama, vLLM, HuggingFace, OpenRouter, and YOLO. Features include:
+Potato integrates with 15 AI endpoint types, with no plugin to install: OpenAI, Anthropic, Google Gemini, Ollama, vLLM, HuggingFace and OpenRouter for text; vision variants of OpenAI, Anthropic and Ollama; YOLO for detection; SAM and SAM 3 for segmentation; and two decision-model endpoints, `systemone` and `laya`, which pick a label without writing text. `ai_support` accepts 11 of them (not SAM, SAM 3 or the decision models); Solo Mode and the labeling engine use the decision models. Features include:
 
 - **Intelligent hints** with suggested labels
 - **Keyword highlighting** using AI-detected terms
@@ -953,9 +996,9 @@ Potato is designed for research annotation studies with built-in support for:
 - **Multi-phase workflows**: consent, instructions, training (with feedback), annotation, post-study surveys
 - **Quality control**: attention checks, gold standards, MACE annotator competence estimation
 - **Adjudication**: dedicated interface for resolving inter-annotator disagreements
-- **55 validated survey instruments** (SUS, NASA-TLX, UMUX, AttrakDiff, and more) for post-study evaluation
+- **55 validated survey instruments** (BFI-10, PHQ-9, GAD-7, PANAS, SWLS, and more) for post-study evaluation
 - **Behavioral tracking**: keystroke, mouse, and timing data for annotator behavior analysis
-- **Crowdsourcing**: native MTurk and Prolific integration
+- **Crowdsourcing**: nine crowd providers: Prolific, MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, and the legacy `url_direct` login
 
 ### Data Source Flexibility
 
@@ -963,7 +1006,7 @@ Load data from 8 source types: local files, URLs, Google Drive, Dropbox, Amazon 
 
 ### Export Format Coverage
 
-Export annotations in 29 formats and import from 15. Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI, MOT, DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Robotics and evaluation: per-frame episode JSONL, agent-eval, telemetry streams. Plus JSON/JSONL/CSV/TSV/Parquet.
+Export annotations in 32 formats and import from 20 (15 computer-vision formats and 5 text formats). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI, MOT, DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -1061,11 +1104,11 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 32 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
-**vs. Roboflow.** Roboflow is excellent if your goal is a trained model: Smart Polygon, batch auto-labelling with SAM 3 text prompts, Label Assist from your own model, and hosted training and deployment in one loop. Potato does not train detectors. Choose Potato when the labels themselves are the research output and their reliability has to be defensible.
+**vs. Roboflow.** Roboflow is excellent if your goal is a trained model: Smart Polygon, batch auto-labelling with SAM 3 text prompts, Label Assist from your own model, and hosted training and deployment in one loop. Potato does not train detectors or segmenters; it trains scikit-learn classifiers on a study's own labels (over text, sentence or CLIP image embeddings), for prelabels or as the labeling engine's first tier. Choose Potato when the labels themselves are the research output and their reliability has to be defensible.
 
 **vs. Label Studio.** Label Studio offers the broadest template system and the largest integration ecosystem, and its Enterprise tier adds review workflows and agreement scoring. Potato's agreement measures are chance-corrected and available in the free, self-hosted product; Label Studio's are exact-match, IoU, and span overlap.
 
@@ -1111,7 +1154,7 @@ This area is defined by datasets and harnesses (RefCOCO/+/g, PixMo-Points, Point
 
 ### LLM Evaluation and Preference Annotation
 
-Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 13 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
+Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 15 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
 
 ## Agent-Evaluation Platforms (LangSmith, LabelBox, Braintrust)
 
@@ -1240,7 +1283,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | General NLP annotation with AI assistance | **Potato** | Broadest AI assistance modes, YAML config, research features |
 | Single annotator + LLM collaboration | **Potato** (Solo Mode) | Only tool with structured progressive-autonomy workflow |
 | Research annotation with surveys/tracking | **Potato** | Multi-phase workflow, 55 surveys, behavioral tracking, MACE |
-| Crowdsourced annotation (MTurk/Prolific) | **Potato** | Native integration with both platforms |
+| Crowdsourced annotation (MTurk/Prolific) | **Potato** | Native providers for both, and for seven other recruitment routes |
 | Complex linguistic annotation + knowledge bases | **INCEpTION** | Strongest KB linking, coreference, IAA, curation |
 | Computer vision annotation at volume | **CVAT** | Deepest CV-only tooling, attributes, task management, large community |
 | Label → train → deploy in one loop | **Roboflow** | Auto Label, hosted training and inference |
@@ -1271,16 +1314,16 @@ AWS-integrated annotation with built-in active learning and workforce management
 |-----------------|:---:|
 | Annotation schemas | 61 |
 | Display types | 24 |
-| Export formats | 29 |
-| Import formats | 15 |
-| AI/LLM endpoint types | 13 |
+| Export formats | 32 |
+| Import formats (15 CV, 5 text) | 20 |
+| AI/LLM endpoint types | 15 |
 | Data source types | 8 |
-| Assignment strategies | 11 |
+| Assignment strategies | 13 |
 | Survey instruments | 55 |
 | Crowdsourcing integrations | 9 |
 | Workflow phases | 8 |
 
-Counts are generated from Potato's own registries. There is no "best alternative" column, because the tools above organise their capabilities differently enough that a single number invites a misleading comparison.
+Each count is read from the registry that defines it, and `tests/unit/test_doc_counts_match_registries.py` fails when this table drifts from the code. There is no "best alternative" column, because the tools above organise their capabilities differently enough that a single number invites a misleading comparison.
 
 ---
 
@@ -1288,7 +1331,7 @@ Counts are generated from Potato's own registries. There is no "best alternative
 
 So an evaluation does not have to discover these late:
 
-- **No model training.** Potato orders items, pre-labels with existing models, and critiques annotations with a VLM, but it does not train or serve detectors. Roboflow, V7, Supervisely, and Labelbox do.
+- **No detector or segmenter training, and no model serving.** Potato trains scikit-learn classifiers on a study's own labels (over bag-of-words, sentence embeddings or CLIP image embeddings), orders items, pre-labels with existing models, and critiques annotations with a VLM. It does not train detectors or segmenters, or serve the models it trains; Roboflow, V7, Supervisely, and Labelbox do both.
 - **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
 - **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
 - **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
@@ -2940,8 +2983,8 @@ python -m potato.export -c config.yaml -f qdpx -o ./export/
 !!! warning "ATLAS.ti supports one level of subcode"
     REFI-QDA lets codes nest to any depth and so does Potato, but ATLAS.ti
     flattens or drops anything past a single level on import — without telling
-    the researcher it happened. Export with `flatten_subcodes` to control that
-    yourself: every code is re-parented to the top level and renamed
+    the researcher it happened. Export with
+    `--option flatten_subcodes=true` to control that yourself: every code is re-parented to the top level and renamed
     `Parent > Child > Grandchild`, which loses the tree but keeps every code
     legible.
 
@@ -3227,9 +3270,15 @@ port: 8000
 server:
   port: 8000
   host: "0.0.0.0"  # Listen on all interfaces
-  require_password: true
-  persist_sessions: false
+
+# Top-level keys, not part of the server block
+require_password: true
+persist_sessions: false
 ```
+
+The `server` block takes only `port`, `host` and `debug`. `require_password`
+and `persist_sessions` are top-level keys; nested under `server` they are
+ignored.
 
 ### Advanced Server Settings
 
@@ -3647,9 +3696,9 @@ creates both tables on first start and loads every stored annotator at boot.
 The data items themselves, exports and the rest of the output directory are
 still files. Only annotator state moves to the database.
 
-The admin and MCP exports, `potato export`, paper mode, auto-export
+The admin and MCP exports, the export CLI (`python -m potato.export`), paper mode, auto-export
 (`export_annotation_format`) and model training read annotator state from the
-database. When `potato export` runs on another machine, it connects with the
+database. When the export CLI runs on another machine, it connects with the
 config's `database` block, so that machine needs the driver and network access
 to the database. `${VAR}` references in `password` are expanded as they are at
 startup.
@@ -4191,8 +4240,9 @@ ui:
 server:
   port: 8000
   host: 0.0.0.0
-  require_password: true
-  persist_sessions: false
+
+require_password: true
+persist_sessions: false
 
 assignment:
   strategy: least_annotated
@@ -4535,7 +4585,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `max_annotations_per_user` |  | integer | `-1` | Cap on how many dataset items one annotator may receive. Left unset, the cap is the number of items loaded, so every annotator is offered the whole corpus; -1 is explicit unlimited, which is what a dynamic data source needs for items added after boot to be assignable. Injected attention checks and gold items do not count against it |  |
 | `max_session_seconds` |  | integer |  | Hard limit on one annotation session |  |
 | `min_annotators_per_instance` |  | integer |  | DEPRECATED spelling of num_annotators_per_item, and read as it. It named a coverage floor that was parsed and never consulted, so a study asking for three annotators an item collected an unlimited number. Setting it alongside num_annotators_per_item or max_annotations_per_item with a different value is refused |  |
-| `num_annotators_per_item` |  | integer or object | `3` | Target annotators per item. Either a plain count or a mapping carrying `default` plus overlap-sampling and adaptive-boost rules |  |
+| `num_annotators_per_item` |  | integer or object |  | Target annotators per item. Either a plain count or a mapping carrying `default` plus overlap-sampling and adaptive-boost rules. Unset (with no max_annotations_per_item) or 0 means unlimited; a negative count is refused |  |
 | `per_annotator_quota` |  | object |  | Per-annotator workload caps: `default`, plus `by_user` and `by_user_role` overrides. Any other sub-key is rejected at load rather than ignored |  |
 | `random_seed` |  | integer |  | Seed for assignment shuffling, so an ordering can be reproduced |  |
 | `scheme_sets` |  | object |  | Named, reusable lists of annotation schemes. A batch_assignment group names one in its `schemes` key to give that cohort its own questions |  |
@@ -9566,7 +9616,7 @@ still ignored. When an option appears in both places, `display_options` wins.
 | `video` | Video player | No |
 | `audio` | Audio player | No |
 | `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
-| `gallery` | Scrollable image gallery with captions | No |
+| `gallery` | Scrollable gallery with captions. Images, plus video for URLs ending in `.mp4`, `.m4v`, `.webm`, `.ogv` or `.mov` (played with controls) | No |
 | `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
@@ -9620,7 +9670,7 @@ rather than to any one renderer, so they work on every display type:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `resizable` | `true` | Wrap the field in a container the annotator can drag to resize. Set `false` to leave the field at its natural height. |
-| `max_height` | `500` | How tall the field may grow before it scrolls inside itself. |
+| `max_height` | none | How tall the field may grow before it scrolls inside itself. Unset, the stylesheet caps the field at `80vh`. Either way, a "Show all" button appears below the field while its content overflows, and lifts the cap until pressed again. |
 | `min_height` | `100` | How short it may be dragged. |
 
 Lengths accept a number or a CSS length: `400`, `"400px"`, `"50vh"` and
@@ -11652,8 +11702,6 @@ Key differences from Best-Worst Scaling:
 | `description` | — | Task instruction |
 | `labels` | — | List of item names to rank (required, minimum 2) |
 | `allow_ties` | `false` | Allow annotators to place items at equal rank |
-| `items_key` | `null` | Data field containing dynamic items (overrides `labels`) |
-| `sequential_key_binding` | `false` | Enable keyboard shortcut reordering |
 | `label_requirement.required` | `false` | Require a complete ranking before proceeding |
 
 ### YAML Example — Static Item List
@@ -11671,25 +11719,6 @@ annotation_schemes:
       - Response D
     label_requirement:
       required: true
-```
-
-### YAML Example — Dynamic Items from Data
-
-When the items to rank come from the instance data (different items per row):
-
-```yaml
-annotation_schemes:
-  - annotation_type: ranking
-    name: translation_rank
-    description: "Rank these machine translations from most to least fluent."
-    items_key: translations
-    allow_ties: true
-```
-
-With corresponding data:
-
-```json
-{"id": "t001", "source": "The cat sat on the mat.", "translations": ["Le chat était assis sur le tapis.", "Le chat s'est assis sur le tapis.", "Chat sur tapis."]}
 ```
 
 ### Ties Configuration
@@ -11742,8 +11771,6 @@ This means B is ranked 1st, D and A are tied at 2nd, and C is ranked 4th.
 ## Troubleshooting
 
 **Annotators find full ranking of 6+ items tiring:** Consider switching to Best-Worst Scaling for large item pools. BWS achieves similar statistical efficiency with much lower per-item cognitive load.
-
-**Dynamic items from data have different lengths per instance:** Use `items_key` with `allow_ties: false` and ensure your data preprocessing produces consistent list lengths if downstream analysis requires it.
 
 ## Related Documentation
 
@@ -15833,6 +15860,7 @@ Then open http://localhost:8000 in your browser.
 | `mode` | string | `"segment"` | Annotation mode (see Annotation Modes) |
 | `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments (null = unlimited) |
+| `segment_schemes` | list | `[]` | Per-segment annotation schemes (see [Per-segment questions](#per-segment-questions)). Read only when `mode: combined`. |
 | `timeline_height` | integer | `70` | Height of timeline in pixels |
 | `overview_height` | integer | `40` | Height of overview bar in pixels |
 | `zoom_enabled` | boolean | `true` | Enable timeline zoom controls |
@@ -16057,6 +16085,51 @@ Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
 - Useful when a video needs both segment and frame-level labels
+
+#### Per-segment questions
+
+In `combined` mode, `segment_schemes` asks the annotator a set of questions
+about each segment. The annotator marks a segment, selects it, and answers the
+questions in the panel that opens for it:
+
+```yaml
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: scene_review
+    description: "Mark each scene and describe it"
+    mode: combined
+    labels:
+      - name: scene
+    segment_schemes:
+      - annotation_type: radio
+        name: setting
+        description: "Where does this scene take place?"
+        labels: ["indoor", "outdoor", "unclear"]
+      - annotation_type: multiselect
+        name: content
+        description: "What appears in this scene?"
+        labels: ["people", "text on screen", "animals"]
+```
+
+`segment_schemes` is read only when `mode` is `combined`. In the other modes
+the validator still accepts it, but no questions appear.
+
+Each entry is an ordinary annotation scheme, rendered by the same generator as
+a top-level one, so any annotation type works inside a segment. Media types
+(`audio_annotation`, `video_annotation`, `tiered_annotation`) are refused,
+since a segment cannot hold its own timeline. Answers are stored on the
+segment, keyed by the sub-scheme's `name`:
+
+```json
+{"segments": [
+  {"id": "segment_1", "start_time": 0.0, "end_time": 10.5, "label": "scene",
+   "annotations": {"setting": "indoor", "content": ["people"]}}
+]}
+```
+
+As with [audio segment questions](audio_annotation.md), keybindings are not
+bound to segment fields, and `label_requirement` is not enforced on a
+sub-scheme. Use `min_segments` to require segments.
 
 ## Showing and Hiding Classes
 
@@ -16981,6 +17054,11 @@ pre_annotation:
   field: predictions
   allow_modification: true
 ```
+
+As of 2.11.0 `pre_annotation` still works, but the
+[labeling engine](../../labeling-engine/overview.md) is its successor, with the
+predictions as a `static` source (`potato label migrate-config` translates the
+block).
 
 Every annotator sees them as a starting point. As soon as someone saves, their
 corrections replace the imported ones permanently.
@@ -18951,8 +19029,6 @@ annotation_schemes:
     left_label: "0%"
     right_label: "100%"
     show_values: true
-    default_low: 25
-    default_high: 75
 ```
 
 ### YAML Example — Sentence Length Acceptability
@@ -22110,6 +22186,12 @@ Pre-annotation pre-fills the form with model predictions, which is useful for:
 - Correcting model outputs
 - Bootstrapping from existing annotations
 
+As of 2.11.0, `pre_annotation` still works, but the
+[labeling engine](../labeling-engine/overview.md) is its successor: the same
+predictions become a `static` source, and `potato label migrate-config` writes
+the equivalent `labeling_engine` block (see
+[Migration](../labeling-engine/migration.md)).
+
 ### Configuration
 
 ```yaml
@@ -22118,6 +22200,10 @@ pre_annotation:
 
   # Field in data items containing predictions
   field: "predictions"
+
+  # Optional: read predictions from a separate file instead (path relative
+  # to task_dir). Used for an item that has no `field` of its own.
+  predictions_file: "data/predictions.json"
 
   # Can annotators change pre-filled values?
   allow_modification: true
@@ -22159,12 +22245,38 @@ For span annotations:
 }
 ```
 
+To keep predictions out of the data, put them in `predictions_file`. Two
+shapes are accepted, as JSON or (for a `.jsonl`/`.ndjson` file) one record per
+line:
+
+```json
+{"item_001": {"sentiment": "positive"}, "item_002": {"sentiment": "negative"}}
+```
+
+```json
+[{"id": "item_001", "predictions": {"sentiment": "positive"}}]
+```
+
+In the list form each record names its item with `id` (or `instance_id`) and
+holds the predictions under the configured `field`, falling back to
+`predictions`. A missing or unreadable file, or one with no usable records,
+logs a warning and seeds nothing.
+
 ### When predictions are applied
 
 1. When an item is loaded, the predictions field is extracted
 2. If the annotator hasn't already annotated this item, predictions are used to pre-fill the form
 3. Annotators can modify the pre-filled values (if `allow_modification: true`)
 4. Low-confidence items can be visually highlighted
+
+### Acceptance records
+
+When a seed is applied, Potato records it in that item's behavioral data as
+`pre_annotation_seeds` (`{schema: seeded value}`, kept after later saves). Set
+against the saved annotation, it shows which answers the annotator left as the
+model wrote them. For AI-assistant suggestions, each AI usage event's
+`final_annotation` is stamped with what was actually saved for that schema,
+alongside `suggestion_accepted`, which records only the click.
 
 ### Best Practices
 
@@ -22270,18 +22382,47 @@ Returns:
 {
   "enabled": true,
   "overall": {
-    "average_krippendorff_alpha": 0.75,
-    "interpretation": "Tentative agreement"
+    "average_krippendorff_alpha": 0.82,
+    "schemas_evaluated": 1,
+    "interpretation": "Good agreement",
+    "average_cohen_kappa": 0.79,
+    "average_fleiss_kappa": 0.78
   },
   "by_schema": {
     "sentiment": {
       "krippendorff_alpha": 0.82,
+      "metric_type": "nominal",
       "items_evaluated": 100,
-      "interpretation": "Good agreement"
+      "total_annotations": 300,
+      "interpretation": "Good agreement",
+      "cohen_kappa": {"mean_kappa": 0.79, "pairs": [...], "n_pairs_evaluated": 3, "n_pairs_skipped": 0},
+      "fleiss_kappa": {"kappa": 0.78, "n_items_evaluated": 100, "n_raters": 3, "n_categories": 3, "interpretation": "Substantial"}
+    },
+    "regions": {
+      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "see": "/admin/iaa"
     }
-  }
+  },
+  "warnings": [],
+  "machine_annotators_excluded": [{"user_id": "llm-1", "origin": "gpt-4o (llm)"}]
 }
 ```
+
+- Only human annotators are counted. Declared machine annotators are listed
+  in `machine_annotators_excluded` (present only when there are any), with a
+  matching entry in `warnings`.
+- `cohen_kappa` (pairwise, with the mean) and `fleiss_kappa` are computed for
+  nominal schemas only. A schema scored on an interval scale gets
+  Krippendorff's alpha alone.
+- `overall` averages each figure over the schemas that produced one, and is
+  empty when no schema did.
+- When every annotator gave the same label on every item, chance agreement is
+  1 and alpha and kappa are undefined. The schema then reports
+  `"krippendorff_alpha": null`, `"percent_agreement": 1.0` and
+  `"interpretation": "Undefined"`. That is perfect agreement, not a failed
+  computation.
+- Structured schemes (steps, segments, regions and other non-label answers)
+  are skipped with an `error` pointing to `/admin/iaa`, which scores them.
 
 ---
 
@@ -22327,6 +22468,8 @@ gold_standards:
     show_correct_answer: true
     show_explanation: true
 
+# Still supported in 2.11.0; the labeling engine's `static` source is its
+# successor (`potato label migrate-config` translates this block).
 pre_annotation:
   enabled: true
   field: "model_prediction"
@@ -24366,6 +24509,31 @@ live_coding_agent:
   sandbox_mode: container         # container (default), bubblewrap, trusted
   container_cli: docker           # or podman
 ```
+
+### Pre-filling the task box
+
+The `live_coding_agent` display can fill its "Describe the coding task..." box
+from the item. It reads only the value of the field it is bound to (`key`):
+
+- **Object value**: the box gets the entry named by `task_field`, falling back
+  to `task_description`, then `task`.
+- **String value**: the box gets the string only when the bound key is named
+  like a task (`task`, `task_description`, `instruction`, `instructions` or
+  `prompt`), or when `task_field` equals the bound key. A string under a key
+  such as `repo` is left out, so a repo name does not land in the task box.
+
+```yaml
+instance_display:
+  fields:
+    - key: session              # each item: {"session": {"goal": "Fix the failing test"}}
+      type: live_coding_agent
+      display_options:
+        task_field: goal        # default: unset
+```
+
+If the bound field holds a non-empty list of turns, or an object with
+`structured_turns`, the display renders the recorded trace for review instead
+of the live viewer.
 
 ### Agent Backends
 
@@ -29092,9 +29260,10 @@ labeled. They hold because of how the sample is drawn and used:
 - **Only people certify.** Machine annotators may take part in final-label
   inference, never in the labels a contract tests against.
 - **A change makes the certificate stale.** Changing a source, a prompt, a
-  threshold or the scheme marks every contract `stale` and moves accepted
-  labels to `pending_recert` until it is tested again. The human labels are
-  kept.
+  threshold or the scheme marks the contracts on the schemes it affects
+  `stale` and moves their accepted labels to `pending_recert` until they are
+  tested again. Contracts on other schemes are untouched, and the human labels
+  are kept.
 - **Machines never take a person's place.** Engine predictions do not count
   against per-item annotator caps.
 
@@ -29727,6 +29896,18 @@ With `features.distill` on:
 | `min_labels` | `200` | Train only once this many labels exist. |
 | `include_silver` | `true` | Also train on machine labels a contract certified (marked silver). |
 | `every` | `2.0` | Retrain when the label count has grown by this factor. |
+| `modality` | `auto` | `text`, `image`, or `auto`: image when most items name an image file (`.jpg`, `.png`, ...). |
+| `image_field` | the text key | The item field holding the image, when it is not the field the page shows. |
+
+On an image study the distilled model is an image classifier: `sklearn-text`
+fits a classifier over CLIP embeddings (`clip-ViT-B-32`) of each image file,
+where a text model would have read only the image's URL. That needs
+`sentence-transformers` and `pillow` (`pip install sentence-transformers
+pillow`); without them distillation logs the install hint and the cascade
+stays as configured. Images must be stored locally (under `media_directory`,
+or a path relative to `task_dir`): remote URLs are not downloaded, so items
+that point at another host are left out of training and the distilled tier
+gives them no label, which sends them on to the next tier.
 
 Items in the cert and audit splits never go into the training set.
 
@@ -30004,7 +30185,7 @@ solo_mode:
   # Models for labeling (tried in order)
   labeling_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
       api_key: "${ANTHROPIC_API_KEY}"
     - endpoint_type: "openai"
       model: "gpt-4o-mini"
@@ -30013,13 +30194,14 @@ solo_mode:
   # Models for prompt revision
   revision_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
 
   # Uncertainty estimation strategy
   uncertainty:
     strategy: "direct_confidence"  # Options: direct_confidence, direct_uncertainty, token_entropy, sampling_diversity
-    num_samples: 5                 # For sampling_diversity
-    sampling_temperature: 1.0      # For sampling_diversity
+    sampling_diversity:            # Read only for sampling_diversity, and only under this block
+      num_samples: 5
+      temperature: 1.0
 
   # Thresholds
   thresholds:
@@ -30029,7 +30211,7 @@ solo_mode:
     confidence_high: 0.8                    # High confidence threshold
     periodic_review_interval: 100           # Review LLM labels every N instances
 
-  # Instance selection weights (must sum to 1.0)
+  # Instance selection weights (normalized to sum to 1.0, with a warning, if they do not)
   instance_selection:
     low_confidence_weight: 0.4    # Prioritize uncertain instances
     diversity_weight: 0.3         # Prioritize diverse instances
@@ -30055,8 +30237,8 @@ state. The phase machine is `SoloPhase` in `potato/solo_mode/phase_controller.py
 not every path visits every phase.
 
 ### 1. Setup
-- Enter task description
-- Upload data file
+- Enter task description. The setup page has no data upload: items come from
+  the config's `data_files`.
 - Generate initial prompt: a revision model (`revision_models`) writes it from
   the description and the schemes. Without one, or if it gives nothing back,
   the description itself becomes the first prompt, and the prompt history
@@ -30158,9 +30340,14 @@ Runs the LLM multiple times at high temperature and measures label diversity. Mo
 ```yaml
 uncertainty:
   strategy: "sampling_diversity"
-  num_samples: 5
-  sampling_temperature: 1.0
+  sampling_diversity:
+    num_samples: 5
+    temperature: 1.0
 ```
+
+`num_samples` and `temperature` are read only from the nested
+`sampling_diversity` block. Flat `uncertainty.num_samples` or
+`uncertainty.sampling_temperature` keys are ignored.
 
 ## Instance Selection
 
@@ -30496,7 +30683,17 @@ Accepts `?bucket_size=<N>` (clamped to [2, 100], default 10).
 
 Orchestrates an automated cycle of confusion analysis → guideline suggestions → prompt revision → re-annotation. Monitors agreement rate trends and stops when metrics plateau.
 
-### One refinement cycle
+`refinement_strategy` picks one of two code paths. The default, `focused_edit`,
+and the other legacy values `generator_critic` and `append` run the cycle
+described below, with no held-out validation. The registered strategies
+`validated_focused_edit`, `principle_icl`, `hybrid_dual_track` and
+`legacy_append` run the validated framework instead: candidates are scored on
+held-out disagreements and applied only if they beat the current prompt. A name
+that is not registered runs the legacy path. See
+[Validated Prompt Refinement](../solo_mode_refinement.md#selecting-a-strategy)
+for the validated framework and the keys it reads.
+
+### One refinement cycle (legacy path)
 
 1. **Trigger**: After every `trigger_interval` human annotations, the loop checks whether a refinement cycle should run.
 2. **Analyze**: Runs confusion analysis on current disagreement patterns.
@@ -30531,7 +30728,15 @@ solo_mode:
 | `min_improvement` | `0.02` | Minimum agreement rate improvement to count as progress |
 | `max_cycles` | `5` | Maximum number of refinement cycles |
 | `patience` | `2` | Consecutive cycles without improvement before stopping |
-| `auto_apply_suggestions` | `false` | Apply guideline suggestions without human review |
+| `auto_apply_suggestions` | `false` | Apply guideline suggestions without human review. Legacy path only |
+| `refinement_strategy` | `focused_edit` | `focused_edit`, `generator_critic` or `append` (legacy path), or `validated_focused_edit`, `principle_icl`, `hybrid_dual_track` or `legacy_append` (validated framework) |
+
+`max_cycles` and `auto_apply_suggestions` apply to the legacy path only. The
+validated framework adds its own keys (`validation_split_ratio`,
+`eval_sample_size`, `num_candidates`, `min_val_size`,
+`max_consecutive_failures`, `min_val_improvement`, `eval_temperature`,
+`prefer_consistent_disagreements`, `dry_run`, `require_approval`), which the
+legacy path ignores.
 
 ### API
 
@@ -30589,7 +30794,7 @@ solo_mode:
       - name: "accurate"
         model:
           endpoint_type: "anthropic"
-          model: "claude-3-5-sonnet-20241022"
+          model: "claude-sonnet-4-5"
           api_key: "${ANTHROPIC_API_KEY}"
         confidence_threshold: 0.70
 ```
@@ -31018,15 +31223,21 @@ solo_mode:
   # LLM models for annotation labeling (tried in order)
   labeling_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
       api_key: "${ANTHROPIC_API_KEY}"
+      base_url: null                   # also read as endpoint_url
       max_tokens: 1000
       temperature: 0.1
+      timeout: null                    # unset = the endpoint's own default
+      think: null                      # unset = the endpoint's default; true/false overrides
+      # Endpoint-specific options, passed to the endpoint unchanged. Only these
+      # five keys are read: device, batch_size, head_max_len, max_options,
+      # state_key (decision models such as laya and systemone use them).
 
   # LLM models for prompt revision (defaults to labeling_models if empty)
   revision_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
 
   # Embedding model for diversity and similarity
   embedding:
@@ -31035,8 +31246,9 @@ solo_mode:
   # Uncertainty estimation
   uncertainty:
     strategy: "direct_confidence"      # direct_confidence | direct_uncertainty | token_entropy | sampling_diversity
-    num_samples: 5                     # For sampling_diversity
-    sampling_temperature: 1.0          # For sampling_diversity
+    sampling_diversity:                # Read only under this block; flat keys are ignored
+      num_samples: 5
+      temperature: 1.0
 
   # Agreement and quality thresholds
   thresholds:
@@ -31120,7 +31332,20 @@ solo_mode:
     min_improvement: 0.02
     max_cycles: 5
     patience: 2
-    auto_apply_suggestions: false
+    auto_apply_suggestions: false      # legacy path only
+    refinement_strategy: focused_edit  # legacy path; see solo_mode_refinement.md
+    # Validated framework only (validated_focused_edit, principle_icl,
+    # hybrid_dual_track, legacy_append)
+    validation_split_ratio: 0.3
+    eval_sample_size: 10
+    num_candidates: 3
+    min_val_size: 10
+    max_consecutive_failures: 2
+    min_val_improvement: 0.0
+    eval_temperature: 0.0
+    prefer_consistent_disagreements: true
+    dry_run: false
+    require_approval: false
 
   # When the suggestion is shown; blind vs shown agreement
   suggestions:
@@ -31137,6 +31362,10 @@ solo_mode:
     file: null
     id_key: id
     label_key: label
+    text_key: null                     # set when the gold file carries its own text
+
+  # Where Solo Mode keeps its state. Unset = <output_annotation_dir>/.solo_mode
+  state_dir: null
 
   # Several models vote on each item
   jury:
@@ -31169,17 +31398,38 @@ Solo Mode's architecture, its extension points, and the conventions to follow wh
 ```
 potato/solo_mode/
 ├── __init__.py                 # Public API exports
-├── config.py                   # SoloModeConfig dataclass
+├── config.py                   # SoloModeConfig dataclass and parser
 ├── manager.py                  # SoloModeManager singleton (orchestrator)
 ├── phase_controller.py         # Phase state machine
 ├── routes.py                   # Flask routes (/solo/*)
 ├── prompt_manager.py           # Prompt versioning and synthesis
 ├── prompt_optimizer.py         # DSPy-style optimization
+├── prompt_sensitivity.py       # Label stability under prompt paraphrase
 ├── instance_selector.py        # Weighted instance selection
+├── anchoring.py                # Anchoring measurement (blind vs shown suggestions)
 ├── disagreement_resolver.py    # Human-LLM conflict handling
+├── disagreement_explorer.py    # Disagreement explorer data
 ├── validation_tracker.py       # Agreement metrics
+├── evaluation.py               # Gold-set and trial scoring of prompt versions
 ├── llm_labeler.py              # Background LLM worker
+├── label_cache.py              # Response cache for labeling calls
+├── spend.py                    # Labeling cost estimate and spend-cap checks
+├── jury.py                     # Several labeling models vote
+├── confidence_router.py        # Cascaded confidence routing
+├── confusion_analyzer.py       # Confusion patterns
+├── guideline_updater.py        # Approved edge case rules into the prompt
+├── refinement_loop.py          # Refinement cycle (legacy path)
 ├── edge_case_synthesizer.py    # Generate boundary examples
+├── edge_case_rules.py          # Co-DETECT-style edge case rules
+├── rule_clusterer.py           # Clusters edge case rules
+├── labeling_functions.py       # ALCHEmist-style labeling functions
+├── refinement/                 # Validated refinement framework
+│   ├── __init__.py
+│   ├── base.py                 # RefinementStrategy and candidate types
+│   ├── registry.py             # @register_strategy / get_strategy
+│   ├── strategies.py           # Built-in strategies
+│   ├── validation.py           # ValidationSplit, CandidateEvaluator
+│   └── icl_library.py          # Persistent library of validated ICL examples
 └── uncertainty/                # Pluggable uncertainty estimation
     ├── __init__.py
     ├── base.py                 # UncertaintyEstimator ABC
@@ -31362,9 +31612,9 @@ class UncertaintyEstimatorFactory:
 ### 3. Add config validation
 
 ```python
-# potato/server_utils/config_module.py
+# potato/solo_mode/config.py
 
-# In validate_solo_mode_config():
+# In SoloModeConfig.validate():
 valid_strategies = [
     'direct_confidence', 'direct_uncertainty',
     'token_entropy', 'sampling_diversity',
@@ -31740,9 +31990,15 @@ URL: https://potatoannotator.readthedocs.io/en/latest/solo_mode_refinement/
 
 # Solo Mode: Validated Prompt Refinement
 
-Solo mode rewrites its labeling prompt from human-LLM disagreements. Every
-candidate rewrite is scored on held-out data and rejected unless it beats the
-prompt already in use.
+Solo mode rewrites its labeling prompt from human-LLM disagreements. This page
+covers the validated framework, where every candidate rewrite is scored on
+held-out data and rejected unless it beats the prompt already in use.
+
+The validated framework is **not the default**. The default
+`refinement_strategy` is `focused_edit`, which runs the older unvalidated cycle,
+and none of the validation keys below apply to it. To use the framework, set
+`solo_mode.refinement_loop.refinement_strategy` to one of the four strategy
+names in the table below. See [Selecting a strategy](#selecting-a-strategy).
 
 ## Problem
 
@@ -31797,8 +32053,8 @@ All strategies are registered via `@register_strategy` in `potato/solo_mode/refi
 |---|---|---|---|
 | `validated_focused_edit` | small | binary, objective, few labels | Generates N prompt-rule candidates via the revision LLM, validation-gated apply. |
 | `principle_icl` | small | subjective, many labels, small models | Proposes validated instances as ICL examples instead of rules. More robust against narrow-rule overfitting. |
-| `hybrid_dual_track` | small | **recommended default** | Tries prompt edits first; after 2 consecutive prompt-edit failures, falls back to ICL. |
-| `legacy_append` | — | ablation / comparison only | Original append-only behavior, no validation. Preserved so research baselines can be reproduced. |
+| `hybrid_dual_track` | small | data with unknown properties | Tries prompt edits first; after 2 consecutive prompt-edit failures, falls back to ICL. A reasonable first choice, but you must set it; it is not the default. |
+| `legacy_append` | small | ablation / comparison only | Proposes appended rules in the style of the original append-only loop. The candidates still go through the validation gate. Preserved so research baselines can be reproduced. |
 
 For larger optimizer models (7B+), additional strategies like ProTeGi beam search and OPRO solution-history are described in the literature but not yet implemented. See `potato/solo_mode/refinement/strategies.py` docstrings for guidance on implementing new strategies.
 
@@ -31811,7 +32067,7 @@ solo_mode:
   refinement_loop:
     enabled: true
     trigger_interval: 50          # fire after N new human annotations
-    refinement_strategy: "hybrid_dual_track"  # see table above
+    refinement_strategy: "hybrid_dual_track"  # must be set; the default is focused_edit
     # Validation-gated framework options
     validation_split_ratio: 0.3   # fraction of disagreements held out
     eval_sample_size: 10          # val instances scored per candidate
@@ -31825,6 +32081,30 @@ solo_mode:
     dry_run: false                # if true, log candidates but don't apply
     require_approval: false       # if true, queue for admin review
 ```
+
+## Selecting a strategy
+
+`refinement_strategy` takes two groups of values, and they run different code
+(`SoloModeManager.trigger_refinement_cycle`).
+
+| Value | Path | Notes |
+|---|---|---|
+| `focused_edit` (default) | legacy | One LLM call rewrites the guidelines section as a set. No validation. |
+| `generator_critic` | legacy | Generates guideline candidates, then a critic pass filters them. No validation. |
+| `append` | legacy | One suggestion per confusion pattern, appended under a "Refinement Guidelines" heading. No validation. |
+| `validated_focused_edit`, `principle_icl`, `hybrid_dual_track`, `legacy_append` | validated | The registered strategies in the table above. |
+
+A name that is not registered falls through to the legacy path, which treats
+anything other than `focused_edit` and `generator_critic` as `append`.
+
+Which keys apply:
+
+| Key | Legacy path | Validated path |
+|---|---|---|
+| `enabled`, `trigger_interval` | yes | yes |
+| `min_improvement`, `patience` | yes | yes |
+| `max_cycles`, `auto_apply_suggestions` | yes | no (a winning candidate is applied unless `dry_run` or `require_approval` is set) |
+| `validation_split_ratio`, `eval_sample_size`, `num_candidates`, `min_val_size`, `max_consecutive_failures`, `min_val_improvement`, `eval_temperature`, `prefer_consistent_disagreements`, `dry_run`, `require_approval` | no | yes |
 
 ## HTTP API
 
@@ -32059,7 +32339,7 @@ AI support is configured in your YAML configuration file under the `ai_support` 
 ```yaml
 ai_support:
   enabled: true
-  endpoint_type: "openai"  # or "anthropic", "huggingface", "ollama", "gemini", "vllm", "open_router"
+  endpoint_type: "openai"  # or "anthropic", "huggingface", "ollama", "gemini", "vllm", "openrouter" (also spelled "open_router")
   ai_config:
     model: "gpt-4o-mini"
     api_key: "your-api-key-here"
@@ -32087,7 +32367,7 @@ ai_support:
 | `ai_config.model` | string | No | Model name (uses provider default if not specified) |
 | `ai_config.api_key` | string | Yes* | API key for cloud providers |
 | `ai_config.base_url` | string | No | An OpenAI-compatible server to use instead of the vendor's — vLLM, SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes `api_key` optional |
-| `ai_config.temperature` | float | No | Response randomness (0.0-2.0, default: 0.7) |
+| `ai_config.temperature` | float | No | Response randomness (0.0-2.0, default: 0.1) |
 | `ai_config.max_tokens` | integer | No | Maximum response length (default: 800). The Rationale and Keyword assistants answer for every label at once and need several hundred tokens; below that the reply is cut off and the assistant renders empty |
 | `ai_config.include.all` | boolean | No | Enable AI for all annotation schemes (default: false) |
 | `ai_config.include.special_include` | object | No | Per-page, per-annotation customization |
@@ -32102,6 +32382,17 @@ ways to get one, and validation accepts all three: `OPENAI_API_KEY` in the
 environment, or a `base_url` pointing at a self-hosted server, which has no key.
 `anthropic`, `huggingface` and `gemini` read neither, so for those it really is
 required.
+
+`endpoint_type` accepts `openai`, `anthropic`, `huggingface`, `ollama`,
+`gemini`, `vllm`, `openrouter` (or `open_router`), and the vision endpoints
+`yolo`, `ollama_vision`, `openai_vision` and `anthropic_vision`. Validation
+rejects anything else, including two registered endpoint types:
+
+- The decision models `laya` and `systemone` pick a label but cannot write
+  text, and every assistant here writes text. Use them under
+  `solo_mode.labeling_models`, as a `solo_mode.confidence_routing` tier, or as
+  a `labeling_engine` source with `kind: decision`.
+- `sam` and `sam3` are segmentation models, not text endpoints.
 
 Two things about `ai_config` are worth stating because nothing catches them:
 
@@ -32192,7 +32483,7 @@ This allows fine-grained control over which instances and annotation schemes rec
 
 ### Prompt Template Files
 
-AI prompts are stored in JSON files in `potato/ai/prompt/`. Each annotation type has its own prompt file:
+AI prompts are stored in JSON files in `potato/ai/prompt/`. Each file is loaded under its file name without the extension, and each annotation type has its own prompt file:
 
 - `radio.json` - For radio button (single-choice) annotations
 - `likert.json` - For Likert scale annotations
@@ -32201,7 +32492,10 @@ AI prompts are stored in JSON files in `potato/ai/prompt/`. Each annotation type
 - `slider.json` - For slider annotations
 - `select.json` - For dropdown annotations
 - `number.json` - For numeric input annotations
-- `textbox.json` - For free-text annotations
+- `text.json` - For free-text (`textbox`) annotations
+- `image_annotation.json` - For image annotation (visual AI support)
+- `video_annotation.json` - For video annotation (visual AI support)
+- `option_highlight.json` - For [option highlighting](option_highlighting.md)
 
 ### Prompt Structure
 
@@ -32277,7 +32571,7 @@ ai_support:
   enabled: true
   endpoint_type: "anthropic"
   ai_config:
-    model: "claude-3-5-sonnet-20241022"
+    model: "claude-haiku-4-5-20251001"  # the default when model is unset
     api_key: "sk-ant-..."
     temperature: 0.7
     max_tokens: 100
@@ -32294,7 +32588,7 @@ ai_support:
   enabled: true
   endpoint_type: "gemini"
   ai_config:
-    model: "gemini-2.0-flash-exp"
+    model: "gemini-2.5-flash"  # the default when model is unset
     api_key: "AIza..."
     temperature: 0.7
     max_tokens: 100
@@ -33042,13 +33336,18 @@ potato download-models --list
 | `grounding_dino_tiny` | Text → boxes | Browser | 145 MB | Apache-2.0 |
 | `sam2_video_tiny` | Prompt one frame → track through the rest | Server | 181 MB | Apache-2.0 |
 | `edge_sam` | Click → mask, fastest on weak hardware | Browser | — | **Non-commercial only** |
+| `sam2_hiera_tiny` | Click → mask, SAM 2's single-image path | Browser | — | Apache-2.0 |
 | `sam3` | Text → boxes and masks, one model | Server | ~3.5 GB | Meta SAM License |
 | `edgetam` | On-device tracking, 22× faster than SAM 2 | — | — | Apache-2.0 |
 | `onnxruntime` | The inference runtime the others need | Browser | 13.5 MB | MIT |
 
-Two entries have no download. `edge_sam` permits non-commercial use only, so
+Four entries have no download, and `potato download-models` refuses them with
+"No download is configured". `edge_sam` permits non-commercial use only, so
 we leave the URL out; making it one command away would invite people to install
-it without reading the licence. `edgetam` has no published ONNX export at all
+it without reading the licence. `sam2_hiera_tiny` has no file list; for SAM 2
+use `sam2_video_tiny`, the export that also carries the memory modules.
+`sam3` is never redistributed: you supply the weights (see
+[Licences](#licences)). `edgetam` has no published ONNX export at all
 (upstream ships CoreML), so there is nothing to fetch yet. Its entry exists
 because the video session is written against a task, so the day an export
 appears, filling in the URL is the whole job.
@@ -33100,7 +33399,10 @@ only. `potato download-models --list` prints `<-- NON-COMMERCIAL` next to it.
 `sam3` is under Meta's SAM License, which is not Apache-2.0. Commercial use is
 permitted and you own your derivative works, but acceptable-use restrictions
 apply and redistribution must carry the same licence. Potato redistributes no
-SAM 3 files and refuses to fetch it without `--accept-licence`.
+SAM 3 files, so `potato download-models sam3` cannot fetch it. Without
+`--accept-licence` the command stops at the licence; with it, the command
+reports that no download is configured. Point `endpoint_type: sam3` at weights
+you already hold, or at an inference server you run.
 
 ## Choosing between text prompting and SAM 3
 
@@ -33437,11 +33739,14 @@ on every endpoint type.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `model` | string | provider default | Model name (e.g., `llama3.2`, `gpt-4o-mini`, `claude-sonnet-4-20250514`) |
-| `temperature` | float | `0.7` | Response creativity (0.0-2.0) |
-| `max_tokens` | int | `500` | Maximum response length |
+| `temperature` | float | `0.1` | Response creativity (0.0-2.0) |
+| `max_tokens` | int | `800` | Maximum response length |
 | `api_key` | string | — | API key (required for cloud providers) |
 | `base_url` | string | — | Custom API base URL (for ollama, vllm) |
-| `timeout` | int | `30` | Request timeout in seconds |
+| `timeout` | int | per endpoint | Request timeout in seconds. Unset, each endpoint uses its own: 30 for `openai`, `anthropic`, `gemini`, `huggingface`, `vllm` and `openrouter`; 60 for `ollama`, `openai_vision` and `anthropic_vision`; 120 for `ollama_vision` |
+
+The `temperature` and `max_tokens` defaults are the ones every AI endpoint
+shares, the same as under `ai_support.ai_config`.
 
 ### `chat_support.system_prompt`
 
@@ -33774,7 +34079,7 @@ class AIEndpointFactory:
 
 1. **Create endpoint file** (`potato/ai/my_provider_endpoint.py`):
 ```python
-from ai.ai_endpoint import BaseAIEndpoint
+from potato.ai.ai_endpoint import BaseAIEndpoint
 
 class MyProviderEndpoint(BaseAIEndpoint):
     def _initialize_client(self):
@@ -33793,13 +34098,27 @@ class MyProviderEndpoint(BaseAIEndpoint):
         return self.parseStringToJson(response)
 ```
 
-2. **Register in cache manager** (`potato/ai/ai_cache.py`):
+2. **Register it lazily** by adding a row to the registration list at the end
+   of `potato/ai/ai_endpoint.py`. Each row is passed to
+   `AIEndpointFactory.register_lazy_endpoint`, so the module is imported only
+   when a config selects that `endpoint_type`. The last field is the install
+   hint printed after `pip install` when the SDK is missing, or `None`:
 ```python
-from ai.my_provider_endpoint import MyProviderEndpoint
-AIEndpointFactory.register_endpoint("my_provider", MyProviderEndpoint)
+for _type, _module, _class, _hint in [
+    ...
+    ("my_provider", ".my_provider_endpoint", "MyProviderEndpoint", "my-provider-sdk"),
+]:
+    AIEndpointFactory.register_lazy_endpoint(_type, _module, _class, _hint)
 ```
 
-3. **Update documentation** in `docs/ai_support.md`
+3. **Allow it in config validation.** Add the type to `valid_endpoint_types`
+   in `validate_ai_support_config` in `potato/server_utils/config_module.py`.
+   For `chat_support`, also add it to the list in
+   `validate_chat_support_config`, and only if the endpoint implements
+   `chat_query` itself; `tests/unit/test_chat_query_every_endpoint.py` checks
+   that list.
+
+4. **Update documentation** in `docs/ai-intelligence/ai_support.md`.
 
 ## Debugging AI Issues
 
@@ -33807,9 +34126,9 @@ AIEndpointFactory.register_endpoint("my_provider", MyProviderEndpoint)
 
 ```python
 # In Python console or debug endpoint:
-from ai.ai_help_wrapper import get_dynamic_ai_help
-from ai.ai_cache import get_ai_cache_manager
-from ai.ai_prompt import get_ai_prompt
+from potato.ai.ai_help_wrapper import get_dynamic_ai_help
+from potato.ai.ai_cache import get_ai_cache_manager
+from potato.ai.ai_prompt import get_ai_prompt
 
 print("AI Help Wrapper:", get_dynamic_ai_help())  # Should not be None
 print("Cache Manager:", get_ai_cache_manager())   # Should not be None
@@ -34362,22 +34681,11 @@ active_learning:
   min_instances_for_training: 15
 ```
 
-### Schema-Specific Configuration
+### Per-Schema Settings
 
-Configure different parameters for each schema:
-
-```yaml
-active_learning:
-  enabled: true
-  schema_names: ["sentiment", "topic"]
-  schema_configs:
-    sentiment:
-      min_annotations_per_instance: 3
-      classifier_name: "sklearn.linear_model.LogisticRegression"
-    topic:
-      min_annotations_per_instance: 2
-      classifier_name: "sklearn.ensemble.RandomForestClassifier"
-```
+There are none. The classifier, vectorizer and thresholds under
+`active_learning` apply to every scheme in `schema_names`. A `schema_configs`
+block is not read.
 
 ## Monitoring and Metrics
 
@@ -34754,10 +35062,23 @@ learning while being nothing of the kind.
 ```yaml
 active_learning:
   enabled: true
-  strategy: uncertainty        # or diversity, badge, bald, hybrid
-  vectorizer: image            # text (default) | image
-  image_model: clip-ViT-B-32
+  query_strategy: uncertainty  # or diversity, badge, bald, hybrid
+  vectorizer:
+    name: image                # alias: clip; the default is TF-IDF over text
+    hyperparameters:
+      model_name: clip-ViT-B-32
+      cache_dir: annotation_output   # optional; turns on the embedding cache
+      image_root: data/images        # optional; prefix for relative references
 ```
+
+`vectorizer` must be a mapping with a `name`; a bare `vectorizer: image` fails
+config validation. `model_name` defaults to `clip-ViT-B-32`, and `cache_dir` and
+`image_root` are unset by default.
+
+With an image vectorizer, every scheme gets the item's image reference as its
+feature, not only `image_annotation` and `video_annotation`. A `radio` or
+`multiselect` scheme over images (image classification) is ranked by its
+images.
 
 ## Why CLIP rather than DINOv2
 
@@ -34779,8 +35100,11 @@ re-ranks after **every batch** of annotations, so an uncached embedder would
 re-encode the entire unlabeled pool each time — minutes of GPU-less compute,
 repeated for nothing.
 
-Embeddings are cached under `<output_dir>/.embeddings/<model>/`, one `.npy` per
-image, keyed by **file content**:
+The cache exists only when `cache_dir` is set under
+`vectorizer.hyperparameters`. Without it, nothing is cached and every re-rank
+re-encodes the pool. With it, embeddings are stored under
+`<cache_dir>/.embeddings/<model>/`, one `.npy` per image, keyed by **file
+content**:
 
 - renaming or moving an image does **not** force a re-encode
 - editing an image **does**
@@ -34791,13 +35115,16 @@ The cache is disposable — delete the directory and it rebuilds.
 
 ```python
 from potato.vision_features import EmbeddingCache
-EmbeddingCache(output_dir).clear()
+EmbeddingCache(cache_dir).clear()
 ```
 
 ## Image references
 
-The vectorizer takes whatever the item stores — `image_url`, `image`,
-`file_name`, or a field you name with `source_field`.
+The feature for an item is the first non-empty value among the scheme's
+`source_field`, then the item fields `image_url`, `image`, `image_path`,
+`file_name`, `video_url` and `url`. When none is set, the item's text (the
+`text_key` field) is used, so `text_key: image_url` also works. Relative
+references are tried as given, then under `image_root`.
 
 **Remote URLs are skipped, not fetched.** Active learning ranks a whole
 unlabeled pool from a background thread; fetching would fire thousands of
@@ -34812,15 +35139,18 @@ model quirk rather than a bug.
 
 ## What is not here
 
-**Detector retraining is out of scope.** Pre-labelling comes from SAM
+**Detector training is out of scope.** Model training
+([Model training](model_training.md)) fits image *classifiers*: the
+`sklearn-text` trainer uses CLIP embeddings when a radio or multiselect scheme's
+items name image files. It does not train detectors or segmenters.
+Pre-labelling for boxes and masks comes from SAM
 (see [Interactive segmentation](../annotation-types/multimedia/segmentation.md))
-and the existing YOLO endpoint, not from a detector Potato trains. Ordering
-plus pre-labelling is most of the value at a small fraction of the
-infrastructure, and training remains a separable later decision.
+and the existing YOLO endpoint, not from a detector Potato trains.
 
 ## Related
 
 - [Active learning guide](active_learning_guide.md)
+- [Model training](model_training.md)
 - [Interactive segmentation](../annotation-types/multimedia/segmentation.md)
 - [Geometry agreement](../advanced/geometry_agreement.md)
 
@@ -35127,6 +35457,14 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/icl_labeli
 # AI-Assisted In-Context Learning (ICL) Labeling
 
 ICL labeling feeds the LLM your highest-confidence human annotations as in-context examples, then has it label the rest of the data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
+
+> **Successor in 2.11:** the [labeling engine](../labeling-engine/overview.md)
+> does this job with an `llm` source and a contract (`threshold_legacy` for this
+> page's fixed-confidence rule, `selective_risk` beside it). `icl_labeling`
+> still works in 2.11 and is planned for removal in 3.0.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
 
 ## Overview
 
@@ -35513,16 +35851,27 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/huggingfac
 
 # Using HuggingFace Models in Potato
 
-Potato calls a language model in three places, and **all three use the same endpoint
-configuration shape**. This guide shows how to point any of them at a model hosted on
-HuggingFace — whether through the serverless Inference API, a dedicated Inference
-Endpoint, a self-hosted TGI/vLLM server, or a fully local model.
+This guide shows how to point Potato's language-model features at a model hosted on
+HuggingFace, whether through the serverless Inference API, a dedicated Inference
+Endpoint, a self-hosted TGI/vLLM server, or a fully local model. It walks through
+three of them in detail: AI hints, Solo Mode and judge calibration. The others take the
+same `endpoint_type` / `model` / `api_key` / `base_url` keys, except `active_learning.llm`.
 
 | Feature | What the LLM does | Config block |
 |---------|-------------------|--------------|
 | **AI hints** | Suggests labels inline in the annotation UI | `ai_support` |
+| **Chat** | Answers annotator questions in a sidebar | `chat_support` |
+| **ICL labeling** | Labels items from high-agreement examples | `icl_labeling` (uses the `ai_support` endpoint) |
+| **Annotation critique** | Reviews drawn regions | per-scheme `ai_support.critique` (uses the top-level `ai_support` endpoint) |
 | **Solo mode** | Auto-labels items while you calibrate (human-in-the-loop) | `solo_mode.labeling_models[]` |
 | **Judge calibration** | Acts as an LLM judge you align against blind human labels | `judge_calibration.models[]` |
+| **Labeling engine** | Labels items as `llm` or `judge` sources | `labeling_engine.sources[]` |
+| **Active learning LLM** | Cold-start labels and ICL ensemble | `active_learning.llm` (its own keys: `endpoint_url`, an OpenAI-compatible chat completions URL, and `model_name`) |
+
+`icl_labeling` and `judge_calibration` still work in 2.11 and are planned for removal
+in 3.0; the [labeling engine](../labeling-engine/overview.md) replaces them. See
+[Migrating to the labeling engine](../labeling-engine/migration.md), or run
+`potato label migrate-config config.yaml --out config-engine.yaml`.
 
 See also: [AI support](ai_support.md) · [Solo mode](../solo-mode/solo_mode.md) ·
 [Judge calibration](judge_calibration.md).
@@ -35632,6 +35981,11 @@ solo_mode:
 
 ### 3. Judge calibration (`judge_calibration.models[]`)
 
+`judge_calibration` is planned for removal in 3.0. In the labeling engine, the same
+model is a source with `kind: judge` and the same `endpoint_type`, `model` and
+`api_key` keys, under `labeling_engine.sources[]`; see
+[Labeling engine configuration](../labeling-engine/configuration.md#sources).
+
 ```yaml
 judge_calibration:
   enabled: true
@@ -35705,6 +36059,14 @@ You then **blind**-label a sample (without seeing the LLM answers) and Potato
 produces a report: per-LLM accuracy, inter-annotator agreement (human↔LLM and
 LLM↔LLM), calibration (ECE + reliability), and confusion matrices — plus a file
 of every LLM's labels on your data.
+
+> **Successor in 2.11:** the [labeling engine](../labeling-engine/overview.md)
+> does this job with `judge` sources and `k_sample` confidence; the blind sample
+> becomes calibration requests. `judge_calibration` still works in 2.11 and is
+> planned for removal in 3.0.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
 
 > **Using a HuggingFace model as the judge?** See [Using HuggingFace Models in Potato](huggingface_models.md) for wiring `judge_calibration.models[]` to an HF-hosted model.
 
@@ -35885,7 +36247,9 @@ All require an admin API key (`X-API-Key` header; bypassed in `--debug`):
 |----------|---------|
 | `GET /judge_calibration/admin` | Setup wizard |
 | `POST /judge_calibration/run` | Apply overrides + start generation |
+| `GET /judge_calibration/status` | Manager status (JSON) |
 | `GET /judge_calibration/progress` | Live progress (JSON) |
+| `GET /judge_calibration/results` | Judge labels generated so far (JSON); `?model=` and `?instance_id=` narrow it |
 | `POST /judge_calibration/report` | Build the report |
 | `GET /judge_calibration/report` | View the HTML report |
 
@@ -35923,7 +36287,18 @@ pre_annotation:
   field: predictions
 ```
 
-Annotators are now served prelabelled items least-confident first. The report:
+Annotators are now served prelabelled items least-confident first.
+Prelabels can also come from [model training](model_training.md): its
+write-back puts predictions in the same `predictions` field by default.
+
+> **Successor in 2.11:** `pre_annotation` still works in 2.11 and is planned for
+> removal in 3.0. In the [labeling engine](../labeling-engine/overview.md),
+> existing predictions are a `static` source.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
+
+The report:
 
 ```bash
 curl -H "X-API-Key: $KEY" http://localhost:8000/admin/model-review
@@ -35968,11 +36343,14 @@ A confidence-ordered queue cannot surface one either, since an item with no
 prediction has no confidence to be low. So missing detections survive review
 unless someone goes looking for them.
 
-Potato ships a built-in slice for that, with no configuration:
+Potato ships a built-in slice for that, `model-found-nothing`. You do not
+have to save it, but it lives in the curation catalog, so the project needs
+`curation: {enabled: true}`; without it the `/admin/catalog` routes are not
+registered. See [Semantic curation](../agent-evaluation/semantic_curation.md).
 
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/slices/model-found-nothing/resolve"
+  "http://localhost:8000/admin/catalog/api/slices/model-found-nothing/resolve"
 ```
 
 It appears in `/admin/catalog` alongside your own slices, and can become a
@@ -36072,6 +36450,354 @@ annotators reorder a queue whose order is what makes it useful.
 
 ---
 
+<!-- source: docs/ai-intelligence/model_training.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/model_training/
+
+# Model Training
+
+Model training fits a classifier on the study's own annotations, from the admin
+Training page at `/admin/training`. Each run resolves the annotations to one
+label per item, splits the items into train, val and test, fits the model in a
+separate process, and records what it trained on and which items it held out.
+A run's predictions can then be written back to items as prelabels, which the
+[model review](model_review.md) workflow serves least-confident first.
+
+The labeling engine uses the same trainers. [Distillation](../labeling-engine/configuration.md#distill)
+fits one on the engine's labels, and a `trained` source loads a fitted model's
+directory (`artifact_dir`).
+
+---
+
+## Quick start
+
+```yaml
+model_training:
+  enabled: true
+```
+
+Restart the server, open `/admin/training`, pick a trainer and a scheme, and
+click **Train now**. Nothing is shown to annotators until you name schemes
+under `writeback.schemas`.
+
+---
+
+## Configuration
+
+All keys sit under `model_training`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Registers the `/admin/training` routes and the training manager. Without it the routes do not exist. |
+| `retain_runs` | `5` | Finished runs kept in the run ledger. Older runs are dropped from it unless their predictions are still stored. The run directories stay on disk. |
+| `grace_seconds` | `20` | After a cancel, seconds the run gets to exit before it is killed. |
+| `split_seed` | `0` | Seeds the split assignment. Keep it fixed: changing it moves held-out items into training. |
+| `splits` | `{train: 0.7, val: 0.15, test: 0.15}` | Split fractions, normalized to sum to 1. Use the names `train`, `val` and `test`: predictions are made for `val` and `test` (and for unlabelled items with `writeback.include_unlabeled`). |
+| `aggregation` | `consensus` | How several annotators' labels become one. `consensus` is Dawid-Skene when there is more than one annotator (falling back to majority vote if it fails); `majority` is majority vote. |
+| `max_wall_seconds` | unset | Time limit for one run. The server stops a run that exceeds it. The check runs each time the run reports an event. |
+| `max_ram_mb` | unset | Address-space limit for the training process (`setrlimit`). Where the platform does not support the limit, the run logs a warning and continues. |
+| `device` | `auto` | `auto`, `cpu`, `cuda` or `mps`, passed to the trainer. `sklearn-text` does not use it. |
+| `num_threads` | unset | Sets `OMP_NUM_THREADS`, `MKL_NUM_THREADS` and `OPENBLAS_NUM_THREADS` for the run, unless they are already set. |
+| `auto_retrain` | off | Retrain as annotations arrive. See below. |
+| `writeback` | none | Publish predictions as prelabels. See below. |
+
+### `auto_retrain`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Check for a retrain after every annotation save. |
+| `trainer` | none | Trainer name. Required. |
+| `schemas` | none | Schemes to train. Required. |
+| `min_interval_s` | `600` | Seconds since the last run finished before another starts. |
+| `update_frequency` | `25` | New annotations since the last automatic run before another starts. |
+| `params` | `{}` | Trainer parameters, as in the `params` of an API run. |
+
+When a check decides not to start a run, the reason ("waiting for 3 more
+annotation(s)", "a run is already in progress") is in the `skip_reason` field
+of `GET /admin/training/api/status`.
+
+### `writeback`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `schemas` | `[]` | Schemes whose predictions are shown to annotators. Empty means none. |
+| `min_confidence` | `0.0` | Predictions below this confidence are not published. A prediction with no confidence passes. |
+| `field` | `predictions` | Item field the prelabels are written to. |
+| `include_unlabeled` | `false` | Also predict on the items nobody has labelled yet, and prelabel them. Without it a run predicts only on its held-out `val` and `test` items. |
+
+### Example
+
+```yaml
+model_training:
+  enabled: true
+  retain_runs: 5
+  split_seed: 0
+  splits: {train: 0.7, val: 0.15, test: 0.15}
+  aggregation: consensus
+  max_wall_seconds: 1800
+  max_ram_mb: 4096
+  num_threads: 4
+  auto_retrain:
+    enabled: true
+    trainer: sklearn-text
+    schemas: [sentiment]
+    min_interval_s: 600
+    update_frequency: 25
+    params:
+      classifier: sklearn.linear_model.LogisticRegression
+      classifier_kwargs: {max_iter: 1000}
+  writeback:
+    schemas: [sentiment]
+    min_confidence: 0.8
+    include_unlabeled: true
+```
+
+---
+
+## The `sklearn-text` trainer
+
+The one built-in trainer. It needs no optional install for text, because
+scikit-learn is a core dependency.
+
+- **Kinds:** `nominal` (`radio`, `select`), `ordinal` (`likert`) and
+  `multilabel` (`multiselect`). A multilabel target is trained as one class per
+  combination of labels. Other kinds (sliders, spans, free text, geometry) have
+  no trainer, and the Training page greys them out.
+- **Modalities:** `text` and `image`.
+- **One scheme per run.** The page sends one scheme. The API accepts a list,
+  but the trainer fits only the first scheme named.
+
+Parameters, set through `params` on an API run or under
+`auto_retrain.params`. The **Train now** button sends none, so a run started
+from the page uses the defaults.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `classifier` | `sklearn.linear_model.LogisticRegression` | Dotted path to any scikit-learn-API estimator. An `SVC` gets `probability: true` so it can report confidence. |
+| `classifier_kwargs` | `{}` | Passed to the estimator's constructor. |
+| `vectorizer` | `sklearn.feature_extraction.text.TfidfVectorizer` | A dotted path, `sentence-transformers`, or `clip` (also `image`) for images. On an image corpus the default is `clip`; see below. |
+| `vectorizer_kwargs` | `{}` | For a dotted path, passed to the constructor (`ngram_range` may be a list). For `sentence-transformers`, `model_name` (default `all-MiniLM-L6-v2`). For `clip`, `model_name` (default `clip-ViT-B-32`), `cache_dir` and `image_root`. |
+| `calibrate` | `true` | Calibrate the confidences, and keep the calibrated model only if it did not cost more than 0.05 training accuracy. Skipped below 50 training items, or when the smallest class has fewer than 2. Platt scaling below 1000 items, isotonic from there. |
+| `min_instances` | `10` | Refuse to fit with fewer items in the train split. |
+
+The classifier and vectorizer take dotted paths only. The short names that
+[active learning](active_learning_guide.md) accepts (`tfidf`, `logistic`) are
+not expanded here: a name that cannot be imported falls back to the default
+with a warning in the run's log.
+
+A text vectorizer always reads the item's text (the `text_key` field), never a
+media or URL field. The run's `model_card.json` records `input: text` or
+`input: media`, and prediction feeds the model the same input it was fitted on.
+
+`sentence-transformers` and `clip` need `pip install sentence-transformers`
+(`clip` also needs `pillow`). When they are missing, the run fails with the
+install command.
+
+---
+
+## Image classification
+
+A `radio` or `multiselect` scheme whose items name image files trains as an
+image classifier. When at least 80% of the labelled items carry an image
+reference ending in `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`, `.tif`, `.tiff`
+or `.gif`, the bundle is marked as an image corpus and `sklearn-text` uses
+CLIP image embeddings unless the run names a vectorizer.
+
+```bash
+pip install sentence-transformers pillow
+```
+
+```yaml
+item_properties:
+  id_key: id
+  text_key: image_url
+
+annotation_schemes:
+  - annotation_type: radio
+    name: species
+    description: Which animal is in the photo?
+    labels: [cat, dog, bird]
+
+model_training:
+  enabled: true
+```
+
+```json
+{"id": "img_001", "image_url": "data/images/img_001.jpg"}
+```
+
+Where the image reference comes from: the scheme's `source_field` if set,
+otherwise the first non-empty item field among `image_url`, `image`,
+`image_path`, `file_name`, `audio_url`, `audio`, `audio_path`, `video_url`,
+`video`, `video_path`, `url` and `path`.
+
+**Images must be local files.** A relative path is resolved against
+`task_dir`, and a URL-style path such as `/media/img_001.jpg` (what the
+annotation page uses) against the task's `media_directory`; the file is linked
+into the run's bundle. Remote `http(s)` URLs are not downloaded. An image run
+leaves out every row whose image is remote or missing, and the run log says
+how many; the model gives no prediction for such items. Download remote images
+into `media_directory` to train on them.
+
+To train an image corpus on text instead, name a text vectorizer in `params`.
+
+---
+
+## Write-back
+
+After a successful run, its predictions are stored, and the ones that pass
+these checks are written into the item's `predictions` field (or
+`writeback.field`) as prelabels. The checks run in this order, and each skip is
+counted in the run's write-back report (the `writeback` field of
+`/admin/training/api/status`):
+
+1. **Train-split items are never prelabelled.** A model is confident about its
+   own training data for reasons that say nothing about new data.
+2. **Only schemes in `writeback.schemas`** are published. The list is empty by
+   default, so turning training on changes nothing annotators see.
+3. **Pairs a reviewer rejected are skipped.** An `(item, scheme)` pair with a
+   `reject` verdict in [model review](model_review.md) is not shown again.
+4. **The confidence floor.** Below `min_confidence`, the prediction is stored
+   but not published.
+
+Write-back does not change human labels. Predictions go into item data;
+annotations live in user state, which write-back does not address.
+
+By default a run predicts only on the items in its `val` and `test` splits,
+which already have a resolved human label, so items nobody has labelled get no
+prediction. Set `writeback.include_unlabeled: true` to predict on those items
+too: the run's bundle then carries them as an `unlabeled` file that the model
+predicts on but is never trained or scored on, and their predictions pass the
+same checks. This is the setting for using prelabels to speed up annotation
+(with [model review](model_review.md) serving them least-confident first).
+Prelabels anchor annotators, so turn it on once the held-out score supports
+it.
+
+One prediction is kept per item and scheme: a newer run replaces an older
+one. At startup, the stored predictions for the schemes in
+`writeback.schemas` are written back into item data, so prelabels survive a
+restart. The replay applies the same checks as above, so a training item, a
+rejected pair or a prediction under the floor stays off after a restart too.
+
+To withdraw a run's prelabels, send `DELETE /admin/training/api/runs/<run_id>/predictions`.
+This removes the stored predictions. Prelabels already written into item data
+stay until the server restarts.
+
+---
+
+## Routes
+
+All routes are under `/admin/training` and need admin access (an admin
+session, or `X-API-Key`). POST and DELETE requests from a browser must be
+same-origin.
+
+| Route | Purpose |
+|---|---|
+| `GET /admin/training` | The Training page: start a run, the run list, the trainers. |
+| `GET /admin/training/runs/<run_id>` | One run: status, metrics, events, the split of each item. |
+| `GET /admin/training/api/trainers` | Every trainer, its kinds, modalities, licence and whether it is installed. |
+| `GET /admin/training/api/schemas` | The study's schemes, their kind and the trainers that fit each. |
+| `GET /admin/training/api/status` | The current or last run: state, step, progress, metrics, warnings, `skip_reason`, `writeback`. |
+| `GET /admin/training/api/runs` | Run history (`?limit=`, default 50, at most 500). |
+| `GET /admin/training/api/runs/<run_id>` | One run's record, plus `review`: precision from review verdicts on its predictions. |
+| `GET /admin/training/api/runs/<run_id>/events` | The run's event log (`?limit=`, default 200). |
+| `POST /admin/training/api/runs` | Start a run. |
+| `POST /admin/training/api/runs/<run_id>/cancel` | Cancel the run in progress. `400` if no run is in progress. |
+| `DELETE /admin/training/api/runs/<run_id>/predictions` | Withdraw the run's stored predictions. |
+
+Starting a run:
+
+```bash
+curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  http://localhost:8000/admin/training/api/runs \
+  -d '{"trainer": "sklearn-text", "schemas": ["species"],
+       "params": {"vectorizer": "clip",
+                  "vectorizer_kwargs": {"model_name": "clip-ViT-B-32"}}}'
+```
+
+The body takes `trainer`, `schemas` (a list, or one name as a string),
+`params`, and `accept_licence`. A missing trainer or scheme is a `400`. A
+trainer whose licence needs acknowledging returns `400` with
+`needs_licence_ack: true` until the request sets `accept_licence: true`
+(`sklearn-text` does not need it). One run at a time: a start while a run is in
+progress returns `409`.
+
+On the Training page, the Runs table's score column shows `accuracy` when the
+trainer reports it and `train_accuracy` otherwise. `sklearn-text` reports only
+`train_accuracy`, the accuracy on the data it was fitted on, so for it the
+column overstates how the model does on new items. The `review` figures on
+`/api/runs/<run_id>` are measured on predictions a human looked at.
+
+---
+
+## Where runs are stored
+
+Each run has a directory under
+`<task_dir>/<output_annotation_dir>/training/runs/<run_id>/`:
+
+| Path | Contents |
+|---|---|
+| `bundle/` | The training data: `train.jsonl`, `val.jsonl`, `test.jsonl`, `unlabeled.jsonl` (with `include_unlabeled`), `labels.json`, `manifest.json`, and `media/` (symlinks to the images, or copies where symlinks are unavailable). |
+| `artifacts/` | `model.pkl`, `model_card.json`, `predictions.jsonl`. |
+| `spec.json` | What the run was asked to do. |
+| `events.jsonl`, `stdout.log`, `stderr.log` | The run's progress events and output. |
+
+The ledger (runs, each item's split per run, stored predictions) is in the
+project database, `<task_dir>/project.sqlite`, in the tables `training_runs`,
+`training_run_items` and `training_predictions`.
+
+Set `POTATO_MODEL_CACHE` to a directory to have the training process use it
+for `HF_HOME`, `TRANSFORMERS_CACHE` and `SENTENCE_TRANSFORMERS_HOME`, unless
+those are already set. On an air-gapped machine, put the sentence-transformers
+and CLIP models there in advance.
+
+---
+
+## Troubleshooting
+
+**`/admin/training` returns 404.** `model_training.enabled` is not `true`. The
+routes are registered only when it is.
+
+**"Only N items in the train split; this trainer needs at least 10."**
+Annotate more items, or lower `min_instances` in `params`. The train split is
+70% of the labelled items by default.
+
+**"Schema 'x' has 1 distinct label(s) in the data."** A classifier needs at
+least two labels in use.
+
+**"No resolved annotations to train on."** The scheme named in the run does
+not match the scheme being annotated, or nothing has been annotated.
+
+**The run was killed and the message says the machine ran out of memory.** The
+process exited on SIGKILL, usually the out-of-memory killer. Use a smaller
+model, fewer items, or set `max_ram_mb` so the run fails inside its own limit.
+
+**The run published no prelabels.** Read the `writeback` report in
+`/admin/training/api/status`. "Write-back is not enabled for any schema" means
+`writeback.schemas` is empty; the skip counts say how many predictions each
+check removed.
+
+**An image run trained on file names.** No item field named the image (see
+[Image classification](#image-classification)), so the bundle was not marked as
+an image corpus, or the run's `params` named a text vectorizer.
+
+**An image run left out most of its rows.** The run log says "Left out N ...
+row(s) with no local image file": the images are remote URLs or the files are
+not where the reference points. Store them under `media_directory` (or give
+paths relative to `task_dir`).
+
+---
+
+## Related documentation
+
+- [Reviewing Model Output](model_review.md): the review queue that prelabels feed
+- [Active Learning Guide](active_learning_guide.md) and
+  [Vision Active Learning](vision_active_learning.md): ordering items by model uncertainty
+- [Labeling engine distillation](../labeling-engine/configuration.md#distill):
+  a trained model as the first tier of the engine's cascade
+
+
+---
+
 <!-- source: docs/ai-intelligence/ai_costs.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/ai_costs/
 
@@ -36119,9 +36845,9 @@ ai_budget:
 
 ---
 
-## The cap refuses before it starts
+## When the cap is checked
 
-A run projected to cross the cap is refused before the first model call, and
+A judge batch or probe projected to cross the cap is refused before the first model call, and
 the endpoint returns `402` with `"ran": false`:
 
 ```json
@@ -36135,8 +36861,21 @@ the endpoint returns `402` with `"ran": false`:
 }
 ```
 
-Halting halfway leaves a part-labelled dataset and a bill for it, so refusing
-up front is the refusal that saves money.
+For these two the check runs once, so a run either goes ahead in full or does
+not start. Halting
+halfway leaves a part-labelled dataset and a bill for it, so refusing up front
+is the refusal that saves money.
+
+The two corpus-labeling paths are long-running, so they check again as they
+go, and can stop partway:
+
+- **Solo Mode labeling** checks the cap before background labeling starts and
+  again before every batch (`potato/solo_mode/spend.py`). A refusal pauses
+  labeling and records the reason; the items already labelled stay labelled.
+- **The labeling engine** checks the cap before each chunk of
+  `runtime.batch_size` items (`potato/labeling_engine/runtime/runner.py`). A
+  refusal ends the run with status `paused`. Chunks already finished are
+  committed, and a later run resumes with the items that have no prediction.
 
 Money already spent counts toward the cap. Otherwise the cap applies per run,
 which caps nothing.
@@ -36146,6 +36885,8 @@ Currently enforced on:
 - the judge batch (`/admin/api/judge-alignment/run`)
 - the [position-bias probe](../advanced/presentation_order.md)
   (`/admin/api/judge-position-bias`)
+- Solo Mode background labeling (before it starts and before every batch)
+- labeling engine runs (before every chunk)
 
 ---
 
@@ -38057,9 +38798,10 @@ Task assignment controls:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `assignment_strategy` | Strategy for assigning items | `random` |
+| `assignment_strategy` | Strategy for assigning items | `fixed_order` (`priority` when a `triage` block is enabled and no strategy is set) |
 | `max_annotations_per_user` | Maximum items per annotator | unlimited |
-| `max_annotations_per_item` | Target annotations per item | 3 |
+| `num_annotators_per_item` | Cap on how many annotators one item gets. `0` also means unlimited; a negative number is refused | unset (unlimited) |
+| `max_annotations_per_item` | Deprecated spelling of `num_annotators_per_item`, read only when that key gives no number. `-1` means unlimited. Setting both to different numbers is refused | `-1` (unlimited) |
 
 ---
 
@@ -38531,6 +39273,24 @@ any work, and until this page existed they were shown the completion screen
 ("Thank You! You have completed the annotation task and your responses are
 saved"), which reads as a finished assignment on both sides.
 
+A full study is one of several reasons assignment can come back empty. The
+page names the reason. The more specific causes are checked first, so
+`saturated` is reported only when none of the others applies. Outside the
+labeling engine, the server also logs a warning with the reason and advice for
+the admin:
+
+| Reason | Page headline | What it means for you |
+|--------|---------------|-----------------------|
+| `engine_waiting` | Nothing to label right now | `assignment_strategy: engine`, and the labeling engine has no open request this annotator can take. `potato label status` shows what the contracts are waiting for. When nothing more will come for the annotator, the engine ends their annotation phase instead of showing this page. |
+| `no_data` | This study has no items yet | No data is loaded. Check `data_files`, or the watched directory if the study ingests data live. |
+| `zero_quota` | Your account is set to zero items | This annotator's quota resolves to 0. Check `per_annotator_quota` (`by_user`, `by_user_role`, `default`) and `max_annotations_per_user`. |
+| `no_batch_group` | You are not in an annotator group for this study | Under `assignment_strategy: batch`, the annotator is in no `batch_assignment` group. Add them to a group's `annotators` list; adding data or raising `num_annotators_per_item` will not help. |
+| `no_qualified_category` | You are not qualified for any category yet | Under `category_based` assignment without dynamic expertise, the annotator has qualified for no category. Static qualification comes only from passing a training phase on categorized questions, so add training or set `category_assignment.dynamic.enabled: true`. |
+| `saturated` | There is no work left for you | Every item is at `num_annotators_per_item`. Raise the cap or add data. |
+
+An adjudicator who gets no annotation items is sent to `/adjudicate` instead of
+this page.
+
 ---
 
 ## Admin Dashboard Integration
@@ -38937,9 +39697,17 @@ one call.
 
 ## Quick start
 
+The duplicate routes belong to the curation catalog, which is registered only
+when the config enables it:
+
+```yaml
+curation:
+  enabled: true
+```
+
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/duplicates"
+  "http://localhost:8000/admin/catalog/api/duplicates"
 ```
 
 ```json
@@ -38964,7 +39732,7 @@ Then stop assigning them:
 ```bash
 curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
      -d '{"instance_ids": ["f0013", "f0014"]}' \
-     http://localhost:8000/curation/api/duplicates/exclude
+     http://localhost:8000/admin/catalog/api/duplicates/exclude
 ```
 
 Excluded items stay in the project and stop being assigned. A duplicate is
@@ -38985,7 +39753,7 @@ telling two different scenes apart. It needs no model, no index and no GPU.
 
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/duplicates?method=phash&max_distance=5"
+  "http://localhost:8000/admin/catalog/api/duplicates?method=phash&max_distance=5"
 ```
 
 `max_distance` is the Hamming distance in bits, out of 64. The default is 5.
@@ -39002,7 +39770,7 @@ is useless.
 
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/duplicates?method=embedding&min_similarity=0.97"
+  "http://localhost:8000/admin/catalog/api/duplicates?method=embedding&min_similarity=0.97"
 ```
 
 This mode requires a built
@@ -39933,7 +40701,7 @@ per (user, instance, field), with the summary features and the detector verdict.
 ### Raw streams
 
 ```bash
-python -m potato.export.cli <config.yaml> --format keystrokes
+python -m potato.export -c <config.yaml> -f keystrokes -o <dir>
 ```
 
 Writes `keystroke_sessions.parquet` and `keystroke_events.parquet`, falling back
@@ -40964,7 +41732,7 @@ above the ones worth looking at.
 ## Export
 
 ```bash
-potato export <config.yaml> --format annotation_telemetry
+python -m potato.export -c <config.yaml> -f annotation_telemetry -o <dir>
 ```
 
 Writes `annotation_sessions.parquet` and `annotation_events.parquet` (JSONL when
@@ -41199,8 +41967,8 @@ Two exporters turn coded data into qualitative-research deliverables:
   append memo rows too.
 
 ```bash
-python -m potato.export config.yaml --format quotation_report \
-  --option include_memos=true -o quotations.csv
+python -m potato.export -c config.yaml -f quotation_report \
+  --option include_memos=true -o ./export/
 ```
 
 See [Export formats](../data-export/export_formats.md) for the column
@@ -42341,7 +43109,7 @@ On top of the model sit four tools:
 ## Quick start
 
 ```bash
-python potato/flask_server.py start examples/advanced/psychometrics/config.yaml -p 8000 --debug
+python potato/flask_server.py start examples/advanced/psychometrics/config.yaml -p 8000 --host 127.0.0.1 --debug
 # annotate a bit (or point the simulator at it), then open:
 #   http://localhost:8000/psychometrics/dashboard
 ```
@@ -42367,7 +43135,16 @@ psychometrics:
   confidence_threshold: 0.95 # posterior at which an item counts as resolved
   cost_per_judgment: 0.08    # optional: expresses savings in currency
   discrimination_flag_threshold: -0.2  # codebook-bug flag sensitivity
+  include_machine_annotators: false    # score declared machine raters too (default false)
 ```
+
+`include_machine_annotators` is off by default, so declared
+[machine annotators](machine_annotators.md) do not move people's ability
+estimates. Turning it on fits an ability for each annotation tool from the
+disagreement pattern, which gives a per-tool reliability estimate on a corpus
+with no ground truth. Tools that share reference databases make correlated
+errors, which inflates the apparent ability of the majority cluster, so check
+which tools share evidence before reporting those estimates.
 
 Supported schemes are single-choice categorical: `radio` and `likert`
 (likert points are treated as nominal categories). Multi-select schemes are
@@ -44284,7 +45061,7 @@ Reset a user's password from the command line:
 # Interactive (prompts for username and password)
 potato reset-password config.yaml
 
-# Non-interactive (prompts for password only)
+# Username on the command line (still prompts for the password)
 potato reset-password config.yaml --username annotator1
 ```
 
@@ -44307,12 +45084,12 @@ curl -X POST http://localhost:8000/admin/reset_password \
 
 **Response (success):**
 ```json
-{"message": "Password updated successfully"}
+{"status": "success", "message": "Password reset for 'annotator1'"}
 ```
 
-**Response (user not found):**
+**Response (user not found, HTTP 404):**
 ```json
-{"error": "User not found"}
+{"error": "User 'annotator1' does not exist"}
 ```
 
 This endpoint requires the `admin_api_key` configured in your project (see [Admin Dashboard](../administration/admin_dashboard.md)).
@@ -44329,7 +45106,7 @@ Potato includes a token-based password reset flow for annotators who forget thei
 4. The annotator opens the link (`/reset/<token>`) and sets a new password
 5. The token is consumed (single-use) and the password is updated
 
-> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API or the `potato reset-password` CLI.
+> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API (`POST /admin/create_reset_token`). The `potato reset-password` CLI issues no link: it prompts for the new password and sets it directly.
 
 #### Generating Tokens via API
 
@@ -44345,6 +45122,7 @@ curl -X POST http://localhost:8000/admin/create_reset_token \
 **Response:**
 ```json
 {
+  "status": "success",
   "reset_link": "http://localhost:8000/reset/abc123...",
   "token": "abc123...",
   "expires_in_hours": 24
@@ -44496,7 +45274,7 @@ authentication:
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/forgot-password` | GET | None | Show forgot password form |
-| `/forgot-password` | POST | None | Generate reset token for username |
+| `/forgot-password` | POST | None | Show the ask-your-administrator page for any username; creates no token |
 | `/reset/<token>` | GET | None | Show password reset form |
 | `/reset/<token>` | POST | None | Submit new password |
 | `/admin/reset_password` | POST | API Key | Admin password reset |
@@ -45179,7 +45957,7 @@ authentication:
 | `authentication.method` | string | `"in_memory"` | Set to `"oauth"` to enable SSO |
 | `authentication.providers` | dict | (required) | Provider configurations (see below) |
 | `authentication.user_identity_field` | string | `"email"` | Which OAuth field becomes the Potato username: `email`, `username`, `sub`, `name` |
-| `authentication.allow_local_login` | bool | `false` | Show local username/password form alongside SSO buttons |
+| `authentication.allow_local_login` | bool | `false` | Show local username/password form alongside SSO buttons. When `false`, `/register` answers 403 and local registration and password login are refused. An SSO identity never signs in with a password either way |
 | `authentication.auto_register` | bool | `true` | Auto-create Potato user on first OAuth login |
 | `secret_key` | string | (random) | **Must be stable for OAuth** — set via config or `POTATO_SECRET_KEY` env var |
 
@@ -45283,7 +46061,7 @@ This shows SSO buttons at the top of the login page with an "or" divider and the
 - Allow both institutional (SSO) and external (password) annotators
 - Development/testing with local accounts while production uses SSO
 
-> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset local passwords via the CLI (`potato reset-password`) or the admin API. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
+> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset a local (non-SSO) account's password with `potato reset-password` or the admin reset link (`POST /admin/create_reset_token`). An SSO identity has no password in Potato: its provider manages it, so a password reset for that username is refused. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
 
 ---
 
@@ -45414,7 +46192,7 @@ A: Yes. Configure multiple providers under `authentication.providers` and each g
 A: They're treated as the same Potato user (when `user_identity_field: "email"`). Their annotations are unified under one identity.
 
 **Q: Can I switch from password-based to OAuth without losing existing annotations?**
-A: Yes, if the OAuth identity (email) matches existing usernames. Set `allow_local_login: true` during the transition period so both methods work.
+A: Yes, if the OAuth identity (email) matches existing usernames: annotations are keyed by username, so they carry over. Set `allow_local_login: true` during the transition so annotators who have not signed in with SSO yet can still use their passwords. Once someone signs in with SSO, that username is an SSO identity: password login and password resets no longer work for it, and they sign in through the provider from then on.
 
 **Q: Do I need HTTPS for local development?**
 A: No. OAuth providers allow `http://localhost` as a redirect URI for development. HTTPS is required only for production.
@@ -46381,6 +47159,20 @@ adjudication:
     # top_k: 5
     # precompute_on_start: true
 
+  # Whether declared machine annotators (see machine_annotators.md) count
+  # toward min_annotations and appear in the queue. When false, their
+  # labels are left out of the queue entirely.
+  # Type: bool
+  # Default: false
+  include_machine_annotators: false
+
+  # Minimum number of human (non-machine) annotations an item needs before
+  # it can be queued, separate from min_annotations. 0 allows an item
+  # labeled only by machine annotators, with the adjudicator as the human.
+  # Type: int
+  # Default: 0
+  min_human_annotations: 0
+
   # Subdirectory name within the annotation output directory where
   # adjudication decisions are stored.
   # Type: string
@@ -46411,8 +47203,9 @@ Regular annotators complete their work through the standard `/annotate` interfac
 
 When an adjudicator logs in and navigates to `/adjudicate`, the system builds the adjudication queue by scanning all items. An item enters the queue when:
 
-1. It has at least `min_annotations` completed annotations (excluding adjudicator users).
-2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
+1. It has at least `min_annotations` completed annotations. Adjudicator users never count, and declared [machine annotators](../advanced/machine_annotators.md) count only when `include_machine_annotators` is true.
+2. It has at least `min_human_annotations` annotations from humans (default 0).
+3. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
 
 An item has no score when none of its schemas can be compared: a span-only item,
 or one where every schema was answered by a single annotator. Such items are
@@ -46431,7 +47224,7 @@ After adjudication is complete (or at any point during the process), you can gen
 - **Adjudicated items**: An adjudicator reviewed the disagreement and submitted a decision. The adjudicator's decision is used.
 - **Unresolved items**: Annotators disagreed but no adjudication decision has been submitted yet. These are excluded by default but can be included with a flag.
 
-Each item in the exported dataset includes a `source` field indicating its provenance (`"unanimous"`, `"adjudicated"`, or `"unresolved"`).
+Each item in the exported dataset includes a `source` field indicating its provenance (`"unanimous"`, `"unanimous_machine"`, `"unanimous_mixed"`, `"adjudicated"`, or `"unresolved"`). A unanimous item is `"unanimous"` when every annotator who agreed is human, `"unanimous_machine"` when all of them are declared machine annotators, and `"unanimous_mixed"` when they include both.
 
 ### Data Flow Diagram
 
@@ -46606,7 +47399,7 @@ If a decision cannot be submitted, the reason appears next to the buttons.
 
 ## Getting the decisions out
 
-`potato export --format adjudication` writes the decisions themselves:
+`python -m potato.export -c <config.yaml> -f adjudication -o <dir>` writes the decisions themselves:
 `adjudicated.csv`, one row per (item, schema) with the value, its source and the
 adjudicator's confidence, plus `adjudication_log.jsonl` with the notes, error
 taxonomy and timings. It runs from the same place as every other format,
@@ -46679,7 +47472,7 @@ Each item in the exported dataset includes the following fields:
 | `instance_id` | The unique identifier for the item |
 | `item_data` | The original item data (JSONL/JSON only) |
 | `labels` | The final label decisions (keyed by schema name) |
-| `source` | Provenance: `"unanimous"`, `"adjudicated"`, or `"unresolved"` |
+| `source` | Provenance: `"unanimous"`, `"unanimous_machine"`, `"unanimous_mixed"`, `"adjudicated"`, or `"unresolved"` |
 | `adjudicator` | Username of the adjudicator (adjudicated items only) |
 | `confidence` | Adjudicator's confidence level (adjudicated items only) |
 | `provenance` | Per-schema source mapping (adjudicated items only) |
@@ -48029,7 +48822,12 @@ Two things worth knowing:
   mangles anything deeper. Passing this option re-parents every code to the top
   level and renames it `Parent > Child > Grandchild`, so you control the loss
   instead of discovering it. Potato warns when your codebook is deep enough for
-  this to matter.
+  this to matter. Pass it with `--option`:
+
+  ```bash
+  python -m potato.export -c config.yaml -f qdpx -o ./export/ \
+    --option flatten_subcodes=true
+  ```
 
 Two exports of an unchanged project are byte-identical: the GUIDs REFI-QDA
 requires are derived from what they name, so an export can be diffed.
@@ -49442,13 +50240,13 @@ Deploy Potato as a [HuggingFace Space](https://huggingface.co/docs/hub/spaces) f
 
 ## Overview
 
-HuggingFace Spaces provides free hosting for Docker-based applications. Potato includes a ready-to-use Dockerfile and configuration templates for Spaces deployment.
+Potato runs as a Docker Space. Docker Spaces are not free: creating one needs a PRO account or a Team or Enterprise plan for an organization. Potato includes a Dockerfile and configuration templates for Spaces deployment, and `potato deploy up config.yaml --provider huggingface` creates the Space for you; see [Deploy to HuggingFace Spaces](../deployment/deploy-huggingface.md).
 
 ### Features
 
 - One-click deployment via Docker SDK
 - Built-in HuggingFace OAuth authentication
-- Optional CommitScheduler for automatic annotation backup
+- Backup of annotations to a HuggingFace Dataset repo, restored when the Space restarts
 - No server management required
 
 ## Quick Start
@@ -49486,52 +50284,49 @@ The `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` environment variables are automa
 3. After approval, redirected back to Potato with user identity
 4. User is automatically registered and can start annotating
 
-## CommitScheduler Backup
+## Backup
 
-Automatically back up annotations to a HuggingFace dataset repository:
+A Space's filesystem is wiped on every restart and rebuild, so annotations
+need to live somewhere else. The `backup:` block copies the annotation output
+and the project databases to a private HuggingFace **Dataset** repo (not the
+Space repo) on a schedule, and copies them back into an empty Space when it
+starts:
 
 ```yaml
-huggingface_backup:
-  enabled: true
-  repo_id: "your-org/annotation-backup"
-  token: "${HF_TOKEN}"
+backup:
   schedule_minutes: 5
-  private: true
+  restore_on_boot: true
+  sinks:
+    - type: huggingface
+      repo_id: "your-org/annotation-backup"
 ```
 
-### Configuration Options
+The token comes from `HF_TOKEN` (set it as a Space secret) or from a `token`
+key on the sink. `potato deploy up --provider huggingface` writes this block for
+you. It needs `pip install 'potato-annotation[hosting]'`, which the published
+image already includes.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable automatic backup |
-| `repo_id` | string | *required* | HuggingFace repo for backups |
-| `token` | string | `$HF_TOKEN` | API token with write access |
-| `schedule_minutes` | int | `5` | Backup interval in minutes |
-| `private` | bool | `true` | Create private backup repo |
-
-### Requirements
-
-```bash
-pip install huggingface_hub>=0.20.0
-```
-
-The CommitScheduler runs as a background thread and automatically commits changed files at the configured interval.
+The older `huggingface_backup:` block (`enabled`, `repo_id`, `token`,
+`schedule_minutes`, `private`) is still read as a single HuggingFace sink, but
+with `restore_on_boot` off unless you set it, so a restarted Space comes back
+empty. Use `backup:` for new projects. See [Backups](../deployment/deploy-backups.md)
+for every option, including S3.
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `POTATO_CONFIG` | Path to Potato config YAML |
-| `HF_TOKEN` | HuggingFace API token (for CommitScheduler) |
+| `HF_TOKEN` | HuggingFace API token with write access (for the backup Dataset) |
 | `OAUTH_CLIENT_ID` | OAuth client ID (auto-set by HF Spaces) |
 | `OAUTH_CLIENT_SECRET` | OAuth client secret (auto-set by HF Spaces) |
 | `PORT` | Server port (default: 7860) |
-| `GUNICORN_WORKERS` | Number of worker processes (default: 2) |
-| `GUNICORN_THREADS` | Threads per worker (default: 4) |
+| `GUNICORN_WORKERS` | Number of worker processes (default: 1). Any other value makes the entrypoint exit, because Potato's item pool and user state are per-process; `POTATO_ALLOW_MULTIWORKER=1` overrides this and loses data |
+| `GUNICORN_THREADS` | Threads per worker (default: 8). Raise this, not the worker count, for more concurrency |
 
 ## Limitations
 
-- **Ephemeral storage**: Files are lost when the Space restarts. Use CommitScheduler for persistence.
+- **Ephemeral storage**: Files are lost when the Space restarts. Configure a [backup](#backup) to keep them.
 - **Cold starts**: Free Spaces may sleep after inactivity. Upgraded Spaces stay running.
 - **Resource limits**: Free tier has limited CPU/RAM. Upgrade for larger projects.
 
@@ -49563,18 +50358,24 @@ curl https://your-space.hf.space/admin/api/export/formats \
   -H "X-API-Key: YOUR_ADMIN_KEY"
 ```
 
-### 2. CommitScheduler Backup (Automatic)
+### 2. The backup Dataset
 
-If `commit_scheduler` is configured, raw annotation files are automatically pushed to your Space's repository on a regular interval. These are the raw JSON files, not structured datasets.
+With a [backup](#backup) configured, the raw annotation files are in the backup Dataset repo, not the Space repo. These are the raw JSON files, not structured datasets. Browse or clone them on the Hub. If you created the Space with `potato deploy`, download them with:
 
-### 3. Download Raw Files
+```bash
+potato deploy pull config.yaml
+```
 
-Access annotation files directly via the HuggingFace Spaces file browser in your repository, or clone the repo locally.
+### 3. Without a backup
+
+Annotations written to the Space are not in its git repository, so the Space file browser does not show them. Use the admin API above while the Space is running.
 
 See [HuggingFace Hub Export](huggingface_export.md) for detailed export options and format documentation.
 
 ## Related Documentation
 
+- [Deploy to HuggingFace Spaces](../deployment/deploy-huggingface.md) - `potato deploy` to a Space, pricing and the concurrency cap
+- [Backups](../deployment/deploy-backups.md) - The `backup:` block and its sinks
 - [HuggingFace Hub Export](huggingface_export.md) - Export annotations to HuggingFace datasets
 - [SSO & OAuth Authentication](../auth-users/sso_authentication.md) - OAuth configuration details
 - [Webhooks](../integrations/webhooks.md) - Event notifications for external integrations
@@ -51351,7 +52152,7 @@ def test_dashboard_shows_annotations(simulated_annotations, flask_test_server):
     """Verify dashboard shows simulated data."""
     # Check admin API
     response = requests.get(f"{flask_test_server.base_url}/admin/api/overview")
-    assert response.json()["total_annotations"] > 0
+    assert response.json()["overview"]["total_annotations"] > 0
 ```
 
 ## Example Configurations
@@ -51449,7 +52250,7 @@ server:
 Launches Potato in debug mode with simplified authentication.
 
 ```bash
-potato start config.yaml --debug
+potato start config.yaml --host 127.0.0.1 --debug
 ```
 
 **Effects:**
@@ -51457,12 +52258,20 @@ potato start config.yaml --debug
 - Enables verbose logging
 - Useful for quickly testing configuration changes
 
+Debug mode only starts on a loopback bind. With the default host `0.0.0.0`,
+Potato exits with "Refusing to start: debug is enabled and the server is bound
+to 0.0.0.0 rather than loopback", because debug disables parts of the admin
+authentication and the built-in server would expose the Werkzeug interactive
+debugger. Pass `--host 127.0.0.1` (or set `server.host: 127.0.0.1`), or set
+`POTATO_ALLOW_REMOTE_DEBUG=1` if you accept the risk; the interactive debugger
+stays off on a non-loopback bind even then.
+
 ### `--debug-log`
 
 Controls debug logging output for different parts of the system.
 
 ```bash
-potato start config.yaml --debug --debug-log=all
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=all
 ```
 
 **Options:**
@@ -51478,16 +52287,16 @@ potato start config.yaml --debug --debug-log=all
 
 ```bash
 # Debug frontend issues (JavaScript errors, UI state)
-potato start config.yaml --debug --debug-log=ui
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=ui
 
 # Debug backend issues (API calls, data processing)
-potato start config.yaml --debug --debug-log=server
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=server
 
 # Full debugging (both frontend and backend)
-potato start config.yaml --debug --debug-log=all
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=all
 
 # Quiet mode - minimal output
-potato start config.yaml --debug --debug-log=none
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=none
 ```
 
 **How it works:**
@@ -51500,7 +52309,7 @@ potato start config.yaml --debug --debug-log=none
 Skip directly to a specific phase or page without going through earlier phases. This is useful for testing specific parts of an annotation workflow.
 
 ```bash
-potato start config.yaml --debug --debug-phase=annotation
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation
 ```
 
 **Requires:** The `--debug` flag must also be set.
@@ -51521,13 +52330,13 @@ You can also specify a specific page name if your configuration defines multiple
 
 ```bash
 # Jump directly to annotation (most common use case)
-potato start config.yaml --debug --debug-phase=annotation
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation
 
 # Test post-study survey
-potato start config.yaml --debug --debug-phase=poststudy
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=poststudy
 
 # Test a specific named page
-potato start config.yaml --debug --debug-phase=my_custom_survey
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=my_custom_survey
 ```
 
 **How it works:**
@@ -51541,13 +52350,13 @@ Flags can be combined for different debugging scenarios:
 
 ```bash
 # Quick annotation testing with minimal noise
-potato start config.yaml --debug --debug-phase=annotation --debug-log=none
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=none
 
 # Full debugging of annotation phase
-potato start config.yaml --debug --debug-phase=annotation --debug-log=all
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=all
 
 # Debug only backend while testing post-study
-potato start config.yaml --debug --debug-phase=poststudy --debug-log=server
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=poststudy --debug-log=server
 ```
 
 ## Other Useful Flags
@@ -51601,14 +52410,14 @@ This restores `console.log`, `console.debug`, `console.info`, and `console.warn`
 
 ```bash
 # Skip to annotation with full logging
-potato start config.yaml --debug --debug-phase=annotation --debug-log=all
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=all
 ```
 
 ### Debugging API Issues
 
 ```bash
 # Server-only logging to focus on backend
-potato start config.yaml --debug --debug-log=server
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=server
 ```
 
 Then use browser Network tab to inspect request/response data.
@@ -51617,14 +52426,14 @@ Then use browser Network tab to inspect request/response data.
 
 ```bash
 # Start from the beginning with UI logging
-potato start config.yaml --debug --debug-log=ui
+potato start config.yaml --host 127.0.0.1 --debug --debug-log=ui
 ```
 
 ### Performance Testing
 
 ```bash
 # Minimal logging overhead
-potato start config.yaml --debug --debug-phase=annotation --debug-log=none
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=none
 ```
 
 ## Troubleshooting
@@ -51638,7 +52447,7 @@ The `--debug-phase` option only works when `--debug` is also specified:
 potato start config.yaml --debug-phase=annotation
 
 # Correct
-potato start config.yaml --debug --debug-phase=annotation
+potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation
 ```
 
 ### Phase not found
@@ -54430,10 +55239,11 @@ http://localhost:8000/?workerId=test123&assignmentId=assign123&hitId=hit123&turk
 ### Server Recommendations
 
 1. **Use HTTPS**: Many browsers require HTTPS for forms
-2. **Handle Concurrent Users**: Use gunicorn or similar:
+2. **Handle Concurrent Users**: Use gunicorn with one worker and several threads:
    ```bash
-   gunicorn -w 4 -b 0.0.0.0:8080 "potato.flask_server:create_app('config.yaml')"
+   gunicorn -w 1 --threads 8 -b 0.0.0.0:8080 "potato.flask_server:create_app('config.yaml')"
    ```
+   Keep `-w 1`. Potato holds its item pool and user state in memory per process, so a second worker hands out items the first already assigned and can overwrite its annotations. Raise `--threads` for more concurrency. See [Docker](docker.md#one-worker).
 3. **Set Up Logging**: Monitor for errors
 4. **Database Backups**: Regular backups of annotation data
 
@@ -54707,7 +55517,7 @@ option.
 
 On AWS, use Lightsail (`--provider aws`): it has a flat monthly price that
 includes the IPv4 address and the disk, and the only permissions it needs are
-`lightsail:*`. New AWS accounts get $100–200 of credit, which covers several
+`lightsail:*` and `sts:GetCallerIdentity`. New AWS accounts get $100–200 of credit, which covers several
 months of it. [The AWS page](deploy-aws.md) also covers EC2 and ECS, and when
 you might want them instead.
 
@@ -54726,6 +55536,14 @@ To use the latest code instead of the latest release:
 git clone https://github.com/davidjurgens/potato.git
 cd potato
 pip install -e .
+```
+
+A server you run yourself that backs up to HuggingFace or S3 (see
+[Backups](deploy-backups.md)) or signs people in with SSO needs the `hosting`
+extra (`huggingface_hub`, `boto3`, Authlib):
+
+```bash
+pip install 'potato-annotation[hosting]'
 ```
 
 Or skip Python entirely and use the published image, which has everything
@@ -54843,7 +55661,7 @@ full:
 |---|---|---|---|
 | [`local`](deploy-local.md) | free | yes | seeing what will deploy, before it costs anything |
 | [`potato share`](deploy-share.md) | free | — | a pilot, a lab meeting, a link for twenty minutes |
-| [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` permissions |
+| [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` and `sts:GetCallerIdentity` permissions |
 | [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$18/mo | yes | AWS accounts that require EC2 |
 | [`aws-ecs`](deploy-aws.md#ecs-express-mode-provider-aws-ecs) | ~$45–70/mo | no, `--backup` | AWS with no server to manage |
 | [`openstack`](deploy-openstack.md) | free with an allocation | yes | Jetstream2 (US academics), campus clouds |
@@ -55548,7 +56366,7 @@ Potato can run on AWS in three ways. For most studies, use the first one.
 | Cost | **$12/month**, flat | about $18/month | about $45–70/month |
 | Disk | survives restarts | survives restarts | wiped when the task is replaced; needs `--backup` |
 | HTTPS | Let's Encrypt certificate for the IP | Let's Encrypt certificate for the IP | AWS certificate on `*.ecs.<region>.on.aws` |
-| Permissions | `lightsail:*` | EC2, plus `ssm:GetParameter` | ECS, IAM, SSM, CloudWatch Logs |
+| Permissions | `lightsail:*`, `sts:GetCallerIdentity` | EC2, plus `ssm:GetParameter` and `sts:GetCallerIdentity` | ECS, IAM, SSM, CloudWatch Logs |
 | `deploy logs` / SSH | yes | yes | logs only |
 
 **Use Lightsail unless you have a reason not to.** Its price includes the IPv4
@@ -55823,6 +56641,10 @@ Caddy with a Let's Encrypt certificate for the machine's IP address, and Potato
 running as a systemd service. `deploy logs`, `deploy pull` over SSH and
 `--volume-gb` work on all three.
 
+The Let's Encrypt contact address defaults to your `git config user.email`;
+`--acme-email <address>` sets another one, as on
+[DigitalOcean](deploy-digitalocean.md#how-tls-works-without-a-domain).
+
 | | `--provider hetzner` | `--provider vultr` | `--provider linode` |
 |---|---|---|---|
 | Default size | `cx23`: 2 vCPU, 4 GB | `vc2-1c-2gb`: 1 vCPU, 2 GB | `g6-standard-1`: 1 vCPU, 2 GB |
@@ -56002,6 +56824,15 @@ warning.
 
 **The certificate store belongs on a volume.** With `--volume-gb` it is placed
 there automatically, so a restart does not mean re-issuing.
+
+Caddy registers its Let's Encrypt account with a contact address. It defaults
+to your `git config user.email`; pass `--acme-email` to use another one. With
+neither, Caddy registers without an address.
+
+```bash
+potato deploy up myproject/config.yaml --provider digitalocean \
+  --acme-email lab-admin@example.edu
+```
 
 For a real name, point an A record at the droplet and pass `--domain`:
 
@@ -56765,7 +57596,13 @@ it. Objects go under `potato/<name>/` (change this with `--s3-prefix`):
 ## Configuring it by hand
 
 `potato deploy` writes this block into the bundled config. Outside deploy,
-for example on your own server, add it to the config yourself:
+for example on your own server, add it to the config yourself. The sinks need
+the `hosting` extra (`huggingface_hub`, `boto3`, Authlib), which the published
+image already includes:
+
+```bash
+pip install 'potato-annotation[hosting]'
+```
 
 ```yaml
 backup:
@@ -56784,8 +57621,9 @@ backup:
 Credentials come from the environment (`HF_TOKEN`, `POTATO_S3_ACCESS_KEY_ID`,
 `POTATO_S3_SECRET_ACCESS_KEY`) or from the sink entry itself, where `${VAR}`
 references are expanded. The older `huggingface_backup:` block still works. It
-is read as one HuggingFace sink with `restore_on_boot` turned off, so an
-existing deployment behaves exactly as before.
+is read as one HuggingFace sink with `restore_on_boot` off by default (set
+`restore_on_boot: true` in that block to turn it on), so an existing deployment
+behaves exactly as before.
 
 ## Getting the project onto the host
 
@@ -57875,22 +58713,35 @@ Clears all span annotations for an instance.
 ### Navigate to Instance
 ```http
 POST /go_to
+Content-Type: application/x-www-form-urlencoded
+```
+
+Moves the annotator to an item by its position in their queue. `go_to` is a
+form field holding a 0-based integer index, not an instance id. Any value that
+does not parse as an integer gets a 400 with
+`{"status": "error", "message": "go_to must be an item number"}`. An index
+outside the queue leaves the position unchanged. The response is the rendered
+annotation page.
+
+**Request Body:**
+```
+go_to=4
+```
+
+To move by action, post to `/annotate` instead. It takes `action` as a form
+field or in a JSON body: `next_instance`, `prev_instance`, or `go_to` together
+with a `go_to` index. Moving forward is refused while the current item is
+missing a required answer.
+
+```http
+POST /annotate
 Content-Type: application/json
 ```
 
-Navigate to a specific instance by ID or index.
-
-**Request Body:**
 ```json
 {
-  "go_to": "item_005"
-}
-```
-
-Or by action:
-```json
-{
-  "action": "next_instance"
+  "action": "go_to",
+  "go_to": 4
 }
 ```
 
@@ -58001,7 +58852,10 @@ Returns admin-defined keyword matches found in the instance text. Keywords are c
 
 ## Admin API Endpoints
 
-Admin endpoints require admin privileges or API key authentication.
+Admin endpoints require admin privileges or the admin API key, sent as an
+`X-API-Key` header. The key is `admin_api_key` in the config, or the one
+Potato generates into `admin_api_key.txt` in the task directory (see
+[the admin dashboard](../administration/admin_dashboard.md)).
 
 ### Health Check
 ```http
@@ -58025,18 +58879,35 @@ GET /admin/api/overview
 **Response:**
 ```json
 {
-  "total_items": 1000,
-  "total_annotations": 5000,
-  "total_users": 25,
-  "active_users": 10,
-  "completion_rate": 0.45,
-  "items_by_status": {
-    "completed": 450,
-    "in_progress": 150,
-    "unassigned": 400
+  "overview": {
+    "over_collected_items": 0,
+    "over_collected_item_ids": [],
+    "total_users": 25,
+    "active_users": 10,
+    "completed_users": 4,
+    "total_annotations": 5000,
+    "total_items": 1000,
+    "items_with_annotations": 450,
+    "completion_percentage": 45.0,
+    "total_assignments": 5200,
+    "total_working_time": "12h 30m",
+    "total_working_seconds": 45000,
+    "average_annotations_per_item": 5.0
+  },
+  "config": {
+    "annotation_task_name": "Sentiment",
+    "max_annotations_per_user": "Unlimited",
+    "max_annotations_per_item": 3,
+    "assignment_strategy": "random",
+    "debug_mode": false
   }
 }
 ```
+
+`completion_percentage` is `items_with_annotations / total_items * 100`,
+rounded to one decimal. `over_collected_items` counts items holding more
+annotations than `max_annotations_per_item` allows; `over_collected_item_ids`
+lists the first 20.
 
 ### Get Annotators
 ```http
@@ -58277,6 +59148,10 @@ GET /admin/api/quality_control
 GET /admin/api/agreement
 ```
 
+Agreement over human annotators only. Declared machine annotators are left out
+and listed in `machine_annotators_excluded`, with a warning; `/admin/iaa` has
+the machine-machine and pooled figures.
+
 **Response:**
 ```json
 {
@@ -58284,7 +59159,9 @@ GET /admin/api/agreement
   "overall": {
     "average_krippendorff_alpha": 0.78,
     "schemas_evaluated": 2,
-    "interpretation": "Tentative agreement"
+    "interpretation": "Tentative agreement",
+    "average_cohen_kappa": 0.8,
+    "average_fleiss_kappa": 0.79
   },
   "by_schema": {
     "sentiment": {
@@ -58292,7 +59169,22 @@ GET /admin/api/agreement
       "metric_type": "nominal",
       "items_evaluated": 100,
       "total_annotations": 300,
-      "interpretation": "Good agreement"
+      "interpretation": "Good agreement",
+      "cohen_kappa": {
+        "mean_kappa": 0.8,
+        "pairs": [
+          {"annotator_a": "ann1", "annotator_b": "ann2", "kappa": 0.8, "n_items": 100}
+        ],
+        "n_pairs_evaluated": 1,
+        "n_pairs_skipped": 0
+      },
+      "fleiss_kappa": {
+        "kappa": 0.79,
+        "n_items_evaluated": 100,
+        "n_raters": 3,
+        "n_categories": 3,
+        "interpretation": "Substantial"
+      }
     },
     "intensity": {
       "krippendorff_alpha": 0.74,
@@ -58300,11 +59192,42 @@ GET /admin/api/agreement
       "items_evaluated": 100,
       "total_annotations": 300,
       "interpretation": "Tentative agreement"
+    },
+    "is_sarcastic": {
+      "krippendorff_alpha": null,
+      "percent_agreement": 1.0,
+      "metric_type": "nominal",
+      "items_evaluated": 40,
+      "total_annotations": 80,
+      "interpretation": "Undefined",
+      "note": "every annotator gave the same label on every item, so chance agreement is 1 and kappa and alpha are undefined. ..."
+    },
+    "regions": {
+      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "see": "/admin/iaa"
     }
   },
-  "warnings": []
+  "machine_annotators_excluded": [
+    {"user_id": "gpt-labeler", "origin": "gpt-4o (llm)"}
+  ],
+  "warnings": ["1 declared machine rater(s) are excluded from these figures: gpt-labeler. ..."]
 }
 ```
+
+- `cohen_kappa` (mean of pairwise kappas) and `fleiss_kappa` are computed for
+  nominal schemas only. Interval schemas (`likert`, `slider`, `number` with
+  numeric answers) report Krippendorff's alpha alone.
+- When every annotator gave the same answer on every item, alpha and both kappas
+  are undefined: `krippendorff_alpha` is `null`, `percent_agreement` is `1.0`,
+  `interpretation` is `"Undefined"`, and `note` explains it. That schema is left
+  out of the `overall` averages.
+- `overall.average_cohen_kappa` and `overall.average_fleiss_kappa` average the
+  schemas that have a kappa value, and appear only when at least one does.
+- Structured schemes (segments, regions, steps, spatial, grounding, episode and
+  caption answers) are not scored here. Their entry has an `error` and
+  `"see": "/admin/iaa"`.
+- A schema with no item reaching `agreement_metrics.min_overlap` annotators
+  (default 2) has an `error` and `items_count` instead.
 
 ---
 
@@ -59037,7 +59960,7 @@ result = response.json()
 print(f"Status: {result['status']}")
 
 # 5. Navigate to next instance
-session.post(f"{BASE_URL}/go_to", json={
+session.post(f"{BASE_URL}/annotate", json={
     "action": "next_instance"
 })
 
@@ -59052,22 +59975,23 @@ session.post(f"{BASE_URL}/go_to", json={
 import requests
 
 BASE_URL = "http://localhost:8000"
+HEADERS = {"X-API-Key": "your_admin_api_key"}
 
 # Get overview
-overview = requests.get(f"{BASE_URL}/admin/api/overview").json()
-print(f"Progress: {overview['completion_rate']*100:.1f}%")
+overview = requests.get(f"{BASE_URL}/admin/api/overview", headers=HEADERS).json()
+print(f"Progress: {overview['overview']['completion_percentage']:.1f}%")
 
 # Get annotator stats
-annotators = requests.get(f"{BASE_URL}/admin/api/annotators").json()
+annotators = requests.get(f"{BASE_URL}/admin/api/annotators", headers=HEADERS).json()
 for a in annotators["annotators"]:
     print(f"{a['user_id']}: {a['completed_items']}/{a['assigned_items']}")
 
 # Get agreement metrics
-agreement = requests.get(f"{BASE_URL}/admin/api/agreement").json()
+agreement = requests.get(f"{BASE_URL}/admin/api/agreement", headers=HEADERS).json()
 print(f"Agreement: α = {agreement['overall']['average_krippendorff_alpha']:.3f}")
 
 # Get quality control metrics
-qc = requests.get(f"{BASE_URL}/admin/api/quality_control").json()
+qc = requests.get(f"{BASE_URL}/admin/api/quality_control", headers=HEADERS).json()
 if qc["attention_checks"]["enabled"]:
     pass_rate = qc["attention_checks"]["total_passed"] / qc["attention_checks"]["total_checks"]
     print(f"Attention check pass rate: {pass_rate*100:.1f}%")
@@ -59242,8 +60166,8 @@ tree an installed Potato has.
 
 ## Regenerating
 
-All five artifacts are generated, and CI fails if a checked-in copy drifts from
-the code:
+Four of the five artifacts are generated (`llms.txt` is curated by hand), and CI
+fails if a checked-in copy drifts from the code:
 
 ```bash
 python scripts/generate_config_schema.py     # config JSON Schema

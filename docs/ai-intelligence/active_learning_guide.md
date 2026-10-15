@@ -258,22 +258,11 @@ active_learning:
   min_instances_for_training: 15
 ```
 
-### Schema-Specific Configuration
+### Per-Schema Settings
 
-Configure different parameters for each schema:
-
-```yaml
-active_learning:
-  enabled: true
-  schema_names: ["sentiment", "topic"]
-  schema_configs:
-    sentiment:
-      min_annotations_per_instance: 3
-      classifier_name: "sklearn.linear_model.LogisticRegression"
-    topic:
-      min_annotations_per_instance: 2
-      classifier_name: "sklearn.ensemble.RandomForestClassifier"
-```
+There are none. The classifier, vectorizer and thresholds under
+`active_learning` apply to every scheme in `schema_names`. A `schema_configs`
+block is not read.
 
 ## Monitoring and Metrics
 

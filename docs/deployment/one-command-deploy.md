@@ -21,7 +21,7 @@ full:
 |---|---|---|---|
 | [`local`](deploy-local.md) | free | yes | seeing what will deploy, before it costs anything |
 | [`potato share`](deploy-share.md) | free | — | a pilot, a lab meeting, a link for twenty minutes |
-| [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` permissions |
+| [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` and `sts:GetCallerIdentity` permissions |
 | [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$18/mo | yes | AWS accounts that require EC2 |
 | [`aws-ecs`](deploy-aws.md#ecs-express-mode-provider-aws-ecs) | ~$45–70/mo | no, `--backup` | AWS with no server to manage |
 | [`openstack`](deploy-openstack.md) | free with an allocation | yes | Jetstream2 (US academics), campus clouds |

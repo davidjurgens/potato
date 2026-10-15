@@ -1,8 +1,14 @@
 # Solo Mode: Validated Prompt Refinement
 
-Solo mode rewrites its labeling prompt from human-LLM disagreements. Every
-candidate rewrite is scored on held-out data and rejected unless it beats the
-prompt already in use.
+Solo mode rewrites its labeling prompt from human-LLM disagreements. This page
+covers the validated framework, where every candidate rewrite is scored on
+held-out data and rejected unless it beats the prompt already in use.
+
+The validated framework is **not the default**. The default
+`refinement_strategy` is `focused_edit`, which runs the older unvalidated cycle,
+and none of the validation keys below apply to it. To use the framework, set
+`solo_mode.refinement_loop.refinement_strategy` to one of the four strategy
+names in the table below. See [Selecting a strategy](#selecting-a-strategy).
 
 ## Problem
 
@@ -57,8 +63,8 @@ All strategies are registered via `@register_strategy` in `potato/solo_mode/refi
 |---|---|---|---|
 | `validated_focused_edit` | small | binary, objective, few labels | Generates N prompt-rule candidates via the revision LLM, validation-gated apply. |
 | `principle_icl` | small | subjective, many labels, small models | Proposes validated instances as ICL examples instead of rules. More robust against narrow-rule overfitting. |
-| `hybrid_dual_track` | small | **recommended default** | Tries prompt edits first; after 2 consecutive prompt-edit failures, falls back to ICL. |
-| `legacy_append` | — | ablation / comparison only | Original append-only behavior, no validation. Preserved so research baselines can be reproduced. |
+| `hybrid_dual_track` | small | data with unknown properties | Tries prompt edits first; after 2 consecutive prompt-edit failures, falls back to ICL. A reasonable first choice, but you must set it; it is not the default. |
+| `legacy_append` | small | ablation / comparison only | Proposes appended rules in the style of the original append-only loop. The candidates still go through the validation gate. Preserved so research baselines can be reproduced. |
 
 For larger optimizer models (7B+), additional strategies like ProTeGi beam search and OPRO solution-history are described in the literature but not yet implemented. See `potato/solo_mode/refinement/strategies.py` docstrings for guidance on implementing new strategies.
 
@@ -71,7 +77,7 @@ solo_mode:
   refinement_loop:
     enabled: true
     trigger_interval: 50          # fire after N new human annotations
-    refinement_strategy: "hybrid_dual_track"  # see table above
+    refinement_strategy: "hybrid_dual_track"  # must be set; the default is focused_edit
     # Validation-gated framework options
     validation_split_ratio: 0.3   # fraction of disagreements held out
     eval_sample_size: 10          # val instances scored per candidate
@@ -85,6 +91,30 @@ solo_mode:
     dry_run: false                # if true, log candidates but don't apply
     require_approval: false       # if true, queue for admin review
 ```
+
+## Selecting a strategy
+
+`refinement_strategy` takes two groups of values, and they run different code
+(`SoloModeManager.trigger_refinement_cycle`).
+
+| Value | Path | Notes |
+|---|---|---|
+| `focused_edit` (default) | legacy | One LLM call rewrites the guidelines section as a set. No validation. |
+| `generator_critic` | legacy | Generates guideline candidates, then a critic pass filters them. No validation. |
+| `append` | legacy | One suggestion per confusion pattern, appended under a "Refinement Guidelines" heading. No validation. |
+| `validated_focused_edit`, `principle_icl`, `hybrid_dual_track`, `legacy_append` | validated | The registered strategies in the table above. |
+
+A name that is not registered falls through to the legacy path, which treats
+anything other than `focused_edit` and `generator_critic` as `append`.
+
+Which keys apply:
+
+| Key | Legacy path | Validated path |
+|---|---|---|
+| `enabled`, `trigger_interval` | yes | yes |
+| `min_improvement`, `patience` | yes | yes |
+| `max_cycles`, `auto_apply_suggestions` | yes | no (a winning candidate is applied unless `dry_run` or `require_approval` is set) |
+| `validation_split_ratio`, `eval_sample_size`, `num_candidates`, `min_val_size`, `max_consecutive_failures`, `min_val_improvement`, `eval_temperature`, `prefer_consistent_disagreements`, `dry_run`, `require_approval` | no | yes |
 
 ## HTTP API
 

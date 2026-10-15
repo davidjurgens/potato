@@ -84,6 +84,7 @@ Then open http://localhost:8000 in your browser.
 | `mode` | string | `"segment"` | Annotation mode (see Annotation Modes) |
 | `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments (null = unlimited) |
+| `segment_schemes` | list | `[]` | Per-segment annotation schemes (see [Per-segment questions](#per-segment-questions)). Read only when `mode: combined`. |
 | `timeline_height` | integer | `70` | Height of timeline in pixels |
 | `overview_height` | integer | `40` | Height of overview bar in pixels |
 | `zoom_enabled` | boolean | `true` | Enable timeline zoom controls |
@@ -308,6 +309,51 @@ Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
 - Useful when a video needs both segment and frame-level labels
+
+#### Per-segment questions
+
+In `combined` mode, `segment_schemes` asks the annotator a set of questions
+about each segment. The annotator marks a segment, selects it, and answers the
+questions in the panel that opens for it:
+
+```yaml
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: scene_review
+    description: "Mark each scene and describe it"
+    mode: combined
+    labels:
+      - name: scene
+    segment_schemes:
+      - annotation_type: radio
+        name: setting
+        description: "Where does this scene take place?"
+        labels: ["indoor", "outdoor", "unclear"]
+      - annotation_type: multiselect
+        name: content
+        description: "What appears in this scene?"
+        labels: ["people", "text on screen", "animals"]
+```
+
+`segment_schemes` is read only when `mode` is `combined`. In the other modes
+the validator still accepts it, but no questions appear.
+
+Each entry is an ordinary annotation scheme, rendered by the same generator as
+a top-level one, so any annotation type works inside a segment. Media types
+(`audio_annotation`, `video_annotation`, `tiered_annotation`) are refused,
+since a segment cannot hold its own timeline. Answers are stored on the
+segment, keyed by the sub-scheme's `name`:
+
+```json
+{"segments": [
+  {"id": "segment_1", "start_time": 0.0, "end_time": 10.5, "label": "scene",
+   "annotations": {"setting": "indoor", "content": ["people"]}}
+]}
+```
+
+As with [audio segment questions](audio_annotation.md), keybindings are not
+bound to segment fields, and `label_requirement` is not enforced on a
+sub-scheme. Use `min_segments` to require segments.
 
 ## Showing and Hiding Classes
 

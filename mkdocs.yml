@@ -151,6 +151,7 @@ nav:
         - HuggingFace Models: ai-intelligence/huggingface_models.md
         - Judge Calibration: ai-intelligence/judge_calibration.md
         - Reviewing Model Output: ai-intelligence/model_review.md
+        - Model Training: ai-intelligence/model_training.md
         - AI Costs and Spend Caps: ai-intelligence/ai_costs.md
     - Advanced Features:
         - MACE: advanced/mace.md

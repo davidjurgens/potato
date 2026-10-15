@@ -2,6 +2,67 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [Unreleased]
+
+### Image classification
+
+- **Model training trains image classifiers.** A radio or multiselect scheme
+  whose items name image files is now treated as an image corpus, and the
+  `sklearn-text` trainer fits it on CLIP embeddings unless the run names a
+  vectorizer. It used to fit TF-IDF on the file paths. `/media/...`
+  references resolve against `media_directory`, and rows whose image is
+  remote or missing are left out with a warning instead of becoming blank
+  embeddings.
+- **Image active learning works as documented.** `vectorizer: {name: image}`
+  (or `clip`) builds the CLIP vectorizer, and every scheme, radio and
+  multiselect included, gets the item's image. `image` was not a name the
+  manager could build, so such a study was ranked by TF-IDF over file paths.
+- **The labeling engine distils image classifiers.** On an image study
+  (`labeling_engine.distill.modality`, default `auto`; `image_field`) the
+  distilled tier is a CLIP-embedding classifier and abstains on images it
+  cannot read.
+- **Prelabels for unlabelled items.** `model_training.writeback.include_unlabeled:
+  true` makes a run predict on the items nobody has labelled yet, and
+  prelabel them under the usual write-back checks. A run used to predict only
+  on its held-out val and test items, which are already labelled, so
+  write-back never reached the items a prelabel is for.
+- New page: [Model Training](docs/ai-intelligence/model_training.md).
+
+### Fixes
+
+- **A text model trained on URLs.** Items with a `url`, `path` or `file_name`
+  field gave the trainer that value instead of the text. A text vectorizer now
+  always reads the text, and the model card records which input a model was
+  fitted on.
+- **Password resets failed under SSO.** With `method: oauth` and
+  `allow_local_login`, the admin reset link, `/reset/<token>` and
+  `potato reset-password` raised for every account. Local accounts can now be
+  reset; SSO identities are refused.
+- **`ai_support` refused OpenRouter.** `endpoint_type: openrouter` (and
+  `open_router`, as the docs show) is accepted.
+- **Prelabels did not survive a restart.** The startup replay of stored
+  predictions ran before any item was loaded, so it failed on the first one
+  ("Could not restore model predictions") and the model review queue emptied
+  on every restart. It now runs after the items load, and applies the same
+  checks as write-back: the leak guard, the confidence floor and reviewer
+  rejections (it applied only the scheme check, and every prediction is
+  stored, a run's training items included).
+- **CSS lengths with units.** `max_height: "50vh"` and similar became
+  `50vhpx` in the text, PDF, code, spreadsheet and live and web agent
+  displays. A unit is now kept; a bare number still means pixels.
+- The embedding vectorizers declare scikit-learn tags, which scikit-learn
+  1.8 will require.
+
+### Documentation
+
+A review of the docs against the code for the 2.9 to 2.11 releases. It
+corrected wrong commands (`potato export`, the export CLI's flags), wrong
+URLs (curation routes, `/go_to`), wrong defaults and response shapes, stale
+counts (now checked by tests), keys documented in the wrong place, the debug
+`--host` requirement, the Hugging Face Spaces and backup pages, and SSO
+behaviour, and added successor notes pointing older machine-labeling
+features to the labeling engine.
+
 ## [2.11.0] - The Labeling Engine
 
 Potato can now label a dataset with models and use people to measure how

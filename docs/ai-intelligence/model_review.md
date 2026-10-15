@@ -20,7 +20,18 @@ pre_annotation:
   field: predictions
 ```
 
-Annotators are now served prelabelled items least-confident first. The report:
+Annotators are now served prelabelled items least-confident first.
+Prelabels can also come from [model training](model_training.md): its
+write-back puts predictions in the same `predictions` field by default.
+
+> **Successor in 2.11:** `pre_annotation` still works in 2.11 and is planned for
+> removal in 3.0. In the [labeling engine](../labeling-engine/overview.md),
+> existing predictions are a `static` source.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
+
+The report:
 
 ```bash
 curl -H "X-API-Key: $KEY" http://localhost:8000/admin/model-review
@@ -65,11 +76,14 @@ A confidence-ordered queue cannot surface one either, since an item with no
 prediction has no confidence to be low. So missing detections survive review
 unless someone goes looking for them.
 
-Potato ships a built-in slice for that, with no configuration:
+Potato ships a built-in slice for that, `model-found-nothing`. You do not
+have to save it, but it lives in the curation catalog, so the project needs
+`curation: {enabled: true}`; without it the `/admin/catalog` routes are not
+registered. See [Semantic curation](../agent-evaluation/semantic_curation.md).
 
 ```bash
 curl -H "X-API-Key: $KEY" \
-  "http://localhost:8000/curation/api/slices/model-found-nothing/resolve"
+  "http://localhost:8000/admin/catalog/api/slices/model-found-nothing/resolve"
 ```
 
 It appears in `/admin/catalog` alongside your own slices, and can become a

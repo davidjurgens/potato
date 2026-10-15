@@ -27,7 +27,7 @@ On top of the model sit four tools:
 ## Quick start
 
 ```bash
-python potato/flask_server.py start examples/advanced/psychometrics/config.yaml -p 8000 --debug
+python potato/flask_server.py start examples/advanced/psychometrics/config.yaml -p 8000 --host 127.0.0.1 --debug
 # annotate a bit (or point the simulator at it), then open:
 #   http://localhost:8000/psychometrics/dashboard
 ```
@@ -53,7 +53,16 @@ psychometrics:
   confidence_threshold: 0.95 # posterior at which an item counts as resolved
   cost_per_judgment: 0.08    # optional: expresses savings in currency
   discrimination_flag_threshold: -0.2  # codebook-bug flag sensitivity
+  include_machine_annotators: false    # score declared machine raters too (default false)
 ```
+
+`include_machine_annotators` is off by default, so declared
+[machine annotators](machine_annotators.md) do not move people's ability
+estimates. Turning it on fits an ability for each annotation tool from the
+disagreement pattern, which gives a per-tool reliability estimate on a corpus
+with no ground truth. Tools that share reference databases make correlated
+errors, which inflates the apparent ability of the majority cluster, so check
+which tools share evidence before reporting those estimates.
 
 Supported schemes are single-choice categorical: `radio` and `likert`
 (likert points are treated as nominal categories). Multi-select schemes are

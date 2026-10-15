@@ -16,13 +16,18 @@ potato download-models --list
 | `grounding_dino_tiny` | Text → boxes | Browser | 145 MB | Apache-2.0 |
 | `sam2_video_tiny` | Prompt one frame → track through the rest | Server | 181 MB | Apache-2.0 |
 | `edge_sam` | Click → mask, fastest on weak hardware | Browser | — | **Non-commercial only** |
+| `sam2_hiera_tiny` | Click → mask, SAM 2's single-image path | Browser | — | Apache-2.0 |
 | `sam3` | Text → boxes and masks, one model | Server | ~3.5 GB | Meta SAM License |
 | `edgetam` | On-device tracking, 22× faster than SAM 2 | — | — | Apache-2.0 |
 | `onnxruntime` | The inference runtime the others need | Browser | 13.5 MB | MIT |
 
-Two entries have no download. `edge_sam` permits non-commercial use only, so
+Four entries have no download, and `potato download-models` refuses them with
+"No download is configured". `edge_sam` permits non-commercial use only, so
 we leave the URL out; making it one command away would invite people to install
-it without reading the licence. `edgetam` has no published ONNX export at all
+it without reading the licence. `sam2_hiera_tiny` has no file list; for SAM 2
+use `sam2_video_tiny`, the export that also carries the memory modules.
+`sam3` is never redistributed: you supply the weights (see
+[Licences](#licences)). `edgetam` has no published ONNX export at all
 (upstream ships CoreML), so there is nothing to fetch yet. Its entry exists
 because the video session is written against a task, so the day an export
 appears, filling in the URL is the whole job.
@@ -74,7 +79,10 @@ only. `potato download-models --list` prints `<-- NON-COMMERCIAL` next to it.
 `sam3` is under Meta's SAM License, which is not Apache-2.0. Commercial use is
 permitted and you own your derivative works, but acceptable-use restrictions
 apply and redistribution must carry the same licence. Potato redistributes no
-SAM 3 files and refuses to fetch it without `--accept-licence`.
+SAM 3 files, so `potato download-models sam3` cannot fetch it. Without
+`--accept-licence` the command stops at the licence; with it, the command
+reports that no download is configured. Point `endpoint_type: sam3` at weights
+you already hold, or at an inference server you run.
 
 ## Choosing between text prompting and SAM 3
 

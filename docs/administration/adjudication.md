@@ -121,6 +121,20 @@ adjudication:
     # top_k: 5
     # precompute_on_start: true
 
+  # Whether declared machine annotators (see machine_annotators.md) count
+  # toward min_annotations and appear in the queue. When false, their
+  # labels are left out of the queue entirely.
+  # Type: bool
+  # Default: false
+  include_machine_annotators: false
+
+  # Minimum number of human (non-machine) annotations an item needs before
+  # it can be queued, separate from min_annotations. 0 allows an item
+  # labeled only by machine annotators, with the adjudicator as the human.
+  # Type: int
+  # Default: 0
+  min_human_annotations: 0
+
   # Subdirectory name within the annotation output directory where
   # adjudication decisions are stored.
   # Type: string
@@ -151,8 +165,9 @@ Regular annotators complete their work through the standard `/annotate` interfac
 
 When an adjudicator logs in and navigates to `/adjudicate`, the system builds the adjudication queue by scanning all items. An item enters the queue when:
 
-1. It has at least `min_annotations` completed annotations (excluding adjudicator users).
-2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
+1. It has at least `min_annotations` completed annotations. Adjudicator users never count, and declared [machine annotators](../advanced/machine_annotators.md) count only when `include_machine_annotators` is true.
+2. It has at least `min_human_annotations` annotations from humans (default 0).
+3. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
 
 An item has no score when none of its schemas can be compared: a span-only item,
 or one where every schema was answered by a single annotator. Such items are
@@ -171,7 +186,7 @@ After adjudication is complete (or at any point during the process), you can gen
 - **Adjudicated items**: An adjudicator reviewed the disagreement and submitted a decision. The adjudicator's decision is used.
 - **Unresolved items**: Annotators disagreed but no adjudication decision has been submitted yet. These are excluded by default but can be included with a flag.
 
-Each item in the exported dataset includes a `source` field indicating its provenance (`"unanimous"`, `"adjudicated"`, or `"unresolved"`).
+Each item in the exported dataset includes a `source` field indicating its provenance (`"unanimous"`, `"unanimous_machine"`, `"unanimous_mixed"`, `"adjudicated"`, or `"unresolved"`). A unanimous item is `"unanimous"` when every annotator who agreed is human, `"unanimous_machine"` when all of them are declared machine annotators, and `"unanimous_mixed"` when they include both.
 
 ### Data Flow Diagram
 
@@ -346,7 +361,7 @@ If a decision cannot be submitted, the reason appears next to the buttons.
 
 ## Getting the decisions out
 
-`potato export --format adjudication` writes the decisions themselves:
+`python -m potato.export -c <config.yaml> -f adjudication -o <dir>` writes the decisions themselves:
 `adjudicated.csv`, one row per (item, schema) with the value, its source and the
 adjudicator's confidence, plus `adjudication_log.jsonl` with the notes, error
 taxonomy and timings. It runs from the same place as every other format,
@@ -419,7 +434,7 @@ Each item in the exported dataset includes the following fields:
 | `instance_id` | The unique identifier for the item |
 | `item_data` | The original item data (JSONL/JSON only) |
 | `labels` | The final label decisions (keyed by schema name) |
-| `source` | Provenance: `"unanimous"`, `"adjudicated"`, or `"unresolved"` |
+| `source` | Provenance: `"unanimous"`, `"unanimous_machine"`, `"unanimous_mixed"`, `"adjudicated"`, or `"unresolved"` |
 | `adjudicator` | Username of the adjudicator (adjudicated items only) |
 | `confidence` | Adjudicator's confidence level (adjudicated items only) |
 | `provenance` | Per-schema source mapping (adjudicated items only) |

@@ -2,6 +2,14 @@
 
 ICL labeling feeds the LLM your highest-confidence human annotations as in-context examples, then has it label the rest of the data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
 
+> **Successor in 2.11:** the [labeling engine](../labeling-engine/overview.md)
+> does this job with an `llm` source and a contract (`threshold_legacy` for this
+> page's fixed-confidence rule, `selective_risk` beside it). `icl_labeling`
+> still works in 2.11 and is planned for removal in 3.0.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
+
 ## Overview
 
 The ICL labeling system:

@@ -131,8 +131,8 @@ python -m potato.export -c config.yaml -f qdpx -o ./export/
 !!! warning "ATLAS.ti supports one level of subcode"
     REFI-QDA lets codes nest to any depth and so does Potato, but ATLAS.ti
     flattens or drops anything past a single level on import — without telling
-    the researcher it happened. Export with `flatten_subcodes` to control that
-    yourself: every code is re-parented to the top level and renamed
+    the researcher it happened. Export with
+    `--option flatten_subcodes=true` to control that yourself: every code is re-parented to the top level and renamed
     `Parent > Child > Grandchild`, which loses the tree but keeps every code
     legible.
 

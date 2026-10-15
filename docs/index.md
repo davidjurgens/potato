@@ -24,7 +24,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Getting Started Guide](guides/getting-started.md) - First-time setup and your first annotation project
 - [Administrator Guide](guides/admin-guide.md) - Managing annotators, quality control, and monitoring
 - [Developer Guide](guides/developer-guide.md) - Extending Potato, API integration, and custom schemas
-- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and MTurk
+- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and MTurk (for other platforms, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
 - [Agent Evaluation Guide](guides/agent-evaluation-guide.md) - Evaluating AI agents, coding agents, and web agents
 - [AI-Assisted Annotation Guide](guides/ai-assisted-annotation-guide.md) - Using LLMs, active learning, and Solo Mode
 
@@ -42,9 +42,9 @@ Role-based guides that walk you through Potato for your specific use case:
 Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
-- **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
+- **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 419 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 477 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -190,7 +190,8 @@ over prose when writing a config or calling the API.
 
 ## Crowdsourcing
 
-- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Prolific and MTurk integration
+- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Configuring a crowd provider; nine ship, including Prolific and MTurk
+- [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md) - Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker and others compared
 - [MTurk Integration](deployment/mturk_integration.md) - Detailed Amazon MTurk setup guide
 
 ## Administration
@@ -224,7 +225,7 @@ over prose when writing a config or calling the API.
 ## Integrations
 
 - [Webhooks](integrations/webhooks.md) - Outgoing webhook notifications for annotation events
-- [HuggingFace Spaces](data-export/huggingface_spaces.md) - Deploy Potato on HuggingFace Spaces
+- [HuggingFace Spaces](deployment/deploy-huggingface.md) - Deploy Potato on HuggingFace Spaces
 - [LangChain Integration](integrations/langchain_integration.md) - Send LangChain agent traces to Potato
 - [Tracing SDK (`potato_trace`)](integrations/tracing_sdk.md) - Instrument any agent with `@traceable` to capture runs into Potato (OpenTelemetry interop)
 
@@ -242,10 +243,25 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.11.0](releasenotes/v2.11.0.md) - The Labeling Engine
+- [v2.10.3](releasenotes/v2.10.3.md) - Agreement, Deploy Button and Pyodide Fixes
+- [v2.10.2](releasenotes/v2.10.2.md) - Security, MySQL, Agreement and Packaging Fixes
+- [v2.10.1](releasenotes/v2.10.1.md) - Deploy Dry Runs and Price Fixes
+- [v2.10.0](releasenotes/v2.10.0.md) - Eight Hosting Platforms, Backups and Text as Image
+- [v2.9.4](releasenotes/v2.9.4.md) - Password Reset Fix and Phone Usability
+- [v2.9.3](releasenotes/v2.9.3.md) - AI Toolbar Fixes
+- [v2.9.2](releasenotes/v2.9.2.md) - Faster Navigation Between Items
+- [v2.9.1](releasenotes/v2.9.1.md) - Chat and Gemini Fixes
+- [v2.9.0](releasenotes/v2.9.0.md) - Importers, Local Transcription and Provenance
+- [v2.8.2](releasenotes/v2.8.2.md) - The Fixes 2.8.1 Said It Had
+- [v2.8.1](releasenotes/v2.8.1.md) - Security Fixes (see the correction at the top of the page)
+- [v2.8.0](releasenotes/v2.8.0.md) - Vision, and the Statistics to Check It
 - [v2.7.1](releasenotes/v2.7.1.md) - Transcripts In, Without the Reformatting (21 input formats, sidecar files, `potato transcripts` CLI)
 - [v2.7.0](releasenotes/v2.7.0.md) - Seven New Ways to Annotate (Psychometrics, Multiplayer Rooms, Boundary Lab, Truth Serum, Think-Aloud, Paper Mode, Pocket Mode)
+- [v2.6.2](releasenotes/v2.6.2.md) - Agent-Evaluation Differentiation and Multi-Agent & Multimodal Annotation
 - [v2.6.1](releasenotes/v2.6.1.md) - Agentic Evaluation Suite (evaluators, datasets/experiments, automation, CI gating, tracing SDK, curation, arena)
 - [v2.6.0](releasenotes/v2.6.0.md) - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing
+- [v2.4.5](releasenotes/v2.4.5.md) - Validated Refinement, Config Validator & Stability
 - [v2.4.4](releasenotes/v2.4.4.md) - Span Annotation Fixes & UX Improvements
 - [v2.4.3](releasenotes/v2.4.3.md) - Coding Agent Annotation, Localization & Stability
 - [v2.4.1](releasenotes/v2.4.1.md) - Bug Fixes
@@ -303,7 +319,7 @@ over prose when writing a config or calling the API.
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
 | Import COCO annotations (RLE masks included) | [Image Annotation Formats](annotation-types/multimedia/image_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
-| Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
+| Deploy on HuggingFace Spaces | [HuggingFace Spaces](deployment/deploy-huggingface.md) |
 | Run behind a `/app1/` reverse proxy | [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) |
 | Set up webhook notifications | [Webhooks](integrations/webhooks.md) |
 | Use LLM chat assistant for annotators | [Chat Support](ai-intelligence/chat_support.md) |
@@ -330,7 +346,7 @@ python potato/flask_server.py start examples/classification/single-choice/config
 python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 ```
 
-See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) directory for more examples, including:
+See the [examples](https://github.com/davidjurgens/potato/tree/master/examples) directory for more examples, including:
 
 - `classification/` - Classification annotation examples (radio, checkbox, likert, etc.)
 - `span/` - Span annotation examples (NER, linking, coreference, etc.)

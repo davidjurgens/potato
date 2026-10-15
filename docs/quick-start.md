@@ -69,7 +69,6 @@ Create a YAML configuration file `config.yaml` in your task directory:
 ```yaml
 # Basic Configuration
 port: 8000
-server_name: My First Annotation Task
 annotation_task_name: Sentiment Analysis
 task_dir: .  # Resolves to the directory containing this config file
 
@@ -130,13 +129,17 @@ alert_time_each_instance: 10000000
 
 ### 4. Start the Server
 
-Start the annotation server with your configuration:
+Step 1 left you inside `my_annotation_task/`. Go back to the directory that
+contains it and start the server:
 
 ```bash
+cd ..
+
 # If you installed from PyPI (Option 1):
 potato start my_annotation_task/config.yaml -p 8000
 
-# If you cloned the repo (Option 2), run from the repo root:
+# If you cloned the repo (Option 2), run from the repo root
+# (with my_annotation_task/ created there):
 python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 ```
 

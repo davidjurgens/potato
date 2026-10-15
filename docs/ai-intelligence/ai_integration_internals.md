@@ -147,7 +147,7 @@ class AIEndpointFactory:
 
 1. **Create endpoint file** (`potato/ai/my_provider_endpoint.py`):
 ```python
-from ai.ai_endpoint import BaseAIEndpoint
+from potato.ai.ai_endpoint import BaseAIEndpoint
 
 class MyProviderEndpoint(BaseAIEndpoint):
     def _initialize_client(self):
@@ -166,13 +166,27 @@ class MyProviderEndpoint(BaseAIEndpoint):
         return self.parseStringToJson(response)
 ```
 
-2. **Register in cache manager** (`potato/ai/ai_cache.py`):
+2. **Register it lazily** by adding a row to the registration list at the end
+   of `potato/ai/ai_endpoint.py`. Each row is passed to
+   `AIEndpointFactory.register_lazy_endpoint`, so the module is imported only
+   when a config selects that `endpoint_type`. The last field is the install
+   hint printed after `pip install` when the SDK is missing, or `None`:
 ```python
-from ai.my_provider_endpoint import MyProviderEndpoint
-AIEndpointFactory.register_endpoint("my_provider", MyProviderEndpoint)
+for _type, _module, _class, _hint in [
+    ...
+    ("my_provider", ".my_provider_endpoint", "MyProviderEndpoint", "my-provider-sdk"),
+]:
+    AIEndpointFactory.register_lazy_endpoint(_type, _module, _class, _hint)
 ```
 
-3. **Update documentation** in `docs/ai_support.md`
+3. **Allow it in config validation.** Add the type to `valid_endpoint_types`
+   in `validate_ai_support_config` in `potato/server_utils/config_module.py`.
+   For `chat_support`, also add it to the list in
+   `validate_chat_support_config`, and only if the endpoint implements
+   `chat_query` itself; `tests/unit/test_chat_query_every_endpoint.py` checks
+   that list.
+
+4. **Update documentation** in `docs/ai-intelligence/ai_support.md`.
 
 ## Debugging AI Issues
 
@@ -180,9 +194,9 @@ AIEndpointFactory.register_endpoint("my_provider", MyProviderEndpoint)
 
 ```python
 # In Python console or debug endpoint:
-from ai.ai_help_wrapper import get_dynamic_ai_help
-from ai.ai_cache import get_ai_cache_manager
-from ai.ai_prompt import get_ai_prompt
+from potato.ai.ai_help_wrapper import get_dynamic_ai_help
+from potato.ai.ai_cache import get_ai_cache_manager
+from potato.ai.ai_prompt import get_ai_prompt
 
 print("AI Help Wrapper:", get_dynamic_ai_help())  # Should not be None
 print("Cache Manager:", get_ai_cache_manager())   # Should not be None

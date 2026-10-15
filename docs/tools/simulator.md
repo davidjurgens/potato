@@ -314,7 +314,7 @@ def test_dashboard_shows_annotations(simulated_annotations, flask_test_server):
     """Verify dashboard shows simulated data."""
     # Check admin API
     response = requests.get(f"{flask_test_server.base_url}/admin/api/overview")
-    assert response.json()["total_annotations"] > 0
+    assert response.json()["overview"]["total_annotations"] > 0
 ```
 
 ## Example Configurations

@@ -7,17 +7,38 @@ Solo Mode's architecture, its extension points, and the conventions to follow wh
 ```
 potato/solo_mode/
 ├── __init__.py                 # Public API exports
-├── config.py                   # SoloModeConfig dataclass
+├── config.py                   # SoloModeConfig dataclass and parser
 ├── manager.py                  # SoloModeManager singleton (orchestrator)
 ├── phase_controller.py         # Phase state machine
 ├── routes.py                   # Flask routes (/solo/*)
 ├── prompt_manager.py           # Prompt versioning and synthesis
 ├── prompt_optimizer.py         # DSPy-style optimization
+├── prompt_sensitivity.py       # Label stability under prompt paraphrase
 ├── instance_selector.py        # Weighted instance selection
+├── anchoring.py                # Anchoring measurement (blind vs shown suggestions)
 ├── disagreement_resolver.py    # Human-LLM conflict handling
+├── disagreement_explorer.py    # Disagreement explorer data
 ├── validation_tracker.py       # Agreement metrics
+├── evaluation.py               # Gold-set and trial scoring of prompt versions
 ├── llm_labeler.py              # Background LLM worker
+├── label_cache.py              # Response cache for labeling calls
+├── spend.py                    # Labeling cost estimate and spend-cap checks
+├── jury.py                     # Several labeling models vote
+├── confidence_router.py        # Cascaded confidence routing
+├── confusion_analyzer.py       # Confusion patterns
+├── guideline_updater.py        # Approved edge case rules into the prompt
+├── refinement_loop.py          # Refinement cycle (legacy path)
 ├── edge_case_synthesizer.py    # Generate boundary examples
+├── edge_case_rules.py          # Co-DETECT-style edge case rules
+├── rule_clusterer.py           # Clusters edge case rules
+├── labeling_functions.py       # ALCHEmist-style labeling functions
+├── refinement/                 # Validated refinement framework
+│   ├── __init__.py
+│   ├── base.py                 # RefinementStrategy and candidate types
+│   ├── registry.py             # @register_strategy / get_strategy
+│   ├── strategies.py           # Built-in strategies
+│   ├── validation.py           # ValidationSplit, CandidateEvaluator
+│   └── icl_library.py          # Persistent library of validated ICL examples
 └── uncertainty/                # Pluggable uncertainty estimation
     ├── __init__.py
     ├── base.py                 # UncertaintyEstimator ABC
@@ -200,9 +221,9 @@ class UncertaintyEstimatorFactory:
 ### 3. Add config validation
 
 ```python
-# potato/server_utils/config_module.py
+# potato/solo_mode/config.py
 
-# In validate_solo_mode_config():
+# In SoloModeConfig.validate():
 valid_strategies = [
     'direct_confidence', 'direct_uncertainty',
     'token_entropy', 'sampling_diversity',

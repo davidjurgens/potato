@@ -338,7 +338,12 @@ Two things worth knowing:
   mangles anything deeper. Passing this option re-parents every code to the top
   level and renames it `Parent > Child > Grandchild`, so you control the loss
   instead of discovering it. Potato warns when your codebook is deep enough for
-  this to matter.
+  this to matter. Pass it with `--option`:
+
+  ```bash
+  python -m potato.export -c config.yaml -f qdpx -o ./export/ \
+    --option flatten_subcodes=true
+  ```
 
 Two exports of an unchanged project are byte-identical: the GUIDs REFI-QDA
 requires are derived from what they name, so an export can be diffed.

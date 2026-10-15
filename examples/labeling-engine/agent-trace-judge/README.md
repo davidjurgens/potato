@@ -46,7 +46,7 @@ on a vLLM server, not the Ollama model in `config.yaml`:
 
 The rest of the source (`max_tokens`, `options`) is unchanged. With
 `llama3.1:8b` the numbers will differ. With Gemma 12B as the judge, it was right on 80% of traces but gave confidence
-1.0 to nearly every verdict, so no threshold could be certified and every
+1.0 to every verdict, so no threshold could be certified and every
 trace went to people. The alternative annotator test was insufficient: the
 judge scored 0.82 against the people's 0.93, and there were not yet enough
 labels to decide. The engine's success-rate interval,

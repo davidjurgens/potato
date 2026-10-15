@@ -156,7 +156,7 @@ AI support is configured in your YAML configuration file under the `ai_support` 
 ```yaml
 ai_support:
   enabled: true
-  endpoint_type: "openai"  # or "anthropic", "huggingface", "ollama", "gemini", "vllm", "open_router"
+  endpoint_type: "openai"  # or "anthropic", "huggingface", "ollama", "gemini", "vllm", "openrouter" (also spelled "open_router")
   ai_config:
     model: "gpt-4o-mini"
     api_key: "your-api-key-here"
@@ -184,7 +184,7 @@ ai_support:
 | `ai_config.model` | string | No | Model name (uses provider default if not specified) |
 | `ai_config.api_key` | string | Yes* | API key for cloud providers |
 | `ai_config.base_url` | string | No | An OpenAI-compatible server to use instead of the vendor's — vLLM, SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes `api_key` optional |
-| `ai_config.temperature` | float | No | Response randomness (0.0-2.0, default: 0.7) |
+| `ai_config.temperature` | float | No | Response randomness (0.0-2.0, default: 0.1) |
 | `ai_config.max_tokens` | integer | No | Maximum response length (default: 800). The Rationale and Keyword assistants answer for every label at once and need several hundred tokens; below that the reply is cut off and the assistant renders empty |
 | `ai_config.include.all` | boolean | No | Enable AI for all annotation schemes (default: false) |
 | `ai_config.include.special_include` | object | No | Per-page, per-annotation customization |
@@ -199,6 +199,17 @@ ways to get one, and validation accepts all three: `OPENAI_API_KEY` in the
 environment, or a `base_url` pointing at a self-hosted server, which has no key.
 `anthropic`, `huggingface` and `gemini` read neither, so for those it really is
 required.
+
+`endpoint_type` accepts `openai`, `anthropic`, `huggingface`, `ollama`,
+`gemini`, `vllm`, `openrouter` (or `open_router`), and the vision endpoints
+`yolo`, `ollama_vision`, `openai_vision` and `anthropic_vision`. Validation
+rejects anything else, including two registered endpoint types:
+
+- The decision models `laya` and `systemone` pick a label but cannot write
+  text, and every assistant here writes text. Use them under
+  `solo_mode.labeling_models`, as a `solo_mode.confidence_routing` tier, or as
+  a `labeling_engine` source with `kind: decision`.
+- `sam` and `sam3` are segmentation models, not text endpoints.
 
 Two things about `ai_config` are worth stating because nothing catches them:
 
@@ -289,7 +300,7 @@ This allows fine-grained control over which instances and annotation schemes rec
 
 ### Prompt Template Files
 
-AI prompts are stored in JSON files in `potato/ai/prompt/`. Each annotation type has its own prompt file:
+AI prompts are stored in JSON files in `potato/ai/prompt/`. Each file is loaded under its file name without the extension, and each annotation type has its own prompt file:
 
 - `radio.json` - For radio button (single-choice) annotations
 - `likert.json` - For Likert scale annotations
@@ -298,7 +309,10 @@ AI prompts are stored in JSON files in `potato/ai/prompt/`. Each annotation type
 - `slider.json` - For slider annotations
 - `select.json` - For dropdown annotations
 - `number.json` - For numeric input annotations
-- `textbox.json` - For free-text annotations
+- `text.json` - For free-text (`textbox`) annotations
+- `image_annotation.json` - For image annotation (visual AI support)
+- `video_annotation.json` - For video annotation (visual AI support)
+- `option_highlight.json` - For [option highlighting](option_highlighting.md)
 
 ### Prompt Structure
 
@@ -374,7 +388,7 @@ ai_support:
   enabled: true
   endpoint_type: "anthropic"
   ai_config:
-    model: "claude-3-5-sonnet-20241022"
+    model: "claude-haiku-4-5-20251001"  # the default when model is unset
     api_key: "sk-ant-..."
     temperature: 0.7
     max_tokens: 100
@@ -391,7 +405,7 @@ ai_support:
   enabled: true
   endpoint_type: "gemini"
   ai_config:
-    model: "gemini-2.0-flash-exp"
+    model: "gemini-2.5-flash"  # the default when model is unset
     api_key: "AIza..."
     temperature: 0.7
     max_tokens: 100

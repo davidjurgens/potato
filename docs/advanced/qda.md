@@ -187,8 +187,8 @@ Two exporters turn coded data into qualitative-research deliverables:
   append memo rows too.
 
 ```bash
-python -m potato.export config.yaml --format quotation_report \
-  --option include_memos=true -o quotations.csv
+python -m potato.export -c config.yaml -f quotation_report \
+  --option include_memos=true -o ./export/
 ```
 
 See [Export formats](../data-export/export_formats.md) for the column

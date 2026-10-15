@@ -152,6 +152,12 @@ Connect any LLM provider to pre-annotate instances and suggest labels. Annotator
 
 Supported backends: **OpenAI**, **Anthropic**, **Ollama**, **vLLM**, **Gemini**, **HuggingFace**, **OpenRouter**
 
+Decision models, new in 2.11.0, pick one label from the options and write no text: `systemone` reaches Jev, OpenJev or laya-serve over HTTP, and `laya` runs in process. Solo Mode and the labeling engine use them; `ai_support` does not accept them.
+
+### Labeling Engine
+
+Models label the dataset, and people supply labels for a blind random sample. The engine tests the machine labels against that sample under the contracts you declare (for example, at most 5% of accepted machine labels wrong, with 90% confidence), accepts the labels the test supports, sends the rest to people, and writes a certificate saying what was tested on how many human labels. Run it from the annotation server or with `potato label run|status|certify|certificate|export` ([docs](docs/labeling-engine/overview.md)).
+
 ### Active Learning
 
 Potato reorders your annotation queue based on model uncertainty so annotators label the most informative instances first. Supports uncertainty sampling, BADGE, BALD, diversity, and hybrid strategies ([docs](docs/ai-intelligence/active_learning_guide.md)).
@@ -190,7 +196,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Multi-annotator** | Multiple annotators per item with overlap control and agreement metrics |
 | **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/administration/admin_dashboard.md)) |
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
-| **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
+| **Crowdsourcing** | Nine crowd providers: Prolific, MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, and the legacy `url_direct` login ([docs](docs/deployment/crowdsourcing.md), [choosing a platform](docs/deployment/crowdsourcing-platforms.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
 | **Multiplayer Rooms** | Live shared sessions: norming (blind vote → reveal → discuss, with blind vs. post-discussion α), huddle (walk current disagreements together), and shadow (trainees watch the host annotate) ([docs](docs/advanced/multiplayer_rooms.md)) |
 | **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
@@ -292,6 +298,7 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 | Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |
 | Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
 | Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
+| Labeling Engine | [docs/labeling-engine/overview.md](docs/labeling-engine/overview.md) |
 | Qualitative Data Analysis (QDA) | [docs/advanced/qda.md](docs/advanced/qda.md) |
 | Quality Control | [docs/workflow/quality_control.md](docs/workflow/quality_control.md) |
 | Password Management | [docs/auth-users/password_management.md](docs/auth-users/password_management.md) |
@@ -308,15 +315,17 @@ Install the [Potato skill](https://github.com/davidjurgens/potato-skill) first.
 [Agent Instructions](docs/tools/authoring-agents.md) has the install commands
 for each agent.
 
-Without the skill, an agent can still work from these specs. They are generated
-from the code, so they match what the server accepts:
+Without the skill, an agent can still work from these specs. The config schema
+and the OpenAPI spec are generated from the code, so they match what the server
+accepts. `llms-full.txt` is generated from the docs pages, and `llms.txt` is
+curated by hand:
 
 | Artifact | What it gives you |
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
 | [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 167 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
-| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 419 HTTP paths, with per-operation auth and config gating |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 477 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`
 modeline, so editors validate it live. See

@@ -125,6 +125,15 @@ warning.
 **The certificate store belongs on a volume.** With `--volume-gb` it is placed
 there automatically, so a restart does not mean re-issuing.
 
+Caddy registers its Let's Encrypt account with a contact address. It defaults
+to your `git config user.email`; pass `--acme-email` to use another one. With
+neither, Caddy registers without an address.
+
+```bash
+potato deploy up myproject/config.yaml --provider digitalocean \
+  --acme-email lab-admin@example.edu
+```
+
 For a real name, point an A record at the droplet and pass `--domain`:
 
 ```bash

@@ -70,9 +70,33 @@ OpenTelemetry exporter is also available.
 
 ## Does Potato support crowdsourcing (MTurk, Prolific)?
 
-Yes — native [MTurk and Prolific integration](deployment/crowdsourcing.md) with
-platform-specific authentication, plus quality control, training phases, and
-inter-annotator agreement.
+Yes. Potato ships nine [crowd providers](deployment/crowdsourcing.md): Prolific,
+MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for
+hired experts, a generic provider for any panel that passes a participant ID in
+the URL, and the legacy `url_direct` login. Quality control, training phases and
+inter-annotator agreement do not depend on the provider. See
+[Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md).
+
+## What is the labeling engine?
+
+New in 2.11.0. Models label the dataset, and people label a blind random sample
+of it. The engine tests the machine labels against those human labels under the
+contracts you declare (for example, at most 5% of accepted machine labels wrong,
+with 90% confidence), accepts the machine labels the test supports, sends the
+rest to people, and writes a certificate recording what was tested on how many
+human labels. Run it from the annotation server or with
+`potato label run|status|certify|certificate|export`. See
+[Labeling Engine](labeling-engine/overview.md).
+
+## Does Potato train models?
+
+It trains scikit-learn classifiers on a study's own labels. Features come from
+the text (bag-of-words or sentence embeddings) or, for image classification,
+from CLIP image embeddings. Start a run from the admin Training page
+(`/admin/training`), configured with the `model_training` block; the labeling
+engine's distillation step uses the same trainers. Potato does not train
+detectors or segmenters, and it does not serve models. See
+[Model Training](ai-intelligence/model_training.md).
 
 ## What annotation types does Potato support?
 
@@ -113,7 +137,7 @@ required external service.
 
 ```bash
 pip install potato-annotation
-python potato/flask_server.py start <config.yaml> -p 8000
+potato start <config.yaml> -p 8000
 ```
 
 See [Quick Start](quick-start.md) and [Usage](deployment/usage.md).

@@ -74,7 +74,7 @@ still ignored. When an option appears in both places, `display_options` wins.
 | `video` | Video player | No |
 | `audio` | Audio player | No |
 | `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
-| `gallery` | Scrollable image gallery with captions | No |
+| `gallery` | Scrollable gallery with captions. Images, plus video for URLs ending in `.mp4`, `.m4v`, `.webm`, `.ogv` or `.mov` (played with controls) | No |
 | `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
@@ -128,7 +128,7 @@ rather than to any one renderer, so they work on every display type:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `resizable` | `true` | Wrap the field in a container the annotator can drag to resize. Set `false` to leave the field at its natural height. |
-| `max_height` | `500` | How tall the field may grow before it scrolls inside itself. |
+| `max_height` | none | How tall the field may grow before it scrolls inside itself. Unset, the stylesheet caps the field at `80vh`. Either way, a "Show all" button appears below the field while its content overflows, and lifts the cap until pressed again. |
 | `min_height` | `100` | How short it may be dragged. |
 
 Lengths accept a number or a CSS length: `400`, `"400px"`, `"50vh"` and

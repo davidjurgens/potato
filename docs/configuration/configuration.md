@@ -190,9 +190,15 @@ port: 8000
 server:
   port: 8000
   host: "0.0.0.0"  # Listen on all interfaces
-  require_password: true
-  persist_sessions: false
+
+# Top-level keys, not part of the server block
+require_password: true
+persist_sessions: false
 ```
+
+The `server` block takes only `port`, `host` and `debug`. `require_password`
+and `persist_sessions` are top-level keys; nested under `server` they are
+ignored.
 
 ### Advanced Server Settings
 
@@ -610,9 +616,9 @@ creates both tables on first start and loads every stored annotator at boot.
 The data items themselves, exports and the rest of the output directory are
 still files. Only annotator state moves to the database.
 
-The admin and MCP exports, `potato export`, paper mode, auto-export
+The admin and MCP exports, the export CLI (`python -m potato.export`), paper mode, auto-export
 (`export_annotation_format`) and model training read annotator state from the
-database. When `potato export` runs on another machine, it connects with the
+database. When the export CLI runs on another machine, it connects with the
 config's `database` block, so that machine needs the driver and network access
 to the database. `${VAR}` references in `password` are expanded as they are at
 startup.
@@ -1154,8 +1160,9 @@ ui:
 server:
   port: 8000
   host: 0.0.0.0
-  require_password: true
-  persist_sessions: false
+
+require_password: true
+persist_sessions: false
 
 assignment:
   strategy: least_annotated

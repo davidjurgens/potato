@@ -152,8 +152,8 @@ tree an installed Potato has.
 
 ## Regenerating
 
-All five artifacts are generated, and CI fails if a checked-in copy drifts from
-the code:
+Four of the five artifacts are generated (`llms.txt` is curated by hand), and CI
+fails if a checked-in copy drifts from the code:
 
 ```bash
 python scripts/generate_config_schema.py     # config JSON Schema

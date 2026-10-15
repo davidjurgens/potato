@@ -165,7 +165,7 @@ above the ones worth looking at.
 ## Export
 
 ```bash
-potato export <config.yaml> --format annotation_telemetry
+python -m potato.export -c <config.yaml> -f annotation_telemetry -o <dir>
 ```
 
 Writes `annotation_sessions.parquet` and `annotation_events.parquet` (JSONL when

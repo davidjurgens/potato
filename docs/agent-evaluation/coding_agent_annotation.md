@@ -329,6 +329,31 @@ live_coding_agent:
   container_cli: docker           # or podman
 ```
 
+### Pre-filling the task box
+
+The `live_coding_agent` display can fill its "Describe the coding task..." box
+from the item. It reads only the value of the field it is bound to (`key`):
+
+- **Object value**: the box gets the entry named by `task_field`, falling back
+  to `task_description`, then `task`.
+- **String value**: the box gets the string only when the bound key is named
+  like a task (`task`, `task_description`, `instruction`, `instructions` or
+  `prompt`), or when `task_field` equals the bound key. A string under a key
+  such as `repo` is left out, so a repo name does not land in the task box.
+
+```yaml
+instance_display:
+  fields:
+    - key: session              # each item: {"session": {"goal": "Fix the failing test"}}
+      type: live_coding_agent
+      display_options:
+        task_field: goal        # default: unset
+```
+
+If the bound field holds a non-empty list of turns, or an object with
+`structured_turns`, the display renders the recorded trace for review instead
+of the live viewer.
+
 ### Agent Backends
 
 | Backend | Config Key | Requirements |
