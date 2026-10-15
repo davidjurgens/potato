@@ -774,10 +774,16 @@ class UserAuthenticator:
         """Update a user's password via the backend."""
         result = self.auth_backend.update_password(username, new_password)
         if result and username in self.users:
-            # Update the stored user dict with the new hash for save_user_config
+            # Update the stored user dict with the new hash for save_user_config.
+            # The OAuth backend keeps local accounts in its own `_local` store;
+            # its `users` holds SSO identities only.
             if isinstance(self.users[username], dict):
-                self.users[username]["password"] = self.auth_backend.users[username] \
-                    if hasattr(self.auth_backend, 'users') else _hash_password_with_salt(new_password)
+                store = getattr(getattr(self.auth_backend, "_local", None), "users", None)
+                if store is None:
+                    store = getattr(self.auth_backend, "users", None)
+                self.users[username]["password"] = (
+                    store[username] if store and username in store
+                    else _hash_password_with_salt(new_password))
         return result
 
     def save_user_config(self):

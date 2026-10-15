@@ -286,8 +286,16 @@ class OAuthBackend(AuthBackend):
         return username in self.users or self._local.is_valid_username(username)
 
     def update_password(self, username: str, new_password: str) -> bool:
-        """Not supported for OAuth - passwords are managed by providers."""
-        raise NotImplementedError("Password management is handled by OAuth providers")
+        """Set a local account's password. An SSO identity has no password
+        here (its provider manages it), so that is refused with False.
+
+        This raised NotImplementedError for every account, so in mixed mode
+        the admin reset link, /reset/<token> and `potato reset-password` all
+        failed with a server error for the local accounts they exist for.
+        """
+        if username in self.users or not self._local.is_valid_username(username):
+            return False
+        return self._local.update_password(username, new_password)
 
     def get_all_users(self) -> list:
         """Return every SSO identity and local account."""

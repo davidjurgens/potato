@@ -112,6 +112,38 @@ class TestTheRenderedStyle:
         assert "min-height: 100px;" in html, html
 
 
+class TestTheTextDisplayStyle:
+    """`text` built its own clamp with an unconditional `px`.
+
+    `max_height: "50vh"` rendered `max-height: 50vhpx`, an invalid
+    declaration the browser drops, so the field never clamped even though
+    the instance_display guide lists `"50vh"` and `calc()` as valid.
+    """
+
+    def _render(self, max_height):
+        from potato.server_utils.displays.text_display import TextDisplay
+        return TextDisplay().render(
+            {"key": "t", "type": "text",
+             "display_options": {"max_height": max_height}},
+            "body")
+
+    @pytest.mark.parametrize("value,expected", [
+        ("50vh", "max-height: 50vh"),
+        ("220px", "max-height: 220px"),
+        ("calc(100vh - 200px)", "max-height: calc(100vh - 200px)"),
+        (400, "max-height: 400px"),
+        ("400", "max-height: 400px"),
+    ])
+    def test_the_length_reaches_the_style_attribute(self, value, expected):
+        html = self._render(value)
+        assert expected + ";" in html, html
+        assert "pxpx" not in html and "vhpx" not in html and ")px" not in html, html
+
+    def test_no_max_height_means_no_clamp(self):
+        html = self._render(None)
+        assert "max-height" not in html, html
+
+
 class TestTheWrapperOptionsAreAcceptedEverywhere:
     """`resizable`, `max_height` and `min_height` belong to the wrapper.
 
@@ -155,3 +187,34 @@ class TestTheWrapperOptionsAreAcceptedEverywhere:
         with pytest.raises(ConfigValidationError) as excinfo:
             self._validate("text", {"max_heigth": 200})
         assert "Did you mean" in str(excinfo.value), str(excinfo.value)
+
+
+class TestEveryLengthOptionTakesAUnit:
+    """Six more displays appended `px` to a configured length unconditionally
+    (code max_width, pdf max_height/max_width, spreadsheet max_height and
+    max_width, the live and web agent screenshot sizes), so `"50vh"` became
+    `50vhpx` and the browser dropped the declaration."""
+
+    @pytest.mark.parametrize("module,cls,options,data,expected", [
+        ("code_display", "CodeDisplay", {"max_width": "60ch"}, "print(1)",
+         "max-width: 60ch"),
+        ("spreadsheet_display", "SpreadsheetDisplay",
+         {"max_height": "50vh", "max_width": "80%"}, [["a", "b"], ["1", "2"]],
+         "max-height: 50vh"),
+        ("pdf_display", "PDFDisplay", {"max_height": "70vh"}, "/media/x.pdf",
+         "max-height: 70vh"),
+        ("web_agent_trace_display", "WebAgentTraceDisplay",
+         {"screenshot_max_width": "40vw"},
+         {"steps": [{"action_type": "click", "screenshot_url": "/media/a.png"}]},
+         "max-width: 40vw"),
+        ("live_agent_display", "LiveAgentDisplay",
+         {"screenshot_max_width": "40vw"}, {"task": "t"}, "max-width: 40vw"),
+    ])
+    def test_a_unit_survives(self, module, cls, options, data, expected):
+        import importlib
+        display = getattr(importlib.import_module(
+            f"potato.server_utils.displays.{module}"), cls)()
+        html = display.render({"key": "f", "type": "x", "display_options": options}, data)
+        assert expected in html, html[:400]
+        for bad in ("vhpx", "vwpx", "chpx", "%px", "pxpx"):
+            assert bad not in html

@@ -20,7 +20,7 @@ import html
 import json
 import logging
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
 
 logger = logging.getLogger(__name__)
 
@@ -127,9 +127,9 @@ class PDFDisplay(BaseDisplay):
         # Build style string
         styles = []
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {html.escape(css_length(max_height))}")
         if max_width:
-            styles.append(f"max-width: {max_width}px")
+            styles.append(f"max-width: {html.escape(css_length(max_width))}")
         style_str = "; ".join(styles) if styles else ""
 
         # Build container
@@ -240,9 +240,9 @@ class PDFDisplay(BaseDisplay):
 
         styles = []
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {html.escape(css_length(max_height))}")
         if max_width:
-            styles.append(f"max-width: {max_width}px")
+            styles.append(f"max-width: {html.escape(css_length(max_width))}")
         style_str = "; ".join(styles) if styles else ""
 
         cfg = {
@@ -333,7 +333,7 @@ class PDFDisplay(BaseDisplay):
             inner_html = '<div class="pdf-error">No content available</div>'
 
         # Build container
-        style_str = f"max-height: {max_height}px; overflow-y: auto;" if max_height else ""
+        style_str = f"max-height: {html.escape(css_length(max_height))}; overflow-y: auto;" if max_height else ""
 
         # Add metadata if available
         metadata_html = ""
@@ -378,9 +378,9 @@ class PDFDisplay(BaseDisplay):
         # Build style string
         styles = []
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {html.escape(css_length(max_height))}")
         if max_width:
-            styles.append(f"max-width: {max_width}px")
+            styles.append(f"max-width: {html.escape(css_length(max_width))}")
         style_str = "; ".join(styles) if styles else ""
 
         parts = []
@@ -497,7 +497,7 @@ class PDFDisplay(BaseDisplay):
         total_pages = metadata.get("total_pages", 1)
         pages = metadata.get("pages", [])
 
-        style_str = f"max-height: {max_height}px; overflow-y: auto;" if max_height else ""
+        style_str = f"max-height: {html.escape(css_length(max_height))}; overflow-y: auto;" if max_height else ""
 
         parts = []
         parts.append(

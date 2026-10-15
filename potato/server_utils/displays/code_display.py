@@ -103,7 +103,7 @@ class CodeDisplay(BaseDisplay):
             styles.append(f"max-height: {css_length(max_height)}")
             styles.append("overflow-y: auto")
         if max_width:
-            styles.append(f"max-width: {max_width}px")
+            styles.append(f"max-width: {css_length(max_width)}")
             styles.append("overflow-x: auto")
 
         style_str = "; ".join(styles) if styles else ""

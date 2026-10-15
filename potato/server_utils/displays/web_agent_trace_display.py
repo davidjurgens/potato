@@ -32,7 +32,7 @@ import html
 import json
 from typing import Dict, Any, List, Optional
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
 
 
 # Action type badge colors
@@ -306,7 +306,7 @@ class WebAgentTraceDisplay(BaseDisplay):
             display: flex; gap: 16px; margin-bottom: 12px;
         }}
         .screenshot-panel {{
-            flex: 0 0 auto; max-width: {max_w}px;
+            flex: 0 0 auto; max-width: {css_length(max_w)};
         }}
         .screenshot-container {{
             position: relative; display: inline-block;
@@ -314,7 +314,7 @@ class WebAgentTraceDisplay(BaseDisplay):
             background: #1a1a1a;
         }}
         .step-screenshot {{
-            display: block; max-width: {max_w}px; max-height: {max_h}px;
+            display: block; max-width: {css_length(max_w)}; max-height: {css_length(max_h)};
             width: auto; height: auto;
         }}
         .overlay-layer {{
@@ -323,7 +323,7 @@ class WebAgentTraceDisplay(BaseDisplay):
             pointer-events: none;
         }}
         .screenshot-placeholder {{
-            width: {max_w}px; height: 300px;
+            width: {css_length(max_w)}; height: 300px;
             display: flex; align-items: center; justify-content: center;
             background: #f0f0f0; color: #999; font-size: 0.9em;
         }}

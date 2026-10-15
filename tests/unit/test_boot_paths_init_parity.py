@@ -180,3 +180,22 @@ class TestLocalLoginAlongsideSso:
         backend.add_user("alice@example.org", None, oauth_provider="google")
         assert backend.add_user("alice@example.org", "pw") == "Duplicate user"
         assert not backend.authenticate("alice@example.org", "pw")
+
+
+def test_a_local_account_password_resets_under_oauth(tmp_path, monkeypatch):
+    """The admin reset link and `potato reset-password` go through
+    UserAuthenticator.update_password; under method: oauth it raised for the
+    local accounts allow_local_login exists for."""
+    pytest.importorskip("authlib")
+    from potato import authentication
+    monkeypatch.setattr(authentication, "USER_AUTHENTICATOR_SINGLETON", None)
+    cfg = {"task_dir": str(tmp_path), "output_annotation_dir": str(tmp_path),
+           "user_config": {"allow_all_users": True},
+           "authentication": {"method": "oauth", "allow_local_login": True,
+                              "providers": {"google": {"client_id": "i",
+                                                       "client_secret": "s"}}}}
+    ua = authentication.UserAuthenticator.init_from_config(cfg)
+    assert ua.add_single_user({"username": "eve", "password": "old"}) == "Success"
+    assert ua.update_password("eve", "new") is True
+    assert ua.auth_backend.authenticate("eve", "new")
+    assert not ua.auth_backend.authenticate("eve", "old")

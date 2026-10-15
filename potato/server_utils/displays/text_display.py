@@ -8,7 +8,7 @@ Supports span annotation targeting when used with span annotation schemes.
 import html
 from typing import Dict, Any, List
 
-from .base import BaseDisplay, display_text
+from .base import BaseDisplay, css_length, display_text
 
 
 def _format_list(items):
@@ -115,8 +115,11 @@ class TextDisplay(BaseDisplay):
         if preserve_whitespace and not self.allow_html:
             wrapper_classes.append("preserve-whitespace")
 
-        if max_height:
-            wrapper_style.append(f"max-height: {max_height}px")
+        # `css_length` appends px only to a bare number; appending it always
+        # turned `max_height: "50vh"` into `50vhpx`, which the browser drops.
+        max_height_css = css_length(max_height) if max_height else ""
+        if max_height_css:
+            wrapper_style.append(f"max-height: {html.escape(max_height_css)}")
             wrapper_style.append("overflow-y: auto")
 
         # Check if this is a span target - add special wrapper for span annotations

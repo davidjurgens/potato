@@ -29,7 +29,7 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
 
 logger = logging.getLogger(__name__)
 
@@ -187,11 +187,11 @@ class LiveAgentDisplay(BaseDisplay):
     position: relative;
     background: #000;
     min-height: 200px;
-    max-width: {max_w}px;
+    max-width: {css_length(max_w)};
 }}
 .live-agent-screenshot {{
     width: 100%;
-    max-height: {max_h}px;
+    max-height: {css_length(max_h)};
     object-fit: contain;
     display: block;
 }}
