@@ -93,8 +93,9 @@ def test_unknown_user_has_no_permissions():
 
 
 class _FakeRequest:
-    def __init__(self, headers=None):
+    def __init__(self, headers=None, remote_addr=None):
         self.headers = headers or {}
+        self.remote_addr = remote_addr
 
 
 def test_superuser_shared_key_bypass(monkeypatch):
@@ -129,8 +130,16 @@ def test_check_allows_role_admin_without_key():
 
 def test_debug_mode_is_superuser():
     m = RBACManager({"debug": True, "host": "127.0.0.1"})
-    req = _FakeRequest({})
+    req = _FakeRequest({}, remote_addr="127.0.0.1")
     assert m.is_admin_superuser(req, {})
+
+
+def test_debug_on_a_loopback_bind_refuses_a_forwarded_request():
+    """A proxy or tunnel on the same host forwards other machines' requests to
+    127.0.0.1, so a loopback bind alone is not a local request."""
+    m = RBACManager({"debug": True, "host": "127.0.0.1"})
+    req = _FakeRequest({"X-Forwarded-For": "203.0.113.9"}, remote_addr="127.0.0.1")
+    assert not m.is_admin_superuser(req, {})
 
 
 def test_debug_on_a_public_bind_is_not_superuser():
@@ -148,7 +157,7 @@ def test_debug_grants_admin_dashboard_but_not_adjudicate():
     must NOT auto-confer the adjudicator role (which was gated separately
     before RBAC by the adjudicator_users allow-list)."""
     m = RBACManager({"debug": True, "host": "127.0.0.1"})
-    req = _FakeRequest({})
+    req = _FakeRequest({}, remote_addr="127.0.0.1")
     session = {"username": "random_annotator"}
     # Admin-dashboard tier: still open under debug (pre-RBAC behavior).
     assert m.check(Permission.VIEW_ADMIN_DASHBOARD, req, session)

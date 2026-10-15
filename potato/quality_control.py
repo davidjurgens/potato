@@ -501,7 +501,14 @@ class QualityControlManager:
 
         # Parse pre-annotation config
         pre_config = config.get('pre_annotation', {})
-        if pre_config.get('enabled', False):
+        writeback = writeback_prelabel_settings(config)
+        if writeback and not pre_config.get('enabled', False):
+            # Model-training write-back puts prelabels in item data; without
+            # this they were stored and never shown unless the deprecated
+            # pre_annotation block was also set, with a matching field.
+            qc.pre_annotation_enabled = True
+            qc.pre_annotation_field = writeback.get('field', 'predictions')
+        elif pre_config.get('enabled', False):
             qc.pre_annotation_enabled = True
             qc.pre_annotation_field = pre_config.get('field', 'predictions')
             qc.pre_annotation_predictions_file = pre_config.get('predictions_file')
@@ -1767,6 +1774,26 @@ class QualityControlManager:
                     "items_with_predictions": len(self.pre_annotations)
                 }
             }
+
+
+def writeback_prelabel_settings(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """``model_training.writeback`` when it publishes prelabels, else None."""
+    training = config.get('model_training') or {}
+    if not isinstance(training, dict) or not training.get('enabled', False):
+        return None
+    writeback = training.get('writeback') or {}
+    if not isinstance(writeback, dict) or not writeback.get('schemas'):
+        return None
+    return writeback
+
+
+def quality_control_needed(config: Dict[str, Any]) -> bool:
+    """Whether anything in the config needs the quality-control manager."""
+    return bool(
+        (config.get('attention_checks') or {}).get('enabled', False)
+        or (config.get('gold_standards') or {}).get('enabled', False)
+        or (config.get('pre_annotation') or {}).get('enabled', False)
+        or writeback_prelabel_settings(config))
 
 
 def init_quality_control_manager(config: Dict[str, Any], base_dir: str) -> QualityControlManager:

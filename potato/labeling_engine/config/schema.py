@@ -567,6 +567,9 @@ def parse_engine_config(config_data: Dict[str, Any]) -> EngineConfig:
             setattr(cfg, key, dict(val))
     if cfg.distill.get("modality", "auto") not in ("auto", "text", "image"):
         errors.append("labeling_engine.distill.modality must be auto, text or image")
+    image_field = cfg.distill.get("image_field")
+    if image_field is not None and (not isinstance(image_field, str) or not image_field.strip()):
+        errors.append("labeling_engine.distill.image_field must be the name of an item field")
 
     # Setups the documentation says cannot work, caught here rather than
     # discovered at run time.

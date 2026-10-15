@@ -2,7 +2,7 @@
 
 A prediction becomes a *prelabel*: it lands in the item's data under the
 ``predictions`` field, and the existing ``pre_annotation`` machinery renders it
-with a confidence badge, ``model_review`` queues it least-confident-first, and
+as a pre-filled answer, ``model_review`` queues it least-confident-first, and
 a reviewer records accept, correct or reject.
 
 Four rules, applied in order, and every skip is counted rather than dropped
@@ -41,7 +41,7 @@ from potato.training import store
 logger = logging.getLogger(__name__)
 
 __all__ = ["WritebackReport", "ingest_predictions", "rehydrate_predictions",
-           "PREDICTION_FIELD"]
+           "clear_published", "PREDICTION_FIELD"]
 
 #: The item-data key prelabels live under. Matches what the importers write
 #: and what `quality_control.extract_pre_annotations` reads.
@@ -134,7 +134,10 @@ def ingest_predictions(run, predictions_path: str,
     min_confidence = float(settings.get("min_confidence", 0.0) or 0.0)
     field_name = settings.get("field", PREDICTION_FIELD)
 
-    train_ids = store.training_split_ids(config, report.run_id)
+    own_train_ids = store.training_split_ids(config, report.run_id)
+    # Any run's training items, not only this run's: an item a later run
+    # fitted on has a human label, and an older prelabel on it is stale.
+    train_ids = own_train_ids | store.all_training_split_ids(config)
     rejected = _rejected_keys(config)
 
     to_store: List[tuple] = []
@@ -187,12 +190,20 @@ def ingest_predictions(run, predictions_path: str,
                              report.run_id)
             report.warnings.append("Predictions could not be persisted")
 
-    if not to_publish:
-        return report
-
-    if item_manager is None:
+    if item_manager is None and (to_publish or own_train_ids):
         from potato.item_state_management import get_item_state_manager
         item_manager = get_item_state_manager()
+
+    # Take down prelabels an earlier run left on the items this run trained
+    # on. They would otherwise stay on screen, and come back after a restart.
+    if item_manager is not None:
+        for instance_id in own_train_ids:
+            for schema_name in enabled_schemas:
+                item_manager.clear_prediction(instance_id, schema_name,
+                                              field=field_name)
+
+    if not to_publish:
+        return report
 
     from potato.labeling_engine.integration.mirror import mirror
     for instance_id, schema_name, payload in to_publish:
@@ -239,15 +250,14 @@ def rehydrate_predictions(config: Dict[str, Any], item_manager) -> int:
     # The same rules ingest_predictions applies. Every prediction is stored,
     # its run's training items included, so replaying them all brought back
     # at boot the prelabels the leak guard, the confidence floor and reviewer
-    # rejections had kept off.
-    train_ids: Dict[str, set] = {}
+    # rejections had kept off. The leak guard covers every run's training
+    # items, so an older run's prelabel on an item a newer run fitted on
+    # stays off too.
+    train_ids = store.all_training_split_ids(config)
     for record in stored:
         if record["schema_name"] not in enabled:
             continue
-        run_id = record.get("run_id") or ""
-        if run_id not in train_ids:
-            train_ids[run_id] = store.training_split_ids(config, run_id)
-        if record["instance_id"] in train_ids[run_id]:
+        if record["instance_id"] in train_ids:
             continue
         if (record["instance_id"], record["schema_name"]) in rejected:
             continue
@@ -263,3 +273,21 @@ def rehydrate_predictions(config: Dict[str, Any], item_manager) -> int:
         logger.info("Restored %d model prediction(s) from previous runs",
                     restored)
     return restored
+
+
+def clear_published(config: Dict[str, Any], records, item_manager=None) -> int:
+    """Take retracted predictions out of item data. Returns how many."""
+    field_name = _writeback_config(config).get("field", PREDICTION_FIELD)
+    if item_manager is None:
+        try:
+            from potato.item_state_management import get_item_state_manager
+            item_manager = get_item_state_manager()
+        except Exception:
+            return 0
+    cleared = 0
+    for record in records:
+        if item_manager.clear_prediction(record["instance_id"],
+                                         record["schema_name"],
+                                         field=field_name):
+            cleared += 1
+    return cleared

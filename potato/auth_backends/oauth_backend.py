@@ -297,6 +297,10 @@ class OAuthBackend(AuthBackend):
             return False
         return self._local.update_password(username, new_password)
 
+    def has_settable_password(self, username: str) -> bool:
+        """Only local accounts have a password Potato can set."""
+        return username not in self.users and self._local.is_valid_username(username)
+
     def get_all_users(self) -> list:
         """Return every SSO identity and local account."""
         return list(self.users.keys()) + [

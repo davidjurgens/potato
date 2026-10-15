@@ -94,7 +94,8 @@ from potato.labeling_engine.sdk import Study
 study = Study("examples/labeling-engine/text-certified-sentiment/config.yaml")
 study.run()                                   # label, sample, certify, resolve
 for req in study.requests(status="open")[:5]:
-    study.label(req.item_id, req.schema, "positive", user="me")
+    study.label(req.item_id, req.schema, "positive", user="me",
+                request_id=req.id)
 study.certify()
 print(study.certificate(fmt="md"))
 study.export("out/")

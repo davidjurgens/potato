@@ -334,6 +334,7 @@ def apply_debug_phase_skip(user_id: str) -> bool:
 from potato.server_utils.admin_key import (
     get_admin_api_key as _get_admin_api_key,
     validate_admin_api_key as _validate_admin_api_key,
+    request_is_local,
 )
 
 def get_admin_api_key():
@@ -406,7 +407,11 @@ def media_login_required(f):
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'username' not in session and not config.get("debug", False):
+        # Debug lets these answer without a login, as debug_grants_admin
+        # does, only for requests from this machine: each one fetches a URL
+        # the caller chose.
+        if 'username' not in session and not (
+                config.get("debug", False) and request_is_local(request)):
             return jsonify({"error": "Authentication required"}), 401
         return f(*args, **kwargs)
     return decorated
@@ -10127,6 +10132,9 @@ def admin_reset_password():
     user_authenticator = UserAuthenticator.get_instance()
     if not user_authenticator.is_valid_username(username):
         return jsonify({"error": f"User '{username}' does not exist"}), 404
+    if not user_authenticator.has_settable_password(username):
+        return jsonify({"error": f"'{username}' signs in through SSO; its "
+                                 f"password is managed by the identity provider"}), 409
 
     if user_authenticator.update_password(username, new_password):
         user_authenticator.save_user_config()
@@ -10156,6 +10164,10 @@ def admin_create_reset_token():
         return jsonify({"error": "username is required"}), 400
 
     user_authenticator = UserAuthenticator.get_instance()
+    if (user_authenticator.is_valid_username(username)
+            and not user_authenticator.has_settable_password(username)):
+        return jsonify({"error": f"'{username}' signs in through SSO; its "
+                                 f"password is managed by the identity provider"}), 409
     token = user_authenticator.create_reset_token(username, ttl_hours=ttl_hours)
 
     if token is None:
@@ -10237,6 +10249,15 @@ def reset_password_with_token(token):
                              title=config.get("annotation_task_name", "Annotation Platform"),
                              token=token,
                              error="Passwords do not match.")
+
+    # A link that cannot work is refused before it is spent.
+    pending = user_authenticator.validate_reset_token(token)
+    if pending and not user_authenticator.has_settable_password(pending):
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             error="This account signs in through single sign-on, so its "
+                                   "password cannot be reset here.",
+                             token_invalid=True)
 
     # Consume token (single-use)
     username = user_authenticator.consume_reset_token(token)

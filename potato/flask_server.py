@@ -78,6 +78,7 @@ from potato.phase import UserPhase
 from potato.expertise_manager import init_expertise_manager, get_expertise_manager, clear_expertise_manager
 from potato.quality_control import (
     init_quality_control_manager, get_quality_control_manager,
+    quality_control_needed,
     clear_quality_control_manager, count_dataset_items
 )
 from potato.adjudication import (
@@ -5919,12 +5920,7 @@ def _initialize_from_config(config_file):
         init_ai_cache_manager()
 
     # Initialize quality control if enabled
-    qc_enabled = (
-        config.get("attention_checks", {}).get("enabled", False)
-        or config.get("gold_standards", {}).get("enabled", False)
-        or config.get("pre_annotation", {}).get("enabled", False)
-    )
-    if qc_enabled:
+    if quality_control_needed(config):
         qc_task_dir = config.get(
             "task_dir", os.path.dirname(config.get("config_file", ""))
         )
@@ -6487,12 +6483,7 @@ def run_server(args):
         logger.warning(f"Search index init skipped: {e}")
 
     # Initialize quality control manager if any QC features are enabled
-    qc_enabled = (
-        config.get('attention_checks', {}).get('enabled', False) or
-        config.get('gold_standards', {}).get('enabled', False) or
-        config.get('pre_annotation', {}).get('enabled', False)
-    )
-    if qc_enabled:
+    if quality_control_needed(config):
         task_dir = config.get('task_dir', os.path.dirname(config.get('config_file', '')))
         init_quality_control_manager(config, task_dir)
         logger.info("Quality control manager initialized")
@@ -6572,7 +6563,7 @@ def run_server(args):
         logger.info("Serving over HTTPS using cert %s", config["ssl_cert"])
 
     # Two different things are spelled `debug`. Potato's own conveniences
-    # (skip login, debug phases, verbose logging) are safe to keep wherever
+    # (debug phases, verbose logging) are safe to keep wherever
     # the operator asked for them. Flask's `debug=True` additionally serves the
     # Werkzeug interactive debugger, which is a remote console for anyone who
     # can reach a traceback. Those are separable, and only the second one has
@@ -6599,8 +6590,8 @@ def run_server(args):
         else:
             logger.warning(
                 "debug is on. Bound to %s: reachable from other machines, so "
-                "debug conveniences (login skip, debug phases) apply to anyone "
-                "who can connect. Admin pages open without a key only from this "
+                "debug phases (and the shared debug_user they sign in) apply to "
+                "anyone who can connect. Admin pages open without a key only from this "
                 "machine (http://localhost:%s); other machines need the admin "
                 "API key. The Werkzeug interactive debugger is off on this bind.",
                 host, port)

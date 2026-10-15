@@ -239,7 +239,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `debug` |  | boolean | `False` | Run in debug mode. This skips login, and admin authentication for requests from this machine, so it must never be set on a deployed server |  |
+| `debug` |  | boolean | `False` | Run in debug mode. Admin pages open without a key for requests from this machine, and with debug_phase every visitor is signed in as a shared debug_user, so it must never be set on a deployed server |  |
 | `debug_log` |  | string |  | Which halves of the debug logging to turn on: all, ui, server or none. The --debug-log flag writes this key |  |
 | `debug_phase` |  | string |  | Jump straight to a workflow phase, for UI debugging |  |
 | `server_debug` |  | boolean | `False` | Backend debug logging. Note that only the phase pages (consent, instructions, surveys) read this key; the annotation page asks the logging module, which is driven by debug_log/verbose/debug |  |

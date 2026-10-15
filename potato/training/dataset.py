@@ -101,8 +101,16 @@ def detect_modality(schemes: Sequence[Dict[str, Any]],
             return modality
     if rows:
         def image_ref(row):
-            ref = str(row.get("media") or row.get("media_missing") or "").lower()
-            return ref.split("?")[0].endswith(_IMAGE_SUFFIXES)
+            ref = str(row.get("media") or row.get("media_missing") or "")
+            if not ref.lower().split("?")[0].endswith(_IMAGE_SUFFIXES):
+                return False
+            if ref.startswith(("http://", "https://")):
+                # A remote image counts only when the item shows nothing else:
+                # a text item that carries an image_url is a text item, and
+                # its images cannot be read from disk anyway.
+                text = str(row.get("text") or "").strip()
+                return not text or text == ref
+            return True
         if sum(1 for r in rows if image_ref(r)) >= 0.8 * len(rows):
             return "image"
     return "text"

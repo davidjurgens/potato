@@ -62,16 +62,20 @@ server:
 
 ### `--debug`
 
-Launches Potato in debug mode with simplified authentication.
+Launches Potato in debug mode.
 
 ```bash
 potato start config.yaml --debug
 ```
 
 **Effects:**
-- Bypasses normal login requirements
 - Enables verbose logging
-- Useful for quickly testing configuration changes
+- Turns off the session idle timeout
+- Opens the admin pages without a key, for requests from this machine
+- Allows `--debug-phase`, which signs every visitor in as `debug_user`
+
+`--debug` on its own keeps the login page. To skip it, add `--debug-phase`
+(below).
 
 Debug mode starts on any address, the default `0.0.0.0` included, so other
 machines can reach the server; open `http://localhost:<port>` on your own.
@@ -79,9 +83,9 @@ Two things stay with this machine. The admin pages and admin API open without
 a key only for requests from it (not from another machine, and not through a
 proxy); elsewhere they need the admin API key, as without debug. Werkzeug's
 interactive debugger, a Python console on every error page, is served only when
-the server is bound to `127.0.0.1`. The other debug conveniences (login skip,
-debug phases) apply to anyone who can connect, so keep debug off a server
-strangers can reach.
+the server is bound to `127.0.0.1`. Debug phases apply to anyone who can
+connect: with `--debug-phase`, every visitor is signed in as the same
+`debug_user`. Keep debug off a server strangers can reach.
 
 ### `--debug-log`
 

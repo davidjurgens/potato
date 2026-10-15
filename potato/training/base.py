@@ -247,7 +247,13 @@ class BundleRef:
         return self.manifest.get("modality", "text")
 
     def resolve_media(self, reference: str) -> str:
-        """Turn a manifest media reference into a path a trainer can open."""
+        """Turn a manifest media reference into a path a trainer can open.
+
+        A remote URL is returned as it is, so a trainer can see that it is not
+        a local file; joined onto the media directory it read as one.
+        """
+        if str(reference).startswith(("http://", "https://")):
+            return reference
         if os.path.isabs(reference):
             return reference
         return os.path.join(self.media_dir, reference)

@@ -54,6 +54,7 @@ __all__ = [
     "record_run_items",
     "run_item_splits",
     "training_split_ids",
+    "all_training_split_ids",
     "record_predictions",
     "load_predictions",
     "predictions_for_instance",
@@ -437,6 +438,23 @@ def training_split_ids(config: Dict[str, Any], run_id: str) -> set:
     except Exception:
         logger.debug("Could not read train split for %s", run_id,
                      exc_info=True)
+        return set()
+    return {r["instance_id"] for r in rows}
+
+
+def all_training_split_ids(config: Dict[str, Any]) -> set:
+    """Instance ids any recorded run fitted on.
+
+    An older run's prelabel on an item a newer run trained on is a prelabel on
+    an item that now has a human label; write-back keeps it off.
+    """
+    try:
+        rows = _db(_task_dir(config)).execute(
+            "SELECT DISTINCT instance_id FROM training_run_items "
+            "WHERE project = ? AND split = 'train'",
+            (_project(config),)).fetchall()
+    except Exception:
+        logger.debug("Could not read train splits", exc_info=True)
         return set()
     return {r["instance_id"] for r in rows}
 

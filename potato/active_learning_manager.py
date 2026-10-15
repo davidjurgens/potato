@@ -101,7 +101,7 @@ class SentenceTransformerVectorizer:
 
 
 def make_image_vectorizer(model_name: str = None, cache_dir: str = None,
-                          image_root: str = None):
+                          image_root: str = None, media_dir: str = None):
     """
     The image counterpart of SentenceTransformerVectorizer.
 
@@ -117,6 +117,7 @@ def make_image_vectorizer(model_name: str = None, cache_dir: str = None,
         model_name=model_name or DEFAULT_IMAGE_MODEL,
         cache_dir=cache_dir,
         image_root=image_root,
+        media_dir=media_dir,
     )
 
 
@@ -1193,6 +1194,23 @@ class ActiveLearningManager:
 
             pipeline.fit(training_data["texts"], training_data["labels"])
 
+            # An image that cannot be read is embedded as a zero vector. A
+            # model fitted mostly on those ranks the queue on nothing, so
+            # refuse it rather than reorder, and say which images failed.
+            failures = list(getattr(vectorizer, "failures", None) or [])
+            if failures:
+                n_rows = len(training_data["texts"])
+                sample = ", ".join(str(f) for f in failures[:3])
+                if len(failures) * 2 > n_rows:
+                    raise ValueError(
+                        f"{len(failures)} of {n_rows} training images could not "
+                        f"be read (for example {sample}). Check media_directory, "
+                        f"or set vectorizer_kwargs.image_root")
+                self.logger.warning(
+                    f"Active learning for {schema_name}: {len(failures)} of "
+                    f"{n_rows} training images could not be read and were "
+                    f"embedded as zero vectors (for example {sample})")
+
             # Apply probability calibration, and keep it only if it helped.
             #
             # This used to fit `CalibratedClassifierCV(cv=min(3, n // 2),
@@ -1344,9 +1362,18 @@ class ActiveLearningManager:
             model_name = kwargs.pop("model_name", "all-MiniLM-L6-v2")
             return SentenceTransformerVectorizer(model_name=model_name)
         elif self.config.vectorizer_name == "image":
+            # Items name their images as page URLs ("/media/a.png"), served
+            # from <task_dir>/<media_directory>. Without these roots no such
+            # reference resolved, and every image became a zero vector.
+            project = self.config.project_config or {}
+            task_dir = project.get("task_dir") or "."
+            media = project.get("media_directory") or "media"
+            if not os.path.isabs(media):
+                media = os.path.join(task_dir, media)
             return make_image_vectorizer(model_name=kwargs.pop("model_name", None),
                                          cache_dir=kwargs.pop("cache_dir", None),
-                                         image_root=kwargs.pop("image_root", None))
+                                         image_root=kwargs.pop("image_root", None) or task_dir,
+                                         media_dir=media)
         else:
             # Try to import dynamically
             try:

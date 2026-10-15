@@ -142,6 +142,10 @@ class AuthBackend(ABC):
         """Load user with already-hashed password (for file loading). Override in subclasses."""
         raise NotImplementedError("This backend does not support loading pre-hashed passwords")
 
+    def has_settable_password(self, username: str) -> bool:
+        """Whether Potato holds this account's password, so it can be reset."""
+        return self.is_valid_username(username)
+
 
 class InMemoryAuthBackend(AuthBackend):
     """
@@ -422,6 +426,9 @@ class ClerkAuthBackend(AuthBackend):
 
     def update_password(self, username: str, new_password: str) -> bool:
         raise NotImplementedError("Password management is handled by Clerk")
+
+    def has_settable_password(self, username: str) -> bool:
+        return False
 
     def get_all_users(self) -> List[str]:
         return list(self.users.keys())
@@ -770,8 +777,18 @@ class UserAuthenticator:
 
         return result
 
+    def has_settable_password(self, username: str) -> bool:
+        """Whether this account's password can be reset here. False for an SSO
+        identity, whose provider holds its password."""
+        check = getattr(self.auth_backend, "has_settable_password", None)
+        if check is None:
+            return self.auth_backend.is_valid_username(username)
+        return bool(check(username))
+
     def update_password(self, username: str, new_password: str) -> bool:
         """Update a user's password via the backend."""
+        if not self.has_settable_password(username):
+            return False
         result = self.auth_backend.update_password(username, new_password)
         if result and username in self.users:
             # Update the stored user dict with the new hash for save_user_config.
@@ -851,6 +868,9 @@ class UserAuthenticator:
             The token string, or None if user doesn't exist
         """
         if not self.auth_backend.is_valid_username(username):
+            return None
+        if not self.has_settable_password(username):
+            # An SSO identity: the link would only fail when used.
             return None
 
         token = secrets.token_urlsafe(32)

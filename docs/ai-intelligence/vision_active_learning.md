@@ -48,8 +48,8 @@ active_learning:
 ```
 
 `vectorizer` must be a mapping with a `name`; a bare `vectorizer: image` fails
-config validation. `model_name` defaults to `clip-ViT-B-32`, and `cache_dir` and
-`image_root` are unset by default.
+config validation. `model_name` defaults to `clip-ViT-B-32`, `cache_dir` is
+unset by default, and `image_root` defaults to `task_dir`.
 
 With an image vectorizer, every scheme gets the item's image reference as its
 feature, not only `image_annotation` and `video_annotation`. A `radio` or
@@ -99,8 +99,16 @@ EmbeddingCache(cache_dir).clear()
 The feature for an item is the first non-empty value among the scheme's
 `source_field`, then the item fields `image_url`, `image`, `image_path`,
 `file_name`, `video_url` and `url`. When none is set, the item's text (the
-`text_key` field) is used, so `text_key: image_url` also works. Relative
-references are tried as given, then under `image_root`.
+`text_key` field) is used, so `text_key: image_url` also works. A
+`/media/...` reference, the URL the annotation page serves images from, is
+read from `media_directory` (`<task_dir>/media` by default). Other references
+are tried as given, then under `image_root`.
+
+An image that cannot be read is embedded as a zero vector, and a warning names
+how many training images that happened to. If more than half of the training
+images cannot be read, the retrain fails with an error and the queue keeps its
+previous order, because a model fitted on blank vectors would rank it on
+nothing.
 
 **Remote URLs are skipped, not fetched.** Active learning ranks a whole
 unlabeled pool from a background thread; fetching would fire thousands of

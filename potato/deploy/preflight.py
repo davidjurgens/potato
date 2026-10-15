@@ -149,10 +149,10 @@ def _check_debug_mode(ctx: CheckContext) -> List[Finding]:
         return []
     return [Finding(
         "D002", "error",
-        "debug is true, which skips login for everyone who reaches the study, "
-        "so anyone can annotate as any user, and opens the debug phases. It is "
-        "for a server on a developer's machine (whose admin pages it also "
-        "opens without a key, to requests from that machine).",
+        "debug is true. With debug_phase it signs every visitor in as one "
+        "shared debug_user and skips them to that phase, and it opens the "
+        "admin pages without a key to requests from the server's own machine. "
+        "It is for a server on a developer's machine.",
         "Remove `debug: true` from the config before deploying.",
         key="debug",
     )]

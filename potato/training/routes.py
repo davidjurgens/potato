@@ -186,12 +186,15 @@ def api_retract(run_id):
     """Withdraw a run's prelabels.
 
     The undo for a write-back that turned out to be bad. Removes the stored
-    predictions; item data catches up on the next restart, or immediately for
-    items still resident.
+    predictions and the prelabels they put in item data.
     """
     from potato.training import store
+    from potato.training.writeback import clear_published
 
-    removed = store.delete_predictions_for_run(_config(), run_id)
+    config = _config()
+    records = store.load_predictions(config, run_id=run_id)
+    removed = store.delete_predictions_for_run(config, run_id)
+    clear_published(config, records)
     return jsonify({"retracted": removed})
 
 

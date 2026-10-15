@@ -348,7 +348,7 @@ class WebAgentTraceDisplay(BaseDisplay):
             flex: 1; min-width: 250px; max-width: 400px;
             border: 1px solid #e0e0e0; border-radius: 6px;
             padding: 12px; background: #fafafa; overflow-y: auto;
-            max-height: {max_h + 50}px;
+            max-height: calc({css_length(max_h)} + 50px);
         }}
         .step-details-content {{
             display: flex; flex-direction: column; gap: 8px;

@@ -176,13 +176,17 @@ class ImageEmbeddingVectorizer:
         model_name: any CLIP-family model sentence-transformers can load
         cache_dir: project output directory; embeddings land in ``.embeddings/``
         image_root: prefix for relative references
+        media_dir: the directory the annotation page serves ``/media/`` from
+            (``<task_dir>/<media_directory>``)
     """
 
     def __init__(self, model_name: str = DEFAULT_IMAGE_MODEL,
                  cache_dir: Optional[str] = None,
-                 image_root: Optional[str] = None):
+                 image_root: Optional[str] = None,
+                 media_dir: Optional[str] = None):
         self.model_name = model_name
         self.image_root = image_root
+        self.media_dir = media_dir
         self._model = None
         self._cache = EmbeddingCache(cache_dir, model_name) if cache_dir else None
         #: Set when references could not be loaded, so callers can report a
@@ -197,6 +201,13 @@ class ImageEmbeddingVectorizer:
         # default estimator tags are right for a stateless embedder.
         from sklearn.base import BaseEstimator
         return BaseEstimator.__sklearn_tags__(self)
+
+    def __getstate__(self):
+        # The CLIP weights are reloaded on the next transform. Pickling them
+        # made every saved model about 600 MB, whatever was fitted on top.
+        state = dict(self.__dict__)
+        state["_model"] = None
+        return state
 
     def fit(self, X=None, y=None):
         """Load the model. Lazy, exactly like the text vectorizer."""
@@ -266,10 +277,22 @@ class ImageEmbeddingVectorizer:
         candidate = str(reference)
         if candidate.startswith(("http://", "https://")):
             return None
-        path = Path(candidate)
-        if not path.is_file() and self.image_root:
-            path = Path(self.image_root) / candidate.lstrip("/")
-        return path if path.is_file() else None
+        candidates = [Path(candidate)]
+        # getattr: a vectorizer pickled by 2.11.0 has no media_dir.
+        media_dir = getattr(self, "media_dir", None)
+        image_root = getattr(self, "image_root", None)
+        if candidate.startswith("/media/"):
+            # The URL the annotation page serves from media_dir. Under an
+            # image_root that is the media directory itself, "/media/" must
+            # not be joined on again.
+            rest = candidate[len("/media/"):]
+            if media_dir:
+                candidates.append(Path(media_dir) / rest)
+            if image_root:
+                candidates.append(Path(image_root) / rest)
+        if image_root:
+            candidates.append(Path(image_root) / candidate.lstrip("/"))
+        return next((path for path in candidates if path.is_file()), None)
 
     def _key(self, reference: str) -> str:
         """Cache key from the resolved file's content.

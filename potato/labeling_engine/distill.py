@@ -153,6 +153,7 @@ def distill_scheme(engine, scheme, items, trainer_name: Optional[str] = None
                          **({"image_field": opts["image_field"]}
                             if opts.get("image_field") else {})},
              "n_train": len(rows), "n_silver": sum(r["silver"] for r in rows),
+             "n_accepted": _n_accepted(engine, scheme),
              "metrics": fit.metrics, "created_at": time.time()}
     registry = engine.store.kv_get(KV_KEY, {}) or {}
     registry[scheme.name] = entry
@@ -161,15 +162,24 @@ def distill_scheme(engine, scheme, items, trainer_name: Optional[str] = None
     return entry
 
 
+def _n_accepted(engine, scheme) -> int:
+    return len(engine.store.resolved(schema=scheme.name, status=["accepted"]))
+
+
 def due(engine, scheme) -> bool:
     """Whether a (re)distillation is due for this scheme."""
     if not engine.cfg.feature("distill"):
         return False
     opts = engine.cfg.distill or {}
-    n = len(engine.store.resolved(schema=scheme.name, status=["accepted"]))
+    n = _n_accepted(engine, scheme)
     if n < int(opts.get("min_labels", 200)):
         return False
     prev = (engine.store.kv_get(KV_KEY, {}) or {}).get(scheme.name)
     if prev is None:
         return True
-    return n >= float(opts.get("every", 2.0)) * (prev.get("n_train") or 1)
+    # Growth is measured in accepted labels at both ends. The training set
+    # leaves out cert, audit and unreadable-image rows, so comparing the
+    # accepted count with it was always "doubled", and an image study
+    # retrained on every planner pass.
+    base = prev.get("n_accepted") or prev.get("n_train") or 1
+    return n >= float(opts.get("every", 2.0)) * base

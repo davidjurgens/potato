@@ -29,7 +29,7 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from .base import BaseDisplay, css_length
+from .base import BaseDisplay, css_length, css_pixels
 
 logger = logging.getLogger(__name__)
 
@@ -482,14 +482,17 @@ class LiveAgentDisplay(BaseDisplay):
         # Main viewer (hidden until session starts)
         parts.append('<div class="live-agent-main" style="display: none;">')
 
-        # Screenshot panel
+        # Screenshot panel. A viewBox takes numbers, not CSS lengths; the
+        # viewer replaces it with the page's viewport on the first frame.
+        box_w = css_pixels(max_w, 900) if _is_pixel_length(max_w) else 900
+        box_h = css_pixels(max_h, 650) if _is_pixel_length(max_h) else 650
         parts.append(f"""
 <div class="live-agent-screenshot-panel">
     <div class="live-agent-screenshot-placeholder">
         Waiting for agent to start...
     </div>
     <img class="live-agent-screenshot" style="display: none;" alt="Agent screenshot">
-    <svg class="live-agent-overlay-layer" viewBox="0 0 {max_w} {max_h}"></svg>
+    <svg class="live-agent-overlay-layer" viewBox="0 0 {box_w} {box_h}"></svg>
 </div>
 """)
 
@@ -587,3 +590,18 @@ class LiveAgentDisplay(BaseDisplay):
         parts.append('</div>')  # viewer
 
         return "\n".join(parts)
+
+
+def _is_pixel_length(value) -> bool:
+    """A bare number or a px length, which a viewBox can use as it is."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    text = str(value).strip().lower()
+    text = text[:-2].strip() if text.endswith("px") else text
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False

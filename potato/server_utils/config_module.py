@@ -7514,10 +7514,14 @@ def _validate_estimator_name(key: str, name: str, *, kind: str) -> None:
     value = name.strip()
     if value.lower() in aliases or "." in value:
         return
+    # An example that is itself a dotted path: some aliases map to another
+    # short name ("clip" -> "image"), which is no example of an import path.
+    dotted = sorted(v for v in set(aliases.values()) if "." in v)
+    example = (f" such as '{dotted[0]}'" if dotted else "")
     raise ConfigValidationError(
         f"{key}: '{name}' is not a {kind} Potato can build. Use a short name "
         f"({', '.join(sorted(set(aliases)))}) or a fully qualified import "
-        f"path such as '{sorted(set(aliases.values()))[0]}'.")
+        f"path{example}.")
 
 
 def validate_active_learning_config(config_data: Dict[str, Any]) -> None:

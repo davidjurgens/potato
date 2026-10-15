@@ -3414,6 +3414,22 @@ class ItemStateManager:
             item.item_data = data
             return True
 
+    def clear_prediction(self, instance_id: str, schema_name: str,
+                         field: str = "predictions") -> bool:
+        """Remove one prelabel that ``set_prediction`` wrote. True if removed."""
+        with self._lock:
+            item = self.find_item(instance_id)
+            if item is None:
+                return False
+            data = dict(item.item_data or {})
+            predictions = dict(data.get(field) or {})
+            if schema_name not in predictions:
+                return False
+            del predictions[schema_name]
+            data[field] = predictions
+            item.item_data = data
+            return True
+
     def get_remaining_instance_ids(self) -> List[str]:
         """
         Instance IDs still available for assignment, in serving order.

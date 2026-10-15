@@ -1306,8 +1306,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
 
     # ------------------------------------------------------------- debug ---
     "debug": _D(
-        "Run in debug mode. This skips login, and admin authentication for "
-        "requests from this machine, so it must never be set on a deployed server",
+        "Run in debug mode. Admin pages open without a key for requests from "
+        "this machine, and with debug_phase every visitor is signed in as a "
+        "shared debug_user, so it must never be set on a deployed server",
         type="boolean", default=False, category=DEBUG,
         see_also=("admin_api_key",),
     ),

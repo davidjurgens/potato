@@ -196,7 +196,9 @@ counted in the run's write-back report (the `writeback` field of
 `/admin/training/api/status`):
 
 1. **Train-split items are never prelabelled.** A model is confident about its
-   own training data for reasons that say nothing about new data.
+   own training data for reasons that say nothing about new data. This covers
+   every run's train split: when a run trains on an item, a prelabel an
+   earlier run left on it is taken down.
 2. **Only schemes in `writeback.schemas`** are published. The list is empty by
    default, so turning training on changes nothing annotators see.
 3. **Pairs a reviewer rejected are skipped.** An `(item, scheme)` pair with a
@@ -206,6 +208,11 @@ counted in the run's write-back report (the `writeback` field of
 
 Write-back does not change human labels. Predictions go into item data;
 annotations live in user state, which write-back does not address.
+
+Prelabels show on the annotation page as a pre-filled answer once
+`writeback.schemas` is set; no `pre_annotation` block is needed. If
+an enabled `pre_annotation` block is also present, its settings apply instead,
+and its `field` must match `writeback.field`.
 
 By default a run predicts only on the items in its `val` and `test` splits,
 which already have a resolved human label, so items nobody has labelled get no
@@ -224,8 +231,7 @@ restart. The replay applies the same checks as above, so a training item, a
 rejected pair or a prediction under the floor stays off after a restart too.
 
 To withdraw a run's prelabels, send `DELETE /admin/training/api/runs/<run_id>/predictions`.
-This removes the stored predictions. Prelabels already written into item data
-stay until the server restarts.
+This removes the stored predictions and takes their prelabels off the items.
 
 ---
 

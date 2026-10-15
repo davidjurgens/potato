@@ -285,7 +285,7 @@ class SklearnTextTrainer(Trainer):
             return out
 
         for item in items:
-            if use_media and not self._readable_media(item.media):
+            if use_media and not self._readable_media(item.media, check_file=True):
                 # An image model given no image would score a blank vector
                 # and return a confident-looking label; give none.
                 continue
@@ -347,8 +347,15 @@ class SklearnTextTrainer(Trainer):
         return features, targets, ids
 
     @staticmethod
-    def _readable_media(media) -> bool:
-        return bool(media) and not str(media).startswith(("http://", "https://"))
+    def _readable_media(media, check_file: bool = False) -> bool:
+        """Whether ``media`` names a local image.
+
+        ``check_file`` is for a resolved path: a prediction on a missing file
+        would score a blank embedding and store a confident label.
+        """
+        if not media or str(media).startswith(("http://", "https://")):
+            return False
+        return os.path.isfile(str(media)) if check_file else True
 
     @staticmethod
     def _reads_media(vectorizer) -> bool:

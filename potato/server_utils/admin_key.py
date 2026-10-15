@@ -137,23 +137,24 @@ def debug_grants_admin(config, request=None) -> bool:
     Debug bypassing the admin key is deliberate and documented, but it was
     unconditional, so a server started with `debug: true` on the default
     0.0.0.0 bind handed the admin dashboard and the admin API to anyone who
-    could reach the port. It applies to requests from this machine: on a
-    loopback bind every request is, and on any other bind (debug servers may
-    be reached from other machines) the request must come over loopback with
-    no forwarding header. Other callers need the admin API key, as without
-    debug.
+    could reach the port. It applies to requests from this machine: the
+    request must come over loopback with no forwarding header, on any bind.
+    A loopback bind is not enough by itself, because a reverse proxy or tunnel
+    on the same host forwards other machines' requests to 127.0.0.1. Other
+    callers need the admin API key, as without debug. With no request at all
+    (a check made outside a request), a loopback bind still grants it.
     """
     if not config.get("debug", False):
         return False
-    if is_loopback_bind(config):
-        return True
     if request is None:
         try:
             from flask import has_request_context, request as current
             request = current if has_request_context() else None
         except Exception:
             request = None
-    return request is not None and request_is_local(request)
+    if request is None:
+        return is_loopback_bind(config)
+    return request_is_local(request)
 
 
 def validate_admin_api_key(provided_key, config):

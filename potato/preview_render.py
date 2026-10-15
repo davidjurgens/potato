@@ -268,9 +268,10 @@ def start_server(
 ):
     """Launch a debug server for `config_path`. Returns Popen, or None.
 
-    Debug mode is what makes this usable unattended: it skips login and
-    `--debug-phase` jumps straight past consent and instructions, so the
-    browser lands on the annotation page without anyone clicking through.
+    Debug mode is what makes this usable unattended: `--debug-phase` signs
+    the browser in as `debug_user` and jumps straight past consent and
+    instructions, so it lands on the annotation page without anyone clicking
+    through.
     """
     working_dir = cwd or server_cwd(config_path)
     config_arg = os.path.relpath(os.path.abspath(config_path), working_dir)
@@ -285,9 +286,8 @@ def start_server(
         "--debug",
         "--debug-phase", phase,
         # Loopback explicitly. This is a throwaway server for one screenshot,
-        # so it has no reason to listen on anything else -- and debug on a
-        # non-loopback bind is refused, since debug narrows admin auth and
-        # exposes the interactive debugger.
+        # so it has no reason to listen on anything else, and debug phases
+        # sign in a shared user for whoever can connect.
         "--host", "127.0.0.1",
     ]
 
