@@ -53,7 +53,8 @@ def cohen_kappa_pairwise(reliability_df):
             {annotator_a, annotator_b, kappa, n_items}), n_pairs_evaluated,
             n_pairs_skipped.
     """
-    from sklearn.metrics import cohen_kappa_score
+    # The report's own kappa, so this table and /admin/iaa agree.
+    from potato.server_utils.iaa.nominal import cohen_kappa as _kappa
 
     annotators = sorted(reliability_df["annotator"].unique())
     pairs = []
@@ -70,7 +71,7 @@ def cohen_kappa_pairwise(reliability_df):
         y_a = a_rows.loc[shared].astype(str).tolist()
         y_b = b_rows.loc[shared].astype(str).tolist()
         try:
-            kappa = float(cohen_kappa_score(y_a, y_b))
+            kappa = float(_kappa(y_a, y_b))
         except Exception:
             skipped += 1
             continue

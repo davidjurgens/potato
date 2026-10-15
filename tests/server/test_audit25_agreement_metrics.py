@@ -17,6 +17,7 @@ The data and the expected alphas are the auditor's, hand-computed against
 simpledorff directly.
 """
 
+import json
 import time
 
 import pytest
@@ -78,6 +79,11 @@ def agreement_server():
             "min_label": "not at all",
             "max_label": "completely",
         },
+        {
+            "annotation_type": "process_reward",
+            "name": "reward",
+            "description": "Is each step correct?",
+        },
     ]
     with TestConfigManager(
         "audit25_agreement",
@@ -119,6 +125,10 @@ def _annotate_everything(server):
                         },
                         **{f"reasons:::{label}": "true"
                            for label in REASONS[annotator][index]},
+                        # Step rewards that differ between the two people.
+                        **{"reward:::reward": json.dumps({"mode": "binary", "steps": [
+                            {"index": k, "reward": (k + index + (annotator == "a2")) % 2}
+                            for k in range(4)]})},
                     ),
                 },
             )
@@ -280,3 +290,15 @@ class TestUnanimousAgreementIsUndefined:
 
     def test_overall_skips_the_undefined_schema(self, unanimous_server):
         assert _agreement(unanimous_server)["overall"] == {}
+
+
+
+class TestStructuredSchemasAreLeftToTheAgreementReport:
+    """Found by potato-skill (D8): a process_reward scheme read as the scheme's
+    own name for every annotator, "perfect agreement", while /admin/iaa,
+    which matches the steps, measured 0.56."""
+
+    def test_process_reward_points_to_admin_iaa(self, agreement_server):
+        entry = _agreement(agreement_server)["by_schema"]["reward"]
+        assert entry.get("see") == "/admin/iaa"
+        assert "krippendorff_alpha" not in entry and "percent_agreement" not in entry

@@ -157,6 +157,44 @@ def _compute_step_cohens_kappa(
         "n_annotators": len(all_annotators),
         "n_steps": len(by_step),
     }
+def steps_from_stored(value: Any) -> Dict[str, Any]:
+    """``{step index: label}`` from a stored step-level value.
+
+    Accepts the shapes the trace schemas store: a JSON string,
+    ``{"steps": [{"index"|"step_index", "reward"|"label"|"verdict"}]}``, a flat
+    ``{index: label}`` mapping, or one of those nested one level under another
+    key. Shared by the agreement report and the labeling engine's trace
+    family, so a machine's steps are read exactly as a person's are.
+    """
+    import json
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return {}
+    if isinstance(value, dict) and isinstance(value.get("steps"), list):
+        out = {}
+        for pos, st in enumerate(value["steps"]):
+            if not isinstance(st, dict):
+                continue
+            idx = st.get("index", st.get("step_index", pos))
+            label = st.get("reward", st.get("label", st.get("verdict")))
+            if label is not None:
+                out[str(idx)] = label
+        return out
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            try:
+                out[str(int(k))] = v
+            except (TypeError, ValueError):
+                nested = steps_from_stored(v)
+                if nested:
+                    return nested
+        return out
+    return {}
+
+
 def _extract_step_annotations(
     ann_data: Any, scheme_name: str
 ) -> Dict[int, str]:

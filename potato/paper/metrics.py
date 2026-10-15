@@ -44,21 +44,19 @@ def _alpha_nominal(units: Dict[Any, List[str]]) -> Optional[float]:
 
 
 def cohen_kappa(pairs: List[Tuple[str, str]]) -> Optional[float]:
-    """Cohen's kappa for a list of (rater_a_value, rater_b_value) pairs."""
-    n = len(pairs)
-    if n == 0:
+    """Cohen's kappa for a list of (rater_a_value, rater_b_value) pairs.
+
+    The computation is ``iaa.nominal.cohen_kappa``, the one the agreement
+    report uses, so a paper and ``/admin/iaa`` cannot print different kappas
+    for the same labels. An undefined kappa (both raters used one label
+    throughout, so chance agreement is 1) is None: publishing 1.0 read as
+    measured perfect agreement.
+    """
+    if not pairs:
         return None
-    observed = sum(1 for a, b in pairs if a == b) / n
-    counts_a = Counter(a for a, _ in pairs)
-    counts_b = Counter(b for _, b in pairs)
-    expected = sum(
-        (counts_a[c] / n) * (counts_b.get(c, 0) / n) for c in counts_a
-    )
-    if expected >= 1.0:
-        # Both raters used one label throughout: chance agreement is 1 and
-        # kappa is 0/0. Publishing 1.0 read as measured perfect agreement.
-        return None
-    return (observed - expected) / (1 - expected)
+    from potato.server_utils.iaa.nominal import cohen_kappa as _kappa
+    k = _kappa([a for a, _ in pairs], [b for _, b in pairs])
+    return None if k != k else float(k)
 
 
 def configured_labels(scheme: Dict[str, Any]) -> List[str]:
@@ -272,6 +270,8 @@ def compute_metrics(project: ProjectData) -> Dict[str, Any]:
     return {
         "task_name": project.task_name,
         "n_annotators": len(per_annotator_items),
+        # Declared tools and models, left out of everything below.
+        "n_machine_raters_excluded": len(getattr(project, "machine_raters", []) or []),
         "n_annotated_instances": len(project.instance_ids),
         "n_total_items": project.total_items,
         "n_label_records": len(records),

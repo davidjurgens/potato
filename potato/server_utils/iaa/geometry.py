@@ -802,10 +802,14 @@ def temporal_similarity(seg_a: Dict[str, Any], seg_b: Dict[str, Any]) -> float:
     """
     if not seg_a or not seg_b:
         return 0.0
-    return temporal_iou(
-        [seg_a.get("start", 0.0), seg_a.get("end", 0.0)],
-        [seg_b.get("start", 0.0), seg_b.get("end", 0.0)],
-    )
+    a = [seg_a.get("start", 0.0), seg_a.get("end", 0.0)]
+    b = [seg_b.get("start", 0.0), seg_b.get("end", 0.0)]
+    if a[0] == a[1] and b[0] == b[1]:
+        # Two instants (a boundary, an event onset): the same instant is a
+        # full match, though IoU is 0/0. Scored 0, identical answers counted
+        # as complete disagreement.
+        return 1.0 if a[0] == b[0] else 0.0
+    return temporal_iou(a, b)
 
 
 def delta_geometric(obj_a: Dict[str, Any], obj_b: Dict[str, Any]) -> float:

@@ -34,6 +34,9 @@ class SchemaKind(str, Enum):
     ROLLOUT = "rollout"      # world-model rollouts: break-points + preference
     CAPTION = "caption"      # free text about a region: agreement over meaning
     GROUNDING = "grounding"  # referring expression -> region: detection + where
+    SPATIAL = "spatial"      # 3D objects in sensor space, matched by 3D IoU
+    SEGMENTS = "segments"    # time segments under non-audio/video types
+    TRACE = "trace"          # one label per step of an agent trace
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -99,6 +102,17 @@ _KIND_BY_TYPE = {
     "rollout_evaluation": SchemaKind.ROLLOUT,
     "region_caption": SchemaKind.CAPTION,
     "grounding_eval": SchemaKind.GROUNDING,
+    # Read by iaa/structured.py. temporal_grounding and tiered_annotation
+    # store {"segments": [...]} like audio/video, but under type names the
+    # TEMPORAL reader does not recognize, so that path found nothing.
+    "spatial_annotation": SchemaKind.SPATIAL,
+    "temporal_grounding": SchemaKind.SEGMENTS,
+    "tiered_annotation": SchemaKind.SEGMENTS,
+    "process_reward": SchemaKind.TRACE,
+    "trajectory_eval": SchemaKind.TRACE,
+    "tool_call_review": SchemaKind.TRACE,
+    "failure_attribution": SchemaKind.TRACE,
+    "gui_trajectory": SchemaKind.TRACE,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
@@ -170,6 +184,9 @@ def metrics_for_schema(scheme: Dict[str, Any],
             "<row>.alpha_nominal",
         ],
         SchemaKind.RANKING: ["kendall_tau", "spearman_footrule"],
+        SchemaKind.SPATIAL: ["mean_agreement", "mean_object_count_diff"],
+        SchemaKind.SEGMENTS: ["mean_agreement", "mean_object_count_diff"],
+        SchemaKind.TRACE: ["alpha_nominal", "cohen_kappa", "percent_agreement"],
         SchemaKind.SPAN: [
             "token_level_kappa", "span_f1_exact", "span_f1_partial",
             "krippendorff_alpha_u", "gamma_mathet",
@@ -1387,6 +1404,15 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
             # cannot drift from what the client wrote.
             rows = _gather_raw(overlap_items, user_states, name)
             metrics = rollout_iaa.rollout_report(rows, scheme)
+        elif kind in (SchemaKind.SPATIAL, SchemaKind.SEGMENTS, SchemaKind.TRACE):
+            from potato.server_utils.iaa import structured
+            rows = _gather_raw(overlap_items, user_states, name)
+            if kind == SchemaKind.SPATIAL:
+                metrics = structured.spatial_report(rows)
+            elif kind == SchemaKind.SEGMENTS:
+                metrics = structured.segment_report(rows)
+            else:
+                metrics = structured.trace_report(rows, name)
         elif kind == SchemaKind.MATRIX:
             rows = _gather_matrix(overlap_items, user_states, name)
             metrics = _aggregate_matrix(rows, scheme)
