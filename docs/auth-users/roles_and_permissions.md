@@ -90,9 +90,11 @@ A user's roles are the union of:
    map (otherwise it stays a pure quota label, e.g. `novice`/`expert`)
 
 A user's permissions are the union of the permissions of all their roles. The
-shared `admin_api_key` bypasses all checks. So does `debug: true`, but only when
-the server is bound to a loopback address (`127.0.0.1`, `localhost`); on
-`0.0.0.0` or behind gunicorn the admin key is still required.
+shared `admin_api_key` bypasses all checks. So does `debug: true`, but only for
+requests from the machine the server runs on: every request when it is bound to
+a loopback address (`127.0.0.1`, `localhost`), and on `0.0.0.0` a request that
+arrives over loopback with no proxy forwarding header. Requests from other
+machines, or through a proxy, still need the admin key.
 
 ## How it's enforced
 
@@ -105,7 +107,7 @@ duplicated `admin_required` decorators across the codebase. This means:
 - A logged-in user with an admin-capable role reaches admin endpoints **without**
   needing the shared key.
 - Requests with a valid shared key always pass, and so do requests to a debug
-  server bound to loopback.
+  server from the machine it runs on.
 
 ## Backward compatibility
 

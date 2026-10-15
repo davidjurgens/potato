@@ -74,7 +74,15 @@ class TestUsernamesAreNotPaths:
 
 
 class TestDebugOnAPublicBind:
-    """`debug: true` on 0.0.0.0 must not open the admin API to anyone."""
+    """`debug: true` on 0.0.0.0 must not open the admin API to anyone.
+
+    A debug server may be reached from other machines; the admin-key bypass
+    is for requests from the machine it runs on. The harness can only send
+    from loopback, so a remote caller is a request a proxy forwarded, which
+    the bypass refuses the same way.
+    """
+
+    REMOTE = {"X-Forwarded-For": "203.0.113.7"}
 
     @pytest.fixture(scope="class")
     def server(self):
@@ -94,11 +102,16 @@ class TestDebugOnAPublicBind:
 
     @pytest.mark.parametrize("path", ["/admin/api/config", "/admin/user_state/alice"])
     def test_anonymous_admin_reads_are_refused(self, server, path):
-        assert requests.get(server.base_url + path).status_code in (401, 403)
+        assert requests.get(server.base_url + path,
+                            headers=self.REMOTE).status_code in (401, 403)
+
+    def test_a_request_from_this_machine_gets_the_debug_bypass(self, server):
+        assert requests.get(server.base_url + "/admin/api/config").status_code == 200
 
     def test_anonymous_password_reset_is_refused(self, server):
         r = requests.post(server.base_url + "/admin/reset_password",
-                          json={"username": "alice", "new_password": "pwned"})
+                          json={"username": "alice", "new_password": "pwned"},
+                          headers=self.REMOTE)
         assert r.status_code == 403
         from potato.authentication import UserAuthenticator
         assert not UserAuthenticator.authenticate("alice", "pwned")

@@ -115,25 +115,45 @@ def is_loopback_bind(config) -> bool:
         return False
 
 
-def debug_grants_admin(config) -> bool:
-    """Whether `debug: true` should bypass admin authentication here.
+#: Headers a reverse proxy adds. A request carrying one came from elsewhere,
+#: whatever its socket address says.
+_FORWARDING_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded")
+
+
+def request_is_local(request) -> bool:
+    """True when this request came from this machine: a loopback peer, and no
+    proxy header saying it was forwarded from somewhere else."""
+    try:
+        if any(request.headers.get(h) for h in _FORWARDING_HEADERS):
+            return False
+        return ipaddress.ip_address(request.remote_addr or "").is_loopback
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
+def debug_grants_admin(config, request=None) -> bool:
+    """Whether `debug: true` should bypass admin authentication for this call.
 
     Debug bypassing the admin key is deliberate and documented, but it was
     unconditional, so a server started with `debug: true` on the default
     0.0.0.0 bind handed the admin dashboard and the admin API to anyone who
-    could reach the port. It now applies only on a loopback bind, which is the
-    case the convenience was written for.
+    could reach the port. It applies to requests from this machine: on a
+    loopback bind every request is, and on any other bind (debug servers may
+    be reached from other machines) the request must come over loopback with
+    no forwarding header. Other callers need the admin API key, as without
+    debug.
     """
     if not config.get("debug", False):
         return False
     if is_loopback_bind(config):
         return True
-    logger.warning(
-        "debug is enabled but the server is bound to %s, not loopback, so the "
-        "admin API key is still required. Bind to 127.0.0.1 for the debug "
-        "admin bypass.", config.get("host", "0.0.0.0"),
-    )
-    return False
+    if request is None:
+        try:
+            from flask import has_request_context, request as current
+            request = current if has_request_context() else None
+        except Exception:
+            request = None
+    return request is not None and request_is_local(request)
 
 
 def validate_admin_api_key(provided_key, config):

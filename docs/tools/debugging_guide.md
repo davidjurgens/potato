@@ -65,7 +65,7 @@ server:
 Launches Potato in debug mode with simplified authentication.
 
 ```bash
-potato start config.yaml --host 127.0.0.1 --debug
+potato start config.yaml --debug
 ```
 
 **Effects:**
@@ -73,20 +73,22 @@ potato start config.yaml --host 127.0.0.1 --debug
 - Enables verbose logging
 - Useful for quickly testing configuration changes
 
-Debug mode only starts on a loopback bind. With the default host `0.0.0.0`,
-Potato exits with "Refusing to start: debug is enabled and the server is bound
-to 0.0.0.0 rather than loopback", because debug disables parts of the admin
-authentication and the built-in server would expose the Werkzeug interactive
-debugger. Pass `--host 127.0.0.1` (or set `server.host: 127.0.0.1`), or set
-`POTATO_ALLOW_REMOTE_DEBUG=1` if you accept the risk; the interactive debugger
-stays off on a non-loopback bind even then.
+Debug mode starts on any address, the default `0.0.0.0` included, so other
+machines can reach the server; open `http://localhost:<port>` on your own.
+Two things stay with this machine. The admin pages and admin API open without
+a key only for requests from it (not from another machine, and not through a
+proxy); elsewhere they need the admin API key, as without debug. Werkzeug's
+interactive debugger, a Python console on every error page, is served only when
+the server is bound to `127.0.0.1`. The other debug conveniences (login skip,
+debug phases) apply to anyone who can connect, so keep debug off a server
+strangers can reach.
 
 ### `--debug-log`
 
 Controls debug logging output for different parts of the system.
 
 ```bash
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=all
+potato start config.yaml --debug --debug-log=all
 ```
 
 **Options:**
@@ -102,16 +104,16 @@ potato start config.yaml --host 127.0.0.1 --debug --debug-log=all
 
 ```bash
 # Debug frontend issues (JavaScript errors, UI state)
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=ui
+potato start config.yaml --debug --debug-log=ui
 
 # Debug backend issues (API calls, data processing)
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=server
+potato start config.yaml --debug --debug-log=server
 
 # Full debugging (both frontend and backend)
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=all
+potato start config.yaml --debug --debug-log=all
 
 # Quiet mode - minimal output
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=none
+potato start config.yaml --debug --debug-log=none
 ```
 
 **How it works:**
@@ -124,7 +126,7 @@ potato start config.yaml --host 127.0.0.1 --debug --debug-log=none
 Skip directly to a specific phase or page without going through earlier phases. This is useful for testing specific parts of an annotation workflow.
 
 ```bash
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation
+potato start config.yaml --debug --debug-phase=annotation
 ```
 
 **Requires:** The `--debug` flag must also be set.
@@ -145,13 +147,13 @@ You can also specify a specific page name if your configuration defines multiple
 
 ```bash
 # Jump directly to annotation (most common use case)
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation
+potato start config.yaml --debug --debug-phase=annotation
 
 # Test post-study survey
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=poststudy
+potato start config.yaml --debug --debug-phase=poststudy
 
 # Test a specific named page
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=my_custom_survey
+potato start config.yaml --debug --debug-phase=my_custom_survey
 ```
 
 **How it works:**
@@ -165,13 +167,13 @@ Flags can be combined for different debugging scenarios:
 
 ```bash
 # Quick annotation testing with minimal noise
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=none
+potato start config.yaml --debug --debug-phase=annotation --debug-log=none
 
 # Full debugging of annotation phase
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=all
+potato start config.yaml --debug --debug-phase=annotation --debug-log=all
 
 # Debug only backend while testing post-study
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=poststudy --debug-log=server
+potato start config.yaml --debug --debug-phase=poststudy --debug-log=server
 ```
 
 ## Other Useful Flags
@@ -225,14 +227,14 @@ This restores `console.log`, `console.debug`, `console.info`, and `console.warn`
 
 ```bash
 # Skip to annotation with full logging
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=all
+potato start config.yaml --debug --debug-phase=annotation --debug-log=all
 ```
 
 ### Debugging API Issues
 
 ```bash
 # Server-only logging to focus on backend
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=server
+potato start config.yaml --debug --debug-log=server
 ```
 
 Then use browser Network tab to inspect request/response data.
@@ -241,14 +243,14 @@ Then use browser Network tab to inspect request/response data.
 
 ```bash
 # Start from the beginning with UI logging
-potato start config.yaml --host 127.0.0.1 --debug --debug-log=ui
+potato start config.yaml --debug --debug-log=ui
 ```
 
 ### Performance Testing
 
 ```bash
 # Minimal logging overhead
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation --debug-log=none
+potato start config.yaml --debug --debug-phase=annotation --debug-log=none
 ```
 
 ## Troubleshooting
@@ -262,7 +264,7 @@ The `--debug-phase` option only works when `--debug` is also specified:
 potato start config.yaml --debug-phase=annotation
 
 # Correct
-potato start config.yaml --host 127.0.0.1 --debug --debug-phase=annotation
+potato start config.yaml --debug --debug-phase=annotation
 ```
 
 ### Phase not found

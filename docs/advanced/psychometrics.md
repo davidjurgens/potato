@@ -27,7 +27,7 @@ On top of the model sit four tools:
 ## Quick start
 
 ```bash
-python potato/flask_server.py start examples/advanced/psychometrics/config.yaml -p 8000 --host 127.0.0.1 --debug
+python potato/flask_server.py start examples/advanced/psychometrics/config.yaml -p 8000 --debug
 # annotate a bit (or point the simulator at it), then open:
 #   http://localhost:8000/psychometrics/dashboard
 ```

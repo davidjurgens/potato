@@ -65,3 +65,35 @@ class TestValidateAdminApiKey:
     def test_local_debug_workflow_is_preserved(self):
         cfg = {"debug": True, "host": "127.0.0.1", "admin_api_key": "realkey"}
         assert validate_admin_api_key(None, cfg) is True
+
+
+class _Req:
+    def __init__(self, remote_addr, headers=None):
+        self.remote_addr = remote_addr
+        self.headers = headers or {}
+
+
+class TestDebugOnAPublicBind:
+    """Debug servers start on 0.0.0.0 so other machines can reach them; the
+    admin bypass stays with requests from this machine."""
+
+    def test_a_request_from_this_machine_gets_the_bypass(self):
+        cfg = {"debug": True, "host": "0.0.0.0"}
+        assert debug_grants_admin(cfg, _Req("127.0.0.1")) is True
+        assert debug_grants_admin(cfg, _Req("::1")) is True
+
+    def test_a_request_from_another_machine_does_not(self):
+        cfg = {"debug": True, "host": "0.0.0.0"}
+        assert debug_grants_admin(cfg, _Req("192.168.1.20")) is False
+
+    def test_a_forwarded_request_does_not(self):
+        """Behind a local proxy every request arrives from 127.0.0.1."""
+        cfg = {"debug": True, "host": "0.0.0.0"}
+        assert debug_grants_admin(
+            cfg, _Req("127.0.0.1", {"X-Forwarded-For": "203.0.113.7"})) is False
+
+    def test_rbac_follows_the_same_rule(self):
+        from potato.server_utils.rbac import Permission, RBACManager
+        m = RBACManager({"debug": True, "host": "0.0.0.0"})
+        assert m.check(Permission.VIEW_ADMIN_DASHBOARD, _Req("127.0.0.1"), {})
+        assert not m.check(Permission.VIEW_ADMIN_DASHBOARD, _Req("10.0.0.4"), {})

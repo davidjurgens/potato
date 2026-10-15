@@ -30,6 +30,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **`--debug` starts again without `--host`.** Since 2.8.2 a debug server
+  on the default `0.0.0.0` bind refused to start unless `--host 127.0.0.1`
+  was given, so `potato start config.yaml --debug` failed. It now starts on
+  any bind and other machines can reach it. The admin-key bypass applies to
+  requests from the machine the server runs on (loopback, no proxy
+  forwarding header), and the Werkzeug interactive debugger is still served
+  only on a `127.0.0.1` bind. `POTATO_ALLOW_REMOTE_DEBUG` is no longer read.
 - **A text model trained on URLs.** Items with a `url`, `path` or `file_name`
   field gave the trainer that value instead of the text. A text vectorizer now
   always reads the text, and the model card records which input a model was

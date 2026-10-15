@@ -149,9 +149,10 @@ def _check_debug_mode(ctx: CheckContext) -> List[Finding]:
         return []
     return [Finding(
         "D002", "error",
-        "debug is true, which disables admin authentication entirely: "
-        "validate_admin_api_key returns True unconditionally in debug mode, so "
-        "anyone reaching /admin has full control.",
+        "debug is true, which skips login for everyone who reaches the study, "
+        "so anyone can annotate as any user, and opens the debug phases. It is "
+        "for a server on a developer's machine (whose admin pages it also "
+        "opens without a key, to requests from that machine).",
         "Remove `debug: true` from the config before deploying.",
         key="debug",
     )]

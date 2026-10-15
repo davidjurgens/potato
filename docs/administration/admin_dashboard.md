@@ -25,7 +25,7 @@ The admin dashboard requires an API key for access. The API key can be configure
 **Access Methods:**
 1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted. The form says where this server's key comes from: the config file, the environment variable, or `admin_api_key.txt`
 2. **Header Access**: Include `X-API-Key: <your_key>` in request headers
-3. **Debug Mode**: When `debug: true` is set in config and the server is bound to loopback, no API key is required
+3. **Debug Mode**: When `debug: true` is set, requests from the machine the server runs on (`http://localhost:<port>`) need no API key. Requests from other machines, or through a proxy, still do
 
 A request to `/admin` that carries a wrong key gets HTTP 403, and the form shows "That API key wasn't recognized".
 

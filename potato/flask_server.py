@@ -6582,36 +6582,28 @@ def run_server(args):
     debug_requested = config.get("debug", False)
     loopback = is_loopback_bind({"host": host})
 
-    if debug_requested and not loopback:
-        if os.environ.get("POTATO_ALLOW_REMOTE_DEBUG") != "1":
-            raise SystemExit(
-                "Refusing to start: debug is enabled and the server is bound "
-                "to %s rather than loopback.\n"
-                "  debug disables parts of the admin authentication and, with "
-                "the built-in server, exposes the Werkzeug interactive "
-                "debugger.\n"
-                "  Bind to 127.0.0.1, remove `debug: true`, or set "
-                "POTATO_ALLOW_REMOTE_DEBUG=1 if you accept the risk."
-                % host
-            )
-        logger.warning(
-            "=" * 70 + "\n"
-            "debug is enabled on %s, a non-loopback bind, allowed only "
-            "because POTATO_ALLOW_REMOTE_DEBUG=1 is set.\n"
-            "The Werkzeug interactive debugger is still withheld.\n"
-            + "=" * 70, host,
-        )
-
-    # The interactive debugger is never served off loopback, override or not.
+    # Debug servers start on any bind, the default 0.0.0.0 included, so they
+    # can be reached from other machines (2.8.2 to 2.11 refused to start
+    # unless --host 127.0.0.1 was given, which broke `potato start ... --debug`).
+    # What stays local: the admin-key bypass applies only to requests from
+    # this machine (admin_key.debug_grants_admin), and the Werkzeug interactive
+    # debugger, a Python console for whoever can reach a traceback, is served
+    # only on a loopback bind.
     werkzeug_debug = bool(debug_requested and loopback)
 
     if debug_requested:
-        logger.warning(
-            "debug is on. Bound to %s. Admin bypass: %s. Werkzeug debugger: %s.",
-            host,
-            "active (loopback)" if loopback else "withheld (not loopback)",
-            "on" if werkzeug_debug else "off",
-        )
+        if loopback:
+            logger.warning("debug is on. Bound to %s: reachable from this machine "
+                           "only. Admin pages open without a key; Werkzeug "
+                           "debugger on.", host)
+        else:
+            logger.warning(
+                "debug is on. Bound to %s: reachable from other machines, so "
+                "debug conveniences (login skip, debug phases) apply to anyone "
+                "who can connect. Admin pages open without a key only from this "
+                "machine (http://localhost:%s); other machines need the admin "
+                "API key. The Werkzeug interactive debugger is off on this bind.",
+                host, port)
 
     # Use threaded=True so background LLM calls (solo mode refinement,
     # edge case synthesis, etc.) don't block the HTTP server.

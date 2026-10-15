@@ -207,7 +207,7 @@ customjs: null  # Path to custom JavaScript file
 customjs_hostname: null  # Hostname for custom JS
 site_dir: default  # or path to custom template directory
 alert_time_each_instance: 10  # Seconds before alert (very high = disabled)
-debug: false  # Debug mode. On a loopback host (127.0.0.1) it also skips admin authentication
+debug: false  # Debug mode. Requests from this machine also skip admin authentication
 ```
 
 ### Session cookie

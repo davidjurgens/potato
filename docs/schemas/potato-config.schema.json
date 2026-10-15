@@ -3689,7 +3689,7 @@
     },
     "debug": {
       "default": false,
-      "description": "Run in debug mode. This disables admin authentication and skips login entirely, so it must never be set on a deployed server",
+      "description": "Run in debug mode. This skips login, and admin authentication for requests from this machine, so it must never be set on a deployed server",
       "type": "boolean"
     },
     "debug_log": {

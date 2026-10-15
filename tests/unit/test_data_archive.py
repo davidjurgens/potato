@@ -363,22 +363,29 @@ class TestRoutes:
                 "PRAGMA integrity_check").fetchone()[0] == "ok"
             connection.close()
 
-    def test_debug_mode_opens_the_archive_on_loopback_only(self, client):
+    def test_debug_mode_opens_the_archive_to_this_machine_only(self, client):
         """Stated because it is load-bearing, not because it is desirable.
 
-        Debug on a loopback bind serves the whole study's data to an
-        unauthenticated request. On any other bind the admin key is still
+        Debug serves the whole study's data to an unauthenticated request from
+        this machine. A debug server may be bound to 0.0.0.0 so other machines
+        can reach it, and from them (or through a proxy) the admin key is still
         required. Preflight also blocks `debug: true` for any public deploy.
         """
         from potato.server_utils.config_module import config
 
         original = (config.get("debug", False), config.get("host"))
         config["debug"] = True
+        remote = {"REMOTE_ADDR": "203.0.113.7"}
         try:
             config["host"] = "127.0.0.1"
             assert client.get("/admin/api/data/manifest").status_code == 200
             config["host"] = "0.0.0.0"
-            assert client.get("/admin/api/data/manifest").status_code in (401, 403)
+            assert client.get("/admin/api/data/manifest").status_code == 200
+            assert client.get("/admin/api/data/manifest",
+                              environ_base=remote).status_code in (401, 403)
+            assert client.get("/admin/api/data/manifest",
+                              headers={"X-Forwarded-For": "203.0.113.7"}
+                              ).status_code in (401, 403)
         finally:
             config["debug"], config["host"] = original
             if original[1] is None:
