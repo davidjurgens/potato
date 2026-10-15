@@ -336,7 +336,7 @@ class TestTheGate:
 class TestDebugDoesNotUnlockAnything:
     """The property this whole design turns on.
 
-    `validate_admin_api_key()` returns True unconditionally under debug and
+    `validate_admin_api_key()` returns True under debug for local requests and
     `RBACManager.check()` passes everything but ADJUDICATE. If the MCP gate ever
     consults either, a debug server becomes remote control with no lock.
     """

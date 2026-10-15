@@ -4659,7 +4659,7 @@
       "properties": {
         "allow_debug": {
           "default": false,
-          "description": "Permit the MCP surface on a debug server. Off by default: debug disables admin authentication server-wide, so the two together are a remote shell",
+          "description": "Permit the MCP surface on a debug server. Off by default: debug opens admin pages without a key to requests from this machine, and a tunnel or proxy on it that adds no forwarding header passes every caller through as local",
           "type": "boolean"
         },
         "audit_log": {

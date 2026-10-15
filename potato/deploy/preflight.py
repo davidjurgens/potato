@@ -171,8 +171,8 @@ def _check_mcp_surface(ctx: CheckContext) -> List[Finding]:
         findings.append(Finding(
             "D017", "error",
             "mcp.enabled is set on a server running in debug mode. Debug "
-            "disables admin authentication server-wide, so an MCP control "
-            "surface there is remote control with no lock on it.",
+            "opens admin pages without a key to requests from the server's own "
+            "machine, which on a deployed host includes its reverse proxy.",
             "Remove `debug: true` before deploying.",
             key="mcp.enabled",
         ))

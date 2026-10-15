@@ -165,8 +165,8 @@ def validate_admin_api_key(provided_key, config):
         config: The application config dict.
 
     Returns:
-        bool: True if the key is valid, or debug mode is enabled on a loopback
-        bind.
+        bool: True if the key is valid, or debug mode is on and the request
+        comes from this machine (see debug_grants_admin).
     """
     if debug_grants_admin(config):
         return True

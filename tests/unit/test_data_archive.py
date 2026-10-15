@@ -315,9 +315,10 @@ class TestRoutes:
     def debug_off(self, monkeypatch):
         """Force debug off for the whole class.
 
-        `validate_admin_api_key` returns True unconditionally when `debug` is
-        set, so a leftover `debug: True` in the process-global config turns
-        every assertion below into a false pass. Another unit test does leave
+        `validate_admin_api_key` can return True when `debug` is set (for a
+        local request, or outside a request on a loopback bind), so a
+        leftover `debug: True` in the process-global config turns every
+        assertion below into a false pass. Another unit test does leave
         one behind, which is how this was found.
         """
         from potato.server_utils.config_module import config

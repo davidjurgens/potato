@@ -16,9 +16,10 @@ The gate, in order, failing closed with a reason at every step:
     rbac.check           the token's role carries the permission
 
 Note what is *not* in that list: debug mode. `validate_admin_api_key()` returns
-True unconditionally under `debug: true` and `RBACManager.check()` passes
-everything except ADJUDICATE, so inheriting either would mean a debug server
-hands full control to anyone who can reach the port. Registration itself refuses
+True under `debug: true` for any request from this machine, and
+`RBACManager.check()` passes everything except ADJUDICATE, so inheriting either
+would hand full control to anything that reaches the port through a local
+tunnel or proxy. Registration itself refuses
 under debug unless `mcp.allow_debug` is set.
 """
 
@@ -745,7 +746,7 @@ def register_mcp_routes(flask_app, app_config) -> bool:
     """Register the blueprint if the task opts in. Returns whether it did.
 
     Refuses under `debug: true` unless `mcp.allow_debug` is set, because debug
-    mode disables admin authentication server-wide.
+    mode opens admin pages without a key to requests from this machine.
     """
     settings = (app_config.get("mcp") or {})
     if not settings.get("enabled"):
@@ -753,9 +754,9 @@ def register_mcp_routes(flask_app, app_config) -> bool:
 
     if app_config.get("debug") and not settings.get("allow_debug"):
         logger.error(
-            "mcp.enabled is set but the server is in debug mode, which disables "
-            "admin authentication. Refusing to register the MCP control "
-            "surface. Set mcp.allow_debug: true to override."
+            "mcp.enabled is set but the server is in debug mode, which opens "
+            "admin pages without a key to local requests. Refusing to register "
+            "the MCP control surface. Set mcp.allow_debug: true to override."
         )
         return False
 

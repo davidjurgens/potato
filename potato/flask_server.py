@@ -5491,7 +5491,8 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
 
     # MCP control surface. Config-gated like the blueprints below, and with an
     # extra refusal: register_mcp_routes() declines under debug: true unless
-    # mcp.allow_debug is set, because debug disables admin auth server-wide.
+    # mcp.allow_debug is set, because debug opens admin pages without a key
+    # to requests from this machine, tunnels and proxies on it included.
     try:
         from potato.mcp_server.routes import register_mcp_routes
 

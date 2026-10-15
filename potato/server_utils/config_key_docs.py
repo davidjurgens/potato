@@ -1258,8 +1258,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "mcp.allow_debug": _D(
         "Permit the MCP surface on a debug server. Off by default: debug "
-        "disables admin authentication server-wide, so the two together are a "
-        "remote shell",
+        "opens admin pages without a key to requests from this machine, and a "
+        "tunnel or proxy on it that adds no forwarding header passes every "
+        "caller through as local",
         type="boolean", default=False, category=INTEG, see_also=("debug",),
     ),
     "trace_ingestion": _D(

@@ -13,9 +13,10 @@ already has.
 
 Deliberately separate from `admin_key.py`:
 
-  * `validate_admin_api_key()` returns True unconditionally under `debug: true`.
-    That is defensible for a dashboard on a laptop and indefensible for a remote
-    control surface, so nothing here consults debug mode.
+  * `validate_admin_api_key()` returns True under `debug: true` for any request
+    from this machine. That is defensible for a dashboard on a laptop and
+    indefensible for a remote control surface, so nothing here consults debug
+    mode.
   * Admin keys are one shared secret. These are per-agent and revocable
     individually, which is what makes an audit log worth keeping.
 

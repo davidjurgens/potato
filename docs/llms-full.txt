@@ -51534,11 +51534,14 @@ allowed or refused, is appended to the audit log.
 
 ### Debug mode
 
-`debug: true` disables admin authentication across the whole server, so the two
-together would be remote control with no lock on it. Potato refuses the
-combination twice: config validation fails at startup, and the blueprint declines
-to register even if validation is bypassed. Setting `mcp.allow_debug: true` states
-that you mean it — and even then the token check still applies.
+`debug: true` opens admin pages without a key to requests from the server's own
+machine. A tunnel or reverse proxy on that machine that adds no forwarding
+header makes every caller look local, so an MCP surface on a debug server could
+hand control of the task to anyone who reaches the tunnel. Potato refuses the
+combination in two places: config validation fails at startup, and the
+blueprint does not register even if validation is bypassed.
+`mcp.allow_debug: true` overrides both. The MCP token check still applies with
+it set.
 
 `potato deploy check` reports on all of this before you ship.
 

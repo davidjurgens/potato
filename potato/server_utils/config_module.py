@@ -8181,9 +8181,9 @@ def validate_mcp_config(config_data: Dict[str, Any]) -> None:
 
     if tools and config_data.get("debug") and not mcp_config.get("allow_debug"):
         raise ConfigValidationError(
-            "mcp.enabled is true alongside debug: true. Debug mode disables "
-            "admin authentication across the server, so an MCP control surface "
-            "on a debug server is a remote shell. Turn off debug, or set "
+            "mcp.enabled is true alongside debug: true. Debug mode opens admin "
+            "pages without a key to requests from this machine, and a tunnel or "
+            "proxy on it can make any caller look local. Turn off debug, or set "
             "mcp.allow_debug: true to state that you mean it."
         )
 
