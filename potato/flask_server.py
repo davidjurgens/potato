@@ -6585,8 +6585,9 @@ def run_server(args):
     if debug_requested:
         if loopback:
             logger.warning("debug is on. Bound to %s: reachable from this machine "
-                           "only. Admin pages open without a key; Werkzeug "
-                           "debugger on.", host)
+                           "only. Admin pages open without a key, except for "
+                           "requests a proxy forwarded; Werkzeug debugger on.",
+                           host)
         else:
             logger.warning(
                 "debug is on. Bound to %s: reachable from other machines, so "
