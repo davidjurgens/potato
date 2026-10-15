@@ -4,6 +4,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+## [2.11.1] - Debug Without --host, Image Classifiers and Prelabels After a Restart
+
+This release restores `--debug` on the default bind, which 2.8.2 through
+2.11.0 refused. It also adds image classifiers to model training, lets a run
+prelabel items nobody has labelled yet, and fixes prelabels that were lost on
+every restart.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
 ### Image classification
 
 - **Model training trains image classifiers.** A radio or multiselect scheme
@@ -11,21 +22,32 @@ All notable changes to the Potato annotation platform are documented in this fil
   `sklearn-text` trainer fits it on CLIP embeddings unless the run names a
   vectorizer. It used to fit TF-IDF on the file paths. `/media/...`
   references resolve against `media_directory`, and rows whose image is
-  remote or missing are left out with a warning instead of becoming blank
-  embeddings.
+  remote or missing are left out of training with a warning instead of
+  becoming blank embeddings, and get no prediction. A text item that also
+  carries a remote `image_url` is still a text item. The saved model does not
+  contain the CLIP weights.
 - **Image active learning works as documented.** `vectorizer: {name: image}`
   (or `clip`) builds the CLIP vectorizer, and every scheme, radio and
   multiselect included, gets the item's image. `image` was not a name the
   manager could build, so such a study was ranked by TF-IDF over file paths.
+  `/media/...` references are read from `media_directory` and `image_root`
+  defaults to `task_dir`; a retrain where most training images cannot be
+  read fails with an error instead of ranking the queue on blank vectors.
 - **The labeling engine distils image classifiers.** On an image study
   (`labeling_engine.distill.modality`, default `auto`; `image_field`) the
   distilled tier is a CLIP-embedding classifier and abstains on images it
-  cannot read.
+  cannot read. A new tier is trained when the accepted labels have doubled
+  since the last one.
 - **Prelabels for unlabelled items.** `model_training.writeback.include_unlabeled:
   true` makes a run predict on the items nobody has labelled yet, and
   prelabel them under the usual write-back checks. A run used to predict only
   on its held-out val and test items, which are already labelled, so
   write-back never reached the items a prelabel is for.
+- **Write-back prelabels show without a `pre_annotation` block.** They used to
+  render only when an enabled `pre_annotation` block named the same `field`.
+  A prelabel an earlier run left on an item a newer run trained on is taken
+  down, and withdrawing a run's predictions takes its prelabels off the items
+  at once rather than at the next restart.
 - New page: [Model Training](docs/ai-intelligence/model_training.md).
 
 ### Fixes
@@ -35,8 +57,12 @@ All notable changes to the Potato annotation platform are documented in this fil
   was given, so `potato start config.yaml --debug` failed. It now starts on
   any bind and other machines can reach it. The admin-key bypass applies to
   requests from the machine the server runs on (loopback, no proxy
-  forwarding header), and the Werkzeug interactive debugger is still served
-  only on a `127.0.0.1` bind. `POTATO_ALLOW_REMOTE_DEBUG` is no longer read.
+  forwarding header), on a `127.0.0.1` bind too, where 2.11.0 also let
+  forwarded requests through. The media endpoints that fetch a caller's URL
+  answer without a login only to those requests as well. The Werkzeug
+  interactive debugger is still served only on a `127.0.0.1` bind.
+  `POTATO_ALLOW_REMOTE_DEBUG` is no longer read. `--debug` alone keeps the
+  login page; `--debug-phase` signs every visitor in as `debug_user`.
 - **A text model trained on URLs.** Items with a `url`, `path` or `file_name`
   field gave the trainer that value instead of the text. A text vectorizer now
   always reads the text, and the model card records which input a model was
@@ -44,7 +70,8 @@ All notable changes to the Potato annotation platform are documented in this fil
 - **Password resets failed under SSO.** With `method: oauth` and
   `allow_local_login`, the admin reset link, `/reset/<token>` and
   `potato reset-password` raised for every account. Local accounts can now be
-  reset; SSO identities are refused.
+  reset. For an SSO identity the admin routes answer 409, no reset link is
+  issued, and the CLI says the provider manages the password.
 - **`ai_support` refused OpenRouter.** `endpoint_type: openrouter` (and
   `open_router`, as the docs show) is accepted.
 - **Prelabels did not survive a restart.** The startup replay of stored
@@ -56,7 +83,10 @@ All notable changes to the Potato annotation platform are documented in this fil
   stored, a run's training items included).
 - **CSS lengths with units.** `max_height: "50vh"` and similar became
   `50vhpx` in the text, PDF, code, spreadsheet and live and web agent
-  displays. A unit is now kept; a bare number still means pixels.
+  displays. A unit is now kept; a bare number still means pixels. The web
+  agent trace display raised on any string `screenshot_max_height` and the
+  page showed the item's text field instead.
+- `labeling_engine.distill.image_field` must be a field name.
 - The embedding vectorizers declare scikit-learn tags, which scikit-learn
   1.8 will require.
 

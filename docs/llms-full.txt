@@ -261,6 +261,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.11.1](releasenotes/v2.11.1.md) - Debug Without --host, Image Classifiers and Prelabels After a Restart
 - [v2.11.0](releasenotes/v2.11.0.md) - The Labeling Engine
 - [v2.10.3](releasenotes/v2.10.3.md) - Agreement, Deploy Button and Pyodide Fixes
 - [v2.10.2](releasenotes/v2.10.2.md) - Security, MySQL, Agreement and Packaging Fixes
@@ -4536,7 +4537,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `debug` |  | boolean | `False` | Run in debug mode. This skips login, and admin authentication for requests from this machine, so it must never be set on a deployed server |  |
+| `debug` |  | boolean | `False` | Run in debug mode. Admin pages open without a key for requests from this machine, and with debug_phase every visitor is signed in as a shared debug_user, so it must never be set on a deployed server |  |
 | `debug_log` |  | string |  | Which halves of the debug logging to turn on: all, ui, server or none. The --debug-log flag writes this key |  |
 | `debug_phase` |  | string |  | Jump straight to a workflow phase, for UI debugging |  |
 | `server_debug` |  | boolean | `False` | Backend debug logging. Note that only the phase pages (consent, instructions, surveys) read this key; the annotation page asks the logging module, which is driven by debug_log/verbose/debug |  |
@@ -30038,7 +30039,8 @@ from potato.labeling_engine.sdk import Study
 study = Study("examples/labeling-engine/text-certified-sentiment/config.yaml")
 study.run()                                   # label, sample, certify, resolve
 for req in study.requests(status="open")[:5]:
-    study.label(req.item_id, req.schema, "positive", user="me")
+    study.label(req.item_id, req.schema, "positive", user="me",
+                request_id=req.id)
 study.certify()
 print(study.certificate(fmt="md"))
 study.export("out/")
@@ -35072,8 +35074,8 @@ active_learning:
 ```
 
 `vectorizer` must be a mapping with a `name`; a bare `vectorizer: image` fails
-config validation. `model_name` defaults to `clip-ViT-B-32`, and `cache_dir` and
-`image_root` are unset by default.
+config validation. `model_name` defaults to `clip-ViT-B-32`, `cache_dir` is
+unset by default, and `image_root` defaults to `task_dir`.
 
 With an image vectorizer, every scheme gets the item's image reference as its
 feature, not only `image_annotation` and `video_annotation`. A `radio` or
@@ -35123,8 +35125,16 @@ EmbeddingCache(cache_dir).clear()
 The feature for an item is the first non-empty value among the scheme's
 `source_field`, then the item fields `image_url`, `image`, `image_path`,
 `file_name`, `video_url` and `url`. When none is set, the item's text (the
-`text_key` field) is used, so `text_key: image_url` also works. Relative
-references are tried as given, then under `image_root`.
+`text_key` field) is used, so `text_key: image_url` also works. A
+`/media/...` reference, the URL the annotation page serves images from, is
+read from `media_directory` (`<task_dir>/media` by default). Other references
+are tried as given, then under `image_root`.
+
+An image that cannot be read is embedded as a zero vector, and a warning names
+how many training images that happened to. If more than half of the training
+images cannot be read, the retrain fails with an error and the queue keeps its
+previous order, because a model fitted on blank vectors would rank it on
+nothing.
 
 **Remote URLs are skipped, not fetched.** Active learning ranks a whole
 unlabeled pool from a background thread; fetching would fire thousands of
@@ -36651,7 +36661,9 @@ counted in the run's write-back report (the `writeback` field of
 `/admin/training/api/status`):
 
 1. **Train-split items are never prelabelled.** A model is confident about its
-   own training data for reasons that say nothing about new data.
+   own training data for reasons that say nothing about new data. This covers
+   every run's train split: when a run trains on an item, a prelabel an
+   earlier run left on it is taken down.
 2. **Only schemes in `writeback.schemas`** are published. The list is empty by
    default, so turning training on changes nothing annotators see.
 3. **Pairs a reviewer rejected are skipped.** An `(item, scheme)` pair with a
@@ -36661,6 +36673,11 @@ counted in the run's write-back report (the `writeback` field of
 
 Write-back does not change human labels. Predictions go into item data;
 annotations live in user state, which write-back does not address.
+
+Prelabels show on the annotation page as a pre-filled answer once
+`writeback.schemas` is set; no `pre_annotation` block is needed. If
+an enabled `pre_annotation` block is also present, its settings apply instead,
+and its `field` must match `writeback.field`.
 
 By default a run predicts only on the items in its `val` and `test` splits,
 which already have a resolved human label, so items nobody has labelled get no
@@ -36679,8 +36696,7 @@ restart. The replay applies the same checks as above, so a training item, a
 rejected pair or a prediction under the floor stays off after a restart too.
 
 To withdraw a run's prelabels, send `DELETE /admin/training/api/runs/<run_id>/predictions`.
-This removes the stored predictions. Prelabels already written into item data
-stay until the server restarts.
+This removes the stored predictions and takes their prelabels off the items.
 
 ---
 
@@ -52249,16 +52265,20 @@ server:
 
 ### `--debug`
 
-Launches Potato in debug mode with simplified authentication.
+Launches Potato in debug mode.
 
 ```bash
 potato start config.yaml --debug
 ```
 
 **Effects:**
-- Bypasses normal login requirements
 - Enables verbose logging
-- Useful for quickly testing configuration changes
+- Turns off the session idle timeout
+- Opens the admin pages without a key, for requests from this machine
+- Allows `--debug-phase`, which signs every visitor in as `debug_user`
+
+`--debug` on its own keeps the login page. To skip it, add `--debug-phase`
+(below).
 
 Debug mode starts on any address, the default `0.0.0.0` included, so other
 machines can reach the server; open `http://localhost:<port>` on your own.
@@ -52266,9 +52286,9 @@ Two things stay with this machine. The admin pages and admin API open without
 a key only for requests from it (not from another machine, and not through a
 proxy); elsewhere they need the admin API key, as without debug. Werkzeug's
 interactive debugger, a Python console on every error page, is served only when
-the server is bound to `127.0.0.1`. The other debug conveniences (login skip,
-debug phases) apply to anyone who can connect, so keep debug off a server
-strangers can reach.
+the server is bound to `127.0.0.1`. Debug phases apply to anyone who can
+connect: with `--debug-phase`, every visitor is signed in as the same
+`debug_user`. Keep debug off a server strangers can reach.
 
 ### `--debug-log`
 
@@ -60188,6 +60208,154 @@ python scripts/generate_llms_full.py --check
 
 Run them after adding an annotation type, a display type, a config key, or a
 route. See [Testing](../guides/testing.md) for the drift tests that enforce this.
+
+
+---
+
+<!-- source: docs/releasenotes/v2.11.1.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.11.1/
+
+# Release Notes: v2.11.1 — Debug Without --host, Image Classifiers and Prelabels After a Restart
+
+This release restores `--debug` on the default bind, which 2.8.2 through
+2.11.0 refused. It also adds image classifiers to model training, lets a run
+prelabel items nobody has labelled yet, and fixes prelabels that were lost on
+every restart.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## `--debug` starts again without `--host`
+
+Since 2.8.2, a debug server on the default `0.0.0.0` bind refused to start
+unless `--host 127.0.0.1` was given, so the documented command
+`potato start config.yaml --debug` failed. In 2.11.1 it starts on any bind,
+and other machines on the network can reach it.
+
+In debug mode:
+
+- **The login page stays unless you add `--debug-phase`.** With
+  `--debug-phase`, every visitor is signed in as the shared `debug_user` and
+  sent to that phase, so anyone who can reach the server annotates under that
+  account. Do not use it for a real study. The `D002` preflight check still
+  blocks `debug: true` on `potato deploy`.
+- **Admin pages open without a key only for requests from the machine the
+  server runs on**: a loopback address with no `X-Forwarded-For`,
+  `X-Real-IP` or `Forwarded` header. A request from another machine, or one
+  that arrives through a proxy, still needs the admin key. This holds on a
+  `127.0.0.1` bind too, where 2.11.0 let every request through: a proxy or
+  tunnel on the same machine forwards other machines' requests to
+  `127.0.0.1`.
+- **The media endpoints answer without a login only for requests from this
+  machine.** The waveform, video metadata and audio proxy endpoints fetch a
+  URL the caller names, and under debug they answered anyone.
+- **The Werkzeug interactive debugger is served only on a `127.0.0.1`
+  bind**, because it runs code typed into the browser.
+
+`POTATO_ALLOW_REMOTE_DEBUG` is no longer read. If you added
+`--host 127.0.0.1` to your debug commands for 2.8.2 through 2.11.0, it still
+works and still gives you the interactive debugger.
+
+## Image classification
+
+- **Model training trains image classifiers.** A radio or multiselect scheme
+  whose items name image files is treated as an image corpus, and the
+  `sklearn-text` trainer fits it on CLIP embeddings unless the run names a
+  vectorizer. It used to fit TF-IDF on the file paths. `/media/...`
+  references resolve against `media_directory`. Rows whose image is remote
+  or missing are left out of training with a warning instead of becoming
+  blank embeddings, and get no prediction. A text item that also carries a
+  remote `image_url` is still a text item. The saved model no longer
+  contains the CLIP weights, which made every `model.pkl` about 600 MB.
+- **Image active learning works as documented.** `vectorizer: {name: image}`
+  (or `clip`) builds the CLIP vectorizer, and every scheme, radio and
+  multiselect included, gets the item's image. `image` was not a name the
+  manager could build, so such a study was ranked by TF-IDF over file paths.
+  `/media/...` references are read from `media_directory`, and
+  `image_root` defaults to `task_dir`. If more than half of the training
+  images cannot be read, the retrain fails with an error naming some of them
+  and the queue keeps its previous order.
+- **The labeling engine distils image classifiers.** On an image study
+  (`labeling_engine.distill.modality`, default `auto`, with `image_field`)
+  the distilled tier is a CLIP-embedding classifier, and it abstains on
+  images it cannot read. A new tier is trained when the accepted labels have
+  doubled (`distill.every`) since the last one.
+
+## Prelabels for unlabelled items
+
+`model_training.writeback.include_unlabeled: true` makes a run predict on the
+items nobody has labelled yet and prelabel them under the usual write-back
+checks. Before this, a run predicted only on its held-out val and test items,
+which are already labelled, so write-back never reached the items a prelabel
+is for. The default is `false`.
+
+```yaml
+model_training:
+  writeback:
+    schemas: [sentiment]
+    include_unlabeled: true
+    min_confidence: 0.7
+```
+
+Prelabels now show on the annotation page as a pre-filled answer once
+`writeback.schemas` is set. They used to show only when a `pre_annotation`
+block was also enabled with the same `field`.
+
+When a run trains on an item, a prelabel an earlier run left on that item is
+taken down, and it stays down after a restart. Withdrawing a run's
+predictions (`DELETE /admin/training/api/runs/<run_id>/predictions`) now takes
+its prelabels off the items at once; they used to stay until the next
+restart.
+
+The new [Model Training](../ai-intelligence/model_training.md) page covers
+training runs, write-back and the review queue.
+
+## Bug fixes
+
+- **Prelabels did not survive a restart.** The startup replay of stored
+  predictions ran before any item was loaded, so it failed on the first one
+  ("Could not restore model predictions") and the model review queue emptied
+  on every restart. It now runs after the items load. It also applies the
+  same checks as write-back: the leak guard, the confidence floor and
+  reviewer rejections. It used to apply only the scheme check, and every
+  prediction is stored, a run's training items included.
+- **A text model trained on URLs.** Items with a `url`, `path` or
+  `file_name` field gave the trainer that value instead of the text. A text
+  vectorizer now always reads the text, and the model card records which
+  input a model was fitted on.
+- **Password resets failed under SSO.** With `method: oauth` and
+  `allow_local_login`, the admin reset link, `/reset/<token>` and
+  `potato reset-password` raised for every account. Local accounts can now
+  be reset. For an SSO identity, the admin routes answer 409, no reset link
+  is issued, and the CLI says the provider manages the password.
+- **`ai_support` refused OpenRouter.** `endpoint_type: openrouter` (and
+  `open_router`, as the docs show) is accepted.
+- **CSS lengths with units.** `max_height: "50vh"` and similar became
+  `50vhpx` in the text, PDF, code, spreadsheet, live agent and web agent
+  displays. A unit is now kept; a bare number still means pixels. The web
+  agent trace display raised on any string `screenshot_max_height`
+  (`"600px"` included) and the page showed the item's text field instead.
+- `labeling_engine.distill.image_field` must be a field name; a number used
+  to validate.
+- The embedding vectorizers declare scikit-learn tags, which scikit-learn
+  1.8 will require.
+
+## Documentation
+
+The docs were reviewed against the code for the 2.9 to 2.11 releases. The
+review corrected:
+
+- wrong commands (`potato export`, the export CLI's flags);
+- wrong URLs (the curation routes, `/go_to`);
+- wrong defaults and response shapes;
+- stale counts, which tests now check;
+- keys documented in the wrong place;
+- the debug `--host` requirement;
+- the Hugging Face Spaces and backup pages, and SSO behaviour.
+
+It also added notes that point older machine-labeling features to the
+labeling engine.
 
 
 ---
