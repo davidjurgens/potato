@@ -290,3 +290,51 @@ class TestExportCarriesOrigin:
     def test_an_empty_origin_dict_is_human(self):
         from potato.export.cli import _annotator_origin
         assert _annotator_origin({"origin": {}}, "i1") == {"kind": "human"}
+
+
+# ---------------------------------------------------------------------------
+# try_enqueue_item, the auto-route a saturating item takes, applies the same
+# filters as build_queue. It used to apply neither.
+# ---------------------------------------------------------------------------
+
+class FakeISMWithFind(FakeISM):
+    def find_item(self, iid):
+        return self._items.get(iid)
+
+
+def _enqueue(config, states):
+    ism = FakeISMWithFind(["i1"], list(states))
+    usm = FakeUSM(states)
+    with patch("potato.user_state_management.get_user_state_manager",
+               return_value=usm), \
+         patch("potato.item_state_management.get_item_state_manager",
+               return_value=ism):
+        mgr = AdjudicationManager(config)
+        queued = mgr.try_enqueue_item("i1")
+        return mgr, queued
+
+
+class TestAutoRouteFilters:
+
+    def test_machines_are_kept_out_on_auto_route_too(self):
+        mgr, queued = _enqueue(_config(), _people_and_tools())
+        assert queued
+        assert set(mgr.queue["i1"].annotations) == {"alice", "bob"}
+        assert mgr.queue["i1"].annotator_origins == {}
+
+    def test_min_human_annotations_applies_on_auto_route(self):
+        states = {"alice": _people()["alice"],
+                  "prokka": FakeUserState({"i1": {("sentiment", "negative"): True}},
+                                          origin=TOOL_A),
+                  "bakta": FakeUserState({"i1": {("sentiment", "negative"): True}},
+                                         origin=TOOL_B)}
+        _, queued = _enqueue(_config(include_machines=True, min_human=2), states)
+        assert not queued
+
+    def test_an_undefined_agreement_still_routes(self):
+        """overall is None when nothing was comparable; %.3f on it raised
+        inside logging and the caller hid the error."""
+        states = {"alice": FakeUserState({"i1": {("other", "x"): True}}),
+                  "bob": FakeUserState({"i1": {("other", "y"): True}})}
+        mgr, queued = _enqueue(_config(), states)
+        assert queued and mgr.queue["i1"].overall_agreement is None

@@ -468,7 +468,25 @@ class AdjudicationManager:
                 u for u in ism.instance_annotators.get(instance_id, set())
                 if u not in self.adj_config.adjudicator_users
             }
+            # The same participant filters build_queue applies. This path used
+            # to skip them, so a declared tool's labels reached the queue on
+            # auto-route that a rebuild would have kept out, and an item with
+            # too few people was queued anyway.
+            from potato.annotator_origin import describe, is_machine
+            item_origins = {}
+            humans = set()
+            for u in sorted(annotators):
+                ustate = usm.get_user_state(u)
+                if ustate is not None and is_machine(ustate):
+                    item_origins[u] = describe(ustate)
+                else:
+                    humans.add(u)
+            if not self.adj_config.include_machine_annotators:
+                annotators = humans
+                item_origins = {}
             if len(annotators) < self.adj_config.min_annotations:
+                return False
+            if len(humans) < self.adj_config.min_human_annotations:
                 return False
 
             scheme_names = [s.get("name", "") for s in self.config.get("annotation_schemes", [])]
@@ -510,11 +528,17 @@ class AdjudicationManager:
                 num_annotators=len(annotators),
                 status=existing.status if existing else "pending",
                 assigned_adjudicator=existing.assigned_adjudicator if existing else None,
+                annotator_origins=item_origins,
             )
+            # %s, not %.3f: overall is None when no scheme had a comparable
+            # value, and a format error inside logging is swallowed (or, under
+            # pytest's handler, raised and then hidden by the caller).
             self.logger.info(
-                "Auto-routed item %s into adjudication queue (overall agreement=%.3f, "
-                "threshold=%.3f, annotators=%d)",
-                instance_id_str, overall, self.adj_config.agreement_threshold, len(annotators),
+                "Auto-routed item %s into adjudication queue (overall agreement=%s, "
+                "threshold=%s, annotators=%d)",
+                instance_id_str,
+                "n/a" if overall is None else f"{overall:.3f}",
+                self.adj_config.agreement_threshold, len(annotators),
             )
             return True
 
@@ -790,7 +814,10 @@ class AdjudicationManager:
                 f"Adjudication decision saved for {instance_id} "
                 f"by {decision.adjudicator_id}"
             )
-            return True
+        # Outside the lock: the engine may read the queue back.
+        from potato.labeling_engine.integration.hooks import on_adjudication
+        on_adjudication(decision)
+        return True
 
     def _has_machine_raters(self, instance_id: str) -> bool:
         """True when the study declares machine raters or this item has one."""

@@ -157,15 +157,46 @@ def crowd_study_transition(study_id, action):
 
 
 def _remaining_annotation_slots():
-    """Annotation slots still needed across all items (cap - current annotators)."""
+    """Annotation slots people still need to fill, across all items.
+
+    Each item's own cap (``required_annotations`` from an overlap sample, or
+    the global ``num_annotators_per_item``) minus the PEOPLE who have
+    annotated it. The global cap alone under-counted overlap items, and
+    counting declared machine raters as filled slots under-recruited by one
+    place per tool per item.
+
+    Under the labeling engine the work is its open crowd requests instead:
+    it decides which items need a person, and how many.
+    """
+    from potato.labeling_engine.integration.hooks import get_engine
+    engine = get_engine()
+    if engine is not None and "crowd" in engine.cfg.humans.pools:
+        return len(engine.store.requests(status=["open", "assigned"], pool="crowd"))
+
+    from potato.annotator_origin import is_machine
     from potato.item_state_management import get_item_state_manager
+    from potato.user_state_management import get_user_state_manager
     ism = get_item_state_manager()
     cap = getattr(ism, 'max_annotations_per_item', -1)
     if cap is None or cap < 0:
         return None
+    try:
+        usm = get_user_state_manager()
+    except Exception:
+        usm = None
+    machines = set()
+    if usm is not None:
+        for uid in usm.get_user_ids():
+            st = usm.get_user_state(uid)
+            if st is not None and is_machine(st):
+                machines.add(uid)
     remaining = 0
     for iid in ism.get_instance_ids():
-        remaining += max(0, cap - len(ism.get_annotators_for_item(iid)))
+        item_cap = ism._get_annotator_cap_for_item(iid)
+        if item_cap is None or item_cap < 0:
+            continue
+        people = [u for u in ism.get_annotators_for_item(iid) if u not in machines]
+        remaining += max(0, item_cap - len(people))
     return remaining
 
 
