@@ -211,6 +211,17 @@ item_properties:
   text_key: image_url
 ```
 
+The canvas asks for images with CORS (`crossOrigin`) so it can read their
+pixels. Many public hosts, cocodataset.org among them, send no
+`Access-Control-Allow-Origin` header and refuse that request; the canvas then
+loads the image again without CORS, and the browser console shows the refused
+request and a warning. On an image loaded that way, boxes, polygons, ellipses,
+points, freeform strokes and the brush work, but the tools that read the
+image's pixels do not: region fill says it cannot read the image and fills
+nothing, and SAM and text-prompt segmentation say the host sends no CORS
+headers. To use those tools, copy the images into the task's
+`media_directory` and reference them as `/media/<file>`.
+
 ### Output Data
 
 Annotations are stored as a **flat JSON array**, with every shape and mask in

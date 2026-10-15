@@ -11,12 +11,13 @@
     "custom-layouts": 6,
     "embodied": 1,
     "image": 15,
+    "labeling-engine": 3,
     "span": 11,
     "spatial": 2,
     "testing": 2,
     "video": 8
   },
-  "count": 215,
+  "count": 218,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -4392,6 +4393,69 @@
       "path": "examples/image/text-prompt-labeling/config.yaml",
       "run": "potato start examples/image/text-prompt-labeling/config.yaml -p 8000",
       "task_name": "Text-prompt labelling"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "labeling-engine",
+      "config_keys": [],
+      "data_files": [
+        "data/agent-traces.jsonl"
+      ],
+      "description": "The labeling engine as a judge-calibration loop. An LLM judge decides whether",
+      "dir": "examples/labeling-engine/agent-trace-judge",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "agent-trace-judge",
+      "path": "examples/labeling-engine/agent-trace-judge/config.yaml",
+      "run": "potato start examples/labeling-engine/agent-trace-judge/config.yaml -p 8000",
+      "task_name": "engine-agent-trace-judge"
+    },
+    {
+      "annotation_types": [
+        "image_annotation",
+        "radio"
+      ],
+      "category": "labeling-engine",
+      "config_keys": [],
+      "data_files": [
+        "data/coco128-objects.jsonl"
+      ],
+      "description": "The labeling engine on 128 COCO images, with two schemes: boxes around",
+      "dir": "examples/labeling-engine/image-objects-and-people",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "image-objects-and-people",
+      "path": "examples/labeling-engine/image-objects-and-people/config.yaml",
+      "run": "potato start examples/labeling-engine/image-objects-and-people/config.yaml -p 8000",
+      "task_name": "engine-image-objects"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "labeling-engine",
+      "config_keys": [],
+      "data_files": [
+        "data/reviews.jsonl"
+      ],
+      "description": "The labeling engine on a text classification study: 481 product reviews,",
+      "dir": "examples/labeling-engine/text-certified-sentiment",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "text-certified-sentiment",
+      "path": "examples/labeling-engine/text-certified-sentiment/config.yaml",
+      "run": "potato start examples/labeling-engine/text-certified-sentiment/config.yaml -p 8000",
+      "task_name": "engine-certified-sentiment"
     },
     {
       "annotation_types": [

@@ -70,7 +70,7 @@ README, which is a dozen or so files. The Dockerfile derives from the published
 image, tagged with the Potato version you have installed:
 
 ```dockerfile
-FROM ghcr.io/davidjurgens/potato:2.10.3
+FROM ghcr.io/davidjurgens/potato:2.11.0
 COPY --chown=potato:potato . /app
 ```
 

@@ -57,7 +57,10 @@ solo_mode:
   suggestions:
     display: "blind_sample"
     blind_rate: 0.2
-    minimum_blind_sample: 5
+    # 20 items at a fifth blind gives about 4 blind items, so the minimum
+    # is 3. Set above what the corpus can give, the gate stops waiting and
+    # reads agreement on however few blind items there are.
+    minimum_blind_sample: 3
 
   # Items with known answers: score each prompt version before trusting it.
   gold:

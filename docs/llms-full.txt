@@ -171,6 +171,14 @@ over prose when writing a config or calling the API.
 - [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
+## Labeling Engine
+
+- [Labeling Engine](labeling-engine/overview.md) - Models label the dataset; a blind random sample of human labels certifies which machine labels to accept
+- [Contracts](labeling-engine/contracts.md) - Error guarantees, prevalence intervals, no-worse-than-a-person tests, budgets, label distributions
+- [Configuration](labeling-engine/configuration.md) - Every `labeling_engine` key
+- [CLI, REST API, MCP and SDK](labeling-engine/cli-and-api.md) - `potato label`, `/api/engine/v1`, the `engine_*` tools, `Study`
+- [Migration](labeling-engine/migration.md) - From `icl_labeling`, `judge_calibration`, `pre_annotation` and Solo Mode routing
+
 ## Solo Mode
 
 - [Solo Mode](solo-mode/solo_mode.md) - Human-LLM collaborative annotation workflow
@@ -323,6 +331,7 @@ over prose when writing a config or calling the API.
 | Use pre-built survey instruments | [Survey Instruments](advanced/survey_instruments.md) |
 | Set up multilingual interface | [Multilingual](configuration/multilingual.md) |
 | Resolve annotator disagreements | [Adjudication](administration/adjudication.md) |
+| Label a dataset with models, certified by a human sample | [Labeling Engine](labeling-engine/overview.md) |
 | Browse the REST API | [API Reference](api-reference/api_reference.md) |
 
 ---
@@ -4363,6 +4372,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
+| `labeling_engine` |  | object |  | Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet | `budgets`, `cascade`, `contracts`, `crowd`, `distill`, `enabled`, `features`, `humans`, `redaction`, `runtime`, `schemas`, `sources` |
+| `model_training` |  | object |  | Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels | `aggregation`, `auto_retrain`, `device`, `enabled`, `grace_seconds`, `max_ram_mb`, `max_wall_seconds`, `num_threads`, `retain_runs`, `split_seed`, `splits`, `writeback` |
 
 ## Qualitative Coding (QDA)
 
@@ -4516,7 +4527,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
-| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review or psychometric. `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
+| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `groups` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
@@ -14248,6 +14259,17 @@ item_properties:
   id_key: id
   text_key: image_url
 ```
+
+The canvas asks for images with CORS (`crossOrigin`) so it can read their
+pixels. Many public hosts, cocodataset.org among them, send no
+`Access-Control-Allow-Origin` header and refuse that request; the canvas then
+loads the image again without CORS, and the browser console shows the refused
+request and a warning. On an image loaded that way, boxes, polygons, ellipses,
+points, freeform strokes and the brush work, but the tools that read the
+image's pixels do not: region fill says it cannot read the image and fills
+nothing, and SAM and text-prompt segmentation say the host sends no CORS
+headers. To use those tools, copy the images into the task's
+`media_directory` and reference them as `/media/<file>`.
 
 ### Output Data
 
@@ -28987,6 +29009,961 @@ python potato/flask_server.py start examples/advanced/review-workflow/config.yam
 
 ---
 
+<!-- source: docs/labeling-engine/overview.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/labeling-engine/overview/
+
+# Labeling engine
+
+The labeling engine labels a dataset with models and uses people to measure
+how often the models are wrong. You declare what the finished labels must
+satisfy (a *contract*, such as "at most 5% of accepted machine labels are
+wrong, with 90% confidence"). The engine asks people for the labels it needs
+to test that claim, accepts the machine labels the test supports, and sends
+the rest to people. You get the dataset and a certificate that says what was
+tested and on how many human labels.
+
+It is available from Potato 2.11. It works with the annotation server, the
+`potato label` command line, the REST API, the MCP server and a Python SDK,
+all over the same `engine.sqlite` file in the task directory.
+
+## When to use it
+
+- You have more items than people can label, and a model that is right most
+  of the time.
+- You need to report how good the labels are, not only that a model made
+  them: a paper, a dataset release, a training set someone else will use.
+- You are evaluating a model or an agent with an LLM judge and need to know
+  whether the judge can stand in for people.
+
+If every item will be labeled by people anyway, the engine adds nothing; use
+an ordinary assignment strategy.
+
+## From predictions to certified labels
+
+```
+items ──► sources (models), in cascade order ──► predictions (append-only)
+                                                      │
+             people ◄── requests (blind random sample) │
+                │                                      ▼
+                └──────► human labels ──► contracts ──► accepted / sent to people
+                                                      │
+                                                      ▼
+                                          labels + certificate
+```
+
+1. **Sources** are the models. A source can be an LLM, a vision-language
+   model, a decision model (Laya, Jev/OpenJev), an object detector, an LLM
+   judge, a model trained on this study's labels, a jury of other sources, or
+   labels you already have. Each source records a confidence with every
+   prediction.
+2. The **cascade** orders the sources. An item goes to the first source; if
+   the contract will not accept that answer, the next source is tried, and
+   after the last one the item goes to a person.
+3. **Requests** are what the engine asks people to do. Each one records why
+   it was made (calibration, certification, verification, audit, ...), the
+   probability that the item was sampled, and whether the person could see a
+   machine answer. Calibration requests are drawn at random and are always
+   blind.
+4. **Contracts** test the machine labels against the human labels on the
+   random sample. Half of that sample (the *dev* split) chooses the
+   acceptance rule; the other half (the *cert* split) tests it. A contract is
+   `met`, `insufficient` (more labels needed, with an estimate of how many),
+   `infeasible`, `violated` or `stale`.
+5. **Resolution** gives every item its final label: a machine label accepted
+   under a met contract, a person's label, or pending.
+6. The **certificate** records each contract's result, the cascade with model
+   and prompt versions, how many human labels went to each purpose, the model
+   spend, and a digest of the call log.
+
+## Guarantees and their limits
+
+The guarantees are statistical statements about the random sample people
+labeled. They hold because of how the sample is drawn and used:
+
+- **Blind means blind.** While a person holds a calibration, certification or
+  audit request, the server withholds every machine answer for that item:
+  pre-annotations, the inline judge, the AI assistant (`403`) and AI help
+  buttons. A label given after seeing the machine's answer is not an
+  independent check of it.
+- **Selection and testing use different labels.** Thresholds are chosen on
+  dev labels and tested on cert labels. Each new test on the cert labels is
+  run at a stricter level, so re-certifying until a test passes does not
+  inflate the confidence.
+- **Only people certify.** Machine annotators may take part in final-label
+  inference, never in the labels a contract tests against.
+- **A change makes the certificate stale.** Changing a source, a prompt, a
+  threshold or the scheme marks every contract `stale` and moves accepted
+  labels to `pending_recert` until it is tested again. The human labels are
+  kept.
+- **Machines never take a person's place.** Engine predictions do not count
+  against per-item annotator caps.
+
+The engine does not check that the human labels are right. Every
+contract measures the machines against the people who labeled the sample. If
+those people are unreliable, the contract certifies agreement with
+unreliable people. Use [quality control](../workflow/quality_control.md),
+overlap (`humans.overlap`) and the `no_worse_than_human` contract to check
+the people too.
+
+## A first study
+
+The three examples under `examples/labeling-engine/` cover text, images and
+agent traces:
+
+| Example | Sources | Contracts |
+|---|---|---|
+| `text-certified-sentiment/` | Laya (decision model), an Ollama LLM | selective risk at 10%, PPI prevalence |
+| `image-objects-and-people/` | YOLOv8n detector, an Ollama vision model | selective risk on boxes (IoU) and on a has-person label |
+| `agent-trace-judge/` | an LLM judge with label-order swap | selective risk, no-worse-than-human, PPI task success |
+
+```bash
+# Label every item with the cascade and draw the first blind sample
+potato label run examples/labeling-engine/text-certified-sentiment/config.yaml
+
+# Serve the sample to people
+python potato/flask_server.py start examples/labeling-engine/text-certified-sentiment/config.yaml -p 8000
+
+# After people have labeled the sample
+potato label certify examples/labeling-engine/text-certified-sentiment/config.yaml
+potato label certificate examples/labeling-engine/text-certified-sentiment/config.yaml --format md
+```
+
+A minimal config:
+
+```yaml
+assignment_strategy: engine
+
+labeling_engine:
+  enabled: true
+  sources:
+    - id: gemma
+      kind: llm
+      endpoint_type: vllm
+      model: google/gemma-4-12B-it-qat-w4a16-ct
+      base_url: http://localhost:8001/v1
+      confidence: {method: logprob}
+  contracts:
+    - id: accuracy
+      kind: selective_risk
+      schema: sentiment
+      error: 0.1
+      confidence: 0.9
+  budgets:
+    human_labels: 400
+```
+
+See [Configuration](configuration.md) for every key and
+[Contracts](contracts.md) for what each contract tests.
+
+## The annotation page
+
+With `assignment_strategy: engine`, annotators are served the engine's
+requests, highest priority first: adjudication, certification, calibration,
+extra raters for distributional contracts, items no machine could label,
+verification, audits. Calibration requests are served in a fixed random
+order; dev and cert requests are interleaved. A person is given every open request on an item
+at once, one per scheme, and never two requests for the same scheme on the
+same item. A short note above the item says what kind of request it is; on a
+page with several questions it names the question:
+
+- **Blind:** "Label this one yourself. Suggestions are off for this item." An
+  item stays blind for that person after they save it, on reload and on
+  Back.
+- **Verify:** the machine's answer is filled in, and the note says to keep it
+  if it is right and change it if it is not. The page records the prefilled
+  answer, so you can measure how often people accept it. Nothing is saved
+  until the person acts: a page left open does not answer for them. Schemes
+  whose answers the page cannot prefill (time segments, 3D objects, agent
+  traces) are served blind instead.
+- **Resolve:** no machine label could be accepted, so the person's answer is
+  the label.
+
+A request someone holds without answering for `runtime.hold_minutes`
+(default 60) goes back to the pool and leaves their page. Saving a label for
+an item the engine did not serve that person never closes someone else's
+request; it is kept as an organic label.
+
+When a new certification accepts machine labels, open verify and resolve
+requests on items it now covers are cancelled. Requests a person already
+holds stay with them, and their answer replaces the machine label.
+
+The progress counter counts the requests a person can still take, not the
+corpus. When there is nothing to do yet, the annotator stays on a short
+waiting page and is served new requests when the planner opens them. When
+nothing more will come (every item has a label, the human-label budget is
+spent, or the person's own cap is reached), their part ends as usual, with
+the post-study pages and, on a crowd platform, the completion code. Nobody is
+finished before the planner's first pass.
+
+Pocket Mode (where phones land) serves engine requests too, a full batch at
+a time, and asks for more before it says "All caught up". It never shows a
+machine answer, so a verify request served there is recorded as blind,
+unless the desktop page had already shown the answer to that person. On
+resolve and adjudicate cards it shows the same note as the desktop page.
+
+## The admin page
+
+The admin dashboard links to **Labeling engine** (`/admin/labeling-engine`)
+when the engine is on. Every chart on it also has a table view. It shows:
+
+- each contract's status, coverage, look number and how many more labels it
+  needs, with the full statement it makes (an unmet contract states its
+  target, not a guarantee);
+- the intervals of each `ppi` contract, beside the people-only intervals;
+- a warning for a source whose last run failed or whose every answer was an
+  error;
+- the error-against-coverage curve for the last cascade tier, with the
+  guaranteed upper bound and the target;
+- a reliability diagram per tier (stated confidence against the share
+  correct on human labels), with ECE and Brier score; bins with few labels
+  are paler;
+- the audits of accepted labels: errors against the target, and whether
+  there are too few audits to tell;
+- human requests by purpose and status;
+- the model-call log, newest first, with tokens, latency and cost;
+- buttons to run a planner pass, certify now, and open the certificate.
+
+Opened without an admin session, the page goes to the dashboard's key form;
+with the engine off, it says so and names the key that turns it on.
+
+## Related documentation
+
+- [Configuration](configuration.md): every `labeling_engine` key
+- [Contracts](contracts.md): the six contract kinds
+- [Command line, API and SDK](cli-and-api.md)
+- [Migrating from older AI keys](migration.md)
+- [Solo Mode](../solo-mode/solo_mode.md): one expert working with an LLM
+- [MCP server](../tools/mcp_server.md): the `engine_*` tools
+
+
+---
+
+<!-- source: docs/labeling-engine/contracts.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/labeling-engine/contracts/
+
+# Labeling engine contracts
+
+A contract is a claim about the finished labels that the engine tests against
+human labels on a random sample. Each contract names one annotation scheme
+(`schema`) and has a `confidence` (default 0.9): the probability that the
+claim holds, so `confidence: 0.9` allows a 10% chance that a met contract is
+wrong.
+
+| Kind | Claim | For |
+|---|---|---|
+| `selective_risk` | At most `error` of the accepted machine labels are wrong | Datasets and training sets where each label must be usable |
+| `ppi` | An interval for each label's prevalence (or a mean score) that is valid whatever the machine's quality | Reporting rates: "12% of posts are toxic [10.5, 13.6]" |
+| `no_worse_than_human` | The machine agrees with people at least as well as a person does | Replacing annotators or an LLM judge |
+| `budget_first` | What a human-label budget can buy | Planning before you spend |
+| `distributional` | The machine's label distribution is close to how people split | Subjective tasks where disagreement is data |
+| `threshold_legacy` | None: accept above a fixed confidence | Translated configs only |
+
+## Status
+
+| Status | Meaning |
+|---|---|
+| `met` | The test passed on the current cascade. |
+| `insufficient` | Not enough human labels yet, with an estimate of how many more are needed. When that estimate is more than the corpus has left to sample, the status says the target is not reachable with this corpus. |
+| `infeasible` | Enough labels, but no acceptance rule passes (for example, the machine's confidence does not separate right from wrong answers). |
+| `violated` | Audits of accepted labels show the error rate is above target (with `features.drift`, on by default). |
+| `stale` | A source, prompt or the scheme changed since the last test. Accepted labels wait in `pending_recert`. |
+
+A machine label is accepted only when every `selective_risk` (and
+`threshold_legacy`) contract on its scheme is met and accepts it: the
+contracts are what the labels must satisfy, so an unmet one blocks
+acceptance rather than being skipped. Until then the status, the admin page
+and the certificate say which contract is not met. When no rule can be in
+force and nothing more is being sampled (a contract is infeasible, the
+calibration sample is finished, or nothing could be projected), the items
+still without a label go to people, within `budgets.human_labels`.
+
+## Dev and cert splits
+
+Calibration requests are drawn at random with a recorded inclusion
+probability and are always blind. Each one is put at random into one of two
+splits:
+
+- **dev** (`humans.dev_fraction`, default half): fits calibrators and chooses
+  thresholds.
+- **cert**: tests the chosen rule, and nothing else reads it.
+
+### Looks
+
+Every new test of a contract runs at a stricter level: look k gets
+`(1 - confidence) * 6 / (pi^2 k^2)` of the error budget, which sums to the
+whole budget over every possible look (the first look gets 61% of it).
+Testing again as labels arrive therefore does not inflate the confidence.
+
+- Looks are counted per contract across every cascade it has been tested
+  under, and a renamed contract keeps the looks of its old id. Trying prompts
+  or models until one passes costs a look each time. Going back to an earlier
+  cascade is a new look too; its earlier result is not restored.
+- Re-testing the same data is not a new look: the same cert labels, the same
+  predictions and the same rule chosen on dev give back the stored result. A
+  test that could not be run (no cert labels in a class, for example) spends
+  nothing.
+- `potato label certify` (and the REST, MCP and SDK equivalents) tests new
+  cert labels and new predictions at once. When only dev labels changed, it
+  returns the stored result with a note that dev now picks another rule;
+  `--retest` tests that rule, at the next look.
+- The planner certifies on its own as labels arrive. A met `selective_risk`
+  contract stays met for its cascade, and audits watch it. A contract that
+  is not met is tested again once its labels have grown by a quarter (and by
+  at least 10). `ppi`, `distributional` and `no_worse_than_human` results are
+  estimates rather than pass/fail tests, so they are re-estimated at the same
+  milestones, and once more when the calibration sample is complete.
+- An edited cert label (an annotator changing their answer) is new data, but
+  it costs no more than new labels do. Edited back to a state already tested,
+  that test's result returns. If none of the stored result's tests sees more
+  errors after the edit, the result and its look stand. Otherwise the planner waits for the labels
+  to grow by a quarter from the first edit, so a burst of corrections becomes
+  one test, and accepted labels stay accepted meanwhile, with a note on the
+  contract; when no more labels are coming, it tests at once. An explicit
+  certify tests it at the next look.
+
+Labels people gave after seeing a machine answer (verify requests) and labels
+given outside the engine's requests are never used to certify or estimate.
+They can train a distilled model.
+
+## selective_risk
+
+```yaml
+- id: accuracy
+  kind: selective_risk
+  schema: sentiment
+  error: 0.05          # required: largest tolerated error among accepted labels
+  confidence: 0.9
+  per_class: true      # test each predicted class separately
+  tolerance: 0.5       # graded families only: loss at or below this counts as correct
+```
+
+The rule is a confidence threshold for each cascade tier (and each predicted
+class with `per_class`). For every tier but the last, the threshold is chosen
+on dev and tested once on cert. The last tier tries thresholds from the dev
+choice toward more lenient ones, testing each in turn and stopping at the
+first that fails (fixed-sequence Learn-then-Test). Each test is a one-sided
+binomial test that the error among accepted labels is above `error`, with the
+level split across tiers and classes. A tier that fails accepts nothing, and
+its items go to people.
+
+"Correct" depends on the scheme:
+
+| Scheme family | Loss | Default `tolerance` |
+|---|---|---|
+| One-of-N (`radio`, `select`) | 0 if the same label | 0 |
+| Ordinal (`likert`) | distance on the scale / (points - 1) | 0 |
+| Continuous (`slider`, `number`) | distance / (max - min) | 0.05 |
+| Multi-label (`multiselect`) | 1 - Jaccard overlap | 0 |
+| Image regions (`image_annotation`) | 1 - mean IoU over matched shapes | 0.5 |
+| Audio/video segments, `temporal_grounding`, `tiered_annotation` | 1 - mean temporal IoU | 0.5 |
+| 3D objects (`spatial_annotation`) | 1 - mean 3D IoU | 0.5 |
+| Agent traces (`process_reward`, `trajectory_eval`, ...) | share of shared steps labeled differently | 0 |
+
+The losses for regions, segments, 3D objects and traces are the ones the
+agreement report (`/admin/iaa`) uses, so a machine is scored against a person
+the way two people are scored against each other. Free text and pairwise
+schemes have no family yet; the certificate lists them as unsupported.
+
+The test needs each tested group of cert items to be a uniform sample. A
+group whose items were sampled with unequal probabilities is not tested, and
+the result names it.
+
+On the last tier a threshold is chosen on dev only where dev's error is at
+most half the target and enough cert labels are expected to pass a first
+test. The projection of how many more labels are needed counts only
+thresholds that could be chosen that way. When cert already has the labels
+the projection asked for and the test still fails, the next projection uses
+the error rate dev and cert show together, not dev's alone. When the lowest
+dev error is under the target but above half of it, nothing is tested and
+nothing is projected; the result says so and names the error, since more
+labels only help if the error turns out lower.
+
+`metrics.accepted_by_tier` is the rule's coverage of the whole population,
+calibration items included, not a count of delivered machine labels; the
+certificate's "Machine labels accepted, by source" line counts those.
+
+The trace loss compares the steps both sides labeled, so a person who marked
+only some steps is compared on those. Steps nobody labeled are not checked:
+a person who labels step 0 alone and agrees with the judge there counts as
+agreeing with the whole trace label. Where every step must be checked, ask
+people to label every step.
+
+## ppi
+
+```yaml
+- id: prevalence
+  kind: ppi
+  schema: sentiment
+  estimand: prevalence   # or mean, for numeric scores
+  by: language           # optional: an interval per value of this item field (copied from the items when they are registered)
+  confidence: 0.95
+  max_width: 0.05        # optional: met once every interval is at most this wide
+```
+
+Prediction-powered inference (Angelopoulos et al., 2023) corrects the
+machine's estimate with its error on the human-labeled sample. The interval
+is valid whatever the machine's quality: a good machine makes it narrower
+than people alone could, and a bad one makes it no wider. With equal
+inclusion probabilities the engine uses PPI++ with a tuned weight. With
+unequal ones (stratified or uncertainty-driven sampling) it uses the
+Horvitz-Thompson difference estimator. The machine label used is the one the
+cascade would deliver.
+
+Without `max_width` the contract is met as soon as it has enough labels to
+report.
+
+## no_worse_than_human
+
+```yaml
+- id: replaces-a-person
+  kind: no_worse_than_human
+  schema: verdict
+  epsilon: 0.1
+```
+
+The alternative annotator test (Calderon, Reichart and Dror, 2025): leaving
+each person out in turn, does the machine agree with the remaining people at
+least as often as the left-out person does, up to `epsilon`? The machine
+passes when it wins against at least half of the people, with the false
+discovery rate across people controlled. It needs items labeled by several
+people: set `humans.overlap` (share of the sample) and `humans.overlap_k`
+(people per item, at least 3). The test asks for 3 or more annotators with 30
+or more items each.
+
+Use it when a fixed accuracy target would mostly measure annotator noise: if
+two careful people agree 85% of the time, no labeler can be shown to be 95%
+"right".
+
+## budget_first
+
+```yaml
+- id: plan
+  kind: budget_first
+  schema: sentiment
+  human_labels: 500      # or human_usd, priced at the crowd reward
+```
+
+A projection from the dev labels collected so far: for each error target on a
+grid, the share of the corpus the machines could be certified to label with
+this budget, and how wide each prevalence interval would be. It is `met` once
+there are enough dev labels to project from. It promises nothing about the
+labels; `selective_risk` and `ppi` do that once the labels are in.
+
+## distributional
+
+```yaml
+- id: disagreement
+  kind: distributional
+  schema: offensiveness
+  max_distance: 0.15     # optional
+  groups_by: age_band    # optional: a prestudy question whose answer groups the annotators
+```
+
+For subjective tasks, where people disagree for reasons that belong in the
+data. Each item labeled by several people (`humans.distribution_k`, default
+5) has a human label distribution. The contract reports the mean
+Jensen-Shannon distance between the machine's distribution and the people's,
+with a bootstrap interval, and a noise ceiling: the same distance between two
+random halves of the people on each item. A machine closer to the people than
+they are to each other is as close as the data allows. With `groups_by`, the
+same numbers are reported per annotator group.
+
+The machine's distribution is its probabilities where the source gives them
+(decision models, `k_sample`, `logprob`), or its label as a one-hot vector.
+It is met when the interval's upper end is at most `max_distance`, or, with no
+`max_distance`, once there are 20 items labeled by 3 or more people. When the
+interval's lower end is above `max_distance`, it is `infeasible`: more items
+narrow the interval around a distance that is too large. With `groups_by`,
+each group's distribution on an item is built from that group's people
+only, read from their answers to the named prestudy question; if nobody
+answered it, the contract says so.
+
+## threshold_legacy
+
+```yaml
+- id: old-rule
+  kind: threshold_legacy
+  schema: sentiment
+  threshold: 0.8
+```
+
+Accepts machine labels above a fixed confidence with no statistical test.
+`potato label migrate-config` writes it for `icl_labeling`, at the old
+`confidence_threshold`, so a translated config behaves as before; it can also
+be written by hand.
+The certificate marks these labels uncertified and reports their measured
+error on the calibration labels, and the export gives them the status
+`accepted_uncertified`.
+
+## Results from the example studies
+
+From the three examples under `examples/labeling-engine/`, with the LLM,
+judge and vision sources pointed at Gemma 12B on a vLLM server instead of
+the Ollama models the committed configs use. Each example's README shows the
+source block that was changed; with the Ollama defaults the numbers will
+differ.
+
+- **Text sentiment** (481 reviews; Gemma 12B with logprob confidence as the
+  last tier): `selective_risk` at 10% / 0.9 was met on 165 human labels, and
+  316 machine labels were accepted. Their measured error against the true
+  labels was 7.6%. The PPI intervals covered the true prevalence of all three
+  labels.
+- **Images** (128 COCO images; YOLOv8n and Gemma 12B as the vision model): a has-person label was certified at 10%. The
+  box contract was insufficient: YOLOv8n's boxes were wrong on 32% of the dev
+  images at IoU 0.5.
+- **Agent traces** (288 traces, Gemma 12B as the judge): the judge was right on 80%, but
+  its confidence was 1.0 throughout, so `selective_risk` was infeasible. The
+  alt-test was insufficient (machine 0.82 against the people's 0.93). PPI
+  estimated task success at 0.66 [0.57, 0.76]; the true value was 0.60, and
+  the judge alone said 0.76.
+
+## Related documentation
+
+- [Overview](overview.md)
+- [Configuration](configuration.md)
+- [Machine annotators](../advanced/machine_annotators.md): machine raters in the agreement report
+
+
+---
+
+<!-- source: docs/labeling-engine/configuration.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/labeling-engine/configuration/
+
+# Labeling engine configuration
+
+Everything the engine does is set in one `labeling_engine` block. An invalid
+block stops the server at boot and lists every problem at once. To have
+annotators served the engine's requests, also set
+`assignment_strategy: engine`; that strategy without an enabled engine is a
+validation error.
+
+```yaml
+assignment_strategy: engine
+
+labeling_engine:
+  enabled: true
+  schemas: [sentiment]            # default: every scheme a source can label
+  sources: [...]
+  cascade: [laya, gemma]          # default: the first source alone
+  contracts: [...]
+  humans: {...}
+  crowd: {...}
+  budgets: {...}
+  runtime: {...}
+  features: {...}
+  redaction: {...}
+  distill: {...}
+```
+
+## Top-level keys
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Turn the engine on. An enabled engine needs at least one source. |
+| `schemas` | all | The annotation schemes the engine labels. Under `assignment_strategy: engine`, a scheme left out is answered only on the items the engine sends to people for its own schemes, not on every item; validation warns about it. A scheme no source can label (free text, for one) cannot be in the engine, so under this strategy it is never answered on every item; use another assignment strategy if it must be. |
+| `sources` | `[]` | The models. See [Sources](#sources). |
+| `cascade` | first source | Source ids in the order they are tried. People come after the last. |
+| `contracts` | `[]` | What the labels must satisfy. See [Contracts](contracts.md). |
+
+## Sources
+
+Every source has an `id` (unique) and a `kind`. Unknown keys are an error.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `id` | required | Name used in `cascade`, the call log and the certificate. |
+| `kind` | required | One of `llm`, `vlm`, `decision`, `detector`, `judge`, `jury`, `trained`, `static`, `fixture`, `asr`, `lf`, `simulator`. |
+| `endpoint_type` | required for `llm`, `vlm`, `decision`, `judge` | The AI endpoint (`vllm`, `openai`, `anthropic`, `gemini`, `ollama`, `openrouter`, `openai_vision`, `ollama_vision`, `laya`, `systemone`, ...). `detector` defaults to `yolo`. |
+| `model` | endpoint default | Model name. |
+| `base_url` | none | Server URL for self-hosted or OpenAI-compatible endpoints. |
+| `api_key` | none | Never hashed into a version and never exported. `${ENV_VAR}` is substituted. |
+| `temperature` | `0.0` | 0 to 2. |
+| `max_tokens` | `256` | Output token limit per call. |
+| `timeout` | endpoint default | Seconds per call. |
+| `prompt` | built from the scheme | Prompt template. Changing it makes a new source version. |
+| `confidence` | `{method: auto}` | How the source states confidence. See below. |
+| `concurrency` | `runtime.concurrency` | Parallel calls to this source. |
+| `schemas` | all engine schemes | Restrict the source to these schemes. |
+| `options` | `{}` | Kind-specific options, listed below. |
+| `judge` | `{}` | `judge` only: the same options as `options`, under their own key; `options` wins where both set one. |
+| `members` | none | `jury` only: at least two other source ids. |
+| `aggregation` | `plurality` | `jury` only. Plurality is the one rule. |
+| `field` / `predictions_file` | none | `static` only: where the existing labels are. The field holds `{scheme: label}`, or a bare label when the source labels one scheme. A field of the wrong shape on every item fails the run with a message naming it. |
+| `error_rate`, `seed` | | `fixture` only: a synthetic source with a known error rate, for tests. |
+| `revision` | none | A model revision to record in the version (for example a checkpoint hash). |
+
+Everything that can change an answer (model, prompt, temperature, options)
+goes into the source's version hash. A new version makes every contract that
+depends on the source `stale`.
+
+An answer that is not a value the scheme can hold (a label not in its list, a
+number field that is not a number, a list on a one-of-N scheme) is recorded
+as an error, never as a label, and the run's message counts them. An item
+whose calls fail is asked again on later runs, at most three times per
+source version; after that it waits for a changed source (a fixed key or
+prompt is a new version). A run in which a source fails does not stop the
+other tiers: the next tier labels every item, and `potato label run` exits
+with status 1 and names the source.
+
+### Confidence methods
+
+| `confidence.method` | Applies to | What it does |
+|---|---|---|
+| `verbalized` | `llm`, `vlm`, `judge` | The model states 0-100 in its reply. One call; the least reliable. |
+| `k_sample` | `llm` | `samples` replies (default 5) at `sample_temperature` (default 0.7). The label is the most common answer; confidence is its share. Costs k calls. |
+| `logprob` | `llm` | Labels are lettered and the model answers with one letter. Confidence is read from the first token's probabilities. One call, usually the best calibrated. Needs a backend that returns logprobs (vLLM, OpenAI-compatible) and at most 20 labels; a scheme with more is a validation error. |
+| `native` | `decision`, `detector`, `trained` | The model's own probabilities. Not available on an `llm` source (a validation error). |
+| `auto` | all | `native` where the source has it, otherwise `verbalized`. |
+
+### Kind-specific options
+
+- **`decision`** (Laya in-process, or any `/v1/systemone` server such as hosted
+  Jev or OpenJev): one forward pass returns a probability for every option.
+  Works on `radio`, `select`, `likert` and `slider` schemes. `endpoint_type`
+  must be `laya` or `systemone`, and `systemone` needs `base_url` (the
+  server root; a URL ending in `/v1/systemone` is accepted too). The state is
+  sent as `{"text": ...}` in both cases, so one checkpoint gives the same
+  answers in-process and behind `laya-serve`; `options: {state_key: ""}`
+  sends the bare string instead. On rating scales (`likert`, `slider`) Laya's
+  scores can barely follow the scale: check a few items before relying on
+  it.
+- **`detector`** (`image_annotation`): `keep_threshold` (0.35), boxes at or
+  above it are the prediction; `candidate_threshold` (0.05), boxes between the
+  two lower the image's confidence; `label_map`, detector class to scheme
+  label (unmapped classes are ignored); `image_field`, the item field with the
+  image path or URL. Paths resolve as the annotation page resolves them:
+  `/media/x.jpg` under the task's `media_directory`, a relative path under
+  `task_dir`.
+- **`judge`**: `rubric` (default: the scheme's description), `fields` (item
+  fields shown to the judge, in order), `swap_order` (ask twice with the label
+  order reversed; a verdict that flips becomes an abstention). On agent-trace
+  schemes (`process_reward`, `trajectory_eval`, ...) the judge labels each
+  step.
+- **`vlm`**: a vision endpoint (`openai_vision`, `anthropic_vision`,
+  `ollama_vision`); for a self-hosted model behind an OpenAI-compatible
+  server, use `openai_vision` with `base_url`.
+- **`trained`**: `artifact_dir`, `trainer` (default `sklearn-text`), `run_id`.
+  Usually created by distillation rather than written by hand.
+
+## humans
+
+| Key | Default | Meaning |
+|---|---|---|
+| `pools` | `[team]` | Who labels: `team`, `crowd`, `solo`. |
+| `calibration_rate` | `auto` | Share of items sampled for blind calibration. `auto` picks a rate from the contracts' projections: enough labels per class to be testable, at most half of a small study and a fifth of one over 1,000 items. |
+| `dev_fraction` | `0.5` | Share of calibration labels used to choose thresholds; the rest test them. |
+| `min_calibration_per_class` | `10` | Floor per class before per-class contracts are tested. |
+| `audit_rate` | `0.02` | Share of newly accepted machine labels sent back to people, blind, to watch for drift. |
+| `overlap` | `0.0` | Share of calibration items labeled by several people. |
+| `overlap_k` | `3` | People per overlap item. The `no_worse_than_human` contract needs 3. |
+| `distribution_k` | `5` | People per item for `distributional` contracts. |
+| `truth` | `majority` | How several people's labels on one item become the label contracts test against: `majority` or `dawid_skene`. |
+| `verify_visibility` | `shown` | Whether a verify request shows the machine's answer (`shown`) or not (`blind`). |
+
+## crowd
+
+Used when `crowd` is in `humans.pools`. Only Prolific can be driven by the
+engine.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `provider` | `prolific` | |
+| `study_id` | none | The Prolific study to resize. |
+| `reward_usd` | none | Reward per place, for cost projections. |
+| `per_worker_quota` | `20` | Requests per worker; places are `ceil(open requests / quota)`. |
+
+Crowd recruiting is a dry run by default: the planner reports what it would
+do. Spending money needs `features.crowd_live_spend: true` and a
+`budgets.human_usd` cap; without both the config is rejected.
+
+## budgets
+
+| Key | Meaning |
+|---|---|
+| `model_usd` | Stop calling priced models once this much is spent. Each call reserves its projected cost first. Models with no price (and self-hosted models on `localhost`) are not limited by it. |
+| `human_usd` | Ceiling on crowd spend. Required for live crowd spend. |
+| `human_labels` | Maximum human requests the engine may open, counted when each request is opened. |
+
+## runtime
+
+| Key | Default | Meaning |
+|---|---|---|
+| `batch_size` | `32` | Items per committed chunk. A killed run resumes at the next chunk without repeating calls. |
+| `concurrency` | `4` | Parallel calls per source (overridden by a source's own `concurrency`). |
+| `cache` | `true` | Reuse replies to identical requests from the same source version. |
+| `retries` | `2` | Extra attempts after a timeout, connection error, 429 or 5xx. Every attempt is logged. |
+| `planner_interval` | `30` | Seconds between planner passes in the server. |
+| `hold_minutes` | `60` | Minutes a person may hold a request without answering before it goes back to the pool. The item also leaves their page, so a tab left open cannot answer it later. |
+
+## features
+
+All off by default except `drift`.
+
+| Key | What it turns on |
+|---|---|
+| `drift` | On by default. Act on audit results: when audits show the accepted labels' error rate is above target, the contract reads `violated`, machine labels on that scheme are no longer accepted, and fresh calibration labels are drawn. Each certification starts a new audit sequence, so certifying again after a fix restores acceptance. Set it to `false` to report a breach only; the contract then reads "met, audits breached". |
+| `distill` | Train a model on the study's labels and put it first in the cascade (see `distill` below). |
+| `optimize` | Have each planner pass score every subset of the cascade on dev labels and report the cheapest one that keeps the contracts' coverage (`GET /api/engine/v1/schemes/<name>/optimize`). Nothing is applied; adopting a cascade is a config change and a new certification. |
+| `crowd_recruit` | Let the planner size the Prolific study (dry run unless `crowd_live_spend`). |
+| `crowd_live_spend` | Actually change the Prolific study. Needs the `crowd` pool and `budgets.human_usd`. |
+| `pii_redaction` | Mask emails, URLs, IP addresses, card numbers, SSNs, phone numbers and @handles before text goes to a third-party API. The call log records what was masked as categories and hashes, never the text. |
+| `payload_capture` | Keep full prompts and replies under `<task_dir>/engine_payloads/`. Off by default; the call log keeps hashes only. |
+
+## redaction
+
+`categories`: which of `email`, `url`, `ip`, `card`, `ssn`, `phone`, `handle`
+to mask (default: all). Applies only with `features.pii_redaction`, and only
+to third-party APIs. Self-hosted endpoint types (`vllm`, `ollama`, `laya`,
+`yolo`, ...) are not masked wherever they run, and neither is any endpoint
+whose `base_url` is on this machine.
+
+## distill
+
+With `features.distill` on:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `trainer` | `sklearn-text` | A trainer from `potato/training`. |
+| `min_labels` | `200` | Train only once this many labels exist. |
+| `include_silver` | `true` | Also train on machine labels a contract certified (marked silver). |
+| `every` | `2.0` | Retrain when the label count has grown by this factor. |
+
+Items in the cert and audit splits never go into the training set.
+
+## Validation
+
+`potato validate config.yaml` checks the block with the rest of the config.
+Errors name the key: `labeling_engine.sources[1].kind must be one of ...`,
+`labeling_engine.contracts[0].error is required for selective_risk`.
+Validation also refuses:
+
+- a contract key the contract kind does not read (a typo of `error`, say);
+- a contract on a scheme no cascade source can label, with each source's
+  reason;
+- a contract on a scheme the engine cannot score (free text, pairwise);
+- a `decision` source whose `endpoint_type` is not a decision model, and an
+  `llm`, `vlm` or `judge` source whose is;
+- `no_worse_than_human` with `humans.overlap_k` below 3.
+
+It warns when `budgets.human_labels` is too small to certify a
+`selective_risk` contract even if every machine answer were right.
+
+## Related documentation
+
+- [Overview](overview.md)
+- [Contracts](contracts.md)
+- [Command line, API and SDK](cli-and-api.md)
+- [AI endpoints](../ai-intelligence/ai_support.md)
+
+
+---
+
+<!-- source: docs/labeling-engine/cli-and-api.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/labeling-engine/cli-and-api/
+
+# Labeling engine CLI, REST API, MCP tools and SDK
+
+The server, the command line, the REST API, the MCP tools and the Python SDK
+all drive the same engine over the same `engine.sqlite` in the task
+directory. You can start a study from the command line, serve the human
+requests with the server, and certify from a notebook.
+
+Only one process drives a study at a time. A running server's planner holds
+the study's writer lock; while it does, `potato label run`, `potato label
+certify` and `Study.run()` refuse and say so (certify through the server
+instead: `POST /api/engine/v1/certify` or the admin page). Two drivers would
+draw two calibration samples and certify against each other's labels. The
+lock is released when its holder exits; a holder killed on the same machine
+is taken over at once, and one elsewhere after two minutes without a
+heartbeat. Read-only commands (`status`, `certificate`, `calls`, `export`)
+work at any time.
+
+## Command line
+
+```bash
+potato label <command> <config.yaml> [options]
+```
+
+| Command | What it does |
+|---|---|
+| `run` | Label every item with the cascade, draw the blind calibration sample, certify, resolve. `--until predicted` (default) stops after one pass; `--until met` keeps going until every contract is met or the engine is waiting on people. `--max-items N`, `--budget-usd X` (overrides `budgets.model_usd` for this run), `--max-ticks N` (default 20), `--json`. A killed run resumes where it stopped without repeating model calls. Exits with status 1, naming the source, when a source's last run failed or every answer it gave was an error, or when no source can label a scheme a contract names. |
+| `status` | Items, predictions, requests by purpose, contracts, spend, items with no label yet, and a line for each source with errors or a failed or paused run. `--json`. |
+| `certify` | Test every contract on new cert labels and new predictions. When only dev labels changed, the stored result comes back with a note; `--retest` tests the rule dev now picks, at the next look (see [Looks](contracts.md#looks)). `--json`. |
+| `certificate` | The quality certificate. `--format md` (default), `html` or `json`; `--out FILE`. |
+| `export` | Labels with provenance, the certificate (JSON, Markdown, HTML), a dataset card and the call log, into `--out DIR` (default `<output_annotation_dir>/labeling_engine`). |
+| `calls` | The model-call audit log as JSON lines. `--out FILE`. |
+| `distill` | Train a model on the labels so far and put it first in the cascade. |
+| `optimize` | Score every subset of the cascade on dev labels and report the cheapest that keeps coverage; when no subset keeps any coverage, it recommends none. `--prompts N` also asks an LLM tier for N paraphrases of its prompt and scores each on the dev items (model calls, logged and budgeted, stored under their own source versions; the current prompt is scored from its stored predictions). The cascade and the certificate are not changed. |
+| `migrate-config` | Write a copy of the config with a `labeling_engine` block equivalent to its older AI keys. `--out FILE`. See [Migration](migration.md). |
+
+### Files written by `export`
+
+| File | Contents |
+|---|---|
+| `labels.jsonl`, `labels.csv` | One row per item and scheme, labeled or not: `id`, `schema`, `label`, `label_origin` (`auto`, `human`, `adjudicated`, ...), `status` (`accepted`, `accepted_uncertified` under `threshold_legacy`, `pending`, `pending_recert`), `source`, `model`, `source_version`, `confidence`, `contract_version`, `request_ids`. A machine label whose source has changed since it was accepted reads `pending_recert` until the next pass re-certifies it. |
+| `certificate.json`, `.md`, `.html` | The certificate |
+| `README.md` | A dataset card (Hugging Face front matter) built from the certificate |
+| `model_calls.jsonl` | Every model call: model, hashes of prompt and reply, tokens, latency, cost, cache hits, redaction categories |
+
+The regular exporters (`python -m potato.export`, the admin export) export
+people's annotations. When the engine is on, CSV, Parquet and Hugging Face exports add
+two columns saying which engine request each annotation answered:
+`engine_purpose` (for example `calibration`) and `engine_request` (JSON with
+the purpose, inclusion probability, visibility, split and request id). Use
+these to separate the blind random sample from verify answers.
+
+## REST API
+
+All routes are under `/api/engine/v1` and return JSON. Authenticate with the
+admin key (`X-API-Key` header) or an admin session. Reads need the
+admin-dashboard permission; `certify` and `plan` need assignment management;
+the certificate needs export permission.
+
+| Method and path | Returns |
+|---|---|
+| `GET /status` | Items, predictions, requests, call totals, budgets, and each scheme's cascade, contracts and resolved-label counts |
+| `GET /schemes/<name>/contracts` | The latest result of each contract on the scheme, marked `stale` if the cascade changed |
+| `GET /schemes/<name>/risk_coverage` | For each threshold of the last tier: share accepted, observed error and the guaranteed upper bound, on cert labels |
+| `GET /schemes/<name>/reliability` | Reliability bins, ECE and Brier score per tier, on calibration labels |
+| `GET /schemes/<name>/drift` | The audit monitor per selective-risk contract |
+| `GET /schemes/<name>/optimize` | The cheaper-cascade report, scored on dev labels |
+| `GET /requests` | Request counts by purpose and status, and the requests themselves. Filters: `purpose`, `status` (repeat the parameter or separate values with commas), `schema`, `limit` (max 1000) |
+| `GET /calls` | The call log, newest first, and totals by source. `limit` (max 500), `offset` |
+| `GET /certificate` | The certificate. `format=json` (default), `md` or `html`; `save=1` also stores it |
+| `GET /crowd` | The planner's last crowd plan (dry run unless live spend is on) |
+| `POST /certify` | Test every contract now. `?retest=1` (or `{"retest": true}`) also tests a rule that only dev labels changed |
+| `POST /plan` | Run one planner pass now |
+
+The routes answer 404 when the engine is off for the study, and 400 with a
+JSON error for a parameter that is not valid (a `limit` that is not a number,
+an unknown `purpose` or `status`, a `format` other than `json`, `md` or
+`html`).
+
+## MCP tools
+
+The MCP server exposes five engine tools, with the same permissions as the
+REST routes: `engine_status`, `engine_requests`, `engine_run` (one planner
+pass), `engine_certify` (with `retest`) and `engine_certificate` (`json`, `md`
+or `html`). Granting them while the engine is off is a validation warning.
+Through `potato mcp connect`, a refused call (a missing permission, a bad
+parameter) comes back as a tool error. See
+[MCP server](../tools/mcp_server.md).
+
+## Python
+
+```python
+from potato.labeling_engine.sdk import Study
+
+study = Study("examples/labeling-engine/text-certified-sentiment/config.yaml")
+study.run()                                   # label, sample, certify, resolve
+for req in study.requests(status="open")[:5]:
+    study.label(req.item_id, req.schema, "positive", user="me")
+study.certify()
+print(study.certificate(fmt="md"))
+study.export("out/")
+```
+
+| Method | Does |
+|---|---|
+| `Study(config_path)` | Load the config and items |
+| `run(until="predicted", max_ticks=20)` | As `potato label run`; takes the writer lock |
+| `label(item_id, scheme, value, user, request_id=None)` | Record a person's label. It closes `request_id`, or else a request this person holds on the item; otherwise it is kept as an organic label, which never certifies. A second label from the same person on the same item updates their first |
+| `status()` | As `GET /status` |
+| `requests(status=None, purpose=None, ...)` | The ledger |
+| `certify(retest=False)` | As `potato label certify` |
+| `certificate(fmt="json")` | `json`, `md` or `html` |
+| `export(out_dir)` | As `potato label export` |
+
+## Related documentation
+
+- [Overview](overview.md)
+- [Configuration](configuration.md)
+- [Contracts](contracts.md)
+
+
+---
+
+<!-- source: docs/labeling-engine/migration.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/labeling-engine/migration/
+
+# Migrating to the labeling engine
+
+Potato's older machine-labeling features keep working in 2.11. Nothing in an
+existing config stops working, and nothing changes behaviour until you add a
+`labeling_engine` block. Three keys now print an informational message at
+boot pointing to the engine; they are planned for removal in 3.0:
+
+| Older key | Engine equivalent |
+|---|---|
+| `icl_labeling` | an `llm` source, with a `threshold_legacy` contract for the old rule and a `selective_risk` contract beside it |
+| `judge_calibration` | `judge` sources with `k_sample` confidence; its blind sample becomes calibration requests |
+| `pre_annotation` | a `static` source |
+
+[Solo Mode](../solo-mode/solo_mode.md), judge alignment and the interactive
+AI assistant (`ai_support`) are not deprecated. Solo Mode is one expert
+working with an LLM through its own interface; judge alignment is a report.
+Both now also write their model predictions into the engine's store when the
+engine is on, so the engine can calibrate and certify them.
+
+## `potato label migrate-config`
+
+```bash
+potato label migrate-config config.yaml --out config-engine.yaml
+```
+
+The command reads the YAML (no data is loaded), adds an equivalent
+`labeling_engine` block, and writes the result with a header of notes that
+explain each translation. The block is written with `enabled: false`: read
+the notes, check the sources and contracts, then set `enabled: true` and
+`assignment_strategy: engine`.
+
+It exits with an error when the config already has a `labeling_engine`
+block, or when there is nothing to translate.
+
+## Translation table
+
+| Older block | Sources | Contracts | Humans |
+|---|---|---|---|
+| `solo_mode` with `confidence_routing.tiers` | one source per tier, in tier order | `selective_risk` per one-of-N scheme, `error: 1 - end_human_annotation_agreement` | `pools: [solo]` |
+| `solo_mode` with `labeling_models` | one source per model; the first is the cascade | as above | `pools: [solo]` |
+| `solo_mode.jury` | one source per juror, plus a `jury` source as the cascade | as above | |
+| `icl_labeling` | the `ai_support` endpoint as an `llm` source | `threshold_legacy` at the old `confidence_threshold`, and `selective_risk` at 10% | `calibration_rate` = the old verification `sample_rate` |
+| `judge_alignment` | the judge endpoint as a `judge` source (with the rubric when there is one scheme) | `no_worse_than_human`, `epsilon: 0.15`, per judged scheme | `overlap: 0.3` |
+| `judge_calibration` | each model as a `judge` source with `k_sample` confidence | | `sampling.sample_size` → `budgets.human_labels` |
+| `pre_annotation` with `field` or `predictions_file` | a `static` source, first in the cascade | | |
+| `active_learning.llm` | an `llm` source | | |
+| `ai_budget.cap_usd` | | | `budgets.model_usd` |
+
+## Behaviour changes after migration
+
+The engine treats the human labels differently from the older features, and
+the notes in the translated config say where:
+
+- **Fixed thresholds become tested ones.** Solo Mode's routing thresholds and
+  `icl_labeling`'s confidence threshold accepted machine labels above a fixed
+  number. `selective_risk` chooses the threshold on dev labels and accepts
+  only what passes a test on held-out labels. Expect fewer labels accepted at
+  first, and a stated error bound on the ones that are.
+- **Verification samples become uniform.** `icl_labeling` verified the
+  least-confident predictions first. That finds errors quickly but gives a
+  biased accuracy estimate. Engine calibration requests are a random sample
+  with recorded inclusion probabilities.
+- **Inline judging becomes blind.** `judge_alignment.inline` showed the
+  judge's verdict while people labeled, so agreement was measured on anchored
+  labels. Engine calibration requests never show a machine answer.
+- **Pre-annotations are tested before they are trusted.** A `static` source's
+  labels are accepted only where a contract certifies them; elsewhere people
+  see them on verify requests.
+
+## Related documentation
+
+- [Overview](overview.md)
+- [Configuration](configuration.md)
+- [Contracts](contracts.md)
+
+
+---
+
 <!-- source: docs/solo-mode/solo_mode.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/solo-mode/solo_mode/
 
@@ -29080,7 +30057,10 @@ not every path visits every phase.
 ### 1. Setup
 - Enter task description
 - Upload data file
-- Generate initial prompt
+- Generate initial prompt: a revision model (`revision_models`) writes it from
+  the description and the schemes. Without one, or if it gives nothing back,
+  the description itself becomes the first prompt, and the prompt history
+  says so.
 
 ### 2. Prompt Review
 - Review and edit the generated prompt
@@ -29754,11 +30734,11 @@ Every comparison between your label and the LLM's is filed as **blind** or **sho
 How the handoff reads agreement:
 
 - Once there are `minimum_blind_sample` blind comparisons, the handoff compares **blind** agreement with `end_human_annotation_agreement`.
-- Before that, under `after_label` and `blind_sample`, the handoff waits, unless the corpus cannot produce enough blind items. When the blind comparisons so far plus the blind items you have not yet labelled come to fewer than `minimum_blind_sample`, the handoff reads blind agreement over the blind comparisons there are. With none, it reads all agreement. A 20-item study at `blind_rate: 0.2` can easily have only one or two blind items.
+- Before that, under `after_label` and `blind_sample`, the handoff waits, unless the corpus cannot produce enough blind items. When the blind comparisons so far plus the blind items you have not yet labelled come to fewer than `minimum_blind_sample`, the handoff reads blind agreement over the blind comparisons there are, and the dashboard says so ("2 blind items, below the minimum of 5"). With none, it reads all agreement. A 20-item study at `blind_rate: 0.2` expects about four blind items, so set the minimum to what the corpus can give.
 - Under `before_label` it uses all comparisons until enough blind ones exist, which is the behaviour Solo Mode had before this setting.
 - `minimum_validation_sample` still applies to all comparisons in every mode.
 
-On a blind item the annotate page says the suggestion is hidden and that you will see the LLM's label if you disagree. The dashboard's **Blind Agreement** card shows blind and shown agreement side by side, the gap between them, how often you took the suggestion with the Accept button, and which agreement the handoff is reading. A large positive gap means you agree with the LLM more often when you can see its answer. The gap is reported once each side has at least 5 comparisons.
+On a blind item the annotate page says the suggestion is hidden and that you will see the model's label if you disagree. The dashboard's **Blind Agreement** card shows blind and shown agreement side by side, the gap between them, how often you took the suggestion with the Accept button, and which agreement the handoff is reading. A large positive gap means you agree with the LLM more often when you can see its answer. The gap is reported once each side has at least 5 comparisons.
 
 `GET /solo/api/status` reports the same numbers under `anchoring`.
 
@@ -29850,7 +30830,8 @@ For a `systemone` server, set `base_url` (for example `http://localhost:8002`), 
 
 Limits:
 
-- **Schemes.** Decision models label `radio`, `select`, `likert` and `slider` schemes. Solo Mode refuses to start if one is set to label `multiselect`, `span` or free-text schemes.
+- **Schemes.** Decision models label `radio`, `select`, `likert` and `slider` schemes. Solo Mode refuses to start if one is set to label `multiselect`, `span` or free-text schemes. On rating scales (`likert`, `slider`) Laya's scores can barely follow the scale, whatever the wording of the question; check a few items with **Try on 10 items** before routing a scale through it.
+- **Same answers in-process and over HTTP.** Both endpoint types send the item as `{"text": ...}`, so one Laya checkpoint labels the same way in-process and behind `laya-serve`. Set `state_key: ""` to send the bare string.
 - **Revision models.** `revision_models` must be generative. It defaults to `labeling_models`, so a study whose only model is a decision model has to set it.
 - **Not under `ai_support`.** A decision model cannot be the `ai_support` endpoint, whose assistants all write text.
 - **Confidence.** The confidence is the probability the model gave its chosen option. No uncertainty estimator runs, because those ask a follow-up question. Calibration varies by domain, so set the tier threshold from your own data. Score the model on a [gold set](#gold-set-and-trials) or watch the per-tier statistics rather than trusting a vendor figure.
@@ -47783,8 +48764,9 @@ layer model. Rather than write a plausible guess into a file you would upload to
 a paid platform, masks are traced to polygons and the loss is reported.
 
 Potato also exports `csv`, `tsv`, `jsonl`, `parquet`, `huggingface`, several
-NLP formats and `adjudication`; those carry annotations generically rather than
-as CV geometry.
+NLP formats, `adjudication` and `labeling_engine` (the labeling engine's
+resolved labels and quality certificate); those carry annotations generically
+rather than as CV geometry.
 
 ## What survives a round trip
 
@@ -49695,11 +50677,19 @@ The token is shown once. Only its SHA-256 digest is stored, in
 | `get_item` | view_admin_dashboard | |
 | `get_agreement` | view_admin_dashboard | |
 | `get_config` | view_admin_dashboard | |
+| `engine_status` | view_admin_dashboard | |
+| `engine_requests` | view_admin_dashboard | |
 | `add_items` | manage_assignment | |
+| `engine_run` | manage_assignment | |
+| `engine_certify` | manage_assignment | |
+| `engine_certificate` | export_data | |
 | `assign_items` | manage_assignment | |
 | `submit_annotation` | annotate | |
 | `export_data` | export_data | |
 | `delete_annotations` | manage_assignment | yes |
+
+The `engine_*` tools exist when the study enables the [labeling
+engine](../labeling-engine/overview.md); without it they answer 404.
 
 `export_data` writes under `<output_annotation_dir>/exports/`. Its `output`
 argument names a folder inside that directory (default: the format name); a
@@ -54060,12 +55050,12 @@ Preflight for myproject/config.yaml  (provider: local)
 Bundle: 4 files, 75.3KB
 
 4 step(s):
-   1. docker.pull   pull ghcr.io/davidjurgens/potato:2.10.3
+   1. docker.pull   pull ghcr.io/davidjurgens/potato:2.11.0
    2. docker.rm     remove any existing container potato-deploy-my-study
    3. docker.run    run potato-deploy-my-study on 127.0.0.1:8123 ...
    4. health.wait   poll http://127.0.0.1:8123/health until the server answers
 
-Pulling ghcr.io/davidjurgens/potato:2.10.3 ...
+Pulling ghcr.io/davidjurgens/potato:2.11.0 ...
 Started potato-deploy-my-study at http://127.0.0.1:8123
 
 Deployed: http://127.0.0.1:8123
@@ -55606,7 +56596,7 @@ README, which is a dozen or so files. The Dockerfile derives from the published
 image, tagged with the Potato version you have installed:
 
 ```dockerfile
-FROM ghcr.io/davidjurgens/potato:2.10.3
+FROM ghcr.io/davidjurgens/potato:2.11.0
 COPY --chown=potato:potato . /app
 ```
 
@@ -58123,7 +59113,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **165 top-level config keys**, **61 annotation types**, and
+It currently covers **167 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation
@@ -58173,7 +59163,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **459 paths / 496 operations**, generated by
+An index of Potato's HTTP surface: **477 paths / 514 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:
@@ -58218,7 +59208,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **215 example projects** in the repository, across 15
+A derived index of the **218 example projects** in the repository, across 16
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.
@@ -58270,6 +59260,190 @@ python scripts/generate_llms_full.py --check
 
 Run them after adding an annotation type, a display type, a config key, or a
 route. See [Testing](../guides/testing.md) for the drift tests that enforce this.
+
+
+---
+
+<!-- source: docs/releasenotes/v2.11.0.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.11.0/
+
+# Release Notes: v2.11.0 — The Labeling Engine
+
+Potato can now label a dataset with models and use people to measure how
+often the models are wrong. You declare what the finished labels must
+satisfy; the engine asks people for a blind random sample, tests the machine
+labels against it, accepts what the test supports and sends the rest to
+people. The result is the dataset plus a certificate that says what was
+tested and on how many human labels.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## The labeling engine
+
+Turn it on with a `labeling_engine` block and `assignment_strategy: engine`.
+See [the documentation](../labeling-engine/overview.md).
+
+- **Sources.** LLMs, vision-language models, decision models (Laya, and any
+  `/v1/systemone` server such as Jev or OpenJev), YOLO detectors, LLM judges
+  (with a label-order swap), juries, models trained on the study's own
+  labels, and labels you already have. Sources are tried in cascade order;
+  people come after the last.
+- **Confidence.** Verbalized, k-sample agreement, or token log probabilities
+  (one call, usually the best calibrated, on vLLM and OpenAI-compatible
+  servers).
+- **Contracts.** `selective_risk` (at most a stated share of accepted machine
+  labels wrong, with stated confidence; Learn-then-Test on held-out labels),
+  `ppi` (prevalence or mean intervals corrected for the machine's error,
+  valid whatever its quality), `no_worse_than_human` (the alternative
+  annotator test), `budget_first` (what a human budget buys),
+  `distributional` (closeness to how people split on subjective items, with a
+  split-half noise ceiling) and `threshold_legacy` (for translated configs).
+- **Modalities.** One-of-N, ordinal, numeric and multi-label schemes; image
+  regions; audio, video, temporal-grounding and tiered segments; 3D objects;
+  and agent-trace step labels. Regions, segments, 3D objects and traces are
+  scored with the measures the agreement report uses.
+- **People.** Team, crowd (Prolific; a dry run unless live spend is turned on
+  and `budgets.human_usd` is set) and solo pools. Calibration requests are
+  random with recorded inclusion probabilities, and blind: while a person
+  holds one, and after they have answered it, the page shows no
+  pre-annotation, inline judge or AI help, and the AI routes answer 403.
+  Contested items go to adjudication. When every item has a label or the
+  human budget is spent, annotators reach the completion page (and a crowd
+  completion code) instead of waiting.
+- **Acceptance.** A machine label is accepted only when every
+  `selective_risk` and `threshold_legacy` contract on its scheme is met. When none can be (a
+  contract is infeasible, or nothing more is being sampled), the remaining
+  items go to people within the budget.
+- **Audits** watch accepted labels with an anytime-valid confidence sequence.
+  A breach stops acceptance on that scheme (`features.drift`, on by default),
+  and certifying again starts a new sequence.
+- **Runs** are resumable and repeat no model call after a kill. Every call is
+  logged with tokens, latency, cost and cache hits; prompts and replies are
+  stored as hashes. Model and human-label budgets stop spending before they
+  are exceeded. Optional PII masking for third-party APIs.
+- **Distillation and optimization.** Train a cheap model on the study's
+  labels and put it first in the cascade (cert and audit items never go into
+  the training set); report cheaper cascades and better prompts, scored on
+  dev labels only.
+- **Interfaces.** `potato label run|status|certify|certificate|export|calls|
+  distill|optimize|migrate-config` (`certify --retest` to test a rule that
+  only dev labels changed; each test spends part of the error budget, so
+  checking progress spends none); `/api/engine/v1`; five `engine_*` MCP
+  tools; `potato.labeling_engine.sdk.Study`; and an admin page
+  (`/admin/labeling-engine`) with contract status, the error-against-coverage
+  curve, reliability per source, requests and the call log.
+- **Exports.** `potato label export` writes labels with provenance, the
+  certificate (JSON, Markdown, HTML), a dataset card and the call log. CSV,
+  Parquet and Hugging Face exports gain `engine_purpose` and
+  `engine_request` columns. Publishing and Paper Mode leave machine raters
+  out of gold labels and agreement figures.
+
+Older keys keep working. `icl_labeling`, `judge_calibration` and
+`pre_annotation` print a note naming their engine equivalent;
+`potato label migrate-config` writes it. Solo Mode and judge alignment are
+not deprecated, and mirror their predictions into the engine when it is on.
+
+Three examples under `examples/labeling-engine/` cover text sentiment,
+images (boxes and a has-person label) and agent-trace judging.
+
+## Solo Mode and LLM labeling (since 2.10.3)
+
+- `solo_mode.suggestions` withholds the LLM's label on all items or a
+  sample, and the handoff reads agreement on the blind items, since a shown
+  suggestion anchors the person checking it.
+- `ai_budget.cap_usd` is checked before labeling starts and before each
+  batch, with spend recorded for each model called.
+- A response cache (`solo_mode.cache`), a gold set with prompt trials
+  (`solo_mode.gold`), a prompt-sensitivity check, a labeling jury
+  (`solo_mode.jury`) and curriculum ordering
+  (`instance_selection.curriculum`).
+- Decision-model endpoints: `systemone` (hosted Jev, OpenJev on vLLM, Laya's
+  server) and `laya` (in-process). `GET /admin/api/alt-test` runs the
+  alternative annotator test on a declared machine annotator.
+- Edge-case fields are now part of the response schema. Guided decoding on
+  vLLM never returned them, so edge-case discovery during labeling did
+  nothing.
+
+## Agreement
+
+- `/admin/iaa` now reports `spatial_annotation`, `temporal_grounding`,
+  `tiered_annotation` and the agent-trace schemas (`process_reward`,
+  `trajectory_eval`, `tool_call_review`, `failure_attribution`,
+  `gui_trajectory`). They were skipped as unsupported. Temporal grounding
+  (`{"events": ...}`) and tiered annotation (`{"annotations": {tier: ...}}`)
+  are read in the shapes their widgets store.
+- `/admin/api/agreement` no longer reports structured schemes (agent traces,
+  segments, regions, 3D objects). Reduced to label names, every annotator
+  agreed perfectly; it points to `/admin/iaa`, which matches the structures.
+- Two identical zero-length segments (instants) now count as agreeing; they
+  scored as complete disagreement.
+- Paper Mode and the agreement module compute Cohen's kappa through the same
+  function as `/admin/iaa`.
+
+## Fixes that affect 2.10 studies
+
+- **An image page saved a prefilled answer on its own.** On an
+  `image_annotation` scheme with `pre_annotation`, the canvas re-laying itself
+  out after load saved the prefilled shapes as the annotator's answer before
+  they touched anything, so an untouched item counted as answered. Only an
+  edit saves now.
+- **Solo Mode's "Generate prompt" never called a model.** Setup stored the
+  task description wrapped in a sentence. It now asks the revision model to
+  write the first prompt, and falls back to the description, saying so, when
+  there is none.
+- **Refusals over `potato mcp connect` looked like successes.** A refused tool
+  call (a missing permission, a bad parameter) came back with `isError:
+  false`; it is now a tool error carrying the server's message.
+- **The full-study skeleton example had a dead key.**
+  `training.feedback.enabled` is not a key; the example now sets
+  `feedback.show_explanations`.
+- **Images on hosts without CORS headers did not load.** The canvas asked
+  for every image with CORS, and a host that sends no
+  `Access-Control-Allow-Origin` header (cocodataset.org is one) refused, so
+  the page showed "Failed to load image". It now loads such an image again
+  without CORS. Drawing works; region fill and SAM and text-prompt
+  segmentation, which read the image's pixels, say why they cannot.
+- **A pre-annotated shape without a `color` was dropped.** The item showed
+  "Annotations: 0" with no warning. The shape now takes its label's colour.
+- **Idle sessions were never signed out.** The idle-timeout check was
+  registered on an app object that `potato start` discards, so
+  `session_timeout_minutes` had no effect.
+  It now runs on the app that serves requests: a session idle for 8 hours
+  (the default) is cleared and the next request goes to the login page.
+  Kiosks and shared lab machines that stay signed in overnight will start
+  seeing sign-outs; raise `session_timeout_minutes` where that matters.
+
+## Bug fixes
+
+- **Persistence committed other threads' transactions.** `get_db` re-ran the
+  migration script on every cached call, which committed whatever another
+  thread had open on the same connection.
+- **Adjudication counted machine raters.** `try_enqueue_item` let machine
+  annotators trigger adjudication, ignored `min_human_annotations`, and
+  crashed formatting a missing agreement score.
+- **Prolific auto-scaling counted machines and ignored per-item caps.** The
+  number of places to open now counts only human annotations against each
+  item's cap.
+- **LF extraction failed on endpoints that return parsed JSON.** vLLM,
+  Ollama and OpenRouter return an already-parsed reply, so labeling-function
+  extraction never produced a function on those backends.
+- **Annotation, admin and adjudication pages.** Fixes from a UI audit
+  include a leftover keydown logger that echoed every key an annotator
+  pressed to the browser console, span highlights that left the text under
+  them at about 2:1 contrast (now about 12:1), agent-trace panes clipped at
+  500px, and an adjudication confidence that started filled in and was lost
+  when a decided item was reopened.
+- **Deploy checks passed with a missing extra.** `potato deploy check` now
+  reports BLOCKED (`ok: false` with `--json`) and `up --dry-run` refuses,
+  instead of passing and then failing at create time. Every deploy target
+  now defaults to the image tag of the installed version, not `:latest`.
+- **Registering an existing account.** `/register` with a known username
+  says "already exists. Log in instead." Its error pages now render with the
+  task's title, password field and SSO buttons.
+- `potato/user_config.json`, three 2020 test accounts read by nothing, is
+  removed.
 
 
 ---

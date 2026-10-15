@@ -2978,7 +2978,8 @@
         "batch",
         "priority",
         "psychometric",
-        "model_review"
+        "model_review",
+        "engine"
       ]
     },
     "attention_checks": {
@@ -4350,6 +4351,62 @@
       ],
       "type": "string"
     },
+    "labeling_engine": {
+      "additionalProperties": true,
+      "description": "Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet",
+      "properties": {
+        "budgets": {
+          "description": "Spending limits: `model_usd`, `human_usd` and `human_labels`",
+          "type": "object"
+        },
+        "cascade": {
+          "description": "Source ids tried in order. An item a tier is not confident enough about goes to the next, and after the last one to a human. Defaults to the first source",
+          "type": "array"
+        },
+        "contracts": {
+          "description": "Quality targets. Each has `kind` (selective_risk, ppi, no_worse_than_human, budget_first, distributional, threshold_legacy), `schema` and `confidence` (0.9), plus the kind's own keys: `error` and `per_class` for selective_risk, `estimand`, `by` and `max_width` for ppi, `epsilon` for no_worse_than_human, `human_labels` or `human_usd` for budget_first, `max_distance` and `groups_by` for distributional, `threshold` for threshold_legacy",
+          "type": "array"
+        },
+        "crowd": {
+          "description": "Crowd recruitment for the crowd pool. Only Prolific is supported",
+          "type": "object"
+        },
+        "distill": {
+          "description": "Distillation settings: `trainer`, `min_labels`, `every`, `include_silver`",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Turn the labeling engine on",
+          "type": "boolean"
+        },
+        "features": {
+          "description": "Optional parts of the engine: all off by default except drift",
+          "type": "object"
+        },
+        "humans": {
+          "description": "Who labels for the engine and how their labels are sampled",
+          "type": "object"
+        },
+        "redaction": {
+          "description": "PII redaction settings: `categories` to mask",
+          "type": "object"
+        },
+        "runtime": {
+          "description": "How model calls are run",
+          "type": "object"
+        },
+        "schemas": {
+          "description": "Scheme names the engine labels. Unset means every scheme it supports",
+          "type": "array"
+        },
+        "sources": {
+          "description": "Machine labelers. Each has an `id` and a `kind` (llm, vlm, decision, detector, asr, trained, lf, jury, judge, static, fixture, simulator), plus endpoint_type, model, base_url, api_key, temperature, max_tokens, prompt and `confidence` (method auto, verbalized, k_sample, logprob or native) as the kind needs",
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "layout": {
       "additionalProperties": true,
       "description": "How the annotation questions are arranged on the page: a grid, collapsible groups, an explicit order, and responsive breakpoints. Without it every scheme stacks full-width in config order",
@@ -4643,6 +4700,66 @@
     "min_annotators_per_instance": {
       "description": "DEPRECATED spelling of num_annotators_per_item, and read as it. It named a coverage floor that was parsed and never consulted, so a study asking for three annotators an item collected an unlimited number. Setting it alongside num_annotators_per_item or max_annotations_per_item with a different value is refused",
       "type": "integer"
+    },
+    "model_training": {
+      "additionalProperties": true,
+      "description": "Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels",
+      "properties": {
+        "aggregation": {
+          "default": "consensus",
+          "description": "How several annotators' labels become one training label",
+          "type": "string"
+        },
+        "auto_retrain": {
+          "description": "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`",
+          "type": "object"
+        },
+        "device": {
+          "default": "auto",
+          "description": "auto, cpu, cuda or mps",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Turn model training on",
+          "type": "boolean"
+        },
+        "grace_seconds": {
+          "description": "Seconds a cancelled run is given to exit before it is killed",
+          "type": "integer"
+        },
+        "max_ram_mb": {
+          "description": "Memory limit for one run",
+          "type": "number"
+        },
+        "max_wall_seconds": {
+          "description": "Time limit for one run",
+          "type": "number"
+        },
+        "num_threads": {
+          "description": "CPU threads for one run",
+          "type": "integer"
+        },
+        "retain_runs": {
+          "default": 5,
+          "description": "Finished runs kept on disk",
+          "type": "integer"
+        },
+        "split_seed": {
+          "default": 0,
+          "description": "Seed for the train/validation/test split",
+          "type": "integer"
+        },
+        "splits": {
+          "description": "Split fractions, e.g. train 0.8, validation 0.1, test 0.1",
+          "type": "object"
+        },
+        "writeback": {
+          "description": "Publish a run's predictions as prelabels",
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "mturk": {
       "description": "Amazon Mechanical Turk. Needs `enabled: true` and `config_file_path` pointing at the credentials YAML, plus boto3 installed. MTurk closed to new customers in July 2026 and the loader says so on startup",

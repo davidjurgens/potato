@@ -125,6 +125,12 @@ nav:
         - Session-Level Scoring: agent-evaluation/session_level_scoring.md
         - Run Tree: agent-evaluation/run_tree.md
         - Review Workflow: agent-evaluation/review_workflow.md
+    - Labeling Engine:
+        - Overview: labeling-engine/overview.md
+        - Contracts: labeling-engine/contracts.md
+        - Configuration: labeling-engine/configuration.md
+        - CLI, REST API, MCP and SDK: labeling-engine/cli-and-api.md
+        - Migration: labeling-engine/migration.md
     - Solo Mode:
         - Solo Mode: solo-mode/solo_mode.md
         - Advanced Features: solo-mode/solo_mode_advanced.md
@@ -248,6 +254,7 @@ nav:
         - API Reference: api-reference/api_reference.md
         - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
+        - v2.11.0: releasenotes/v2.11.0.md
         - v2.10.3: releasenotes/v2.10.3.md
         - v2.10.2: releasenotes/v2.10.2.md
         - v2.10.1: releasenotes/v2.10.1.md

@@ -125,6 +125,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
+| `labeling_engine` |  | object |  | Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet | `budgets`, `cascade`, `contracts`, `crowd`, `distill`, `enabled`, `features`, `humans`, `redaction`, `runtime`, `schemas`, `sources` |
+| `model_training` |  | object |  | Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels | `aggregation`, `auto_retrain`, `device`, `enabled`, `grace_seconds`, `max_ram_mb`, `max_wall_seconds`, `num_threads`, `retain_runs`, `split_seed`, `splits`, `writeback` |
 
 ## Qualitative Coding (QDA)
 
@@ -278,7 +280,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
-| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review or psychometric. `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
+| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `groups` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |

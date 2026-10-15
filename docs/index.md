@@ -153,6 +153,14 @@ over prose when writing a config or calling the API.
 - [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
+## Labeling Engine
+
+- [Labeling Engine](labeling-engine/overview.md) - Models label the dataset; a blind random sample of human labels certifies which machine labels to accept
+- [Contracts](labeling-engine/contracts.md) - Error guarantees, prevalence intervals, no-worse-than-a-person tests, budgets, label distributions
+- [Configuration](labeling-engine/configuration.md) - Every `labeling_engine` key
+- [CLI, REST API, MCP and SDK](labeling-engine/cli-and-api.md) - `potato label`, `/api/engine/v1`, the `engine_*` tools, `Study`
+- [Migration](labeling-engine/migration.md) - From `icl_labeling`, `judge_calibration`, `pre_annotation` and Solo Mode routing
+
 ## Solo Mode
 
 - [Solo Mode](solo-mode/solo_mode.md) - Human-LLM collaborative annotation workflow
@@ -305,6 +313,7 @@ over prose when writing a config or calling the API.
 | Use pre-built survey instruments | [Survey Instruments](advanced/survey_instruments.md) |
 | Set up multilingual interface | [Multilingual](configuration/multilingual.md) |
 | Resolve annotator disagreements | [Adjudication](administration/adjudication.md) |
+| Label a dataset with models, certified by a human sample | [Labeling Engine](labeling-engine/overview.md) |
 | Browse the REST API | [API Reference](api-reference/api_reference.md) |
 
 ---

@@ -69,7 +69,7 @@ training:
   enabled: true
   data_file: data/training.json
   allow_retry: true
-  feedback: {enabled: true}
+  feedback: {show_explanations: true}
 
 attention_checks:
   enabled: true

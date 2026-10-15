@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# The labeling engine as an LLM-judge calibration loop for agent traces.
+#
+# An LLM judge decides whether each agent run succeeded. People label a blind
+# random sample, half of it by three people each. From those labels the
+# engine checks three things: how often the judge's accepted verdicts are
+# wrong, whether the judge is as good as a person (the alternative annotator
+# test), and what share of runs succeeded, with an interval.
+#
+# The traces are synthetic, written by an LLM for this example.
+#
+#   ollama serve && ollama pull llama3.1:8b
+#   potato label run examples/labeling-engine/agent-trace-judge/config.yaml
+#   python potato/flask_server.py start examples/labeling-engine/agent-trace-judge/config.yaml -p 8000
+
+task_dir: .
+port: 8000
+
+annotation_task_name: "engine-agent-trace-judge"
+output_annotation_dir: "annotation_output"
+
+data_files:
+  - data/agent-traces.jsonl
+
+item_properties:
+  id_key: id
+  text_key: trace
+
+user_config:
+  allow_all_users: true
+
+assignment_strategy: engine
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 12px
+  fields:
+    - key: task_description
+      type: text
+      label: "User request"
+    - key: trace
+      type: text
+      label: "Agent transcript"
+
+annotation_schemes:
+  - annotation_type: radio
+    name: outcome
+    description: "Did the agent fully and correctly complete the user's request?"
+    labels:
+      - name: success
+        tooltip: "Everything the user asked for was done, and the final answer is right"
+      - name: failure
+        tooltip: "Wrong answer, unfinished step, ignored error, invented result, or off-task"
+    sequential_key_binding: true
+
+labeling_engine:
+  enabled: true
+
+  sources:
+    - id: judge
+      kind: judge
+      endpoint_type: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434
+      max_tokens: 200
+      options:
+        rubric: >
+          Label 'success' only if every part of the user's request was done
+          and the final answer is correct given the tool results. A tool
+          error that the agent ignores, a result the agent made up, or an
+          answer that contradicts the tool output is a 'failure'.
+        fields: [task_description, trace]
+        # Ask twice with the labels in opposite orders; a verdict that flips
+        # goes to a person.
+        swap_order: true
+
+  cascade: [judge]
+
+  contracts:
+    - id: judge_accuracy
+      kind: selective_risk
+      schema: outcome
+      error: 0.15
+      confidence: 0.9
+    - id: as_good_as_a_person
+      kind: no_worse_than_human
+      schema: outcome
+      epsilon: 0.15
+      confidence: 0.95
+    - id: success_rate
+      kind: ppi
+      schema: outcome
+      confidence: 0.9
+
+  humans:
+    calibration_rate: 0.4
+    overlap: 0.5
+    overlap_k: 3

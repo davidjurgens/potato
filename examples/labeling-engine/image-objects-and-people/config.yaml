@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# The labeling engine on images: boxes from a detector, a yes/no from a
+# vision-language model, one set of contracts.
+#
+# A box set is right when it matches a person's closely enough (the same
+# matched-IoU distance the agreement report uses for two people), and the
+# accuracy guarantee is written exactly as for text labels.
+#
+# Images are the first 128 of COCO train2017, loaded from cocodataset.org;
+# the boxes in data/ are COCO's annotations (CC BY 4.0), grouped into
+# person / vehicle / animal.
+#
+#   pip install ultralytics                    # YOLO, the detector
+#   ollama serve && ollama pull llava:7b      # the vision model
+#   potato label run examples/labeling-engine/image-objects-and-people/config.yaml
+#   python potato/flask_server.py start examples/labeling-engine/image-objects-and-people/config.yaml -p 8000
+
+task_dir: .
+port: 8000
+
+annotation_task_name: "engine-image-objects"
+output_annotation_dir: "annotation_output"
+
+data_files:
+  - data/coco128-objects.jsonl
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+
+assignment_strategy: engine
+
+annotation_schemes:
+  - annotation_type: radio
+    name: has_person
+    description: "Is there a person anywhere in this image?"
+    labels: ["yes", "no"]
+  - annotation_type: image_annotation
+    name: objects
+    description: "Draw a box around every person, vehicle and animal."
+    tools: [bbox]
+    labels:
+      - name: person
+        color: "#FF6B6B"
+      - name: vehicle
+        color: "#4ECDC4"
+      - name: animal
+        color: "#45B7D1"
+
+labeling_engine:
+  enabled: true
+
+  sources:
+    - id: yolo
+      kind: detector
+      endpoint_type: yolo
+      model: yolov8n.pt
+      schemas: [objects]
+      options:
+        keep_threshold: 0.35
+        label_map:
+          person: person
+          bicycle: vehicle
+          car: vehicle
+          motorcycle: vehicle
+          airplane: vehicle
+          bus: vehicle
+          train: vehicle
+          truck: vehicle
+          boat: vehicle
+          bird: animal
+          cat: animal
+          dog: animal
+          horse: animal
+          sheep: animal
+          cow: animal
+          elephant: animal
+          bear: animal
+          zebra: animal
+          giraffe: animal
+    - id: vision
+      kind: vlm
+      endpoint_type: ollama_vision
+      model: llava:7b
+      schemas: [has_person]
+      max_tokens: 200
+
+  cascade: [yolo, vision]
+
+  contracts:
+    # A box set counts as right when its distance from a person's is at most
+    # 0.5 (matched-IoU, unmatched boxes counting fully against it).
+    - id: boxes
+      kind: selective_risk
+      schema: objects
+      error: 0.2
+      tolerance: 0.5
+      confidence: 0.9
+    - id: person_accuracy
+      kind: selective_risk
+      schema: has_person
+      error: 0.1
+      confidence: 0.9
+    - id: person_share
+      kind: ppi
+      schema: has_person
+
+  humans:
+    calibration_rate: 0.5

@@ -2,7 +2,7 @@
   "info": {
     "description": "Generated from the live Flask url_map \u2014 see potato/server_utils/openapi_spec.py.\n\nMost endpoints are session-authenticated: POST /auth with `username` and `password` as form data, then reuse the session cookie. `x-potato-auth` records the decorators guarding an operation, and `x-potato-requires-config` marks operations that only exist when the named config is enabled.\n\nResponse schemas are intentionally not modelled; this spec is an authoritative index of what exists, not a payload contract.",
     "title": "Potato HTTP API",
-    "version": "2.10.3"
+    "version": "2.11.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3322,6 +3322,29 @@
         ]
       }
     },
+    "/admin/labeling-engine": {
+      "get": {
+        "operationId": "get_admin_labeling_engine",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The labeling engine's page: contracts, calibration, requests, calls.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/logout": {
       "post": {
         "operationId": "post_admin_logout",
@@ -4451,6 +4474,324 @@
         ],
         "x-potato-auth": [
           "inline:session_username"
+        ]
+      }
+    },
+    "/api/engine/v1/calls": {
+      "get": {
+        "operationId": "get_labeling_engine_calls",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/certificate": {
+      "get": {
+        "operationId": "get_labeling_engine_certificate",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/certify": {
+      "post": {
+        "operationId": "post_labeling_engine_certify",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/crowd": {
+      "get": {
+        "operationId": "get_labeling_engine_crowd",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/plan": {
+      "post": {
+        "operationId": "post_labeling_engine_plan",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Run one planner pass now, instead of waiting for the next tick.",
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/requests": {
+      "get": {
+        "operationId": "get_labeling_engine_requests_list",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/schemes/{name}/contracts": {
+      "get": {
+        "operationId": "get_labeling_engine_contracts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/schemes/{name}/drift": {
+      "get": {
+        "operationId": "get_labeling_engine_drift",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/schemes/{name}/optimize": {
+      "get": {
+        "operationId": "get_labeling_engine_optimize_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The planner's latest cheaper-cascade report (features.optimize), or a",
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/schemes/{name}/reliability": {
+      "get": {
+        "operationId": "get_labeling_engine_reliability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Reliability bins and ECE per tier, over the human calibration labels.",
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/schemes/{name}/risk_coverage": {
+      "get": {
+        "operationId": "get_labeling_engine_risk_coverage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "For each threshold of the last tier: the share accepted on the cert",
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
+    "/api/engine/v1/status": {
+      "get": {
+        "operationId": "get_labeling_engine_status",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "labeling_engine"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -5778,6 +6119,111 @@
     "/api/mcp/tools/delete_annotations": {
       "post": {
         "operationId": "post_mcp_tool_delete_annotations",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/engine_certificate": {
+      "post": {
+        "operationId": "post_mcp_tool_engine_certificate",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/engine_certify": {
+      "post": {
+        "operationId": "post_mcp_tool_engine_certify",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/engine_requests": {
+      "post": {
+        "operationId": "post_mcp_tool_engine_requests",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/engine_run": {
+      "post": {
+        "operationId": "post_mcp_tool_engine_run",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/engine_status": {
+      "post": {
+        "operationId": "post_mcp_tool_engine_status",
         "responses": {
           "200": {
             "description": "Success"

@@ -413,11 +413,11 @@ Every comparison between your label and the LLM's is filed as **blind** or **sho
 How the handoff reads agreement:
 
 - Once there are `minimum_blind_sample` blind comparisons, the handoff compares **blind** agreement with `end_human_annotation_agreement`.
-- Before that, under `after_label` and `blind_sample`, the handoff waits, unless the corpus cannot produce enough blind items. When the blind comparisons so far plus the blind items you have not yet labelled come to fewer than `minimum_blind_sample`, the handoff reads blind agreement over the blind comparisons there are. With none, it reads all agreement. A 20-item study at `blind_rate: 0.2` can easily have only one or two blind items.
+- Before that, under `after_label` and `blind_sample`, the handoff waits, unless the corpus cannot produce enough blind items. When the blind comparisons so far plus the blind items you have not yet labelled come to fewer than `minimum_blind_sample`, the handoff reads blind agreement over the blind comparisons there are, and the dashboard says so ("2 blind items, below the minimum of 5"). With none, it reads all agreement. A 20-item study at `blind_rate: 0.2` expects about four blind items, so set the minimum to what the corpus can give.
 - Under `before_label` it uses all comparisons until enough blind ones exist, which is the behaviour Solo Mode had before this setting.
 - `minimum_validation_sample` still applies to all comparisons in every mode.
 
-On a blind item the annotate page says the suggestion is hidden and that you will see the LLM's label if you disagree. The dashboard's **Blind Agreement** card shows blind and shown agreement side by side, the gap between them, how often you took the suggestion with the Accept button, and which agreement the handoff is reading. A large positive gap means you agree with the LLM more often when you can see its answer. The gap is reported once each side has at least 5 comparisons.
+On a blind item the annotate page says the suggestion is hidden and that you will see the model's label if you disagree. The dashboard's **Blind Agreement** card shows blind and shown agreement side by side, the gap between them, how often you took the suggestion with the Accept button, and which agreement the handoff is reading. A large positive gap means you agree with the LLM more often when you can see its answer. The gap is reported once each side has at least 5 comparisons.
 
 `GET /solo/api/status` reports the same numbers under `anchoring`.
 
@@ -509,7 +509,8 @@ For a `systemone` server, set `base_url` (for example `http://localhost:8002`), 
 
 Limits:
 
-- **Schemes.** Decision models label `radio`, `select`, `likert` and `slider` schemes. Solo Mode refuses to start if one is set to label `multiselect`, `span` or free-text schemes.
+- **Schemes.** Decision models label `radio`, `select`, `likert` and `slider` schemes. Solo Mode refuses to start if one is set to label `multiselect`, `span` or free-text schemes. On rating scales (`likert`, `slider`) Laya's scores can barely follow the scale, whatever the wording of the question; check a few items with **Try on 10 items** before routing a scale through it.
+- **Same answers in-process and over HTTP.** Both endpoint types send the item as `{"text": ...}`, so one Laya checkpoint labels the same way in-process and behind `laya-serve`. Set `state_key: ""` to send the bare string.
 - **Revision models.** `revision_models` must be generative. It defaults to `labeling_models`, so a study whose only model is a decision model has to set it.
 - **Not under `ai_support`.** A decision model cannot be the `ai_support` endpoint, whose assistants all write text.
 - **Confidence.** The confidence is the probability the model gave its chosen option. No uncertainty estimator runs, because those ask a follow-up question. Calibration varies by domain, so set the tier threshold from your own data. Score the model on a [gold set](#gold-set-and-trials) or watch the per-tier statistics rather than trusting a vendor figure.

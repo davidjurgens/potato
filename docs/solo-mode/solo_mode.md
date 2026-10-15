@@ -88,7 +88,10 @@ not every path visits every phase.
 ### 1. Setup
 - Enter task description
 - Upload data file
-- Generate initial prompt
+- Generate initial prompt: a revision model (`revision_models`) writes it from
+  the description and the schemes. Without one, or if it gives nothing back,
+  the description itself becomes the first prompt, and the prompt history
+  says so.
 
 ### 2. Prompt Review
 - Review and edit the generated prompt

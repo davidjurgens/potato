@@ -152,11 +152,19 @@ The token is shown once. Only its SHA-256 digest is stored, in
 | `get_item` | view_admin_dashboard | |
 | `get_agreement` | view_admin_dashboard | |
 | `get_config` | view_admin_dashboard | |
+| `engine_status` | view_admin_dashboard | |
+| `engine_requests` | view_admin_dashboard | |
 | `add_items` | manage_assignment | |
+| `engine_run` | manage_assignment | |
+| `engine_certify` | manage_assignment | |
+| `engine_certificate` | export_data | |
 | `assign_items` | manage_assignment | |
 | `submit_annotation` | annotate | |
 | `export_data` | export_data | |
 | `delete_annotations` | manage_assignment | yes |
+
+The `engine_*` tools exist when the study enables the [labeling
+engine](../labeling-engine/overview.md); without it they answer 404.
 
 `export_data` writes under `<output_annotation_dir>/exports/`. Its `output`
 argument names a folder inside that directory (default: the format name); a

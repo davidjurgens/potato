@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 215 examples, generated from the configs themselves.
+All 218 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -465,6 +465,14 @@ The `Types` column lists the annotation types each one uses.
 | [`pdf-bbox/`](image/pdf-bbox/) | PDF Layout Annotation | `radio`, `text` |
 | [`region-captioning/`](image/region-captioning/) | Region captioning | `image_annotation`, `region_caption` |
 | [`text-prompt-labeling/`](image/text-prompt-labeling/) | Text-prompt labelling | `image_annotation` |
+
+### labeling-engine/ (3)
+
+| Example | Task | Types |
+|---------|------|-------|
+| [`agent-trace-judge/`](labeling-engine/agent-trace-judge/) | engine-agent-trace-judge | `radio` |
+| [`image-objects-and-people/`](labeling-engine/image-objects-and-people/) | engine-image-objects | `image_annotation`, `radio` |
+| [`text-certified-sentiment/`](labeling-engine/text-certified-sentiment/) | engine-certified-sentiment | `radio` |
 
 ### span/ (11)
 

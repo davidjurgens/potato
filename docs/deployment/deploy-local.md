@@ -57,12 +57,12 @@ Preflight for myproject/config.yaml  (provider: local)
 Bundle: 4 files, 75.3KB
 
 4 step(s):
-   1. docker.pull   pull ghcr.io/davidjurgens/potato:2.10.3
+   1. docker.pull   pull ghcr.io/davidjurgens/potato:2.11.0
    2. docker.rm     remove any existing container potato-deploy-my-study
    3. docker.run    run potato-deploy-my-study on 127.0.0.1:8123 ...
    4. health.wait   poll http://127.0.0.1:8123/health until the server answers
 
-Pulling ghcr.io/davidjurgens/potato:2.10.3 ...
+Pulling ghcr.io/davidjurgens/potato:2.11.0 ...
 Started potato-deploy-my-study at http://127.0.0.1:8123
 
 Deployed: http://127.0.0.1:8123
