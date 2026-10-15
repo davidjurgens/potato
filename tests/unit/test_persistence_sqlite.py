@@ -174,3 +174,78 @@ class TestThreadSafety:
 
         first = results[0]
         assert all(r is first for r in results)
+
+
+class TestSeparateDatabases:
+    """A migration names its file; each file runs only its own migrations."""
+
+    def test_named_database_is_its_own_file(self, task_dir):
+        register_migration(Migration(
+            name="test_persistence_engine_only",
+            sql="CREATE TABLE engine_only_t (n INT);",
+            database="enginetest",
+        ))
+        eng = get_db(task_dir, database="enginetest")
+        eng.execute("INSERT INTO engine_only_t (n) VALUES (7)")
+        proj = get_db(task_dir)
+        assert eng is not proj
+        assert os.path.exists(os.path.join(task_dir, "enginetest.sqlite"))
+        tables = {r["name"] for r in proj.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "engine_only_t" not in tables
+
+    def test_project_migrations_stay_out_of_named_database(self, task_dir):
+        register_migration(Migration(
+            name="test_persistence_project_only",
+            sql="CREATE TABLE project_only_t (n INT);",
+        ))
+        get_db(task_dir)
+        eng = get_db(task_dir, database="enginetest")
+        tables = {r["name"] for r in eng.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "project_only_t" not in tables
+
+    def test_close_without_name_closes_every_database(self, task_dir):
+        p1, e1 = get_db(task_dir), get_db(task_dir, database="enginetest")
+        close_db(task_dir)
+        assert get_db(task_dir) is not p1
+        assert get_db(task_dir, database="enginetest") is not e1
+
+    def test_close_with_name_keeps_the_others(self, task_dir):
+        p1, e1 = get_db(task_dir), get_db(task_dir, database="enginetest")
+        close_db(task_dir, database="enginetest")
+        assert get_db(task_dir) is p1
+        assert get_db(task_dir, database="enginetest") is not e1
+
+    @pytest.mark.parametrize("bad", ["../escape", "a/b", "", "x.y"])
+    def test_database_name_cannot_leave_task_dir(self, task_dir, bad):
+        with pytest.raises(ValueError):
+            get_db(task_dir, database=bad)
+
+
+class TestGetDbDoesNotCommitOpenTransactions:
+    """get_db() on a cached connection used to run executescript() every time,
+    which COMMITs any transaction open on the shared connection: one thread's
+    lookup committed another thread's half-written batch."""
+
+    def test_lookup_during_a_transaction_leaves_it_open(self, task_dir):
+        register_migration(Migration(
+            name="test_persistence_txn_t", sql="CREATE TABLE txn_t (n INT);"))
+        conn = get_db(task_dir)
+        conn.execute("BEGIN")
+        conn.execute("INSERT INTO txn_t (n) VALUES (1)")
+        assert get_db(task_dir) is conn  # what another thread would do
+        assert conn.in_transaction
+        conn.execute("ROLLBACK")
+        assert conn.execute("SELECT COUNT(*) FROM txn_t").fetchone()[0] == 0
+
+    def test_late_migration_waits_for_the_transaction(self, task_dir):
+        conn = get_db(task_dir)
+        conn.execute("BEGIN")
+        register_migration(Migration(
+            name="test_persistence_late_t", sql="CREATE TABLE late_t (n INT);"))
+        get_db(task_dir)
+        assert conn.in_transaction
+        conn.execute("COMMIT")
+        get_db(task_dir)  # nothing open now: the migration runs
+        conn.execute("INSERT INTO late_t (n) VALUES (1)")

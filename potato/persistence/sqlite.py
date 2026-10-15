@@ -5,7 +5,11 @@ Provides a process-wide cache of WAL-mode SQLite connections keyed by task_dir,
 plus a migration registry so each feature module declares the tables it owns.
 
 Design choices:
-- One database file per project: `<task_dir>/project.sqlite`.
+- One database file per project: `<task_dir>/project.sqlite`. A feature with
+  enough rows to want its own WAL (the labeling engine's prediction store) can
+  name another file through ``Migration.database``; ``get_db(task_dir,
+  database="engine")`` then opens `<task_dir>/engine.sqlite` with the same
+  settings and runs only the migrations registered for that file.
 - WAL journal mode for concurrent reads alongside writes.
 - `foreign_keys = ON` enforced on every connection.
 - Migrations are idempotent and tracked in a `schema_migrations` table.
@@ -36,7 +40,7 @@ import os
 import sqlite3
 import threading
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -50,17 +54,25 @@ class Migration:
             key in the `schema_migrations` table — running twice is a no-op.
         sql: SQL statement(s). Multi-statement scripts allowed; runs via
             ``connection.executescript``.
+        database: Which file under task_dir the migration belongs to, without
+            the ``.sqlite`` suffix. Defaults to the shared ``project`` file.
     """
     name: str
     sql: str
+    database: str = "project"
 
 
 _MIGRATIONS: List[Migration] = []
 _MIGRATION_NAMES: set = set()
 _REGISTRY_LOCK = threading.Lock()
 
-_DB_CACHE: Dict[str, sqlite3.Connection] = {}
+#: (abs task_dir, database name) -> connection
+_DB_CACHE: Dict[Tuple[str, str], sqlite3.Connection] = {}
 _DB_CACHE_LOCK = threading.Lock()
+
+#: Migration names known to be applied on each cached connection. Lets the
+#: common get_db() call, with nothing pending, return without running any SQL.
+_APPLIED: Dict[Tuple[str, str], set] = {}
 
 _SCHEMA_MIGRATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -104,30 +116,51 @@ def clear_migrations() -> None:
         _MIGRATION_NAMES.clear()
 
 
-def get_db(task_dir: str) -> sqlite3.Connection:
+def _check_database_name(database: str) -> None:
+    # The name becomes a file name under task_dir; refuse anything that could
+    # leave it.
+    if not database or not database.replace("_", "").isalnum():
+        raise ValueError(f"Invalid database name {database!r}")
+
+
+def get_db(task_dir: str, database: str = "project") -> sqlite3.Connection:
     """Return the cached WAL-mode SQLite connection for this project.
 
-    On first call for a given task_dir, opens `<task_dir>/project.sqlite`,
-    sets WAL + foreign_keys, and runs any pending migrations.
+    On first call for a given task_dir and database, opens
+    `<task_dir>/<database>.sqlite`, sets WAL + foreign_keys, and runs the
+    pending migrations registered for that database.
 
     Connections are cached per task_dir and reused across requests. They
     are NOT thread-local — SQLite connections created with
     `check_same_thread=False` are safe for serialized access from multiple
     threads, which matches Flask's per-request threading model.
     """
+    _check_database_name(database)
     abs_dir = os.path.abspath(task_dir)
+    key = (abs_dir, database)
     with _DB_CACHE_LOCK:
-        existing = _DB_CACHE.get(abs_dir)
+        existing = _DB_CACHE.get(key)
         if existing is not None:
             # Apply any migrations registered AFTER this connection was
-            # first opened. Idempotent and cheap (one indexed SELECT when
-            # nothing is pending). Without this, a feature whose module
-            # is imported/registered later than another feature's first
+            # first opened. Without this, a feature whose module is
+            # imported/registered later than another feature's first
             # get_db() call would never get its tables created.
-            _run_pending_migrations(existing)
+            #
+            # Nothing runs when nothing is pending. Migrations go through
+            # executescript(), which COMMITs whatever transaction is open on
+            # the connection, and the connection is shared by every thread:
+            # running it on every call committed other threads' half-written
+            # batches out from under them. With something pending and a
+            # transaction open, the migration waits for the next call.
+            applied = _APPLIED.setdefault(key, set())
+            with _REGISTRY_LOCK:
+                pending = [m for m in _MIGRATIONS
+                           if m.database == database and m.name not in applied]
+            if pending and not existing.in_transaction:
+                _run_pending_migrations(existing, database, applied)
             return existing
         os.makedirs(abs_dir, exist_ok=True)
-        db_path = os.path.join(abs_dir, "project.sqlite")
+        db_path = os.path.join(abs_dir, f"{database}.sqlite")
         conn = sqlite3.connect(
             db_path,
             check_same_thread=False,
@@ -138,18 +171,28 @@ def get_db(task_dir: str) -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA synchronous = NORMAL")
-        _run_pending_migrations(conn)
-        _DB_CACHE[abs_dir] = conn
-        logger.info(f"Opened SQLite project DB: {db_path}")
+        applied: set = set()
+        _run_pending_migrations(conn, database, applied)
+        _DB_CACHE[key] = conn
+        _APPLIED[key] = applied
+        logger.info(f"Opened SQLite DB: {db_path}")
         return conn
 
 
-def close_db(task_dir: str) -> None:
-    """Close and evict the cached connection for one task_dir."""
+def close_db(task_dir: str, database: Optional[str] = None) -> None:
+    """Close and evict cached connections for one task_dir.
+
+    With ``database`` unset, every database open for that task_dir is closed,
+    so a caller releasing a project directory releases all of its files.
+    """
     abs_dir = os.path.abspath(task_dir)
     with _DB_CACHE_LOCK:
-        conn = _DB_CACHE.pop(abs_dir, None)
-    if conn is not None:
+        keys = [k for k in _DB_CACHE
+                if k[0] == abs_dir and (database is None or k[1] == database)]
+        conns = [_DB_CACHE.pop(k) for k in keys]
+        for k in keys:
+            _APPLIED.pop(k, None)
+    for conn in conns:
         try:
             conn.close()
         except sqlite3.Error as e:
@@ -161,6 +204,7 @@ def clear_db_cache() -> None:
     with _DB_CACHE_LOCK:
         connections = list(_DB_CACHE.values())
         _DB_CACHE.clear()
+        _APPLIED.clear()
     for conn in connections:
         try:
             conn.close()
@@ -168,15 +212,24 @@ def clear_db_cache() -> None:
             pass
 
 
-def _run_pending_migrations(conn: sqlite3.Connection) -> None:
-    """Apply migrations that haven't been recorded in schema_migrations yet."""
+def _run_pending_migrations(conn: sqlite3.Connection,
+                            database: str = "project",
+                            known: Optional[set] = None) -> None:
+    """Apply this database's migrations not yet in its schema_migrations.
+
+    ``known`` is the caller's cache of applied names; it is updated with
+    everything found applied or applied here.
+    """
     conn.executescript(_SCHEMA_MIGRATIONS_DDL)
     applied = {
         row["name"]
         for row in conn.execute("SELECT name FROM schema_migrations").fetchall()
     }
+    if known is not None:
+        known.update(applied)
     with _REGISTRY_LOCK:
-        pending = [m for m in _MIGRATIONS if m.name not in applied]
+        pending = [m for m in _MIGRATIONS
+                   if m.database == database and m.name not in applied]
 
     if not pending:
         return
@@ -196,6 +249,8 @@ def _run_pending_migrations(conn: sqlite3.Connection) -> None:
                 "INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)",
                 (migration.name,),
             )
+            if known is not None:
+                known.add(migration.name)
             logger.info(f"Applied migration: {migration.name}")
         except sqlite3.Error as e:
             logger.error(f"Migration {migration.name} failed: {e}")
