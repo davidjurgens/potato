@@ -28,6 +28,7 @@ from potato.mcp_server.live_tools import (
     describe_tools,
 )
 from potato.mcp_server.routes import mcp_bp, register_mcp_routes
+from potato.mcp_server.server import check_sdk_available
 from potato.server_utils.agent_tokens import (
     issue_token,
     list_tokens,
@@ -552,6 +553,7 @@ class TestRemoteBridge:
         assert "alice" in text
 
 
+@pytest.mark.skipif(not check_sdk_available(), reason="mcp SDK not installed")
 def test_a_refused_tool_call_is_an_error_result_over_the_bridge(monkeypatch):
     """Found by potato-skill (C8): the stdio bridge returned a permission
     refusal with isError false."""
