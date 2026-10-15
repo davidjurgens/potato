@@ -3403,7 +3403,7 @@ class ItemStateManager:
         Returns False when there is no such item, so the caller can count it.
         """
         with self._lock:
-            item = self.get_item(instance_id)
+            item = self.find_item(instance_id)
             if item is None:
                 return False
 

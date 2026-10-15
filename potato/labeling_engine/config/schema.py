@@ -380,7 +380,8 @@ CROWD_KEYS = ("provider", "study_id", "reward_usd", "per_worker_quota")
 RUNTIME_KEYS = ("batch_size", "concurrency", "retries", "cache", "planner_interval",
                 "hold_minutes")
 REDACTION_KEYS = ("categories",)
-DISTILL_KEYS = ("trainer", "min_labels", "every", "include_silver")
+DISTILL_KEYS = ("trainer", "min_labels", "every", "include_silver", "modality",
+                "image_field")
 
 
 def parse_engine_config(config_data: Dict[str, Any]) -> EngineConfig:
@@ -564,6 +565,8 @@ def parse_engine_config(config_data: Dict[str, Any]) -> EngineConfig:
             errors.append(f"labeling_engine.{key} must be a mapping")
         else:
             setattr(cfg, key, dict(val))
+    if cfg.distill.get("modality", "auto") not in ("auto", "text", "image"):
+        errors.append("labeling_engine.distill.modality must be auto, text or image")
 
     # Setups the documentation says cannot work, caught here rather than
     # discovered at run time.

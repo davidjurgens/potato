@@ -38,6 +38,8 @@ _DEFAULT_VECTORIZER = "sklearn.feature_extraction.text.TfidfVectorizer"
 
 #: Model file inside the artifact directory.
 MODEL_FILE = "model.pkl"
+#: Vectorizer names that read an image file rather than text.
+_IMAGE_VECTORIZERS = ("clip", "image")
 META_FILE = "model_card.json"
 
 
@@ -153,9 +155,18 @@ class SklearnTextTrainer(Trainer):
         if schema is None:
             raise TrainerError("No schema to train on")
 
+        # An image bundle (an image scheme, or a classification scheme over
+        # items that name image files) gets CLIP embeddings unless the run
+        # names a vectorizer: TF-IDF over a file path learns the file names.
+        if not (spec.params or {}).get("vectorizer") \
+                and bundle.manifest.get("modality") == "image":
+            params["vectorizer"] = "clip"
+            report.log("info", "Image bundle: using CLIP image embeddings")
+        use_media = self._reads_media(params.get("vectorizer"))
+
         report.status("running", "reading bundle")
         features, targets, _ = self._read_split(spec, bundle, schema, "train",
-                                                report)
+                                                report, use_media=use_media)
         if not features:
             raise TrainerError(
                 "The train split produced no usable rows for schema %r"
@@ -201,6 +212,8 @@ class SklearnTextTrainer(Trainer):
             "trainer": self.name, "schema": schema.name,
             "kind": schema.kind, "classifier": params.get("classifier"),
             "vectorizer": params.get("vectorizer"),
+            # What the model was fitted on, so prediction feeds it the same.
+            "input": "media" if use_media else "text",
             "calibration": getattr(self, "_calibration", {}),
             "label_order": label_order, "n_train": len(features),
             "bundle_digest": bundle.digest,
@@ -231,6 +244,13 @@ class SklearnTextTrainer(Trainer):
             raise TrainerError("No fitted model at %s" % model_path)
         with open(model_path, "rb") as fh:
             pipeline = pickle.load(fh)
+        use_media = None
+        card_path = os.path.join(artifact_dir, META_FILE)
+        if os.path.isfile(card_path):
+            with open(card_path) as fh:
+                recorded = (json.load(fh) or {}).get("input")
+            if recorded in ("media", "text"):
+                use_media = recorded == "media"
 
         batch: List[PredictItem] = []
         seen = 0
@@ -238,7 +258,8 @@ class SklearnTextTrainer(Trainer):
         def flush(chunk):
             if not chunk:
                 return []
-            features = [self._feature_of(item, schema) for item in chunk]
+            features = [self._feature_of(item, schema, use_media=use_media)
+                        for item in chunk]
             try:
                 probabilities = pipeline.predict_proba(features)
                 classes = [str(c) for c in pipeline.classes_]
@@ -264,6 +285,10 @@ class SklearnTextTrainer(Trainer):
             return out
 
         for item in items:
+            if use_media and not self._readable_media(item.media):
+                # An image model given no image would score a blank vector
+                # and return a confident-looking label; give none.
+                continue
             batch.append(item)
             if len(batch) >= 256:
                 for record in flush(batch):
@@ -280,19 +305,24 @@ class SklearnTextTrainer(Trainer):
     # --------------------------------------------------------------- helpers
 
     def _read_split(self, spec: TrainingSpec, bundle: BundleRef, schema,
-                    split: str, report: ProgressReporter
+                    split: str, report: ProgressReporter,
+                    use_media: Optional[bool] = None
                     ) -> Tuple[List[str], List[Any], List[str]]:
         """``(features, targets, instance_ids)`` for one split."""
         features, targets, ids = [], [], []
+        no_image = 0
         for row in bundle.read_split(split):
             target = (row.get("targets") or {}).get(schema.name)
             if target is None or target == [] or target == "":
+                continue
+            if use_media and not self._readable_media(row.get("media")):
+                no_image += 1
                 continue
             features.append(self._feature_of(
                 PredictItem(instance_id=row.get("instance_id", ""),
                             text=row.get("text", ""),
                             media=row.get("media")), schema,
-                bundle=bundle))
+                bundle=bundle, use_media=use_media))
             targets.append(target)
             ids.append(row.get("instance_id", ""))
 
@@ -307,18 +337,38 @@ class SklearnTextTrainer(Trainer):
         elif schema.kind == "ordinal":
             targets = [str(t) for t in targets]
 
+        if no_image:
+            report.log("warning",
+                       "Left out %d %s row(s) with no local image file (a remote "
+                       "URL, or a file that was not found); images are read from "
+                       "disk, not downloaded" % (no_image, split))
         report.log("info", "Read %d labelled rows from the %s split"
                    % (len(features), split))
         return features, targets, ids
 
+    @staticmethod
+    def _readable_media(media) -> bool:
+        return bool(media) and not str(media).startswith(("http://", "https://"))
+
+    @staticmethod
+    def _reads_media(vectorizer) -> bool:
+        name = str(vectorizer or "")
+        return name in _IMAGE_VECTORIZERS or "ImageEmbedding" in name
+
     def _feature_of(self, item: PredictItem, schema,
-                    bundle: Optional[BundleRef] = None) -> str:
+                    bundle: Optional[BundleRef] = None,
+                    use_media: Optional[bool] = None) -> str:
         """What the vectorizer sees: the text, or a media path.
 
-        For an image schema this is a file path, and the CLIP vectorizer opens
-        it. Handing an image trainer the item's text is the failure that made
-        image active learning sort by filename.
+        For an image vectorizer this is a file path, and the CLIP vectorizer
+        opens it. Handing an image trainer the item's text is the failure that
+        made image active learning sort by filename. The reverse matters as
+        much: a text model given an item's ``url`` field learns URLs, so a
+        text vectorizer always gets the text. ``use_media`` None is a model
+        fitted before that was recorded, which read media whenever present.
         """
+        if use_media is False:
+            return item.text or ""
         if item.media:
             if bundle is not None:
                 return bundle.resolve_media(item.media)

@@ -627,7 +627,7 @@ KNOWN_CONFIG_KEYS = {
         "max_ram_mb": None,
         "device": None,
         "num_threads": None,
-        "writeback": {"schemas", "min_confidence", "field"},
+        "writeback": {"schemas", "min_confidence", "field", "include_unlabeled"},
     },
     # The labeling engine (potato/labeling_engine): machines label, humans
     # calibrate and certify. Sources, cascade and contracts are lists of
@@ -648,7 +648,8 @@ KNOWN_CONFIG_KEYS = {
         "features": {"distill", "optimize", "drift", "crowd_recruit",
                      "crowd_live_spend", "pii_redaction", "payload_capture"},
         "redaction": {"categories"},
-        "distill": {"trainer", "min_labels", "every", "include_silver"},
+        "distill": {"trainer", "min_labels", "every", "include_silver", "modality",
+                    "image_field"},
     },
     "solo_mode": {
         "enabled": None,
@@ -7874,7 +7875,10 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
             f"as a solo_mode.confidence_routing tier, or as a labeling_engine "
             f"source with kind: decision instead.")
 
+    # openrouter (and its old spelling open_router) is a registered endpoint
+    # the AI support docs show, and was refused here.
     valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm",
+                            "openrouter", "open_router",
                             "yolo", "ollama_vision", "openai_vision", "anthropic_vision"]
     if endpoint_type not in valid_endpoint_types:
         raise ConfigValidationError(f"ai_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}")

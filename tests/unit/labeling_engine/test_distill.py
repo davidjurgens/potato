@@ -113,3 +113,145 @@ def test_too_few_labels_trains_nothing(tmp_path):
     eng.register_items(items)
     assert distill.distill_scheme(eng, scheme, items) is None
     assert not distill.due(eng, scheme)
+
+
+# --- image studies ------------------------------------------------------------
+
+COLOURS = {"red": (200, 30, 30), "blue": (30, 30, 200)}
+
+
+def _image_items(tmp_path, n=160, seed=0, remote=False):
+    """Red and blue squares with noise, stored under media/ and referenced
+    the way an image study's text_key does (/media/<file>)."""
+    from PIL import Image
+    rng = random.Random(seed)
+    media = tmp_path / "media"
+    media.mkdir(exist_ok=True)
+    out = []
+    for k in range(n):
+        g = rng.choice(list(COLOURS))
+        base = COLOURS[g]
+        img = Image.new("RGB", (48, 48))
+        img.putdata([tuple(max(0, min(255, c + rng.randint(-40, 40))) for c in base)
+                     for _ in range(48 * 48)])
+        img.save(media / f"img{k}.png")
+        ref = (f"http://images.example.org/img{k}.png" if remote else f"/media/img{k}.png")
+        out.append(ItemView(f"i{k}", ref, data={"gold": g, "image_url": ref}))
+    return out
+
+
+def _image_engine(tmp_path, **distill_opts):
+    cfg = {"task_dir": str(tmp_path), "annotation_task_name": "img",
+           "media_directory": "media",
+           "annotation_schemes": [{"name": "s", "annotation_type": "radio",
+                                   "labels": list(COLOURS)}],
+           "labeling_engine": {
+               "enabled": True,
+               "sources": [{"id": "fx", "kind": "fixture", "error_rate": 0.3}],
+               "contracts": [{"id": "acc", "kind": "selective_risk", "schema": "s",
+                              "error": 0.15}],
+               "features": {"distill": True},
+               "distill": {"min_labels": 40, **distill_opts}}}
+    return Engine(cfg)
+
+
+def _prepare_images(eng, items, rate=0.6):
+    scheme = eng.scheme("s")
+    eng.register_items(items)
+    eng.predict(scheme, items)
+    eng.draw_calibration(scheme, [i.item_id for i in items], rate=rate)
+    gold = {i.item_id: i.data["gold"] for i in items}
+    for r in eng.store.requests(status=["open"]):
+        eng.record_human_label(r.item_id, "s", gold[r.item_id], "ann", request_id=r.id)
+    eng.certify(scheme)
+    eng.resolve(scheme, open_requests=False)
+    return scheme
+
+
+class _RecordingTrainer:
+    """Stands in for sklearn-text so the wiring is checked without CLIP."""
+    name = "sklearn-text"
+
+    def __init__(self):
+        self.spec = self.rows = None
+
+    def fit(self, spec, bundle, log):
+        from types import SimpleNamespace
+        self.spec, self.rows = spec, list(bundle.read_split("train"))
+        return SimpleNamespace(metrics={})
+
+
+def test_an_image_study_trains_on_image_files_with_clip(tmp_path, monkeypatch):
+    """The distilled tier read an image study's text, which is only the image
+    URL, through bag-of-words."""
+    from potato.training import registry
+    eng = _image_engine(tmp_path)
+    items = _image_items(tmp_path)
+    scheme = _prepare_images(eng, items)
+    assert distill.modality_of(eng, items) == "image"
+    fake = _RecordingTrainer()
+    monkeypatch.setattr(registry, "get_trainer", lambda name: fake)
+    entry = distill.distill_scheme(eng, scheme, items)
+    assert entry and entry["options"]["modality"] == "image"
+    assert fake.spec.params.get("vectorizer") == "clip"
+    assert fake.rows and all(r["media"].endswith(".png") for r in fake.rows)
+    assert all((tmp_path / "media" / r["media"].rsplit("/", 1)[-1]).exists()
+               for r in fake.rows)
+
+
+def test_a_text_study_keeps_the_text_vectorizer(tmp_path, monkeypatch):
+    from potato.training import registry
+    eng = _engine(tmp_path)
+    items = _items(400)
+    scheme = _prepare(eng, items)
+    fake = _RecordingTrainer()
+    monkeypatch.setattr(registry, "get_trainer", lambda name: fake)
+    distill.distill_scheme(eng, scheme, items)
+    assert "vectorizer" not in fake.spec.params
+    assert all("media" not in r for r in fake.rows)
+
+
+def test_remote_images_are_not_trained_on(tmp_path, monkeypatch):
+    """Remote URLs are not downloaded, so they cannot be training rows."""
+    from potato.training import registry
+    eng = _image_engine(tmp_path)
+    items = _image_items(tmp_path, remote=True)
+    scheme = _prepare_images(eng, items)
+    fake = _RecordingTrainer()
+    monkeypatch.setattr(registry, "get_trainer", lambda name: fake)
+    assert distill.distill_scheme(eng, scheme, items) is None
+    assert fake.spec is None
+
+
+def _clip_available():
+    import os
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    try:
+        from sentence_transformers import SentenceTransformer
+        SentenceTransformer("clip-ViT-B-32")
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+@pytest.mark.skipif(not _clip_available(), reason="CLIP (clip-ViT-B-32) not available offline")
+def test_a_distilled_image_tier_labels_images_it_has_not_seen(tmp_path):
+    """End to end with real CLIP embeddings: red and blue squares."""
+    eng = _image_engine(tmp_path)
+    items = _image_items(tmp_path)
+    scheme = _prepare_images(eng, items)
+    entry = distill.distill_scheme(eng, scheme, items)
+    assert entry and eng.tiers(scheme)[0] == "distilled-s"
+    eng.predict(scheme, items)
+    preds = eng.store.current_predictions("s", eng.tier_versions(scheme)[0])
+    trained_on = set()
+    import json, os
+    with open(os.path.join(entry["options"]["artifact_dir"], "train.jsonl")) as f:
+        trained_on = {json.loads(l)["instance_id"] for l in f}
+    gold = {i.item_id: i.data["gold"] for i in items}
+    held_out = [i for i in preds if i not in trained_on and preds[i].value is not None]
+    assert len(held_out) >= 20
+    acc = sum(preds[i].value == gold[i] for i in held_out) / len(held_out)
+    assert acc > 0.9

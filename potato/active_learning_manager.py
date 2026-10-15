@@ -78,6 +78,13 @@ class SentenceTransformerVectorizer:
         self.model_name = model_name
         self._model = None
 
+    def __sklearn_tags__(self):
+        # Inside a Pipeline, scikit-learn >= 1.6 asks every step for its tags
+        # and warns (an error from 1.8) when a step cannot give them. The
+        # default estimator tags are right for a stateless embedder.
+        from sklearn.base import BaseEstimator
+        return BaseEstimator.__sklearn_tags__(self)
+
     def fit(self, X, y=None):
         from sentence_transformers import SentenceTransformer
         self._model = SentenceTransformer(self.model_name)
@@ -119,15 +126,18 @@ def make_image_vectorizer(model_name: str = None, cache_dir: str = None,
 VISUAL_SCHEMA_TYPES = {"image_annotation", "video_annotation"}
 
 
-def feature_for_item(item, schema_type: str, source_field: str = None) -> str:
+def feature_for_item(item, schema_type: str, source_field: str = None,
+                     reads_images: bool = False) -> str:
     """
     What the vectorizer should see for one item.
 
-    Text for a text schema; the image reference for a visual one. This single
-    branch is the whole of what made active learning text-only: every strategy
-    already worked on whatever features it was handed.
+    Text for a text schema; the image reference for a visual one, or for any
+    scheme when the vectorizer reads images (a radio or multiselect scheme
+    over images is image classification). This single branch is the whole of
+    what made active learning text-only: every strategy already worked on
+    whatever features it was handed.
     """
-    if schema_type in VISUAL_SCHEMA_TYPES:
+    if schema_type in VISUAL_SCHEMA_TYPES or reads_images:
         data = getattr(item, "data", None) or {}
         if source_field and data.get(source_field):
             return str(data[source_field])
@@ -135,6 +145,7 @@ def feature_for_item(item, schema_type: str, source_field: str = None) -> str:
                     "video_url", "url"):
             if data.get(key):
                 return str(data[key])
+    # Otherwise the study's text_key names the image (text_key: image_url).
     return item.get_text()
 
 
@@ -503,7 +514,18 @@ VECTORIZER_ALIASES = {
     "sentence_transformers": "sentence-transformers",
     "sentence-transformers": "sentence-transformers",
     "embeddings": "sentence-transformers",
+    # Images: CLIP embeddings of each item's image (potato.vision_features).
+    "image": "image",
+    "clip": "image",
+    "images": "image",
+    "text": "sklearn.feature_extraction.text.TfidfVectorizer",
 }
+
+
+def vectorizer_reads_images(name: str) -> bool:
+    """Whether a vectorizer takes image references rather than text."""
+    name = str(name or "")
+    return name == "image" or "ImageEmbedding" in name
 
 
 def resolve_classifier_name(name: str) -> str:
@@ -1083,7 +1105,8 @@ class ActiveLearningManager:
                         text = feature_for_item(
                             item,
                             self.config.schema_types.get(schema_name, ""),
-                            self.config.schema_source_fields.get(schema_name))
+                            self.config.schema_source_fields.get(schema_name),
+                            vectorizer_reads_images(self.config.vectorizer_name))
                         training_data["texts"].append(text)
                         training_data["labels"].append(resolved_label)
                         training_data["instance_ids"].append(instance_id)
@@ -1320,6 +1343,10 @@ class ActiveLearningManager:
         elif self.config.vectorizer_name == "sentence-transformers":
             model_name = kwargs.pop("model_name", "all-MiniLM-L6-v2")
             return SentenceTransformerVectorizer(model_name=model_name)
+        elif self.config.vectorizer_name == "image":
+            return make_image_vectorizer(model_name=kwargs.pop("model_name", None),
+                                         cache_dir=kwargs.pop("cache_dir", None),
+                                         image_root=kwargs.pop("image_root", None))
         else:
             # Try to import dynamically
             try:
@@ -1364,7 +1391,8 @@ class ActiveLearningManager:
             if item:
                 unlabeled_instances.append(instance_id)
                 unlabeled_texts.append(
-                    feature_for_item(item, schema_type, source_field))
+                    feature_for_item(item, schema_type, source_field,
+                                     vectorizer_reads_images(self.config.vectorizer_name)))
 
         if not unlabeled_texts:
             self.logger.info("No unlabeled instances to reorder")
@@ -1581,7 +1609,8 @@ class ActiveLearningManager:
 
             text = feature_for_item(
                 item, self.config.schema_types.get(schema_name, ""),
-                self.config.schema_source_fields.get(schema_name))
+                self.config.schema_source_fields.get(schema_name),
+                vectorizer_reads_images(self.config.vectorizer_name))
 
             try:
                 probas = model.predict_proba([text])[0]
@@ -1823,6 +1852,7 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> Optional[Active
             for src, dest in mapping.items():
                 if src in nested:
                     kwargs.setdefault(dest, nested[src])
+
 
     # Honor the nested `active_learning.llm:` block (LLM cold-start / ICL).
     # The dataclass uses flat fields (llm_enabled / llm_config), so translate.

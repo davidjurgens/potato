@@ -81,17 +81,30 @@ class BundleStats:
                 "splits": dict(self.splits), "warnings": list(self.warnings)}
 
 
-def detect_modality(schemes: Sequence[Dict[str, Any]]) -> str:
-    """What kind of corpus this is, from the schemes being trained.
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif")
+
+
+def detect_modality(schemes: Sequence[Dict[str, Any]],
+                    rows: Optional[Sequence[Dict[str, Any]]] = None) -> str:
+    """What kind of corpus this is, from the schemes being trained and, for a
+    classification scheme, from what its items show.
 
     Text is the default because it is both the common case and the harmless
     one: a text trainer handed an image path fails loudly at fit time, whereas
-    an image trainer handed text tries to open a sentence as a file.
+    an image trainer handed text tries to open a sentence as a file. A radio
+    or multiselect scheme over images is an image classifier, though: when
+    most labelled rows name an image file, the corpus is images.
     """
     for scheme in schemes:
         modality = _MODALITY_BY_TYPE.get(scheme.get("annotation_type", ""))
         if modality:
             return modality
+    if rows:
+        def image_ref(row):
+            ref = str(row.get("media") or row.get("media_missing") or "").lower()
+            return ref.split("?")[0].endswith(_IMAGE_SUFFIXES)
+        if sum(1 for r in rows if image_ref(r)) >= 0.8 * len(rows):
+            return "image"
     return "text"
 
 
@@ -269,8 +282,19 @@ def _media_reference(item_data: Dict[str, Any],
     return None
 
 
+def _media_file(reference: str, task_dir: str, media_directory: str = "media") -> str:
+    """A media reference as a filesystem path. ``/media/x.jpg`` is the URL the
+    annotation page serves from ``<task_dir>/<media_directory>/``; read as a
+    path it pointed at /media, so an image study's files were never found."""
+    if reference.startswith("/media/"):
+        base = (media_directory if os.path.isabs(media_directory)
+                else os.path.join(task_dir, media_directory))
+        return os.path.join(base, reference[len("/media/"):])
+    return reference if os.path.isabs(reference) else os.path.join(task_dir, reference)
+
+
 def _link_media(reference: str, task_dir: str, media_dir: str,
-                stats: BundleStats) -> Optional[str]:
+                stats: BundleStats, media_directory: str = "media") -> Optional[str]:
     """Symlink one media file into the bundle, returning its bundle-relative path.
 
     Symlinks rather than copies: a run over a large image corpus would
@@ -281,8 +305,7 @@ def _link_media(reference: str, task_dir: str, media_dir: str,
         # A remote asset is the trainer's problem to fetch; record it as-is.
         return reference
 
-    source = reference if os.path.isabs(reference) else os.path.join(
-        task_dir, reference)
+    source = _media_file(reference, task_dir, media_directory)
     if not os.path.isfile(source):
         stats.n_media_missing += 1
         return None
@@ -328,6 +351,7 @@ def build_bundle(
     aggregation: str = "consensus",
     text_key: Optional[str] = None,
     include_media: bool = True,
+    include_unlabeled: bool = False,
 ) -> Tuple[BundleRef, BundleStats, Dict[str, List[str]]]:
     """Write a training bundle from an ``ExportContext``.
 
@@ -340,6 +364,10 @@ def build_bundle(
             changing it reshuffles held-out data into training and silently
             invalidates every earlier metric.
         aggregation: ``consensus`` (Dawid-Skene) or ``majority``.
+        include_unlabeled: also write the items nobody has labelled yet as an
+            ``unlabeled`` split, for the worker to predict on (write-back's
+            ``include_unlabeled``). Never trained or evaluated on, and not in
+            *split_ids*.
 
     Returns:
         ``(bundle, stats, split_ids)`` where *split_ids* maps a split name to
@@ -382,15 +410,37 @@ def build_bundle(
     label_index: Dict[str, List[str]] = {name: [] for name in schema_names}
     seen_labels: Dict[str, set] = {name: set() for name in schema_names}
     rows: List[Dict[str, Any]] = []
+    unlabeled_rows: List[Dict[str, Any]] = []
+    media_directory = config.get("media_directory") or "media"
+
+    def attach_media(row, item_data):
+        if not include_media:
+            return
+        source_field = by_name.get(schema_names[0], {}).get("source_field")
+        reference = _media_reference(item_data, source_field)
+        if reference:
+            linked = _link_media(reference, task_dir, media_dir, stats,
+                                 media_directory)
+            if linked:
+                row["media"] = linked
+            else:
+                row["media_missing"] = reference
+
+    def unlabeled(iid, item_data):
+        if include_unlabeled:
+            row = {"instance_id": iid,
+                   "text": str(item_data.get(text_key, "") or "")}
+            attach_media(row, item_data)
+            unlabeled_rows.append(row)
 
     for iid in instance_ids:
         resolved = references.get(iid)
-        if not resolved:
-            continue
-
         item_data = items.get(iid) or {}
         if not isinstance(item_data, dict):
             item_data = {"text": str(item_data)}
+        if not resolved:
+            unlabeled(iid, item_data)
+            continue
 
         targets: Dict[str, Any] = {}
         for name in schema_names:
@@ -413,6 +463,7 @@ def build_bundle(
 
         if not targets:
             stats.n_skipped_no_label += 1
+            unlabeled(iid, item_data)
             continue
 
         row: Dict[str, Any] = {
@@ -421,15 +472,7 @@ def build_bundle(
             "targets": targets,
         }
 
-        if include_media:
-            source_field = by_name.get(schema_names[0], {}).get("source_field")
-            reference = _media_reference(item_data, source_field)
-            if reference:
-                linked = _link_media(reference, task_dir, media_dir, stats)
-                if linked:
-                    row["media"] = linked
-                else:
-                    row["media_missing"] = reference
+        attach_media(row, item_data)
 
         rows.append(row)
 
@@ -458,6 +501,17 @@ def build_bundle(
         stats.splits[split_name] = len(split_rows)
         written_paths.append(path)
 
+    if unlabeled_rows:
+        # Predicted on, never trained or scored on, and kept out of split_ids:
+        # the run ledger's held-out records stay what they were.
+        path = os.path.join(dest, "unlabeled.jsonl")
+        with open(path, "w") as fh:
+            for row in unlabeled_rows:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        split_files["unlabeled"] = {"path": "unlabeled.jsonl", "format": "jsonl",
+                                    "n": len(unlabeled_rows), "predict_only": True}
+        written_paths.append(path)
+
     if not stats.splits.get("train"):
         stats.warnings.append(
             "The train split is empty. With %d labelled items and these split "
@@ -471,7 +525,7 @@ def build_bundle(
         "splits": split_files,
         "labels": label_index,
         "media_dir": "media",
-        "modality": detect_modality(schemes),
+        "modality": detect_modality(schemes, rows),
         "text_key": text_key,
         "split_seed": split_seed,
         "aggregation": aggregation,

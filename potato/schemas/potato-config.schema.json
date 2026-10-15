@@ -254,8 +254,7 @@
           "type": "boolean"
         },
         "endpoint_type": {
-          "default": "openai",
-          "description": "Which backend to talk to: openai, openai_vision, anthropic, anthropic_vision, gemini, huggingface, ollama, ollama_vision, openrouter, vllm, yolo, sam, sam3",
+          "description": "Which backend to talk to, required when ai_support is enabled: openai, openai_vision, anthropic, anthropic_vision, gemini, huggingface, ollama, ollama_vision, openrouter (or open_router), vllm, yolo. The decision models laya and systemone are refused here (they cannot write text; use them in solo_mode.labeling_models or as a labeling_engine decision source), and so are sam and sam3",
           "examples": [
             "vllm"
           ],
@@ -4711,7 +4710,7 @@
           "type": "string"
         },
         "auto_retrain": {
-          "description": "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`",
+          "description": "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`, `min_interval_s` (default 600, seconds since the last run), `update_frequency` (default 25, new annotations since the last run) and `params` (passed to the trainer)",
           "type": "object"
         },
         "device": {
@@ -4725,6 +4724,7 @@
           "type": "boolean"
         },
         "grace_seconds": {
+          "default": 20,
           "description": "Seconds a cancelled run is given to exit before it is killed",
           "type": "integer"
         },
@@ -4742,7 +4742,7 @@
         },
         "retain_runs": {
           "default": 5,
-          "description": "Finished runs kept on disk",
+          "description": "Finished runs kept in the run ledger. Older runs are dropped from it unless their predictions are still stored; run directories stay on disk",
           "type": "integer"
         },
         "split_seed": {
@@ -4751,7 +4751,19 @@
           "type": "integer"
         },
         "splits": {
-          "description": "Split fractions, e.g. train 0.8, validation 0.1, test 0.1",
+          "default": {
+            "test": 0.15,
+            "train": 0.7,
+            "val": 0.15
+          },
+          "description": "Split fractions as a mapping of train, val and test. Unset, 0.7 / 0.15 / 0.15. Membership is a seeded hash of the instance id, so it is stable across runs",
+          "examples": [
+            {
+              "test": 0.1,
+              "train": 0.8,
+              "val": 0.1
+            }
+          ],
           "type": "object"
         },
         "writeback": {
@@ -4766,8 +4778,10 @@
       "type": "object"
     },
     "num_annotators_per_item": {
-      "default": 3,
-      "description": "Target annotators per item. Either a plain count or a mapping carrying `default` plus overlap-sampling and adaptive-boost rules",
+      "description": "Target annotators per item. Either a plain count or a mapping carrying `default` plus overlap-sampling and adaptive-boost rules. Unset (with no max_annotations_per_item) or 0 means unlimited; a negative count is refused",
+      "examples": [
+        3
+      ],
       "type": [
         "integer",
         "object"

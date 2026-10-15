@@ -192,7 +192,9 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
     n_predictions = 0
     try:
         report.status("evaluating", "predicting on held-out items")
-        items = _predict_items(bundle, ["val", "test"])
+        # `unlabeled` is there when write-back's include_unlabeled is on:
+        # the items nobody has labelled, which is what a prelabel is for.
+        items = _predict_items(bundle, ["val", "test", "unlabeled"])
         if items:
             predictions_path = os.path.join(spec.workdir, PREDICTIONS_FILE)
             with open(predictions_path, "w") as fh:

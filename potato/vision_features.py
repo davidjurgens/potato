@@ -191,6 +191,13 @@ class ImageEmbeddingVectorizer:
 
     # -- sklearn surface ------------------------------------------------
 
+    def __sklearn_tags__(self):
+        # Inside a Pipeline, scikit-learn >= 1.6 asks every step for its tags
+        # and warns (an error from 1.8) when a step cannot give them. The
+        # default estimator tags are right for a stateless embedder.
+        from sklearn.base import BaseEstimator
+        return BaseEstimator.__sklearn_tags__(self)
+
     def fit(self, X=None, y=None):
         """Load the model. Lazy, exactly like the text vectorizer."""
         _require("sentence_transformers", "sentence-transformers",

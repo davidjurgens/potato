@@ -266,10 +266,12 @@ class TrainingManager:
         else:
             context = self._context_from_live_state()
 
+        writeback = (self.config.get("model_training", {}) or {}).get("writeback") or {}
         bundle, stats, split_ids = build_bundle(
             context, bundle_dir, run.schema_names,
             split_spec=self.split_spec, split_seed=self.split_seed,
-            aggregation=self.aggregation)
+            aggregation=self.aggregation,
+            include_unlabeled=bool(writeback.get("include_unlabeled", False)))
 
         store.record_run_items(self.config, run.run_id, split_ids)
         run.n_train = stats.splits.get("train", 0)

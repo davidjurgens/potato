@@ -444,3 +444,160 @@ class TestBootWeight:
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == "", (
             "listing trainers imported: %s" % result.stdout.strip())
+
+
+# --- image classification over a radio scheme; text studies with a url field --
+
+def _media_context(tmp, items, labels):
+    config = _config(tmp)
+    annotations = [{"instance_id": iid, "user_id": "alice",
+                    "labels": {"sentiment": {labels[iid]: True}}} for iid in items]
+    return config, types.SimpleNamespace(
+        config=config, annotations=annotations, items=items,
+        schemas=config["annotation_schemes"], output_dir=tmp, phase_responses={})
+
+
+class TestClassificationOverImages:
+    def test_a_radio_scheme_over_image_files_is_an_image_corpus(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            items, labels = {}, {}
+            for n in range(8):
+                path = os.path.join(tmp, "img%d.png" % n)
+                with open(path, "wb") as fh:
+                    fh.write(b"\x89PNG" + bytes(64))
+                items["i%d" % n] = {"id": "i%d" % n, "text": path, "image_url": path}
+                labels["i%d" % n] = "positive" if n < 4 else "negative"
+            config, ctx = _media_context(tmp, items, labels)
+            bundle, _, _ = build_bundle(ctx, os.path.join(tmp, "b"), ["sentiment"],
+                                        split_seed=1)
+            assert bundle.manifest["modality"] == "image"
+
+    def test_a_text_study_with_a_url_field_trains_on_the_text(self):
+        """Every row of a text study whose items carry `url` got that URL as
+        `media`, and the trainer fitted and predicted on the URLs."""
+        with tempfile.TemporaryDirectory() as tmp:
+            items, labels = {}, {}
+            for n, text in enumerate(POS + NEG):
+                iid = "i%02d" % n
+                items[iid] = {"id": iid, "text": text,
+                              "url": "https://example.org/review/%d" % n}
+                labels[iid] = "positive" if n < len(POS) else "negative"
+            config, ctx = _media_context(tmp, items, labels)
+            dest = os.path.join(tmp, "bundle")
+            bundle, _, _ = build_bundle(ctx, dest, ["sentiment"], split_seed=42)
+            assert bundle.manifest["modality"] == "text"
+            spec = TrainingSpec(
+                run_id="r1", trainer="sklearn-text",
+                schemas=schema_specs_from_config(
+                    config, ["sentiment"], {"sentiment": bundle.labels("sentiment")}),
+                bundle_dir=dest, workdir=os.path.join(tmp, "artifacts"),
+                params={"min_instances": 4})
+            trainer = registry.get_trainer("sklearn-text")
+            trainer.fit(spec, bundle, ProgressReporter())
+            with open(os.path.join(spec.workdir, "model_card.json")) as fh:
+                assert json.load(fh)["input"] == "text"
+            preds = {p.instance_id: p.payload["label"] for p in trainer.predict(
+                spec, spec.workdir,
+                [PredictItem("x1", "a wonderful and excellent film, I loved it",
+                             media="https://example.org/review/x1"),
+                 PredictItem("x2", "an awful tedious movie, I hated it",
+                             media="https://example.org/review/x2")],
+                ProgressReporter())}
+            assert preds == {"x1": "positive", "x2": "negative"}
+
+
+def _clip_available():
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    try:
+        from sentence_transformers import SentenceTransformer
+        SentenceTransformer("clip-ViT-B-32")
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+@pytest.mark.skipif(not _clip_available(), reason="CLIP (clip-ViT-B-32) not available offline")
+def test_an_image_classifier_trains_on_clip_embeddings_without_being_told():
+    from PIL import Image
+    import random
+    rng = random.Random(0)
+    with tempfile.TemporaryDirectory() as tmp:
+        items, labels = {}, {}
+        colours = {"positive": (200, 30, 30), "negative": (30, 30, 200)}
+        for n in range(40):
+            label = "positive" if n % 2 else "negative"
+            img = Image.new("RGB", (32, 32))
+            img.putdata([tuple(max(0, min(255, c + rng.randint(-40, 40)))
+                               for c in colours[label]) for _ in range(32 * 32)])
+            path = os.path.join(tmp, "img%d.png" % n)
+            img.save(path)
+            items["i%02d" % n] = {"id": "i%02d" % n, "text": path, "image_url": path}
+            labels["i%02d" % n] = label
+        config, ctx = _media_context(tmp, items, labels)
+        dest = os.path.join(tmp, "bundle")
+        bundle, _, _ = build_bundle(ctx, dest, ["sentiment"], split_seed=3)
+        spec = TrainingSpec(
+            run_id="r1", trainer="sklearn-text",
+            schemas=schema_specs_from_config(
+                config, ["sentiment"], {"sentiment": bundle.labels("sentiment")}),
+            bundle_dir=dest, workdir=os.path.join(tmp, "artifacts"),
+            params={"min_instances": 4})
+        trainer = registry.get_trainer("sklearn-text")
+        trainer.fit(spec, bundle, ProgressReporter())
+        with open(os.path.join(spec.workdir, "model_card.json")) as fh:
+            card = json.load(fh)
+        assert card["vectorizer"] == "clip" and card["input"] == "media"
+        test_ids = {r["instance_id"] for r in bundle.read_split("test")} | \
+                   {r["instance_id"] for r in bundle.read_split("val")}
+        assert test_ids
+        preds = {p.instance_id: p.payload["label"] for p in trainer.predict(
+            spec, spec.workdir,
+            [PredictItem(i, items[i]["text"], media=items[i]["image_url"]) for i in test_ids],
+            ProgressReporter())}
+        assert sum(preds[i] == labels[i] for i in test_ids) / len(test_ids) > 0.9
+
+
+class TestImageReferencesAsThePageServesThem:
+    def test_a_media_url_path_resolves_under_media_directory(self):
+        """`/media/x.png` is the URL the page uses; read as a filesystem path it
+        pointed at /media and every image was "missing"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "pics"))
+            items, labels = {}, {}
+            for n in range(6):
+                with open(os.path.join(tmp, "pics", "img%d.png" % n), "wb") as fh:
+                    fh.write(b"\x89PNG" + bytes(64))
+                items["i%d" % n] = {"id": "i%d" % n, "text": "/media/img%d.png" % n,
+                                    "image_url": "/media/img%d.png" % n}
+                labels["i%d" % n] = "positive" if n < 3 else "negative"
+            config, ctx = _media_context(tmp, items, labels)
+            config["media_directory"] = "pics"
+            bundle, stats, _ = build_bundle(ctx, os.path.join(tmp, "b"), ["sentiment"],
+                                            split_seed=1)
+            assert stats.n_media_linked == 6 and stats.n_media_missing == 0
+            assert bundle.manifest["modality"] == "image"
+
+    def test_an_image_run_leaves_out_rows_it_cannot_read(self):
+        """A remote URL or a missing file became a blank embedding and a
+        training row, with nothing said."""
+        from potato.training.trainers.sklearn_text import SklearnTextTrainer
+        trainer = SklearnTextTrainer()
+        logs = []
+
+        class Report(ProgressReporter):
+            def log(self, level, msg):
+                logs.append((level, msg))
+
+        bundle = types.SimpleNamespace(
+            read_split=lambda split: [
+                {"instance_id": "a", "targets": {"s": "x"}, "media": "media/aa/a.png"},
+                {"instance_id": "b", "targets": {"s": "y"}, "media": "https://example.org/b.png"},
+                {"instance_id": "c", "targets": {"s": "y"}, "media_missing": "/nowhere/c.png"}],
+            resolve_media=lambda m: "/bundle/" + m)
+        schema = types.SimpleNamespace(name="s", kind="nominal")
+        features, targets, ids = trainer._read_split(None, bundle, schema, "train",
+                                                     Report(), use_media=True)
+        assert ids == ["a"] and features == ["/bundle/media/aa/a.png"]
+        assert any(level == "warning" and "Left out 2" in msg for level, msg in logs)

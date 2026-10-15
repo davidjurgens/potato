@@ -453,8 +453,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "num_annotators_per_item": _D(
         "Target annotators per item. Either a plain count or a mapping carrying "
-        "`default` plus overlap-sampling and adaptive-boost rules",
-        type="integer|object", default=3, category=ASSIGN,
+        "`default` plus overlap-sampling and adaptive-boost rules. Unset (with "
+        "no max_annotations_per_item) or 0 means unlimited; a negative count "
+        "is refused",
+        type="integer|object", category=ASSIGN, example=3,
     ),
     "min_annotators_per_instance": _D(
         "DEPRECATED spelling of num_annotators_per_item, and read as it. "
@@ -596,10 +598,13 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="boolean", default=False, category=AI,
     ),
     "ai_support.endpoint_type": _D(
-        "Which backend to talk to: openai, openai_vision, anthropic, "
-        "anthropic_vision, gemini, huggingface, ollama, ollama_vision, "
-        "openrouter, vllm, yolo, sam, sam3",
-        type="string", default="openai", category=AI, example="vllm",
+        "Which backend to talk to, required when ai_support is enabled: "
+        "openai, openai_vision, anthropic, anthropic_vision, gemini, "
+        "huggingface, ollama, ollama_vision, openrouter (or open_router), "
+        "vllm, yolo. The decision models laya and systemone are refused here "
+        "(they cannot write text; use them in solo_mode.labeling_models or as "
+        "a labeling_engine decision source), and so are sam and sam3",
+        type="string", category=AI, example="vllm",
     ),
     "ai_support.ai_config": _D(
         "Everything about the model itself: model, base_url, api_key, "
@@ -634,9 +639,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "ai_support.ai_config.timeout": _D(
         "Seconds to wait for the model. Left out, each endpoint applies its "
-        "own: 30 for openai, anthropic, gemini, huggingface and vllm, 60 for "
-        "ollama and the openai/anthropic vision endpoints, 120 for "
-        "ollama_vision. There is no single default to quote here",
+        "own: 30 for openai, anthropic, gemini, huggingface, vllm and "
+        "openrouter, 60 for ollama and the openai/anthropic vision endpoints, "
+        "120 for ollama_vision. There is no single default to quote here",
         type="integer", category=AI, example=120,
     ),
     "ai_support.ai_config.include": _D(
@@ -2612,6 +2617,16 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Also train on machine labels a contract certified", type="boolean",
         default=True, category=AI,
     ),
+    "labeling_engine.distill.modality": _D(
+        "What the distilled model reads: text, image (each item's image file, "
+        "through CLIP embeddings), or auto (image when most items name an "
+        "image file)", type="string", default="auto", category=AI,
+        example="image",
+    ),
+    "labeling_engine.distill.image_field": _D(
+        "The item field holding the image, when it is not the text_key",
+        type="string", category=AI,
+    ),
     # === model_training =====================================================
     "model_training": _D(
         "Train models on the study's annotations from the admin Training page, "
@@ -2622,26 +2637,34 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Turn model training on", type="boolean", default=False, category=AI,
     ),
     "model_training.retain_runs": _D(
-        "Finished runs kept on disk", type="integer", default=5, category=AI,
+        "Finished runs kept in the run ledger. Older runs are dropped from it "
+        "unless their predictions are still stored; run directories stay on "
+        "disk", type="integer", default=5, category=AI,
     ),
     "model_training.grace_seconds": _D(
         "Seconds a cancelled run is given to exit before it is killed",
-        type="integer", category=AI,
+        type="integer", default=20, category=AI,
     ),
     "model_training.split_seed": _D(
         "Seed for the train/validation/test split", type="integer", default=0,
         category=AI,
     ),
     "model_training.splits": _D(
-        "Split fractions, e.g. train 0.8, validation 0.1, test 0.1",
-        type="object", category=AI,
+        "Split fractions as a mapping of train, val and test. Unset, 0.7 / "
+        "0.15 / 0.15. Membership is a seeded hash of the instance id, so it "
+        "is stable across runs",
+        type="object", default={"train": 0.7, "val": 0.15, "test": 0.15},
+        category=AI, example={"train": 0.8, "val": 0.1, "test": 0.1},
     ),
     "model_training.aggregation": _D(
         "How several annotators' labels become one training label",
         type="string", default="consensus", category=AI,
     ),
     "model_training.auto_retrain": _D(
-        "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`",
+        "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`, "
+        "`min_interval_s` (default 600, seconds since the last run), "
+        "`update_frequency` (default 25, new annotations since the last run) "
+        "and `params` (passed to the trainer)",
         type="object", category=AI,
     ),
     "model_training.max_wall_seconds": _D(
@@ -2669,6 +2692,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "model_training.writeback.field": _D(
         "Item field the prelabels are written to", type="string",
         default="predictions", category=AI,
+    ),
+    "model_training.writeback.include_unlabeled": _D(
+        "Also predict on, and prelabel, the items nobody has labelled yet "
+        "(otherwise only the held-out val and test items get predictions)",
+        type="boolean", default=False, category=AI,
     ),
     "solo_mode.refinement_loop": _D(
         "The automatic refine-evaluate-keep cycle over the labeling prompt",

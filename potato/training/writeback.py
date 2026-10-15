@@ -85,7 +85,7 @@ class WritebackReport:
     def summary(self) -> str:
         if not self.schemas_enabled:
             return ("No predictions were published: write-back is not enabled "
-                    "for any schema. Set training.writeback.schemas.")
+                    "for any schema. Set model_training.writeback.schemas.")
         if self.n_written:
             return "Published %d prediction(s) as prelabels." % self.n_written
         return ("Read %d prediction(s) and published none. See the skip "
@@ -226,6 +226,8 @@ def rehydrate_predictions(config: Dict[str, Any], item_manager) -> int:
         return 0
 
     field_name = settings.get("field", PREDICTION_FIELD)
+    min_confidence = float(settings.get("min_confidence", 0.0) or 0.0)
+    rejected = _rejected_keys(config)
     restored = 0
 
     try:
@@ -234,8 +236,23 @@ def rehydrate_predictions(config: Dict[str, Any], item_manager) -> int:
         logger.debug("Could not read stored predictions", exc_info=True)
         return 0
 
+    # The same rules ingest_predictions applies. Every prediction is stored,
+    # its run's training items included, so replaying them all brought back
+    # at boot the prelabels the leak guard, the confidence floor and reviewer
+    # rejections had kept off.
+    train_ids: Dict[str, set] = {}
     for record in stored:
         if record["schema_name"] not in enabled:
+            continue
+        run_id = record.get("run_id") or ""
+        if run_id not in train_ids:
+            train_ids[run_id] = store.training_split_ids(config, run_id)
+        if record["instance_id"] in train_ids[run_id]:
+            continue
+        if (record["instance_id"], record["schema_name"]) in rejected:
+            continue
+        confidence = record.get("confidence")
+        if confidence is not None and float(confidence) < min_confidence:
             continue
         if item_manager.set_prediction(record["instance_id"],
                                        record["schema_name"],

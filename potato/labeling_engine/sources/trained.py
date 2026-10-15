@@ -60,10 +60,23 @@ class TrainedSource(Source):
             def metric(self, *a, **k): pass
             def should_stop(self): return False
 
+        # An image tier reads each item's image file. An item whose image is
+        # not stored locally gets no prediction (it abstains below): a blank
+        # embedding would still produce a confident-looking label.
+        image = self._opt("modality") == "image"
+        if image:
+            from .base import image_reference, local_image_file
+            files = {i.item_id: local_image_file(
+                self.app_config, image_reference(i, self._opt("image_field")))
+                for i in items}
+            asked = [PredictItem(instance_id=i.item_id, text=i.text,
+                                 media=files[i.item_id])
+                     for i in items if files[i.item_id]]
+        else:
+            asked = [PredictItem(instance_id=i.item_id, text=i.text) for i in items]
+
         def run_all(_prompt):
-            recs = trainer.predict(spec, art, [PredictItem(instance_id=i.item_id,
-                                                           text=i.text) for i in items],
-                                   _Quiet())
+            recs = trainer.predict(spec, art, asked, _Quiet()) if asked else []
             return ({r.instance_id: [r.payload.get("label"), r.confidence] for r in recs},
                     None)
 

@@ -1840,6 +1840,22 @@ def load_all_data(config: dict):
     # cot_trace display + process_reward schema). Must run after items load so
     # every static item is segmented before assignment/rendering.
     apply_cot_segmentation_to_all(config)
+    # Replay model predictions from previous training runs back into item data.
+    # They are not durable on their own: item_data["predictions"] is populated
+    # from the input file at load time and nothing re-persists it, so without
+    # this every prelabel written at runtime vanishes on restart and the review
+    # queue empties itself each time the server bounces. After the items load:
+    # it ran from load_annotation_schematic_data, before any item existed, so
+    # the first prediction raised KeyError and nothing was ever restored.
+    if config.get("model_training", {}).get("enabled", False):
+        try:
+            from potato.training.writeback import rehydrate_predictions
+            restored = rehydrate_predictions(config, get_item_state_manager())
+            if restored:
+                logger.info("Restored %d model prediction(s) from earlier "
+                            "training runs", restored)
+        except Exception as e:
+            logger.warning("Could not restore model predictions: %s", e)
     # Stamp per-item annotator caps for the overlap sample (must run before
     # user_data so that initial assignments see the heterogeneous caps).
     try:
@@ -1889,20 +1905,6 @@ def load_annotation_schematic_data(config: dict) -> None:
     usm.add_phase(UserPhase.ANNOTATION, config['annotation_task_name'],
                   html_template_fname)
 
-    # Replay model predictions from previous training runs back into item data.
-    # They are not durable on their own: item_data["predictions"] is populated
-    # from the input file at load time and nothing re-persists it, so without
-    # this every prelabel written at runtime vanishes on restart and the review
-    # queue empties itself each time the server bounces.
-    if config.get("model_training", {}).get("enabled", False):
-        try:
-            from potato.training.writeback import rehydrate_predictions
-            restored = rehydrate_predictions(config, get_item_state_manager())
-            if restored:
-                logger.info("Restored %d model prediction(s) from earlier "
-                            "training runs", restored)
-        except Exception as e:
-            logger.warning("Could not restore model predictions: %s", e)
 
 
 def load_highlights_data(config: dict) -> None:

@@ -14,6 +14,8 @@ redacts, caches, budgets and logs (see ``runtime/calls.py``).
 
 from __future__ import annotations
 
+import os
+
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..config.schema import SourceConfig
@@ -110,6 +112,31 @@ def local_media_path(app_config: Optional[Dict[str, Any]], ref: str) -> str:
     if os.path.isabs(ref):
         return ref
     return os.path.join(task_dir, ref)
+
+
+#: File endings read as images when deciding a study's modality.
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif")
+
+
+def image_reference(item, field: Optional[str] = None) -> str:
+    """The image an item shows: ``item.data[field]``, or its text (an image
+    study's text_key names the image)."""
+    value = item.data.get(field) if field else item.text
+    return str(value or "")
+
+
+def looks_like_image(ref: str) -> bool:
+    ref = (ref or "").strip().lower()
+    return ref.startswith("data:image/") or ref.split("?")[0].endswith(IMAGE_SUFFIXES)
+
+
+def local_image_file(app_config: Optional[Dict[str, Any]], ref: str) -> Optional[str]:
+    """A file this process can open for an image reference, or None. Remote
+    URLs are not downloaded: copy such images into the media directory."""
+    if not ref or ref.startswith(("http://", "https://", "data:")):
+        return None
+    path = local_media_path(app_config, ref)
+    return path if os.path.isfile(path) else None
 
 
 def build_endpoint(cfg: SourceConfig, temperature: Optional[float] = None,
