@@ -4,6 +4,24 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Fixes
+
+- **A deploy button backed up every deployment to the author's storage.**
+  `potato deploy button --hf-backup-repo` wrote the author's dataset into
+  `potato.deploy.yaml` with `restore_on_boot` on. A deployer without write
+  access to it got failing backups, one with write access sent their
+  annotations there, and a new deployment could restore the author's
+  annotators. Each deployer now names their own destination at deploy time:
+  `POTATO_BACKUP_HF_REPO`, or `POTATO_BACKUP_S3_BUCKET` with optional
+  `POTATO_BACKUP_S3_REGION` and `POTATO_BACKUP_S3_ENDPOINT`. Heroku and
+  Render ask for these with no default, and the AWS template takes them as
+  required stack parameters. `button` ignores `--hf-backup-repo`, `--hf-token`,
+  `--s3-bucket`, `--s3-region` and `--s3-endpoint` and says so. Regenerate an
+  existing button with `--force`. The Railway steps now warn that a template
+  shares the author's backup storage.
+- A backup sink whose dataset or bucket comes from an unset `${VAR}` logs an
+  error naming the variable instead of trying to back up to the literal text.
+
 ## [2.11.1] - Debug Without --host, Image Classifiers and Prelabels After a Restart
 
 This release restores `--debug` on the default bind, which 2.8.2 through

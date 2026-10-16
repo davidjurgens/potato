@@ -47,6 +47,12 @@ Railway publishes templates from its dashboard, not from a file in your
 repository. `potato deploy button config.yaml --target railway` prints the
 steps. See [Deploy buttons](deploy-buttons.md).
 
+A template copies your deployment, and that deployment fetches its project
+from your backup storage and backs up there. Everyone who deploys the template
+would share your dataset or bucket, and a new deployment could restore your
+annotators. Unless you want that, have each person run
+`potato deploy up --provider railway` with their own backup.
+
 ## Related
 
 - [Installing and running Potato](installation.md)

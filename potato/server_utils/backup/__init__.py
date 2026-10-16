@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import threading
 from dataclasses import dataclass, field
@@ -136,7 +137,32 @@ def safe_join(root: str, parts) -> Optional[str]:
     return target
 
 
+_UNSET_REFERENCE = re.compile(r"^\$\{(\w+)\}$")
+
+
+def _drop_unset(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Treat an empty value, or a ``${VAR}`` whose variable is not set, as absent.
+
+    A deploy button's config reads the destination from the environment, and
+    an optional variable the deployer left empty arrives either as "" or as
+    the literal reference. Neither is a bucket region or a repo name.
+    """
+    cleaned = dict(spec)
+    for key, value in spec.items():
+        if not isinstance(value, str):
+            continue
+        unset = _UNSET_REFERENCE.match(value.strip())
+        if unset and key in ("repo_id", "bucket"):
+            logger.error("The backup sink's %s comes from ${%s}, which is not "
+                         "set; set it to your own %s", key, unset.group(1),
+                         "dataset" if key == "repo_id" else "bucket")
+        if unset or not value.strip():
+            cleaned.pop(key)
+    return cleaned
+
+
 def _make_sink(spec: Dict[str, Any], config: Dict[str, Any]):
+    spec = _drop_unset(spec)
     kind = str(spec.get("type", "")).lower()
     if kind in ("huggingface", "hf"):
         from potato.server_utils.backup.hf_sink import HuggingFaceSink

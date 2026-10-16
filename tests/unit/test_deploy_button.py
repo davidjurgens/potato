@@ -52,7 +52,9 @@ class TestCommon:
         deployed = yaml.safe_load(result.files[f"studies/pilot/{DEPLOY_CONFIG}"])
         assert deployed["debug"] is False
         assert deployed["backup"]["restore_on_boot"] is True
-        assert deployed["backup"]["sinks"][0]["repo_id"] == "lab/study-annotations"
+        # The destination is the deployer's, read at deploy time; see
+        # TestTheDestinationIsTheDeployers.
+        assert deployed["backup"]["sinks"][0]["repo_id"] == "${POTATO_BACKUP_HF_REPO}"
 
     @pytest.mark.parametrize("target,reason", [
         ("heroku", "A Heroku button"), ("render", "A Render button"),
@@ -190,34 +192,149 @@ class TestCLI:
         assert (repo / "app.json").exists()
         assert "herokucdn.com/deploy/button.svg" in capsys.readouterr().out
 
-    def test_hf_backup_needs_a_repo_name(self, repo, capsys, monkeypatch):
+    def test_an_hf_button_needs_no_repo_name_or_token(self, repo, capsys, monkeypatch):
+        # It used to need --hf-backup-repo, or a token to look its owner up,
+        # because the author's dataset was written into the files.
         monkeypatch.delenv("HF_TOKEN", raising=False)
+        def no_network(*_args, **_kwargs):
+            raise AssertionError("the button asked HuggingFace who the token is")
+        monkeypatch.setattr(cli, "default_hf_repo", no_network)
         code = cli.main(["button", config_of(repo), "--target", "heroku",
                          "--backup", "hf"])
-        assert code == cli.EXIT_ERROR
-        assert "--hf-backup-repo" in capsys.readouterr().out
-
-    def test_dry_run_without_a_repo_name_stays_off_the_network(
-            self, repo, capsys, monkeypatch):
-        # It called whoami-v2 to name the dataset, so a dry run reached
-        # HuggingFace and a bad token ended in an HfHubHTTPError traceback.
-        def no_network(*_args, **_kwargs):
-            raise AssertionError("a dry run asked HuggingFace who the token is")
-        monkeypatch.setattr(cli, "default_hf_repo", no_network)
-        code = cli.main(["button", config_of(repo), "--target", "render",
-                         "--backup", "hf", "--hf-token", "x", "--dry-run"])
         assert code == cli.EXIT_OK
-        assert "<hf-account>/" in capsys.readouterr().out
+        assert "POTATO_BACKUP_HF_REPO" in (repo / "app.json").read_text()
 
-    def test_a_rejected_token_is_an_error_not_a_traceback(
-            self, repo, capsys, monkeypatch):
-        def rejected(*_args, **_kwargs):
-            raise RuntimeError("Invalid user token.")
-        monkeypatch.setattr(cli, "default_hf_repo", rejected)
+    def test_author_destination_flags_are_ignored_and_said_so(self, repo, capsys):
         code = cli.main(["button", config_of(repo), "--target", "render",
-                         "--backup", "hf", "--hf-token", "x"])
-        assert code == cli.EXIT_ERROR
+                         "--backup", "hf,s3", "--hf-backup-repo", "lab/pilot-annotations",
+                         "--s3-bucket", "lab-bucket", "--s3-region", "eu-west-2"])
+        assert code == cli.EXIT_OK
         out = capsys.readouterr().out
-        assert "could not ask HuggingFace" in out
-        assert "token.." not in out and "--hf-backup-repo" in out
-        assert not (repo / "render.yaml").exists()
+        assert "Ignored --hf-backup-repo, --s3-bucket, --s3-region" in out
+        for path in ("render.yaml", f"studies/pilot/{DEPLOY_CONFIG}"):
+            text = (repo / path).read_text()
+            assert "lab/pilot-annotations" not in text
+            assert "lab-bucket" not in text and "eu-west-2" not in text
+
+    def test_an_s3_button_needs_no_bucket(self, repo):
+        code = cli.main(["button", config_of(repo), "--target", "heroku",
+                         "--backup", "s3"])
+        assert code == cli.EXIT_OK
+
+
+AUTHOR = BackupOptions(kinds=["hf", "s3"], hf_token="hf_author_token",
+                       hf_repo="lab/pilot-annotations", s3_bucket="lab-bucket",
+                       s3_prefix="potato/pilot", s3_region="eu-west-2",
+                       s3_endpoint="https://lab.r2.example.com",
+                       s3_access_key_id="AKIAAUTHOR", s3_secret_access_key="authorsecret")
+AUTHOR_VALUES = ("lab/pilot-annotations", "lab-bucket", "eu-west-2",
+                 "lab.r2.example.com", "hf_author_token", "AKIAAUTHOR", "authorsecret")
+
+
+class TestTheDestinationIsTheDeployers:
+    """A button must never back a deployer's annotations up to the author's storage.
+
+    Through 2.11.1 the author's --hf-backup-repo was written into
+    potato.deploy.yaml with restore_on_boot on, so every deployment backed up
+    to the author's dataset and a new one restored the author's annotators.
+    """
+
+    @pytest.mark.parametrize("target", ["heroku", "render", "aws"])
+    def test_no_author_destination_or_credential_reaches_a_file(self, repo, target):
+        result = generate(config_of(repo), target, AUTHOR, name="pilot")
+        for path, content in result.files.items():
+            for value in AUTHOR_VALUES:
+                assert value not in content, f"{value} written into {path}"
+
+    @pytest.mark.parametrize("target", ["heroku", "render", "aws"])
+    def test_the_sinks_read_the_deployers_environment(self, repo, target):
+        result = generate(config_of(repo), target, AUTHOR, name="pilot")
+        sinks = yaml.safe_load(result.files[f"studies/pilot/{DEPLOY_CONFIG}"])[
+            "backup"]["sinks"]
+        assert sinks[0] == {"type": "huggingface", "repo_id": "${POTATO_BACKUP_HF_REPO}",
+                            "repo_type": "dataset", "private": True}
+        assert sinks[1] == {"type": "s3", "bucket": "${POTATO_BACKUP_S3_BUCKET}",
+                            "prefix": "potato/pilot",
+                            "region": "${POTATO_BACKUP_S3_REGION}",
+                            "endpoint_url": "${POTATO_BACKUP_S3_ENDPOINT}"}
+
+    def test_heroku_asks_for_the_destination_with_no_default(self, repo):
+        result = generate(config_of(repo), "heroku", AUTHOR, name="pilot")
+        env = json.loads(result.files["app.json"])["env"]
+        for key in ("POTATO_BACKUP_HF_REPO", "HF_TOKEN", "POTATO_BACKUP_S3_BUCKET",
+                    "POTATO_S3_ACCESS_KEY_ID", "POTATO_S3_SECRET_ACCESS_KEY"):
+            assert env[key]["required"] is True and "value" not in env[key], key
+        for key in ("POTATO_BACKUP_S3_REGION", "POTATO_BACKUP_S3_ENDPOINT"):
+            assert env[key]["required"] is False and "value" not in env[key], key
+
+    def test_render_asks_for_the_destination(self, repo):
+        result = generate(config_of(repo), "render", AUTHOR, name="pilot")
+        env = {v["key"]: v for v in
+               yaml.safe_load(result.files["render.yaml"])["services"][0]["envVars"]}
+        for key in ("POTATO_BACKUP_HF_REPO", "POTATO_BACKUP_S3_BUCKET",
+                    "POTATO_BACKUP_S3_REGION", "POTATO_BACKUP_S3_ENDPOINT"):
+            assert env[key] == {"key": key, "sync": False}
+
+    def test_aws_requires_the_destination_as_a_parameter(self, repo):
+        result = generate(config_of(repo), "aws", AUTHOR, name="pilot")
+        template = yaml.safe_load(result.files["potato-lightsail.cfn.yaml"])
+        params = template["Parameters"]
+        for name in ("HfBackupRepo", "S3Bucket"):
+            assert "Default" not in params[name] and params[name]["MinLength"] == 1
+        for name in ("S3Region", "S3Endpoint"):
+            assert params[name]["Default"] == ""
+        script = template["Resources"]["Instance"]["Properties"]["UserData"]["Fn::Sub"]
+        for line in ("POTATO_BACKUP_HF_REPO=${HfBackupRepo}",
+                     "POTATO_BACKUP_S3_BUCKET=${S3Bucket}",
+                     "POTATO_BACKUP_S3_REGION=${S3Region}",
+                     "POTATO_BACKUP_S3_ENDPOINT=${S3Endpoint}"):
+            assert line in script.splitlines()
+        referenced = set(re.findall(r"\$\{([\w:.]+)\}", script))
+        assert referenced <= set(params) | {"AWS::StackName"}
+
+    def test_an_hf_only_stack_asks_for_no_bucket(self, repo):
+        hf_only = BackupOptions(kinds=["hf"], hf_repo="lab/pilot-annotations")
+        result = generate(config_of(repo), "aws", hf_only, name="pilot")
+        params = yaml.safe_load(result.files["potato-lightsail.cfn.yaml"])["Parameters"]
+        assert "HfBackupRepo" in params and "S3Bucket" not in params
+
+
+class TestTheServerReadsTheDeployersDestination:
+    """The generated potato.deploy.yaml, as the deployed server loads it."""
+
+    def _sinks(self, repo, monkeypatch, env):
+        from potato.server_utils import backup as backup_module
+        from potato.server_utils.config_module import _substitute_llm_block_env_vars
+
+        for key in ("POTATO_BACKUP_HF_REPO", "POTATO_BACKUP_S3_BUCKET",
+                    "POTATO_BACKUP_S3_REGION", "POTATO_BACKUP_S3_ENDPOINT"):
+            monkeypatch.delenv(key, raising=False)
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        result = generate(config_of(repo), "heroku", AUTHOR, name="pilot")
+        config = yaml.safe_load(result.files[f"studies/pilot/{DEPLOY_CONFIG}"])
+        config = _substitute_llm_block_env_vars(config)
+        settings = backup_module.resolve_settings(config)
+        return [backup_module._make_sink(spec, config) for spec in settings.sinks]
+
+    def test_the_deployers_values_are_used(self, repo, monkeypatch):
+        hf, s3 = self._sinks(repo, monkeypatch, {
+            "POTATO_BACKUP_HF_REPO": "me/my-annotations",
+            "POTATO_BACKUP_S3_BUCKET": "my-bucket",
+            "POTATO_BACKUP_S3_REGION": "us-west-1"})
+        assert hf.repo_id == "me/my-annotations"
+        assert s3.bucket == "my-bucket" and s3.spec["region"] == "us-west-1"
+        # Optional and left unset: no endpoint, rather than a literal "${...}".
+        assert "endpoint_url" not in s3.spec
+
+    def test_an_empty_optional_value_is_no_value(self, repo, monkeypatch):
+        # Lightsail's env file writes POTATO_BACKUP_S3_REGION= when left blank.
+        _hf, s3 = self._sinks(repo, monkeypatch, {
+            "POTATO_BACKUP_S3_BUCKET": "my-bucket", "POTATO_BACKUP_S3_REGION": ""})
+        assert "region" not in s3.spec
+
+    def test_an_unset_destination_backs_up_nowhere(self, repo, monkeypatch, caplog):
+        hf, s3 = self._sinks(repo, monkeypatch, {})
+        assert hf.repo_id is None and s3.bucket is None
+        assert hf._check() is False and s3._check() is False
+        assert "POTATO_BACKUP_HF_REPO" in caplog.text

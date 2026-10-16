@@ -704,28 +704,14 @@ def cmd_button(args) -> int:
 
     name = args.name or slugify(_load_task_name(args.config_file))
     try:
-        # The token is supplied by whoever clicks the button; generation needs
-        # only the repo name, from --hf-backup-repo or a token's owner.
-        backup = backup_from_args(args, name, require_credentials=False)
-        if "hf" in backup.kinds and not backup.hf_repo:
-            if not backup.hf_token:
-                raise BackupOptionsError(
-                    "name the backup dataset with --hf-backup-repo <owner>/<name> "
-                    "(or pass --hf-token so its owner can be looked up)")
-            # A dry run stays off the network, as `up --dry-run` does.
-            if args.dry_run:
-                backup.hf_repo = f"<hf-account>/{name}-annotations"
-            else:
-                try:
-                    backup.hf_repo = default_hf_repo(backup.hf_token, name)
-                except BackupOptionsError:
-                    raise
-                except Exception as exc:
-                    raise BackupOptionsError(
-                        "could not ask HuggingFace who the token belongs to: "
-                        f"{str(exc).rstrip('.')}. Pass --hf-backup-repo "
-                        "<owner>/<name> to skip "
-                        "the lookup.")
+        # Whoever clicks the button supplies the destination and its
+        # credentials at deploy time, so generation needs neither.
+        backup = backup_from_args(args, name, require_credentials=False,
+                                  require_destination=False)
+        ignored = [flag for flag, attr in (
+            ("--hf-backup-repo", "hf_backup_repo"), ("--hf-token", "hf_token"),
+            ("--s3-bucket", "s3_bucket"), ("--s3-region", "s3_region"),
+            ("--s3-endpoint", "s3_endpoint")) if getattr(args, attr, None)]
         result = buttons.generate(args.config_file, args.target, backup, name=name,
                                   image=args.image, template_url=args.template_url,
                                   region=args.region)
@@ -747,6 +733,10 @@ def cmd_button(args) -> int:
             return EXIT_ERROR
         for path in written:
             _echo(f"wrote {path}")
+    if ignored:
+        _echo(f"Ignored {', '.join(ignored)}: each person who deploys the button "
+              "names their own backup destination and credentials at deploy "
+              "time, so yours are not written into the files.")
     for note in result.notes:
         _echo(note)
     if result.badge:

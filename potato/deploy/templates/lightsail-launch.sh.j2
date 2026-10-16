@@ -37,7 +37,8 @@ POTATO_ADMIN_API_KEY=$(openssl rand -hex 24)
 HF_TOKEN={{ '${HfToken}' }}
 POTATO_S3_ACCESS_KEY_ID={{ '${S3AccessKeyId}' }}
 POTATO_S3_SECRET_ACCESS_KEY={{ '${S3SecretAccessKey}' }}
-ENVEOF
+{% for env, parameter in backup_destination or [] %}{{ env }}={{ '${' ~ parameter ~ '}' }}
+{% endfor %}ENVEOF
 umask 022
 
 cat > /etc/systemd/system/potato.service <<'UNITEOF'

@@ -7,8 +7,7 @@ each host reads into your repository and prints the badge to put in your
 README:
 
 ```bash
-potato deploy button studies/pilot/config.yaml --target heroku \
-    --backup hf --hf-backup-repo lab/pilot-annotations
+potato deploy button studies/pilot/config.yaml --target heroku --backup hf
 git add app.json heroku.yml Dockerfile.potato .dockerignore studies/pilot/potato.deploy.yaml
 git commit -m "Add a Deploy to Heroku button" && git push
 ```
@@ -20,30 +19,62 @@ copy.
 
 No secrets are written. Heroku and Render generate the session key and the
 admin key when someone deploys. The AWS template generates them on the
-instance. Backup credentials are asked for at deploy time.
+instance.
+
+The backup destination is not written either. Each person who deploys the
+button names their own HuggingFace dataset or S3 bucket, along with its
+credentials, and `potato.deploy.yaml` reads them from the environment. Their
+annotations go to storage they own, and a new deployment restores only from
+that storage.
+
+## Settings each deployer supplies
+
+| Backup | Setting | Required |
+|---|---|---|
+| `--backup hf` | `POTATO_BACKUP_HF_REPO`: their dataset, as `<account>/<name>`. It is created, private, if it does not exist | yes |
+| | `HF_TOKEN`: a token with write access to that dataset | yes |
+| `--backup s3` | `POTATO_BACKUP_S3_BUCKET`: their bucket | yes |
+| | `POTATO_BACKUP_S3_REGION`: the bucket's region | no |
+| | `POTATO_BACKUP_S3_ENDPOINT`: an S3-compatible endpoint (R2, MinIO); empty for AWS | no |
+| | `POTATO_S3_ACCESS_KEY_ID`, `POTATO_S3_SECRET_ACCESS_KEY` | yes |
+
+Heroku asks for these as config vars and Render as Blueprint environment
+variables. Neither has a default. The AWS template takes them as stack
+parameters (`HfBackupRepo`, `HfToken`, `S3Bucket`, `S3Region`, `S3Endpoint`,
+`S3AccessKeyId`, `S3SecretAccessKey`). CloudFormation will not create the
+stack without the dataset or bucket. If one is missing on a running server,
+the server logs an error naming the variable and backs up nothing.
+
+The S3 key prefix, `potato/<name>` unless you pass `--s3-prefix`, is written
+into the files. It is a path inside the deployer's bucket.
+
+`--hf-backup-repo`, `--hf-token`, `--s3-bucket`, `--s3-region` and
+`--s3-endpoint` are ignored by `button`, and the command says so. Through
+2.11.1 `--hf-backup-repo` was written into `potato.deploy.yaml`, so every
+deployment backed up to the author's dataset and a new deployment restored the
+author's annotators from it. Regenerate a button made with 2.11.1 or earlier
+with `--force` and commit the result.
 
 ## Targets
 
 | `--target` | Files | What the person clicking needs |
 |---|---|---|
-| `heroku` | `app.json`, `heroku.yml`, `Dockerfile.potato` | a Heroku account and a backup token |
-| `render` | `render.yaml`, `Dockerfile.potato` | a Render account and a backup token |
-| `aws` | `potato-lightsail.cfn.yaml` | an AWS account; the repository must be public |
+| `heroku` | `app.json`, `heroku.yml`, `Dockerfile.potato` | a Heroku account and their own backup storage |
+| `render` | `render.yaml`, `Dockerfile.potato` | a Render account and their own backup storage |
+| `aws` | `potato-lightsail.cfn.yaml` | an AWS account and their own backup storage; the repository must be public |
 | `railway` | none (the command prints the steps) | a Railway account |
 
 The Heroku and Render buttons deploy onto disks that do not last, and nobody
-pulls from an AWS button's instance, so all three require `--backup`. The
-person clicking supplies the token or key; `--hf-backup-repo` names the dataset
-the backup goes to.
+pulls from an AWS button's instance, so all three require `--backup`.
 
 ### AWS: "Launch Stack"
 
 CloudFormation reads templates only from S3, so there is one more step:
 
 ```bash
-potato deploy button config.yaml --target aws --backup hf --hf-backup-repo lab/r
+potato deploy button config.yaml --target aws --backup hf
 aws s3 cp potato-lightsail.cfn.yaml s3://my-bucket/ --acl public-read
-potato deploy button config.yaml --target aws --backup hf --hf-backup-repo lab/r \
+potato deploy button config.yaml --target aws --backup hf \
     --template-url https://my-bucket.s3.amazonaws.com/potato-lightsail.cfn.yaml --force
 ```
 

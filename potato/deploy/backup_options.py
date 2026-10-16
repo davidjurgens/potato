@@ -82,7 +82,8 @@ class BackupOptions:
 
 
 def from_args(args, name: str, *, environ=None,
-              require_credentials: bool = True) -> BackupOptions:
+              require_credentials: bool = True,
+              require_destination: bool = True) -> BackupOptions:
     """Build options from parsed `up` arguments.
 
     ``--hf-token`` (or ``HF_TOKEN``) on its own still means an HF backup, which
@@ -132,7 +133,7 @@ def from_args(args, name: str, *, environ=None,
         raise BackupOptionsError(
             "An HF backup needs a HuggingFace token with write access: pass "
             "--hf-token or set HF_TOKEN.")
-    if "s3" in kinds and not s3_bucket:
+    if "s3" in kinds and not s3_bucket and require_destination:
         raise BackupOptionsError("An S3 backup needs --s3-bucket.")
     return options
 

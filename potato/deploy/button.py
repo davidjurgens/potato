@@ -9,6 +9,13 @@ block, ``potato.deploy.yaml``, is written beside it and the generated files
 point at that. Secrets are never written: Heroku and Render generate them at
 deploy time, and the Lightsail launch script generates them on the machine.
 
+The backup destination is not written either. Each person who clicks the
+button names their own dataset or bucket at deploy time, and
+``potato.deploy.yaml`` reads it from the environment (``DEPLOYER_BACKUP_ENV``).
+In 2.11.1 and earlier the author's ``--hf-backup-repo`` was written into the
+file, so every deployment backed up to the author's dataset, and with
+``restore_on_boot`` a new deployment restored the author's annotators.
+
 Targets:
 
 * ``heroku`` — app.json (container stack, generated secrets), heroku.yml and
@@ -31,6 +38,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import yaml
+
+import dataclasses
 
 from potato.deploy.backup_options import BackupOptions, apply_to_config
 from potato.deploy.preflight import harden_config
@@ -62,8 +71,37 @@ DOCKERIGNORE = [".git", "**/.potato", "**/annotation_output", "**/*.sqlite",
 GIT_PRIVATE = (".potato/", "admin_api_key.txt", "annotation_output/", "project.sqlite")
 
 
+#: Where a button deployment's backup goes, read from the deployer's
+#: environment through config env substitution. Nothing about the destination
+#: comes from the author.
+DEPLOYER_BACKUP_ENV = {
+    "hf_repo": "POTATO_BACKUP_HF_REPO",
+    "s3_bucket": "POTATO_BACKUP_S3_BUCKET",
+    "s3_region": "POTATO_BACKUP_S3_REGION",
+    "s3_endpoint": "POTATO_BACKUP_S3_ENDPOINT",
+}
+
+#: The CloudFormation parameter each of those comes from on the AWS target.
+_CFN_PARAMETER = {
+    "POTATO_BACKUP_HF_REPO": "HfBackupRepo",
+    "POTATO_BACKUP_S3_BUCKET": "S3Bucket",
+    "POTATO_BACKUP_S3_REGION": "S3Region",
+    "POTATO_BACKUP_S3_ENDPOINT": "S3Endpoint",
+}
+
+
 class ButtonError(ValueError):
     pass
+
+
+def deployer_backup(backup: BackupOptions) -> BackupOptions:
+    """The same backup kinds, with every destination read from the deployer.
+
+    The S3 prefix stays: it is a path inside the deployer's own bucket.
+    """
+    fields = {attr: f"${{{env}}}" for attr, env in DEPLOYER_BACKUP_ENV.items()}
+    return dataclasses.replace(backup, hf_token=None, s3_access_key_id=None,
+                               s3_secret_access_key=None, **fields)
 
 
 @dataclass
@@ -128,6 +166,7 @@ def generate(config_path: str, target: str, backup: BackupOptions, *, name: str,
             f"{_NEEDS_BACKUP[target]}, so the button needs a backup: pass "
             "--backup hf or --backup s3 --s3-bucket <bucket>.")
 
+    backup = deployer_backup(backup)
     result = ButtonResult()
     result.files[_join(project_rel, DEPLOY_CONFIG)] = deploy_config(config_path, backup)
     result.notes += _dockerignore_notes(root, result)
@@ -223,14 +262,34 @@ def _gitignore_notes(root: str, config_dir: str) -> List[str]:
             ".gitignore before you commit."]
 
 
-def _backup_env(backup: BackupOptions) -> Dict[str, str]:
-    """Credentials the person clicking the button must supply."""
-    wanted = {}
+@dataclass
+class DeployerInput:
+    description: str
+    required: bool = True
+    secret: bool = True
+
+
+def _backup_env(backup: BackupOptions) -> Dict[str, DeployerInput]:
+    """What the person clicking the button supplies: where, and the credentials."""
+    wanted: Dict[str, DeployerInput] = {}
     if "hf" in backup.kinds:
-        wanted["HF_TOKEN"] = "A HuggingFace token with write access, for the backup dataset."
+        wanted["POTATO_BACKUP_HF_REPO"] = DeployerInput(
+            "The HuggingFace dataset your annotations are backed up to, as "
+            "<account>/<name>. Use one your own account owns; it is created, "
+            "private, if it does not exist.", secret=False)
+        wanted["HF_TOKEN"] = DeployerInput(
+            "A HuggingFace token with write access to that dataset.")
     if "s3" in backup.kinds:
-        wanted["POTATO_S3_ACCESS_KEY_ID"] = "Access key for the backup bucket."
-        wanted["POTATO_S3_SECRET_ACCESS_KEY"] = "Secret key for the backup bucket."
+        wanted["POTATO_BACKUP_S3_BUCKET"] = DeployerInput(
+            "An S3 bucket you own, for the annotation backups.", secret=False)
+        wanted["POTATO_BACKUP_S3_REGION"] = DeployerInput(
+            "The bucket's region, such as us-east-1.", required=False, secret=False)
+        wanted["POTATO_BACKUP_S3_ENDPOINT"] = DeployerInput(
+            "Endpoint URL for an S3-compatible store (R2, MinIO). Leave it "
+            "empty for AWS S3.", required=False, secret=False)
+        wanted["POTATO_S3_ACCESS_KEY_ID"] = DeployerInput("Access key for that bucket.")
+        wanted["POTATO_S3_SECRET_ACCESS_KEY"] = DeployerInput(
+            "Secret key for that bucket.")
     return wanted
 
 
@@ -245,8 +304,8 @@ def _app_json(name: str, backup: BackupOptions) -> Dict:
                              "value": "1"},
         "POTATO_NONINTERACTIVE": {"value": "1"},
     }
-    for key, description in _backup_env(backup).items():
-        env[key] = {"description": description, "required": True}
+    for key, wanted in _backup_env(backup).items():
+        env[key] = {"description": wanted.description, "required": wanted.required}
     return {
         "name": f"Potato: {name}",
         "description": "A Potato annotation task.",
@@ -281,7 +340,8 @@ def _aws(result: ButtonResult, backup: BackupOptions, *, name: str, url: Optiona
          project_rel: str, image: str, template_url: Optional[str],
          region: str) -> ButtonResult:
     result.files["potato-lightsail.cfn.yaml"] = lightsail_template(
-        repo=url or "", project_path=project_rel or ".", image=image)
+        repo=url or "", project_path=project_rel or ".", image=image,
+        backup=backup)
     launch = "https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"
     if template_url:
         query = urllib.parse.urlencode({"templateURL": template_url,
@@ -305,7 +365,8 @@ def _aws(result: ButtonResult, backup: BackupOptions, *, name: str, url: Optiona
     return result
 
 
-def lightsail_template(*, repo: str, project_path: str, image: str) -> str:
+def lightsail_template(*, repo: str, project_path: str, image: str,
+                       backup: Optional[BackupOptions] = None) -> str:
     """A CloudFormation template: Lightsail instance + static IP + launch script."""
     from potato.deploy.providers.base import DeploySpec
     from potato.deploy.providers.vm_base import (
@@ -314,8 +375,14 @@ def lightsail_template(*, repo: str, project_path: str, image: str) -> str:
 
     spec = DeploySpec(name="button", config_path=DEPLOY_CONFIG, image=image)
     cert_dir = f"{DATA_DIR}/caddy"
+    # The backup destination, one parameter per value, with no default for a
+    # required one so CloudFormation will not create the stack without it.
+    destination = {env: wanted for env, wanted in
+                   _backup_env(backup or BackupOptions()).items()
+                   if env in _CFN_PARAMETER}
     launch = render_template(
         "lightsail-launch.sh.j2",
+        backup_destination=[(env, _CFN_PARAMETER[env]) for env in destination],
         app_dir=APP_DIR, data_dir=DATA_DIR, env_file=ENV_FILE,
         config_rel=DEPLOY_CONFIG, image=image, caddy_image=CADDY_IMAGE,
         ip_placeholder=IP_PLACEHOLDER,
@@ -348,6 +415,8 @@ def lightsail_template(*, repo: str, project_path: str, image: str) -> str:
                         "Description": "HuggingFace write token for the backup."},
             "S3AccessKeyId": {"Type": "String", "NoEcho": True, "Default": ""},
             "S3SecretAccessKey": {"Type": "String", "NoEcho": True, "Default": ""},
+            **{_CFN_PARAMETER[env]: _cfn_parameter(wanted)
+               for env, wanted in destination.items()},
         },
         "Resources": {
             "Instance": {
@@ -381,6 +450,15 @@ def lightsail_template(*, repo: str, project_path: str, image: str) -> str:
     return yaml.safe_dump(template, sort_keys=False, width=1000)
 
 
+def _cfn_parameter(wanted: DeployerInput) -> Dict:
+    parameter: Dict = {"Type": "String", "Description": wanted.description}
+    if not wanted.required:
+        parameter["Default"] = ""
+    else:
+        parameter["MinLength"] = 1
+    return parameter
+
+
 def _railway(name: str) -> ButtonResult:
     result = ButtonResult()
     result.notes = [
@@ -391,5 +469,10 @@ def _railway(name: str) -> ButtonResult:
         "  3. Mark POTATO_SECRET_KEY and POTATO_ADMIN_API_KEY as generated secrets "
         "and HF_TOKEN as required.",
         "  4. Publish; Railway gives you the button markdown.",
+        "WARNING: a template copies your deployment, and that deployment fetches "
+        "its project from your backup storage and backs up there. Everyone who "
+        "deploys the template would share your dataset and could restore your "
+        "annotators. Unless that is what you want, have each person run "
+        "`potato deploy up --provider railway` with their own backup instead.",
     ]
     return result
