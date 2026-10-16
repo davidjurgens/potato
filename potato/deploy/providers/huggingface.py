@@ -102,6 +102,7 @@ class HuggingFaceProvider(Provider):
     ignored_flags = ("domain", "size")
     name = "huggingface"
     requires = ("huggingface_hub",)
+    install_extra = "huggingface"
     ephemeral_fs = True
     public = True
     # Build and run logs are behind JWT-gated, undocumented endpoints. Reporting

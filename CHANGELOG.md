@@ -21,6 +21,9 @@ All notable changes to the Potato annotation platform are documented in this fil
   shares the author's backup storage.
 - A backup sink whose dataset or bucket comes from an unset `${VAR}` logs an
   error naming the variable instead of trying to back up to the literal text.
+- `potato deploy up --provider huggingface` without huggingface_hub said to
+  install `potato-annotation[deploy]`, which does not include it. It now says
+  `potato-annotation[huggingface]`.
 
 ## [2.11.1] - Debug Without --host, Image Classifiers and Prelabels After a Restart
 
