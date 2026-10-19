@@ -290,7 +290,7 @@ class TestGridViewConfig:
 
     @pytest.mark.parametrize("grid,fragment", [
         ({"scheme": "nope"}, "must name a top-level annotation scheme"),
-        ({"scheme": "t"}, "takes a radio or multiselect scheme"),
+        ({"scheme": "t"}, "takes a radio, multiselect or triage scheme"),
         ({"page_size": 0}, "from 1 to 200"),
         ({"page_size": "24"}, "from 1 to 200"),
     ])

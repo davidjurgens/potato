@@ -3100,12 +3100,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "grid_view": _D(
         "A page at /annotate/grid that labels many items at once for one "
-        "radio or multiselect scheme: select tiles, press a label",
+        "radio, multiselect or triage scheme: select tiles, press a label",
         type="object", category=UI,
     ),
     "grid_view.enabled": _D("Serve the grid page", type="boolean", default=False, category=UI),
     "grid_view.scheme": _D(
-        "The radio or multiselect scheme the grid labels. Other schemes are "
+        "The radio, multiselect or triage scheme the grid labels. Other schemes are "
         "answered on the normal page",
         type="string", category=UI,
     ),

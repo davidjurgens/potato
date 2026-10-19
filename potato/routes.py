@@ -2096,17 +2096,33 @@ def annotate_grid():
         tiles.append({"id": iid, "kind": kind,
                       "content": content if isinstance(content, str) else str(content)})
 
+    kind = scheme.get("annotation_type")
     labels = []
-    for index, label in enumerate(scheme.get("labels") or []):
-        name = label if isinstance(label, str) else (label or {}).get("name")
-        labels.append({"name": str(name), "key": str(index + 1) if index < 9 else ""})
+    if kind == "triage":
+        # The triage scheme's own buttons: its labels, its keys, and the value
+        # its hidden `decision` input stores, so the normal page shows a grid
+        # decision as if it had been made there.
+        from potato.server_utils.schemas import triage as triage_schema
+        for value, default_label in (("accept", triage_schema.DEFAULT_ACCEPT_LABEL),
+                                     ("reject", triage_schema.DEFAULT_REJECT_LABEL),
+                                     ("skip", triage_schema.DEFAULT_SKIP_LABEL)):
+            labels.append({"name": str(scheme.get(f"{value}_label", default_label)),
+                           "value": value,
+                           "key": str(scheme.get(f"{value}_key",
+                                                 triage_schema.DEFAULT_KEYBINDINGS[value]))})
+    else:
+        for index, label in enumerate(scheme.get("labels") or []):
+            name = str(label if isinstance(label, str) else (label or {}).get("name"))
+            labels.append({"name": name, "value": name,
+                           "key": str(index + 1) if index < 9 else ""})
 
     return render_template(
         "annotate_grid.html",
         title=config.get("annotation_task_name", "Annotation"),
         scheme_name=scheme["name"],
         scheme_description=scheme.get("description", ""),
-        multiple=scheme.get("annotation_type") == "multiselect",
+        multiple=kind == "multiselect",
+        scheme_kind=kind,
         labels=labels,
         tiles=tiles,
         n_annotated=len(annotated),
@@ -7077,6 +7093,17 @@ def update_instance():
                     request.json.get("annotations", {}),
                     {sc.get("name"): sc.get("annotation_type")
                      for sc in config.get("annotation_schemes") or [] if isinstance(sc, dict)}))
+
+        # A grid save carries the item's share of the page's active time; the
+        # item has no interaction events of its own (see grid-view.js).
+        grid_timing = request.json.get("grid_timing")
+        if (isinstance(grid_timing, dict) and request.json.get("source_view") == "grid"
+                and (config.get("grid_view") or {}).get("enabled")
+                and not is_phase_page_update):
+            from potato.interaction_tracking import get_or_create_behavioral_data
+            get_or_create_behavioral_data(
+                user_state.instance_id_to_behavioral_data, instance_id
+            ).record_bulk_time(grid_timing)
 
         # Consent, survey and other phase pages are not items: grading them
         # as attention checks or gold, counting them toward check frequency,

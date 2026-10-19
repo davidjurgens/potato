@@ -62,7 +62,12 @@ def _finished_at(behavior: Any) -> Optional[float]:
         end = getattr(behavior, "session_end", None)
     if times:
         return max(times)
-    return float(end) if end else None
+    if end:
+        return float(end)
+    # A grid save has no events of its own; it records when it was saved.
+    bulk = (behavior.get("bulk") if isinstance(behavior, dict)
+            else getattr(behavior, "bulk", None)) or {}
+    return float(bulk["saved_at"]) if bulk.get("saved_at") else None
 
 
 def _day(ts: Optional[float]) -> Optional[str]:

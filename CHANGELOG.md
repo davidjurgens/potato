@@ -6,6 +6,12 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Grid labeling: triage schemes, timing and a link.** The grid takes a
+  `triage` scheme, with the scheme's own labels and keys, and its decisions
+  show on the normal page. Grid saves now record time: the page measures its
+  own active time and gives each saved item an equal share, which the
+  Throughput tab counts. The annotation page's header links to the grid when
+  it is on. See *Grid Labeling*.
 - **Key-ordered polling for large buckets.** S3 and GCS sources in live
   prefix mode take `live_ingestion.listing: after_last_key`: each poll lists
   only the keys after the last one read, where the default lists the whole
@@ -188,6 +194,9 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **`live_ingestion` that is not a mapping is refused for every source type.**
+  Only database sources checked it; an S3, GCS or Azure source with
+  `live_ingestion: true` passed validation.
 - **The Langfuse poller ingested nothing.** It was started without the
   callback that adds a trace to the project, so every trace it fetched was
   dropped; it also read the trace list's observation ids as observations. It

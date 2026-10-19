@@ -2705,7 +2705,7 @@ def validate_phase_question_files(config_data: Dict[str, Any],
 
 
 def validate_grid_view_config(config_data: Dict[str, Any]) -> None:
-    """`grid_view` names one top-level radio or multiselect scheme."""
+    """`grid_view` names one top-level radio, multiselect or triage scheme."""
     grid = config_data.get("grid_view")
     if grid is None:
         return
@@ -2721,10 +2721,10 @@ def validate_grid_view_config(config_data: Dict[str, Any]) -> None:
             f"grid_view.scheme must name a top-level annotation scheme; "
             f"'{name}' is not one ({', '.join(map(str, schemes)) or 'none defined'})")
     kind = schemes[name].get("annotation_type")
-    if kind not in ("radio", "multiselect"):
+    if kind not in ("radio", "multiselect", "triage"):
         raise ConfigValidationError(
             f"grid_view.scheme '{name}' is a {kind}. The grid labels many items "
-            f"with one click, so it takes a radio or multiselect scheme.")
+            f"with one click, so it takes a radio, multiselect or triage scheme.")
     size = grid.get("page_size", 24)
     if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= 200:
         raise ConfigValidationError("grid_view.page_size must be a whole number from 1 to 200")
@@ -5703,6 +5703,9 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
                 f"'live_ingestion' (only {', '.join(LIVE_SOURCE_TYPES)})"
             )
         live_block = source.get("live_ingestion")
+        if live_block is not None and not isinstance(live_block, dict):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}).live_ingestion must be a dictionary")
         if (source_type in ("s3", "gcs", "azure_blob") and isinstance(live_block, dict)
                 and live_block.get("enabled") and not source.get("prefix")):
             raise ConfigValidationError(

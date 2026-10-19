@@ -28,18 +28,19 @@ from tests.helpers.test_utils import (
 
 
 class TestGridViewUI(unittest.TestCase):
+    SCHEMES = [{"annotation_type": "radio", "name": "sentiment",
+                "description": "Sentiment?", "labels": ["positive", "negative"]}]
+    GRID_SCHEME = "sentiment"
 
     @classmethod
     def setUpClass(cls):
-        cls.test_dir = create_test_directory("grid_view_ui")
+        cls.test_dir = create_test_directory(f"grid_view_ui_{cls.__name__}")
         items = [{"id": f"t{n}", "text": f"Headline number {n}"} for n in range(1, 9)]
         data_file = create_test_data_file(cls.test_dir, items)
         port = find_free_port(preferred_port=9896)
-        schemes = [{"annotation_type": "radio", "name": "sentiment",
-                    "description": "Sentiment?", "labels": ["positive", "negative"]}]
         cls.config_file = create_test_config(
-            cls.test_dir, schemes, data_files=[data_file], port=port,
-            additional_config={"grid_view": {"enabled": True, "scheme": "sentiment",
+            cls.test_dir, cls.SCHEMES, data_files=[data_file], port=port,
+            additional_config={"grid_view": {"enabled": True, "scheme": cls.GRID_SCHEME,
                                              "page_size": 6}})
         cls.server = FlaskTestServer(port=port, debug=False, config_file=cls.config_file)
         assert cls.server.start_server(), "Failed to start Flask server"
@@ -117,3 +118,33 @@ class TestGridViewUI(unittest.TestCase):
                    self.driver.find_elements(By.CSS_SELECTOR, "input[name='sentiment']")
                    if r.is_selected()]
         self.assertEqual(checked, ["positive"])
+
+
+class TestTriageGridUI(TestGridViewUI):
+    """A triage scheme in the grid: its own labels and keys, and the normal
+    triage page shows a grid decision as selected."""
+    SCHEMES = [{"annotation_type": "triage", "name": "keep", "description": "Keep it?"}]
+    GRID_SCHEME = "keep"
+    test_label_from_the_keyboard_save_and_see_it_on_the_normal_page = None
+
+    def test_triage_decisions_from_the_grid_show_on_the_normal_page(self):
+        self.driver.get(f"{self.server.base_url}/annotate/grid")
+        WebDriverWait(self.driver, 10).until(lambda d: len(self._tiles()) == 6)
+        tiles = self._tiles()
+        first_id = tiles[0].get_attribute("data-instance-id")
+        ActionChains(self.driver).click(tiles[0]).send_keys("1").perform()   # Keep
+        ActionChains(self.driver).click(self._tiles()[1]).send_keys("2").perform()  # Discard
+        self.assertEqual([self._chips(t) for t in self._tiles()[:2]], [["Keep"], ["Discard"]])
+
+        self.driver.find_element(By.ID, "grid-save").click()
+        WebDriverWait(self.driver, 10, ignored_exceptions=(StaleElementReferenceException,)).until(
+            lambda d: first_id not in [t.get_attribute("data-instance-id") for t in self._tiles()])
+
+        self.driver.get(f"{self.server.base_url}/annotate")
+        WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "instance_id")))
+        self.assertEqual(self.driver.find_element(By.ID, "instance_id").get_attribute("value"),
+                         first_id)
+        keep = self.driver.find_element(By.CSS_SELECTOR, ".triage-btn.triage-accept")
+        WebDriverWait(self.driver, 10).until(lambda d: "selected" in keep.get_attribute("class"))
+        self.assertNotIn("selected", self.driver.find_element(
+            By.CSS_SELECTOR, ".triage-btn.triage-reject").get_attribute("class"))

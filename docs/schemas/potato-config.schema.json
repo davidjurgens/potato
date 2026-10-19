@@ -3928,7 +3928,7 @@
     },
     "grid_view": {
       "additionalProperties": true,
-      "description": "A page at /annotate/grid that labels many items at once for one radio or multiselect scheme: select tiles, press a label",
+      "description": "A page at /annotate/grid that labels many items at once for one radio, multiselect or triage scheme: select tiles, press a label",
       "properties": {
         "enabled": {
           "default": false,
@@ -3941,7 +3941,7 @@
           "type": "integer"
         },
         "scheme": {
-          "description": "The radio or multiselect scheme the grid labels. Other schemes are answered on the normal page",
+          "description": "The radio, multiselect or triage scheme the grid labels. Other schemes are answered on the normal page",
           "type": "string"
         }
       },

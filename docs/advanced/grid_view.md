@@ -1,7 +1,7 @@
 # Grid Labeling
 
-The grid page labels many items at once for a single radio or multiselect
-scheme. The annotator selects a run of tiles, presses a label, and saves the
+The grid page labels many items at once for a single radio, multiselect or
+triage scheme. The annotator selects a run of tiles, presses a label, and saves the
 page. It suits short texts and images that take a second each to judge, which
 is where one-item-per-page navigation spends more time loading than labeling.
 
@@ -16,25 +16,28 @@ in the grid shows as answered on the normal page.
 ```yaml
 grid_view:
   enabled: true
-  scheme: sentiment     # a top-level radio or multiselect scheme
+  scheme: sentiment     # a top-level radio, multiselect or triage scheme
   page_size: 24         # items per page, 1 to 200
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `false` | Serve the grid at `/annotate/grid` |
-| `scheme` | required | The radio or multiselect scheme the grid labels |
+| `scheme` | required | The radio, multiselect or triage scheme the grid labels |
 | `page_size` | `24` | Items per page |
 
-The scheme must be a top-level `radio` or `multiselect`. A study with other
+The scheme must be a top-level `radio`, `multiselect` or `triage`. For a triage
+scheme the grid's buttons are the scheme's own labels and keys (Keep, Discard
+and Unsure on 1, 2 and 3 unless the scheme sets others), and a decision made in
+the grid shows on the normal page as if it had been made there. A study with other
 schemes as well can still use the grid for this one; the others are answered on
 the normal page.
 
 ## Using it
 
-Open `/annotate/grid` once logged in; the grid page links back to the normal one
-("One at a time"). Share that address with annotators: the normal page does not
-link to the grid.
+Open `/annotate/grid` once logged in, or use the **Grid** link in the
+annotation page's header. The grid page links back to the normal one ("One at
+a time").
 
 | Action | Mouse | Keyboard |
 |---|---|---|
@@ -42,7 +45,7 @@ link to the grid.
 | Select a range | Shift-click | Shift with an arrow key |
 | Add or remove one tile | Ctrl- or Cmd-click | Space |
 | Select every tile | | A |
-| Apply a label | Click the label | Its number, 1 to 9 |
+| Apply a label | Click the label | Its key, shown on the button (1 to 9 for radio and multiselect) |
 | Remove all labels (multiselect) | Clear | |
 
 For a radio scheme a label replaces whatever the tile had. For a multiselect
@@ -74,8 +77,12 @@ fewer.
   the normal page.
 - The grid shows only items the annotator has not answered. To revise an
   answer, use the normal page.
-- Per-item timing is not recorded for grid labels, since one decision covers
-  several items.
+- Timing is per page, not per item. The page measures its own active time (the
+  gaps between the annotator's clicks and keys, each capped at five minutes,
+  as on the normal page), and each save gives every item it saves an equal
+  share. The [Throughput tab](../administration/admin_dashboard.md) counts
+  those shares, so a grid annotator's items per hour are comparable with the
+  normal page's, but a grid item's own time is an average over its page.
 
 ## Example
 

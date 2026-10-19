@@ -337,6 +337,9 @@ class TestConfigValidation:
         self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
                         "live_ingestion": {"enabled": True, "listing": "after_last_key",
                                            "initial_cursor": "in/002.jsonl"}})
+        with pytest.raises(ConfigValidationError, match="live_ingestion must be a dictionary"):
+            self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
+                            "live_ingestion": "notadict"})
         with pytest.raises(ConfigValidationError, match="listing must be one of"):
             self._validate({"type": "gcs", "bucket": "b", "prefix": "in/",
                             "live_ingestion": {"enabled": True, "listing": "newest"}})

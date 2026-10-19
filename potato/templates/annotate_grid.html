@@ -24,12 +24,14 @@
 
 <main class="grid-main" id="grid-root"
       data-scheme="{{ scheme_name }}"
-      data-multiple="{{ 'true' if multiple else 'false' }}">
+      data-multiple="{{ 'true' if multiple else 'false' }}"
+      data-kind="{{ scheme_kind }}">
     <section class="grid-toolbar" aria-label="Labels">
         <p class="grid-question">{{ scheme_description }}</p>
         <div class="grid-labels" role="group" aria-label="Apply a label to the selected items">
             {% for label in labels %}
-            <button type="button" class="grid-label-btn" data-label="{{ label.name }}"
+            <button type="button" class="grid-label-btn" data-label="{{ label.value }}"
+                    data-name="{{ label.name }}"
                     {% if label.key %}data-key="{{ label.key }}" aria-keyshortcuts="{{ label.key }}"{% endif %}>
                 {% if label.key %}<kbd>{{ label.key }}</kbd>{% endif %}{{ label.name }}
             </button>
@@ -40,8 +42,8 @@
         </div>
         <p class="grid-help">
             Click a tile to select it; Shift-click selects a range and Ctrl or
-            Cmd-click adds one. Arrow keys move, Space selects, a number applies
-            that label, A selects every tile.
+            Cmd-click adds one. Arrow keys move, Space selects, a label's key
+            (shown on its button) applies it, A selects every tile.
             {% if multiple %}A label toggles on the selected tiles.{% endif %}
         </p>
         <p class="grid-status" aria-live="polite"></p>
@@ -70,6 +72,6 @@
     {% endif %}
 </main>
 
-<script src="{{ url_for('static', filename='grid-view.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='grid-view.js') }}?v=2"></script>
 </body>
 </html>

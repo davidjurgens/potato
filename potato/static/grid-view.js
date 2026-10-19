@@ -1,5 +1,5 @@
 /**
- * Grid labeling: one radio or multiselect scheme over a page of items.
+ * Grid labeling: one radio, multiselect or triage scheme over a page of items.
  *
  * Selection is local to the page. Saving posts each labelled tile to
  * /updateinstance in the same shape annotation.js sends, one request per item,
@@ -14,6 +14,10 @@
     if (!root) return;
     const scheme = root.dataset.scheme;
     const multiple = root.dataset.multiple === 'true';
+    const kind = root.dataset.kind || 'radio';
+    /** stored value -> the label's display name (they differ for triage) */
+    const names = new Map(Array.from(document.querySelectorAll('.grid-label-btn[data-label]'))
+        .map(b => [b.dataset.label, b.dataset.name || b.dataset.label]));
     const tiles = Array.from(document.querySelectorAll('.grid-tile'));
     const status = document.querySelector('.grid-status');
     const unlabelled = document.querySelector('.grid-unlabelled');
@@ -44,10 +48,10 @@
         const labels = Array.from(answers.get(tile.dataset.instanceId));
         const holder = tile.querySelector('.grid-tile-labels');
         holder.textContent = '';
-        labels.forEach(name => {
+        labels.forEach(value => {
             const chip = document.createElement('span');
             chip.className = 'grid-chip';
-            chip.textContent = name;
+            chip.textContent = names.get(value) || value;
             holder.appendChild(chip);
         });
         tile.classList.toggle('is-labelled', labels.length > 0);
@@ -80,7 +84,7 @@
             }
             render(tile);
         });
-        status.textContent = `${label} applied to ${chosen.length} item${chosen.length === 1 ? '' : 's'}.`;
+        status.textContent = `${names.get(label) || label} applied to ${chosen.length} item${chosen.length === 1 ? '' : 's'}.`;
     }
 
     function clearLabels() {
@@ -138,22 +142,48 @@
             anchor = current;
             return;
         }
-        if ((event.key === 'a' || event.key === 'A') && !event.ctrlKey && !event.metaKey) {
-            event.preventDefault();
-            tiles.forEach(t => setSelected(t, true));
-            return;
-        }
-        const button = document.querySelector(`.grid-label-btn[data-key="${CSS.escape(event.key)}"]`);
+        // A label's own key first: a triage scheme may bind "a" to Keep. Not
+        // with a modifier held: Cmd/Ctrl+C and +R must still copy and reload.
+        const chord = event.ctrlKey || event.metaKey || event.altKey;
+        const button = chord ? null
+            : document.querySelector(`.grid-label-btn[data-key="${CSS.escape(event.key)}"]`);
         if (button) {
             event.preventDefault();
             apply(button.dataset.label);
+            return;
+        }
+        if ((event.key === 'a' || event.key === 'A') && !event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
+            tiles.forEach(t => setSelected(t, true));
         }
     });
 
     // --------------------------------------------------------------- save
-    async function saveOne(instanceId, labels) {
+    // ------------------------------------------------------- active time
+    // No item on this page has events of its own, so the page measures its
+    // own active time -- the gaps between the annotator's actions, each
+    // capped like the server's BehavioralData.active_time_ms -- and each save
+    // gives the items it saves an equal share.
+    const IDLE_CAP_MS = 300000;
+    let lastAction = Date.now();
+    let activeMs = 0;
+    let activeAtLastSave = 0;
+    function noteAction() {
+        const now = Date.now();
+        activeMs += Math.min(Math.max(now - lastAction, 0), IDLE_CAP_MS);
+        lastAction = now;
+    }
+    ['pointerdown', 'keydown', 'wheel'].forEach(type =>
+        document.addEventListener(type, noteAction, { capture: true, passive: true }));
+
+    async function saveOne(instanceId, labels, timing) {
         const annotations = {};
-        labels.forEach(name => { annotations[`${scheme}:${name}`] = name; });
+        if (kind === 'triage') {
+            // The hidden input the triage page itself stores.
+            annotations[`${scheme}:::decision`] = labels[0];
+        } else {
+            labels.forEach(name => { annotations[`${scheme}:${name}`] = name; });
+        }
         const response = await fetch('/updateinstance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -164,6 +194,7 @@
                 span_annotations: [],
                 client_timestamp: new Date().toISOString(),
                 source_view: 'grid',
+                grid_timing: timing,
             }),
         });
         let body = {};
@@ -175,18 +206,26 @@
 
     if (saveButton) {
         saveButton.addEventListener('click', async () => {
-            const todo = tiles.filter(t => answers.get(t.dataset.instanceId).size);
+            // A retry after a partial failure re-sends only what did not save,
+            // so a saved item is neither posted nor timed twice.
+            const todo = tiles.filter(t => answers.get(t.dataset.instanceId).size
+                                           && !t.classList.contains('is-saved'));
             if (!todo.length) {
                 status.textContent = 'Label at least one item before saving.';
                 return;
             }
             saveButton.disabled = true;
             status.textContent = `Saving ${todo.length} item${todo.length === 1 ? '' : 's'}...`;
+            noteAction();
+            const pageMs = activeMs - activeAtLastSave;
+            activeAtLastSave = activeMs;
+            const timing = { page_items: todo.length, page_active_ms: pageMs,
+                             active_ms: Math.round(pageMs / todo.length) };
             const failed = [];
             for (const tile of todo) {
                 try {
                     await saveOne(tile.dataset.instanceId,
-                                  Array.from(answers.get(tile.dataset.instanceId)));
+                                  Array.from(answers.get(tile.dataset.instanceId)), timing);
                     tile.classList.add('is-saved');
                 } catch (error) {
                     failed.push(tile);

@@ -300,6 +300,12 @@
                     <i class="fas fa-gavel"></i> {{ ui_lang.adjudicate }}
                 </a>
                 {% endif %}
+                {% if grid_view_enabled | default(false) %}
+                <a href="{{ url_prefix }}/annotate/grid" class="adjudicate-btn"
+                   title="Label many items at once">
+                    <i class="fas fa-table-cells"></i> Grid
+                </a>
+                {% endif %}
                 {% if annotator_dashboard_enabled | default(false) %}
                 <a href="{{ url_prefix }}/progress" class="adjudicate-btn" title="View your progress">
                     <i class="fas fa-chart-line"></i> {{ ui_lang.progress | default('Progress') }}

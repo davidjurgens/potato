@@ -334,6 +334,11 @@ class BehavioralData:
     #: reading behavioural data gets it without knowing about a second store.
     #: A room answer is a group answer; nothing else in the record says so.
     room_provenance: Dict[str, Any] = field(default_factory=dict)
+    #: Time from a page that labels many items at once (the grid), where no
+    #: single item has events of its own: ``{view, page_items,
+    #: page_active_ms, active_ms, saved_at}``. ``active_ms`` is this item's
+    #: equal share of the page's active time, and active_time_ms() adds it.
+    bulk: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -367,6 +372,7 @@ class BehavioralData:
             'typing_summaries': self.typing_summaries,
             'annotation_telemetry': self.annotation_telemetry,
             'room_provenance': dict(self.room_provenance),
+            'bulk': dict(self.bulk),
         }
 
     @classmethod
@@ -423,6 +429,7 @@ class BehavioralData:
         bd.typing_summaries = data.get('typing_summaries', {})
         bd.annotation_telemetry = data.get('annotation_telemetry', {})
         bd.room_provenance = data.get('room_provenance', {}) or {}
+        bd.bulk = data.get('bulk', {}) or {}
 
         # States saved before total_time_ms was computed carry 0 beside a
         # full event log; derive it so old studies get real times too.
@@ -494,6 +501,30 @@ class BehavioralData:
                 event["final_annotation"] = value
             stamped += 1
         return stamped
+
+    #: The longest share one item can take from a grid page: an hour.
+    MAX_BULK_MS = 3_600_000
+
+    def record_bulk_time(self, timing: Dict[str, Any], view: str = "grid",
+                         now: Optional[float] = None) -> None:
+        """Store this item's share of a bulk page's active time.
+
+        The share comes from the page, which measured its own active time
+        (idle gaps capped as here) and split it equally among the items it
+        saved. Values are clamped: a share is never negative or over an hour.
+        """
+        def number(key, default=0):
+            try:
+                return max(0, int(float(timing.get(key, default))))
+            except (TypeError, ValueError):
+                return default
+        self.bulk = {
+            "view": view,
+            "page_items": max(1, number("page_items", 1)),
+            "page_active_ms": min(number("page_active_ms"), self.MAX_BULK_MS * 50),
+            "active_ms": min(number("active_ms"), self.MAX_BULK_MS),
+            "saved_at": time.time() if now is None else now,
+        }
 
     def record_decisions(self, chosen_by_schema: Dict[str, Any],
                          now: Optional[float] = None) -> int:
@@ -617,9 +648,10 @@ class BehavioralData:
         every instance: the dashboard showed 0h worked, 0 annotations per hour,
         and every annotator as answering faster than the "fast" threshold.
         """
+        bulk = int((self.bulk or {}).get("active_ms") or 0)
         events = [e for e in self.interactions if getattr(e, "timestamp", None) is not None]
         if len(events) < 2:
-            return 0
+            return bulk
         use_client = all(getattr(e, "client_timestamp", None) for e in events)
 
         def when(e):
@@ -631,7 +663,7 @@ class BehavioralData:
             if current.event_type == "navigation" and current.target == "instance_load":
                 continue
             total += min(max(when(current) - when(previous), 0.0), idle_cap_seconds)
-        return int(total * 1000)
+        return int(total * 1000) + bulk
 
     def refresh_total_time(self) -> None:
         """Recompute ``total_time_ms`` and ``session_end`` from the events."""

@@ -268,7 +268,9 @@ How fast each annotator works, and how often their work is sent back.
 - **Items per active hour** and **median time per item**, for the project and
   for each annotator. Active time comes from the annotator's own interaction
   events: the gaps between events, each capped at five minutes so an idle tab
-  does not count as work.
+  does not count as work. An item labelled on the [grid](../advanced/grid_view.md)
+  has no events of its own; it counts an equal share of its page's active time
+  and is dated by when it was saved.
 - Only saved items count. Time on an item that was opened and left counts
   towards nothing.
 - Attention-check and gold items are not work on the data, so they are

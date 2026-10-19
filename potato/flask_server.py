@@ -4043,6 +4043,9 @@ def render_page_with_annotations(username: str):
         judge_prediction=judge_prediction,
         # Labeling engine request on this item (blind / verify / resolve note)
         engine_request=engine_request,
+        # The header's "Grid" link. Annotation pages only: phase pages do not
+        # pass it, so consent and instructions show no link to the grid.
+        grid_view_enabled=bool((config.get("grid_view") or {}).get("enabled")),
         # No model assistance for this annotator on this item: the browser
         # tools (interactive and text-prompt segmentation) read it from
         # window.config. Phase pages leave it unset, which reads as false.

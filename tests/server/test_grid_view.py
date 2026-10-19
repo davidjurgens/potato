@@ -220,3 +220,79 @@ class TestAttentionChecks:
         redirected = session.get(f"{checked.base_url}/annotate/grid", allow_redirects=False)
         assert redirected.status_code == 302
         assert redirected.headers["Location"].endswith("/annotate")
+
+
+TRIAGE = {"annotation_type": "triage", "name": "keep", "description": "Keep this item?",
+          "accept_label": "Keep it", "accept_key": "a"}
+
+
+class TestFollowUps:
+    """Triage schemes in the grid, timing for grid saves, and the header link."""
+
+    @pytest.fixture(scope="class")
+    def triage(self):
+        test_dir = create_test_directory("grid_triage")
+        data_file = create_test_data_file(test_dir, ITEMS[:4])
+        port = find_free_port(preferred_port=9898)
+        config_file = create_test_config(
+            test_dir, [TRIAGE], data_files=[data_file], port=port,
+            additional_config={"admin_api_key": ADMIN_KEY,
+                               "grid_view": {"enabled": True, "scheme": "keep", "page_size": 4}})
+        server = FlaskTestServer(port=port, debug=False, config_file=config_file)
+        if not server.start():
+            pytest.fail("Failed to start server")
+        yield server
+        server.stop()
+        cleanup_test_directory(test_dir)
+
+    def test_a_triage_grid_uses_the_schemes_labels_keys_and_values(self, triage):
+        session = _login(triage, "tina")
+        tiles, html = _grid(triage, session)
+        soup = BeautifulSoup(html, "html.parser")
+        buttons = [(b["data-label"], b["data-name"], b.get("data-key"))
+                   for b in soup.select(".grid-label-btn")]
+        assert buttons == [("accept", "Keep it", "a"), ("reject", "Discard", "2"),
+                           ("skip", "Unsure", "3")]
+        assert soup.select_one("#grid-root")["data-kind"] == "triage"
+
+        # What grid-view.js sends for a triage tile, with its time share.
+        response = session.post(f"{triage.base_url}/updateinstance", json={
+            "instance_id": tiles[0], "annotations": {"keep:::decision": "accept"},
+            "cleared_schemas": [], "span_annotations": [], "source_view": "grid",
+            "grid_timing": {"page_items": 2, "page_active_ms": 9000, "active_ms": 4500}})
+        assert response.status_code == 200, response.text
+        stored = session.get(f"{triage.base_url}/get_annotations",
+                             params={"instance_id": tiles[0]}).json()
+        assert stored["label_values"]["keep"] == {"decision": "accept"}
+
+        bulk = session.get(f"{triage.base_url}/api/behavioral_data/{tiles[0]}").json()["bulk"]
+        assert (bulk["view"], bulk["active_ms"], bulk["page_items"]) == ("grid", 4500, 2)
+
+        # The same field on a normal save is ignored: only the grid sends it.
+        session.post(f"{triage.base_url}/updateinstance", json={
+            "instance_id": tiles[1], "annotations": {"keep:::decision": "reject"},
+            "cleared_schemas": [], "span_annotations": [],
+            "grid_timing": {"active_ms": 99999}})
+        other = session.get(f"{triage.base_url}/api/behavioral_data/{tiles[1]}")
+        assert other.status_code == 404 or not other.json().get("bulk")
+
+    def test_the_annotation_page_links_to_the_grid(self, triage):
+        page = _login(triage, "lena").get(f"{triage.base_url}/annotate").text
+        assert 'href="/annotate/grid"' in page
+
+    def test_no_link_and_no_grid_timing_when_the_grid_is_off(self):
+        server, test_dir = _server("grid_no_link", ITEMS[:2], {})
+        try:
+            session = _login(server, "omar")
+            page = session.get(f"{server.base_url}/annotate").text
+            assert "/annotate/grid" not in page
+            item = session.get(f"{server.base_url}/api/current_instance").json()["instance_id"]
+            session.post(f"{server.base_url}/updateinstance", json={
+                "instance_id": item, "annotations": {"sentiment:pos": "pos"},
+                "cleared_schemas": [], "span_annotations": [], "source_view": "grid",
+                "grid_timing": {"active_ms": 99999}})
+            data = session.get(f"{server.base_url}/api/behavioral_data/{item}")
+            assert data.status_code == 404 or not data.json().get("bulk")
+        finally:
+            server.stop()
+            cleanup_test_directory(test_dir)
