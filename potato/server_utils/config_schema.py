@@ -62,11 +62,10 @@ _REQUIRED_FIELD_ALTERNATIVES = {
     ("hierarchical_multiselect", "taxonomy"): ["taxonomy_preset"],
 }
 
-# data_sources[].type, from validate_data_sources_config().
-_DATA_SOURCE_TYPES = [
-    "file", "url", "google_drive", "dropbox",
-    "s3", "huggingface", "google_sheets", "database",
-]
+def _data_source_types():
+    """data_sources[].type: the loader's own enum, not a copy of it."""
+    from potato.data_sources.base import SourceType
+    return [t.value for t in SourceType]
 
 
 def _documented(path: str) -> Dict[str, Any]:
@@ -377,7 +376,7 @@ def build_config_schema() -> Dict[str, Any]:
         "items": {
             "type": "object",
             "required": ["type"],
-            "properties": {"type": {"enum": list(_DATA_SOURCE_TYPES)}},
+            "properties": {"type": {"enum": _data_source_types()}},
             "additionalProperties": True,
         },
     }

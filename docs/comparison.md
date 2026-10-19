@@ -125,7 +125,7 @@ Potato is designed for research annotation studies with built-in support for:
 
 ### Data Source Flexibility
 
-Load data from 8 source types: local files, URLs, Google Drive, Dropbox, Amazon S3, HuggingFace datasets, Google Sheets, and databases. Most tools only support local file upload.
+Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon S3, Google Cloud Storage, Azure Blob Storage, HuggingFace datasets, Google Sheets, and databases. Databases and the three object stores can also be polled for new data while a study runs. Most tools only support local file upload.
 
 ### Export Format Coverage
 
@@ -451,7 +451,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Export formats | 32 |
 | Import formats (15 CV, 5 text, 2 whole-project) | 22 |
 | AI/LLM endpoint types | 15 |
-| Data source types | 8 |
+| Data source types | 10 |
 | Assignment strategies | 13 |
 | Survey instruments | 55 |
 | Crowdsourcing integrations | 9 |

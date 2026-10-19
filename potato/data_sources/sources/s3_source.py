@@ -12,12 +12,13 @@ import socket
 from typing import Any, Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
-from potato.data_sources.base import DataSource, SourceConfig
+from potato.data_sources.base import SourceConfig
+from potato.data_sources.sources.object_store import ObjectInfo, ObjectStoreSource
 
 logger = logging.getLogger(__name__)
 
 
-class S3Source(DataSource):
+class S3Source(ObjectStoreSource):
     """
     Data source for Amazon S3 buckets.
 
@@ -30,8 +31,10 @@ class S3Source(DataSource):
     Configuration:
         type: s3
         bucket: "my-annotation-data"       # Required
-        key: "datasets/items.jsonl"        # Required
+        key: "datasets/items.jsonl"        # One object, or:
+        prefix: "incoming/"                # every data file under the prefix
         region: "us-east-1"                # Optional, default us-east-1
+        live_ingestion: {enabled: true}    # prefix mode: pick up new objects
 
         # Optional: explicit credentials (prefer env vars)
         access_key_id: "${AWS_ACCESS_KEY_ID}"
@@ -61,29 +64,15 @@ class S3Source(DataSource):
         """Initialize the S3 source."""
         super().__init__(config)
 
-        self._bucket = config.config.get("bucket", "")
-        self._key = config.config.get("key", "")
         self._region = config.config.get("region", "us-east-1")
         self._access_key_id = config.config.get("access_key_id")
         self._secret_access_key = config.config.get("secret_access_key")
         self._endpoint_url = config.config.get("endpoint_url")
-
-        self._cached_data: Optional[List[Dict]] = None
         self._client = None
-
-    def get_source_id(self) -> str:
-        """Get unique identifier."""
-        return self._source_id
 
     def validate_config(self) -> List[str]:
         """Validate source configuration."""
-        errors = []
-
-        if not self._bucket:
-            errors.append("'bucket' is required for S3 source")
-
-        if not self._key:
-            errors.append("'key' is required for S3 source")
+        errors = super().validate_config()
 
         # Check that both access key and secret are provided together
         if self._access_key_id and not self._secret_access_key:
@@ -160,105 +149,56 @@ class S3Source(DataSource):
         self._client = boto3.client('s3', **client_kwargs)
         return self._client
 
-    def _fetch_data(self) -> List[Dict[str, Any]]:
-        """Fetch and parse data from S3."""
+    def _uri(self, key: str) -> str:
+        return f"s3://{self._bucket}/{key}"
+
+    def _list_objects(self, prefix: str) -> List[ObjectInfo]:
         client = self._get_client()
-
+        objects: List[ObjectInfo] = []
         try:
-            response = client.get_object(Bucket=self._bucket, Key=self._key)
-            content = response['Body'].read()
-            content_type = response.get('ContentType', '')
-
-            logger.debug(
-                f"Downloaded s3://{self._bucket}/{self._key} "
-                f"({len(content)} bytes, {content_type})"
-            )
-
-            # Decode and parse
-            text = content.decode('utf-8-sig')
-            return self._parse_content(text, content_type)
-
-        except client.exceptions.NoSuchKey:
-            raise ValueError(
-                f"Object not found: s3://{self._bucket}/{self._key}"
-            )
+            for page in client.get_paginator("list_objects_v2").paginate(
+                    Bucket=self._bucket, Prefix=prefix):
+                for entry in page.get("Contents", []) or []:
+                    if entry["Key"].endswith("/"):
+                        continue  # a "folder" placeholder
+                    objects.append(ObjectInfo(entry["Key"], entry["LastModified"],
+                                              int(entry.get("Size") or 0)))
         except client.exceptions.NoSuchBucket:
             raise ValueError(f"Bucket not found: {self._bucket}")
+        return objects
+
+    def _read_object(self, key: str):
+        client = self._get_client()
+        try:
+            response = client.get_object(Bucket=self._bucket, Key=key)
+        except client.exceptions.NoSuchKey:
+            raise ValueError(f"Object not found: {self._uri(key)}")
+        except client.exceptions.NoSuchBucket:
+            raise ValueError(f"Bucket not found: {self._bucket}")
+        content = response["Body"].read()
+        logger.debug("Downloaded %s (%d bytes)", self._uri(key), len(content))
+        return content, response.get("ContentType", "")
+
+    def _fetch_data(self) -> List[Dict[str, Any]]:
+        try:
+            return super()._fetch_data()
+        except ValueError:
+            raise
         except Exception as e:
             raise RuntimeError(f"S3 error: {e}")
 
-    def _parse_content(
-        self,
-        text: str,
-        content_type: str = ""
-    ) -> List[Dict[str, Any]]:
-        """Parse file content based on content type or key extension.
-
-        Uses the shared parser, so CSV/TSV cells are verbatim, TSV has no
-        quoting, and a malformed JSON line is an error naming the line.
-        """
-        from potato.data_sources.parsing import format_for, parse_records
-        fmt = format_for(self._key)
-        if fmt is None:
-            if 'ndjson' in content_type or 'json' in content_type:
-                fmt = 'jsonl'
-            elif 'tab-separated' in content_type:
-                fmt = 'tsv'
-            elif 'csv' in content_type:
-                fmt = 'csv'
-        records = parse_records(text, fmt, f"s3://{self._bucket}/{self._key}")
-        if not records and fmt is None:
-            raise ValueError(
-                f"Could not parse content from s3://{self._bucket}/{self._key}"
-            )
-        return records
-
-    def read_items(
-        self,
-        start: int = 0,
-        count: Optional[int] = None
-    ) -> Iterator[Dict[str, Any]]:
-        """Read items from S3."""
-        if self._cached_data is None:
-            self._cached_data = self._fetch_data()
-
-        items = self._cached_data[start:]
-        if count is not None:
-            items = items[:count]
-
-        yield from items
-
-    def get_total_count(self) -> Optional[int]:
-        """Get total number of items."""
-        if self._cached_data is None:
-            try:
-                self._cached_data = self._fetch_data()
-            except Exception as e:
-                logger.error(f"Error fetching data: {e}")
-                return None
-
-        return len(self._cached_data)
-
-    def supports_partial_reading(self) -> bool:
-        """Partial reading is supported after initial fetch."""
-        return True
-
-    def refresh(self) -> bool:
-        """Refresh by clearing cached data."""
-        self._cached_data = None
-        return True
+    def _parse_content(self, text: str, content_type: str = "") -> List[Dict[str, Any]]:
+        """Parse one object's text (kept for callers of the old interface)."""
+        return self._parse(self._key or "data", text.encode("utf-8"), content_type)
 
     def get_status(self) -> Dict[str, Any]:
         """Get source status."""
         status = super().get_status()
-        status["bucket"] = self._bucket
-        status["key"] = self._key
         status["region"] = self._region
         status["endpoint_url"] = self._endpoint_url
-        status["cached"] = self._cached_data is not None
         return status
 
     def close(self) -> None:
         """Close the source."""
+        super().close()
         self._client = None
-        self._cached_data = None

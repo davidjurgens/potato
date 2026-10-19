@@ -3644,7 +3644,9 @@
               "s3",
               "huggingface",
               "google_sheets",
-              "database"
+              "database",
+              "gcs",
+              "azure_blob"
             ]
           }
         },

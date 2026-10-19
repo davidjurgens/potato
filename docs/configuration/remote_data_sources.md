@@ -6,7 +6,8 @@ Potato supports loading annotation data from various remote sources beyond local
 
 The data sources system extends Potato's data loading capabilities with:
 
-- **Multiple source types**: URLs, Google Drive, Dropbox, S3, Hugging Face, Google Sheets, SQL databases
+- **Multiple source types**: URLs, Google Drive, Dropbox, Amazon S3, Google Cloud Storage, Azure Blob Storage, Hugging Face, Google Sheets, SQL databases
+- **Live ingestion**: poll a database table, or an object-store prefix, for new data while the study runs
 - **Partial loading**: Load data in chunks for large datasets
 - **Incremental loading**: Auto-load more data as annotation progresses
 - **Caching**: Cache remote files locally to avoid repeated downloads
@@ -103,7 +104,8 @@ Load from S3 or S3-compatible storage:
 data_sources:
   - type: s3
     bucket: "my-annotation-data"
-    key: "datasets/items.jsonl"
+    key: "datasets/items.jsonl"   # one object, or
+    # prefix: "incoming/"         # every data file under the prefix
     region: "us-east-1"  # Optional, default: us-east-1
     # Optional: explicit credentials (prefer env vars or AWS credentials file)
     access_key_id: "${AWS_ACCESS_KEY_ID}"
@@ -112,7 +114,54 @@ data_sources:
     endpoint_url: "https://minio.example.com"
 ```
 
-**Dependencies**: `pip install boto3`
+**Dependencies**: `pip install "potato-annotation[s3]"` (boto3)
+
+#### Google Cloud Storage
+
+```yaml
+data_sources:
+  - type: gcs
+    bucket: "my-annotation-data"
+    prefix: "incoming/"            # or key: "datasets/items.jsonl"
+    credentials_file: "sa.json"    # Optional: a service-account key file
+    project: "my-project"          # Optional
+    # anonymous: true              # for a public bucket
+```
+
+Without `credentials_file`, the client uses Application Default Credentials:
+`gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or
+the service account attached on Google Cloud.
+
+**Dependencies**: `pip install "potato-annotation[gcs]"` (google-cloud-storage)
+
+#### Azure Blob Storage
+
+```yaml
+data_sources:
+  - type: azure_blob
+    container: "annotation-data"
+    prefix: "incoming/"            # or key: "datasets/items.jsonl"
+    connection_string: "${AZURE_STORAGE_CONNECTION_STRING}"
+    # or:
+    # account_url: "https://myaccount.blob.core.windows.net"
+    # credential: "${AZURE_STORAGE_SAS_TOKEN}"   # SAS token or account key;
+    #                                            # omit for a public container
+```
+
+**Dependencies**: `pip install "potato-annotation[azure]"` (azure-storage-blob)
+
+#### Key or prefix
+
+The three object stores take either `key` or `prefix`, not both:
+
+- `key` reads one object.
+- `prefix` reads every `.json`, `.jsonl`, `.ndjson`, `.csv` and `.tsv` object
+  under the prefix, in key order, and skips anything else (images, READMEs).
+
+The format comes from the file extension, or from the object's content type
+when the extension does not say. As for S3's `endpoint_url`, an Azure
+`account_url` or connection-string endpoint that resolves to a loopback or
+link-local address is refused.
 
 #### Hugging Face Datasets
 
@@ -289,6 +338,38 @@ Each reports `polls_total`, `polls_failed`, `rows_fetched`, `items_added`, `dupl
 - **Set an explicit `id`.** Without one, the generated id encodes the source's position in the list, so reordering `data_sources` would point a stored cursor at a different table.
 
 **Example project**: `examples/advanced/live-database-ingestion/`
+
+#### Live Ingestion (Object Stores)
+
+An S3, GCS or Azure source in `prefix` mode can be polled the same way.
+Each object that appears under the prefix adds its rows while the study runs:
+
+```yaml
+data_sources:
+  - id: incoming            # set an id, as for databases
+    type: gcs
+    bucket: "my-annotation-data"
+    prefix: "incoming/"
+    live_ingestion:
+      enabled: true
+      poll_interval_seconds: 30
+```
+
+There is no cursor column to choose. The cursor is each object's
+last-modified time, and rows are taken in the order (modified time, key, row
+number). A poll that stops part-way through a large object resumes at the
+next row of that object.
+
+The other live options (`batch_size`, `safety_lag_seconds`,
+`stop_after_items`, backoff, `replay_on_start`) behave as described above.
+`safety_lag_seconds` holds back objects modified within the lag, which helps
+with a writer that uploads in several steps. `live_ingestion` without a
+`prefix` is refused at startup.
+
+**Write new objects; do not edit old ones.** An object uploaded again gets a
+new modified time, so its rows are read again. Ids already in the item pool
+are dropped as duplicates, so a changed row is not picked up. Add changes as
+new rows with new ids in a new object.
 
 ### Partial/Incremental Loading
 

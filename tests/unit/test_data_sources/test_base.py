@@ -42,7 +42,8 @@ class TestSourceType:
         """Verify all expected source types are defined."""
         expected_types = [
             "file", "url", "google_drive", "dropbox",
-            "s3", "huggingface", "google_sheets", "database"
+            "s3", "huggingface", "google_sheets", "database",
+            "gcs", "azure_blob",
         ]
         actual_types = [t.value for t in SourceType]
         assert sorted(actual_types) == sorted(expected_types)

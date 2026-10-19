@@ -81,6 +81,10 @@ _AUTH_DEPS = [
 _LANGCHAIN_DEPS = [
     "langchain-core>=0.1.0",
 ]
+# Cloud storage data sources (data_sources: type s3 / gcs / azure_blob).
+_S3_DEPS = ["boto3>=1.26.0"]
+_GCS_DEPS = ["google-cloud-storage>=2.10"]
+_AZURE_DEPS = ["azure-storage-blob>=12.19"]
 # The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
 # in "all": FiftyOne brings its own MongoDB and a large dependency tree.
 _FIFTYONE_DEPS = [
@@ -208,6 +212,9 @@ setup(
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "fiftyone": _FIFTYONE_DEPS,
+        "s3": _S3_DEPS,
+        "gcs": _GCS_DEPS,
+        "azure": _AZURE_DEPS,
         "db": _DB_DEPS,
         "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,

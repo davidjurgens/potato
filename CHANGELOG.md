@@ -6,6 +6,14 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Google Cloud Storage and Azure Blob sources, prefixes, and live object
+  stores.** `data_sources` gains `type: gcs` and `type: azure_blob`, and S3,
+  GCS and Azure take `prefix` (every JSON, JSONL, CSV and TSV object under it)
+  as well as `key`. In prefix mode, `live_ingestion` picks up new objects
+  while the study runs, resuming part-way through an object when a batch
+  stops there. Live ingestion was database-only. The list of source types now
+  comes from one place (the loader's enum). Install with the `s3`, `gcs` or
+  `azure` extra. See *Remote Data Sources*.
 - **Throughput tab in the admin dashboard.** Items per active hour and the
   median active time per item, for the project, per annotator and per day,
   from each annotator's own interaction events (idle gaps capped at five

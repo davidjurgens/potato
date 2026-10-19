@@ -5630,11 +5630,10 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(data_sources, list):
         raise ConfigValidationError("data_sources must be a list")
 
-    # Valid source types
-    valid_types = [
-        "file", "url", "google_drive", "dropbox",
-        "s3", "huggingface", "google_sheets", "database"
-    ]
+    # One list of source types: the enum the loader builds sources from.
+    # This list and config_schema's were hand-kept copies of it.
+    from potato.data_sources.base import LIVE_SOURCE_TYPES, SourceType
+    valid_types = [t.value for t in SourceType]
 
     for i, source in enumerate(data_sources):
         if not isinstance(source, dict):
@@ -5654,14 +5653,21 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
                 f"Valid types: {', '.join(valid_types)}"
             )
 
-        # Live ingestion is cursor-based polling, which only the database
-        # source implements. Silently ignoring the block on other types would
-        # leave an admin believing polling was on when it was not.
-        if "live_ingestion" in source and source_type != "database":
+        # Live ingestion is cursor-based polling: database tables, and object
+        # stores polled for new objects under a prefix. Silently ignoring the
+        # block on other types would leave an admin believing polling was on
+        # when it was not.
+        if "live_ingestion" in source and source_type not in LIVE_SOURCE_TYPES:
             raise ConfigValidationError(
                 f"data_sources[{i}] (type={source_type}) does not support "
-                f"'live_ingestion' (database sources only)"
+                f"'live_ingestion' (only {', '.join(LIVE_SOURCE_TYPES)})"
             )
+        live_block = source.get("live_ingestion")
+        if (source_type in ("s3", "gcs", "azure_blob") and isinstance(live_block, dict)
+                and live_block.get("enabled") and not source.get("prefix")):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion needs 'prefix': "
+                f"new rows arrive as new objects under it")
 
         # Type-specific validation
         _validate_data_source_by_type(source, source_type, i)
@@ -5710,11 +5716,21 @@ def _validate_data_source_by_type(source: Dict, source_type: str, index: int) ->
                 f"{prefix} (type=dropbox) requires 'access_token' when using 'path'"
             )
 
-    elif source_type == "s3":
-        if not source.get("bucket"):
-            raise ConfigValidationError(f"{prefix} (type=s3) requires 'bucket'")
-        if not source.get("key"):
-            raise ConfigValidationError(f"{prefix} (type=s3) requires 'key'")
+    elif source_type in ("s3", "gcs", "azure_blob"):
+        bucket_key = "container" if source_type == "azure_blob" else "bucket"
+        if not source.get(bucket_key):
+            raise ConfigValidationError(f"{prefix} (type={source_type}) requires '{bucket_key}'")
+        if not source.get("key") and not source.get("prefix"):
+            raise ConfigValidationError(
+                f"{prefix} (type={source_type}) requires 'key' (one object) or 'prefix' "
+                f"(every data file under it)")
+        if source.get("key") and source.get("prefix"):
+            raise ConfigValidationError(
+                f"{prefix} (type={source_type}) takes 'key' or 'prefix', not both")
+        if (source_type == "azure_blob" and not source.get("connection_string")
+                and not source.get("account_url")):
+            raise ConfigValidationError(
+                f"{prefix} (type=azure_blob) requires 'connection_string' or 'account_url'")
 
     elif source_type == "huggingface":
         if not source.get("dataset"):

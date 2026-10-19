@@ -24,6 +24,12 @@ class SourceType(Enum):
     HUGGINGFACE = "huggingface"
     GOOGLE_SHEETS = "google_sheets"
     DATABASE = "database"
+    GCS = "gcs"
+    AZURE_BLOB = "azure_blob"
+
+
+#: Source types that can be polled for new rows while the study runs.
+LIVE_SOURCE_TYPES = ("database", "s3", "gcs", "azure_blob")
 
 
 @dataclass
@@ -42,7 +48,11 @@ class LiveRow:
             ``.isoformat()`` on datetimes, so by the time a value reaches
             ``item`` the native type is gone -- and re-binding an ISO string
             against, say, a PostgreSQL ``timestamptz`` is not reliable.
-        row_id: The stringified id_key value.
+        row_id: The row's identity within the source: the stringified id
+            column value for a database; for an object store, the object key
+            and row number (the same mark as ``tiebreak_value``), since the
+            source does not know the project's ``id_key``. Deduplication never
+            reads it -- the worker dedupes on the item's own id.
         tiebreak_value: The RAW value of the tie-breaker column (the id column
             unless ``tiebreaker_column`` names another). Rows sharing a cursor
             value are ordered by it, and it is what the next read binds, so it
