@@ -116,6 +116,16 @@ def build_server(root: Optional[str] = None):
         return local.list_display_types()
 
     @mcp_server.tool()
+    def list_plugins(name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Installed plugins, from package metadata; nothing is imported.
+
+        Pass `name` to load one plugin and list the annotation and display
+        types it adds. A plugin's types work only in a config that lists the
+        plugin under `plugins:`.
+        """
+        return local.list_plugins(name)
+
+    @mcp_server.tool()
     def describe_display_type(name: str) -> Dict[str, Any]:
         """Required and optional keys for one `instance_display` field type."""
         return local.describe_display_type(name)

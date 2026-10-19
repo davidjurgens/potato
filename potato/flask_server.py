@@ -88,6 +88,7 @@ from potato.diversity_manager import (
     init_diversity_manager, get_diversity_manager, clear_diversity_manager
 )
 from potato.knowledge_base import init_kb_manager
+from potato.plugins import plugin_assets
 
 from potato.solo_mode import init_solo_mode_manager, get_solo_mode_manager
 from potato.solo_mode.routes import solo_mode_bp
@@ -2304,33 +2305,9 @@ def _keyword_entries_from_data(data, path):
 
 
 def _check_phase_schemes(schemes, source, phase_name):
-    """Refuse a phase file whose entries cannot be rendered, and say which.
-
-    The generator raises `KeyError: 'annotation_type'` and the boot aborts --
-    correct, since a phase the author asked for and did not get is never the
-    safe outcome, but the message names neither the file nor the entry. On a
-    survey file with a dozen questions that leaves the author reading all
-    twelve. Name the file, the position, and the question.
-    """
-    required = ("annotation_type", "name", "description")
-    problems = []
-    for index, scheme in enumerate(schemes or []):
-        if not isinstance(scheme, dict):
-            problems.append(
-                f"  entry {index}: expected a question object, got "
-                f"{type(scheme).__name__}")
-            continue
-        missing = [key for key in required if not scheme.get(key)]
-        if missing:
-            named = scheme.get("name") or scheme.get("description") or "(unnamed)"
-            problems.append(
-                f"  entry {index} ({named!r}) is missing: {', '.join(missing)}")
-    if problems:
-        raise ValueError(
-            f"{source} cannot be rendered as the '{phase_name}' phase.\n"
-            + "\n".join(problems)
-            + "\nEvery question needs annotation_type, name and description."
-        )
+    """See potato/server_utils/phase_files.py; `potato validate` runs the same check."""
+    from potato.server_utils.phase_files import check_phase_schemes
+    check_phase_schemes(schemes, source, phase_name, config.get("plugins") or [])
 
 
 def load_phase_data(config: dict) -> None:
@@ -2658,35 +2635,8 @@ def load_phase_data(config: dict) -> None:
 
 def get_phase_annotation_schemes(filename: str) -> list[dict]:
     '''Returns the annotation schemes for a phase from a file.'''
-
-    schemes = []
-    if not os.path.exists(filename):
-        raise Exception("Phase labeling schemes file %s does not exist" % filename)
-
-    if filename.endswith(".json"):
-        with open(filename, "rt", encoding="utf-8") as f:
-            schemes = json.load(f)
-        # Allow users to have specified a single scheme in the JSON file
-        if type(schemes) != list:
-            schemes = [schemes]
-    elif filename.endswith(".jsonl"):
-        with open(filename, 'rt', encoding='utf-8') as f:
-            for line_no, line in enumerate(f):
-                line = line.strip()
-                if not line:  # Skip empty lines
-                    continue
-                try:
-                    schemes.append(json.loads(line))
-                except json.JSONDecodeError as e:
-                    raise ValueError(
-                        f"Invalid JSON at line {line_no+1} in {filename}: {e}"
-                    ) from e
-    elif filename.endswith(".yaml") or filename.endswith(".yml"):
-        with open(filename, 'rt', encoding='utf-8') as f:
-            schemes = yaml.safe_load(f)
-    else:
-        raise Exception("Unknown file format for phase labeling schemes file %s" % filename)
-    return schemes
+    from potato.server_utils.phase_files import load_phase_schemes
+    return load_phase_schemes(filename)
 
 def get_abs_or_rel_path(fname: str, config: dict) -> str:
     """
@@ -5727,6 +5677,10 @@ def create_app(config_file=None):
             'annotation_codebook_url': _sanitize_codebook_url(config.get('annotation_codebook_url', '')),
             # Multilingual UI strings
             'ui_lang': ui_lang,
+            # Scripts and styles from loaded plugins (potato/plugins.py).
+            # Here rather than in the two page-render paths so every page
+            # built on the base template gets them.
+            'plugin_assets': plugin_assets(config.get('plugins')),
             # Project-level base CSS
             'PROJECT_BASE_CSS': project_base_css,
             # Header logo
@@ -6696,6 +6650,11 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'label':
         from potato.labeling_engine.cli import main as label_main
         sys.exit(label_main(sys.argv[2:]))
+
+    # ``plugins`` lists installed plugins, or loads one to check it.
+    if len(sys.argv) > 1 and sys.argv[1] == 'plugins':
+        from potato.plugins import main as plugins_main
+        sys.exit(plugins_main(sys.argv[2:]))
 
     # ``snapshot`` freezes a project under a citable id. See potato/snapshots.
     if len(sys.argv) > 1 and sys.argv[1] == 'snapshot':

@@ -28,6 +28,7 @@ from potato.mcp_server.tools_local import (  # noqa: F401
     list_config_keys,
     list_display_types,
     list_examples,
+    list_plugins,
     preview_config,
     validate_config,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "list_config_keys",
     "list_display_types",
     "list_examples",
+    "list_plugins",
     "preview_config",
     "validate_config",
 ]

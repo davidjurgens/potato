@@ -9665,6 +9665,39 @@
         ]
       }
     },
+    "/plugin-static/{plugin}/{filepath}": {
+      "get": {
+        "operationId": "get_serve_plugin_static",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "A static file from a loaded plugin's assets folder (potato/plugins.py).",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/pocket": {
       "get": {
         "operationId": "get_pocket_page",

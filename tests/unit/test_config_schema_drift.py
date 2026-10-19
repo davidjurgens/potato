@@ -139,6 +139,18 @@ class TestRegistriesAndSchemaAgree:
         )
 
 
+def _plugin_type_names(data):
+    """Type names the config's listed plugins register (examples/plugins)."""
+    names = data.get("plugins") or []
+    if not names:
+        return set()
+    from potato import plugins
+    from tests.helpers.plugins import example_plugins_installed
+    with example_plugins_installed():
+        loaded = plugins.load_plugins(names)
+        return {t for p in loaded for t in p.schemas + p.displays}
+
+
 class TestSchemaIsNotStricterThanTheServer:
     """
     Every config shipped in `examples/` must validate.
@@ -160,7 +172,13 @@ class TestSchemaIsNotStricterThanTheServer:
                 continue
             if not isinstance(data, dict):
                 continue
+            plugin_types = _plugin_type_names(data)
             for error in sorted(validator.iter_errors(data), key=lambda e: list(e.path)):
+                # The published schema lists built-in types only; a type a
+                # listed plugin provides is checked by the server, not here.
+                if error.path and error.path[-1] in ("annotation_type", "type") \
+                        and error.instance in plugin_types:
+                    continue
                 location = "/".join(str(p) for p in error.path) or "<root>"
                 failures.append(
                     f"{path.relative_to(REPO_ROOT)} :: {location}: {error.message}"

@@ -1,0 +1,2 @@
+[potato.plugins]
+counter = potato_plugin_example:register

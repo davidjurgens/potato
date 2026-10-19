@@ -89,7 +89,10 @@ class TestManifestContent:
     def test_every_annotation_type_is_registered(self, checked_in):
         from potato.server_utils.schemas.registry import schema_registry
 
-        registered = set(schema_registry.get_supported_types())
+        from tests.helpers.plugins import example_plugin_types
+
+        # Types from examples/plugins count: those examples list the plugin.
+        registered = set(schema_registry.get_supported_types()) | example_plugin_types()["schema"]
         unknown = {}
         for entry in checked_in["examples"]:
             for type_name in entry["annotation_types"]:
@@ -104,7 +107,9 @@ class TestManifestContent:
     def test_every_display_type_is_registered(self, checked_in):
         from potato.server_utils.displays import display_registry
 
-        registered = set(display_registry.get_supported_types())
+        from tests.helpers.plugins import example_plugin_types
+
+        registered = set(display_registry.get_supported_types()) | example_plugin_types()["display"]
         unknown = {}
         for entry in checked_in["examples"]:
             for type_name in entry["display_types"]:

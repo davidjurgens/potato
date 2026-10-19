@@ -37,6 +37,7 @@ def list_annotation_types() -> List[Dict[str, Any]]:
 
     The starting point for "what can this thing do".
     """
+    from potato.plugins import owner_of
     from potato.server_utils.schemas.registry import schema_registry
 
     return [
@@ -47,6 +48,9 @@ def list_annotation_types() -> List[Dict[str, Any]]:
                 f for f in s["required_fields"] if f not in ("name", "description")
             ],
             "optional_field_count": len(s["optional_fields"]),
+            # The plugin that provides the type, or None for a built-in. A
+            # config using a plugin type must list that plugin under `plugins:`.
+            "plugin": owner_of("schema", s["name"]),
         }
         for s in schema_registry.list_schemas()
     ]
@@ -93,6 +97,7 @@ def describe_annotation_type(name: str) -> Dict[str, Any]:
 
 def list_display_types() -> List[Dict[str, Any]]:
     """Every registered `instance_display` field type."""
+    from potato.plugins import owner_of
     from potato.server_utils.displays import display_registry
 
     return [
@@ -100,9 +105,45 @@ def list_display_types() -> List[Dict[str, Any]]:
             "name": d["name"],
             "description": d.get("description", ""),
             "supports_span_target": d.get("supports_span_target", False),
+            "plugin": owner_of("display", d["name"]),
         }
         for d in display_registry.list_displays()
     ]
+
+
+def list_plugins(name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Installed plugins, from package metadata only.
+
+    Nothing is imported: a plugin is Python that runs inside this process, and
+    asking what is installed should not run it. A plugin already loaded (by a
+    config that lists it) also shows its types. Pass ``name`` to load that one
+    plugin and see what it registers, as `potato plugins <name>` does.
+    """
+    from potato import plugins
+
+    installed = plugins.discover()
+    if name is not None and name not in installed:
+        return [{"name": name, "error": f"plugin '{name}' is not installed",
+                 "installed": sorted(installed)}]
+    found = []
+    for plugin_name, entry_point in sorted(installed.items()):
+        if name is not None and plugin_name != name:
+            continue
+        package, version = plugins._package_of(entry_point)
+        row = {"name": plugin_name, "package": package, "version": version,
+               "entry_point": entry_point.value,
+               "loaded": plugin_name in plugins.loaded()}
+        if name is not None and not row["loaded"]:
+            try:
+                plugins.load_plugin(plugin_name)
+                row["loaded"] = True
+            except Exception as exc:  # noqa: BLE001 - report it
+                row["error"] = str(exc)
+        if row["loaded"]:
+            plugin = plugins.loaded()[plugin_name]
+            row.update(annotation_types=plugin.schemas, display_types=plugin.displays)
+        found.append(row)
+    return found
 
 
 def describe_display_type(name: str) -> Dict[str, Any]:

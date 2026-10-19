@@ -12,12 +12,13 @@
     "embodied": 1,
     "image": 16,
     "labeling-engine": 3,
+    "plugins": 1,
     "span": 11,
     "spatial": 2,
     "testing": 2,
     "video": 8
   },
-  "count": 221,
+  "count": 222,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -4519,6 +4520,29 @@
       "path": "examples/labeling-engine/text-certified-sentiment/config.yaml",
       "run": "potato start examples/labeling-engine/text-certified-sentiment/config.yaml -p 8000",
       "task_name": "engine-certified-sentiment"
+    },
+    {
+      "annotation_types": [
+        "counter",
+        "radio"
+      ],
+      "category": "plugins",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/plugins/counter",
+      "display_types": [
+        "word_count"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "counter",
+      "path": "examples/plugins/counter/config.yaml",
+      "run": "potato start examples/plugins/counter/config.yaml -p 8000",
+      "task_name": "Plugin example - counting people"
     },
     {
       "annotation_types": [

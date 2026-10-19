@@ -65,6 +65,7 @@ def cmd_tools(args) -> int:
         ("describe_annotation_type", "Fields and a working example for one type"),
         ("list_display_types", "Every instance_display field type"),
         ("describe_display_type", "Fields for one display type"),
+        ("list_plugins", "Installed plugins and the types they add"),
         ("list_config_keys", "Documented top-level config keys"),
         ("describe_config_key", "One config key by dotted path"),
         ("get_config_schema", "The full config JSON Schema"),

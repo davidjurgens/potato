@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "potato-plugin-example"
+version = "0.1.0"
+description = "Example Potato plugin: a counter annotation type and a word-count display"
+requires-python = ">=3.9"
+
+[project.entry-points."potato.plugins"]
+counter = "potato_plugin_example:register"
+
+[tool.setuptools]
+packages = ["potato_plugin_example"]
+
+[tool.setuptools.package-data]
+potato_plugin_example = ["static/*"]

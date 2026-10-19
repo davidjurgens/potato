@@ -734,6 +734,13 @@
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='annotation.js') }}?v=47"></script>
+    {# Plugins load after annotation.js so they can use its functions. #}
+    {% for href in (plugin_assets | default({})).get('styles', []) %}
+    <link rel="stylesheet" href="{{ url_prefix }}{{ href }}">
+    {% endfor %}
+    {% for src in (plugin_assets | default({})).get('scripts', []) %}
+    <script src="{{ url_prefix }}{{ src }}"></script>
+    {% endfor %}
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->

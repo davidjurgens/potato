@@ -459,6 +459,22 @@ def serve_media(filepath):
     return response
 
 
+def serve_plugin_static(plugin, filepath):
+    """A static file from a loaded plugin's assets folder (potato/plugins.py).
+
+    Only plugins the config loaded have a folder here; send_from_directory
+    refuses paths that leave it.
+    """
+    from flask import send_from_directory, abort
+
+    from potato.plugins import static_folder
+
+    folder = static_folder(plugin)
+    if folder is None:
+        abort(404)
+    return send_from_directory(folder, filepath)
+
+
 def serve_trace_screenshot(filepath):
     """Serve a static agent-trace screenshot referenced by trace data.
 
@@ -10709,6 +10725,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
+    app.add_url_rule("/plugin-static/<plugin>/<path:filepath>", "serve_plugin_static",
+                     serve_plugin_static, methods=["GET"])
     app.add_url_rule("/health", "health", health, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
     app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])

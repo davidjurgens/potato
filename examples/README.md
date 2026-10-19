@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 221 examples, generated from the configs themselves.
+All 222 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -476,6 +476,12 @@ The `Types` column lists the annotation types each one uses.
 | [`agent-trace-judge/`](labeling-engine/agent-trace-judge/) | engine-agent-trace-judge | `radio` |
 | [`image-objects-and-people/`](labeling-engine/image-objects-and-people/) | engine-image-objects | `image_annotation`, `radio` |
 | [`text-certified-sentiment/`](labeling-engine/text-certified-sentiment/) | engine-certified-sentiment | `radio` |
+
+### plugins/ (1)
+
+| Example | Task | Types |
+|---------|------|-------|
+| [`counter/`](plugins/counter/) | Plugin example - counting people | `counter`, `radio` |
 
 ### span/ (11)
 

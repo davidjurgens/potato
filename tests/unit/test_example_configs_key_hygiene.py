@@ -92,7 +92,15 @@ def test_no_example_config_uses_an_unrecognized_key():
 
 
 def test_every_example_config_validates():
+    from tests.helpers.plugins import example_plugins_installed
+
     failures = []
+    with example_plugins_installed():
+        _validate_examples(failures)
+    assert not failures, "Example configs fail server validation:\n  " + "\n  ".join(failures)
+
+
+def _validate_examples(failures):
     for path in _example_configs():
         with open(path, encoding="utf-8") as handle:
             config = yaml.safe_load(handle)
@@ -105,7 +113,6 @@ def test_every_example_config_validates():
             )
         except Exception as exc:
             failures.append(f"{os.path.relpath(path, REPO_ROOT)}: {type(exc).__name__}: {exc}")
-    assert not failures, "Example configs fail server validation:\n  " + "\n  ".join(failures)
 
 
 class TestKnownKeyPlacement:

@@ -324,7 +324,7 @@ class TestOverStdio:
     def test_all_tools_are_advertised(self, responses):
         for name in (
             "list_annotation_types", "describe_annotation_type",
-            "list_display_types", "describe_display_type",
+            "list_display_types", "describe_display_type", "list_plugins",
             "list_config_keys", "describe_config_key", "get_config_schema",
             "list_examples", "get_example",
             "validate_config", "preview_config", "render_task_screenshot",

@@ -4846,6 +4846,10 @@
         "object"
       ]
     },
+    "plugins": {
+      "description": "Installed plugins to load, by name. A plugin adds annotation or display types; `potato plugins` lists the installed ones. Plugins run as Python inside the server, so only listed ones load",
+      "type": "array"
+    },
     "pocket": {
       "additionalProperties": true,
       "description": "Pocket Mode: the phone-sized annotation surface at /pocket, served as a PWA with an offline queue",

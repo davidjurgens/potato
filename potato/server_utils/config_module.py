@@ -460,6 +460,8 @@ KNOWN_CONFIG_KEYS = {
     # Read only by `potato validate`, never by the server.
     "validation": {"acknowledge"},
     "grid_view": {"enabled", "scheme", "page_size"},
+    # Installed plugins to load (a list of entry-point names).
+    "plugins": None,
     # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
     "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
@@ -2405,6 +2407,11 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     for _deprecation in deprecated_key_warnings(config_data):
         logger.warning(_deprecation)
 
+    # Plugins register annotation and display types, so they load before
+    # anything checks a type name. See potato/plugins.py.
+    validate_plugins_config(config_data)
+    validate_phase_question_files(config_data, config_file_dir)
+
     # Required fields validation. NOTE: 'data_files' is intentionally NOT here —
     # it is one of three mutually-acceptable data sources (data_files /
     # data_directory / data_sources), enforced by the dedicated check below.
@@ -2662,6 +2669,39 @@ def _phase_file_schemes(config_data: Dict[str, Any],
                 if isinstance(scheme, dict):
                     found.append((f"phases.{phase_name} ({os.path.basename(path)})", scheme))
     return found
+
+
+def validate_plugins_config(config_data: Dict[str, Any]) -> None:
+    """Load the plugins `plugins:` names, and refuse types from unlisted ones."""
+    from potato import plugins
+    try:
+        plugins.load_plugins(plugins.configured_names(config_data))
+    except (ValueError, plugins.PluginError) as exc:
+        raise ConfigValidationError(str(exc))
+    problems = plugins.unlisted_plugin_types(config_data)
+    if problems:
+        raise ConfigValidationError("; ".join(problems))
+
+
+def validate_phase_question_files(config_data: Dict[str, Any],
+                                  config_file_dir: Optional[str] = None) -> None:
+    """Check the questions in survey-phase files the way the server will at boot.
+
+    A missing file is left to the server, which looks in several places.
+    """
+    from potato.server_utils.phase_files import (
+        check_phase_schemes, load_phase_schemes, question_file_phases, resolve_phase_file)
+    for phase_name, filename in question_file_phases(config_data):
+        path = resolve_phase_file(filename, config_file_dir)
+        if path is None:
+            continue
+        try:
+            check_phase_schemes(load_phase_schemes(path), filename, phase_name,
+                                config_data.get("plugins") or [])
+        except ConfigValidationError:
+            raise
+        except Exception as exc:
+            raise ConfigValidationError(f"phases.{phase_name}.file: {exc}")
 
 
 def validate_grid_view_config(config_data: Dict[str, Any]) -> None:

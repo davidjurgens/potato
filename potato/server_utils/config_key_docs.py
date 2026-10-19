@@ -3086,6 +3086,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", default="", category=AGENT_EVAL,
         see_also=("item_properties.text_key",),
     ),
+    "plugins": _D(
+        "Installed plugins to load, by name. A plugin adds annotation or "
+        "display types; `potato plugins` lists the installed ones. Plugins "
+        "run as Python inside the server, so only listed ones load",
+        type="array", category=FEATURES,
+    ),
     "grid_view": _D(
         "A page at /annotate/grid that labels many items at once for one "
         "radio or multiselect scheme: select tiles, press a label",

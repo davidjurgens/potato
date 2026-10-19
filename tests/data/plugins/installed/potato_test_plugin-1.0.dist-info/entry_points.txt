@@ -1,0 +1,8 @@
+[potato.plugins]
+testplugin = potato_test_plugin:register
+collides = potato_test_plugin:register_collision
+explodes = potato_test_plugin:register_explodes
+missing_asset = potato_test_plugin:register_missing_asset
+as_module = potato_test_plugin.module_style
+twice = potato_test_plugin:register_twice
+display_twice = potato_test_plugin:register_display_twice

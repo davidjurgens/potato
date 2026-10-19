@@ -46,6 +46,7 @@ before they are checked.
 | `describe_annotation_type` | What fields does `bws` take, and what does a real one look like? |
 | `list_display_types` | How can an item be displayed? |
 | `describe_display_type` | What keys does an `image` field take? |
+| `list_plugins` | Which plugins are installed, and what types do they add? |
 | `list_config_keys` | What top-level keys exist? |
 | `describe_config_key` | What is `attention_checks.frequency`? |
 | `get_config_schema` | The whole contract, as JSON Schema |
