@@ -224,6 +224,7 @@ nav:
         - Webhooks: integrations/webhooks.md
         - ConvoKit: integrations/convokit.md
         - LangChain Integration: integrations/langchain_integration.md
+        - FiftyOne Annotation Backend: integrations/fiftyone.md
         - Tracing SDK (potato_trace): integrations/tracing_sdk.md
     - Deployment:
         - Usage: deployment/usage.md

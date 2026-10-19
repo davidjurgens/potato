@@ -85,7 +85,8 @@ def prediction_value(scheme: dict, value: Any) -> Any:
 
 
 def build_config(result: ProjectImportResult, data_file: str,
-                 task_name: str, keep_annotators: bool = False) -> dict:
+                 task_name: str, keep_annotators: bool = False,
+                 extra_config: Optional[dict] = None) -> dict:
     config: Dict[str, Any] = {
         "port": 8000,
         "annotation_task_name": task_name,
@@ -127,16 +128,21 @@ def build_config(result: ProjectImportResult, data_file: str,
             "field": PREDICTION_FIELD,
             "allow_modification": True,
         }
+    # Keys a caller adds on top (the FiftyOne backend's annotator count and
+    # media folder); they win over anything above.
+    config.update(extra_config or {})
     config["annotation_schemes"] = [dict(s) for s in result.schemes]
     return config
 
 
 def write_project(result: ProjectImportResult, output_dir: str, source: str,
                   keep_annotators: bool = False, config_only: bool = False,
-                  stem: Optional[str] = None) -> List[str]:
+                  stem: Optional[str] = None, extra_config: Optional[dict] = None,
+                  task_name: Optional[str] = None) -> List[str]:
     output = Path(output_dir)
     (output / "data").mkdir(parents=True, exist_ok=True)
     stem = stem or Path(source).stem or "imported"
+    task_name = task_name or f"{stem} (imported)"
     data_rel = os.path.join("data", f"{stem}.jsonl")
     schemes = {s["name"]: s for s in result.schemes}
     written: List[str] = []
@@ -159,14 +165,14 @@ def write_project(result: ProjectImportResult, output_dir: str, source: str,
         written.append(str(data_path))
 
         if keep_annotators:
-            written.extend(_write_annotators(result, output, schemes,
-                                             f"{stem} (imported)"))
+            written.extend(_write_annotators(result, output, schemes, task_name))
 
     config_path = output / "config.yaml"
     with config_path.open("w", encoding="utf-8") as handle:
         handle.write(SCHEMA_MODELINE + "\n")
-        yaml.safe_dump(build_config(result, data_rel, f"{stem} (imported)",
-                                    keep_annotators=keep_annotators),
+        yaml.safe_dump(build_config(result, data_rel, task_name,
+                                    keep_annotators=keep_annotators,
+                                    extra_config=extra_config),
                        handle, sort_keys=False, default_flow_style=False,
                        allow_unicode=True)
     written.append(str(config_path))

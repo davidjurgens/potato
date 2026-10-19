@@ -81,6 +81,11 @@ _AUTH_DEPS = [
 _LANGCHAIN_DEPS = [
     "langchain-core>=0.1.0",
 ]
+# The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
+# in "all": FiftyOne brings its own MongoDB and a large dependency tree.
+_FIFTYONE_DEPS = [
+    "fiftyone>=1.0",
+]
 # Optional server-side vision stack. Browser segmentation needs none of this:
 # ONNX Runtime Web is vendored under potato/static/ and runs the default models
 # with no Python dependency at all. These cover the server endpoints
@@ -202,6 +207,7 @@ setup(
         "publish": _HF_DEPS + _EXPORT_DEPS,
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
+        "fiftyone": _FIFTYONE_DEPS,
         "db": _DB_DEPS,
         "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,

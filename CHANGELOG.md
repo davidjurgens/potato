@@ -6,6 +6,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **FiftyOne annotation backend.** `view.annotate(..., backend="potato")`
+  writes a FiftyOne view out as a Potato project for several annotators
+  (`annotations_per_item`), with any existing labels as pre-annotations.
+  `dataset.load_annotations()` brings back one merged label per sample
+  (majority class; boxes matched by overlap and averaged; an adjudicator's
+  decision where there is one), optionally each person's labels in
+  `<field>_<username>`, and stores Krippendorff's alpha and the geometry
+  agreement report in `dataset.info["potato_agreement"]`. Classification,
+  classifications, detections, polygons and polylines on images. Install with
+  `pip install "potato-annotation[fiftyone]"`. See *FiftyOne Annotation
+  Backend*.
 - **Measure whether AI assistance changes the answers.**
   `ai_support.holdout: {fraction, salt}` withholds every assistance surface
   (pre-annotations, hints, option highlights, visual AI, critique, chat, the

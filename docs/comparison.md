@@ -400,7 +400,7 @@ Managed annotation platform combining human workforce with AI assistance. Primar
 
 FiftyOne started as a dataset curation and model-evaluation tool: embedding views, similarity search, and model-vs-label error review across image, video and 3D data. Since February 2026 it also annotates natively in its app, and it can hand labeling off to external backends such as CVAT and Label Studio. The open-source edition is single-user; multi-user workflows are part of Enterprise.
 
-**Compared to Potato:** FiftyOne is the stronger tool for finding what to label and what was labeled wrong. Potato is built for collecting labels from several annotators and measuring how far they agree.
+**Compared to Potato:** FiftyOne is the stronger tool for finding what to label and what was labeled wrong. Potato is built for collecting labels from several annotators and measuring how far they agree. The two work together: Potato is a FiftyOne annotation backend, so a view can be sent to several annotators in Potato and loaded back with a merged label per sample and an agreement report (see [FiftyOne Annotation Backend](integrations/fiftyone.md)).
 
 ### Amazon SageMaker Ground Truth
 - **Type:** Commercial (AWS)
