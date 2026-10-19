@@ -1,10 +1,10 @@
 /* Multi-Document Event Annotation form styling */
 
 .mde-container {
-  border: 1px solid #e2e8f0;
+  border: 1px solid light-dark(#e2e8f0, #434b56);
   border-radius: 8px;
   padding: 12px 14px;
-  background: #fff;
+  background: light-dark(#fff, #1a1a1a);
   font-size: 14px;
 }
 
@@ -16,7 +16,7 @@
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: light-dark(#1e293b, #c9d1de);
 }
 
 .mde-section-header {
@@ -28,7 +28,7 @@
 
 .mde-section-label {
   font-weight: 600;
-  color: #334155;
+  color: light-dark(#334155, #c0c9d4);
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -36,15 +36,15 @@
 
 .mde-create-btn {
   border: 1px solid #2563eb;
-  color: #2563eb;
-  background: #fff;
+  color: light-dark(#2563eb, #9cb4e8);
+  background: light-dark(#fff, #1a1a1a);
   border-radius: 6px;
   padding: 3px 10px;
   font-size: 13px;
   cursor: pointer;
 }
 .mde-create-btn:hover {
-  background: #eff6ff;
+  background: light-dark(#eff6ff, #0e1c2f);
 }
 
 .mde-empty {
@@ -65,13 +65,13 @@
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid light-dark(#e2e8f0, #434b56);
   border-radius: 6px;
-  background: #f8fafc;
+  background: light-dark(#f8fafc, #161c23);
 }
 .mde-event-row.mde-active {
   border-color: #2563eb;
-  background: #eff6ff;
+  background: light-dark(#eff6ff, #0e1c2f);
 }
 
 .mde-event-open {
@@ -81,15 +81,15 @@
   background: none;
   cursor: pointer;
   font-weight: 600;
-  color: #1e293b;
+  color: light-dark(#1e293b, #c9d1de);
   padding: 0;
 }
 .mde-event-open:hover {
-  color: #2563eb;
+  color: light-dark(#2563eb, #9cb4e8);
 }
 
 .mde-event-meta {
-  color: #64748b;
+  color: light-dark(#64748b, #bac0c9);
   font-size: 12px;
 }
 
@@ -102,11 +102,11 @@
   cursor: pointer;
 }
 .mde-event-del:hover {
-  color: #dc2626;
+  color: light-dark(#dc2626, #e3a1a1);
 }
 
 .mde-editor {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid light-dark(#e2e8f0, #434b56);
   padding-top: 10px;
 }
 
@@ -120,23 +120,23 @@
 
 .mde-editor-title {
   font-weight: 700;
-  color: #1e293b;
+  color: light-dark(#1e293b, #c9d1de);
   flex: 1;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 4px 6px;
   font-size: 14px;
-  background: #f8fafc;
+  background: light-dark(#f8fafc, #161c23);
 }
 .mde-editor-title:focus {
   outline: none;
   border-color: #2563eb;
-  background: #fff;
+  background: light-dark(#fff, #1a1a1a);
 }
 
 .mde-membership {
   font-size: 12px;
-  color: #475569;
+  color: light-dark(#475569, #bac1cb);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -150,7 +150,7 @@
 .mde-slot-label {
   display: block;
   font-weight: 600;
-  color: #334155;
+  color: light-dark(#334155, #c0c9d4);
   margin-bottom: 3px;
 }
 
@@ -161,7 +161,7 @@
 
 .mde-slot-input {
   flex: 1;
-  border: 1px solid #cbd5e1;
+  border: 1px solid light-dark(#cbd5e1, #444c55);
   border-radius: 6px;
   padding: 5px 8px;
   font-size: 14px;
@@ -175,7 +175,7 @@
 .mde-cite-btn {
   border: 1px solid #16a34a;
   color: #16a34a;
-  background: #fff;
+  background: light-dark(#fff, #1a1a1a);
   border-radius: 6px;
   padding: 3px 10px;
   font-size: 12px;
@@ -183,7 +183,7 @@
   white-space: nowrap;
 }
 .mde-cite-btn:hover {
-  background: #f0fdf4;
+  background: light-dark(#f0fdf4, #122b1a);
 }
 
 .mde-cite-list {
@@ -198,7 +198,7 @@
   gap: 6px;
   font-size: 12px;
   padding: 2px 0;
-  color: #475569;
+  color: light-dark(#475569, #bac1cb);
 }
 
 .mde-cite-doc {
@@ -207,7 +207,7 @@
 }
 .mde-cite-text {
   flex: 1;
-  color: #334155;
+  color: light-dark(#334155, #c0c9d4);
 }
 .mde-cite-del {
   border: none;
@@ -218,22 +218,22 @@
   line-height: 1;
 }
 .mde-cite-del:hover {
-  color: #dc2626;
+  color: light-dark(#dc2626, #e3a1a1);
 }
 
 .mde-cite-hint {
   margin-top: 10px;
   padding: 8px 10px;
-  background: #fef9c3;
-  border: 1px solid #fde047;
+  background: light-dark(#fef9c3, #433f14);
+  border: 1px solid light-dark(#fde047, #6a612f);
   border-radius: 6px;
   font-size: 13px;
-  color: #713f12;
+  color: light-dark(#713f12, #e7caaf);
 }
 .mde-cite-hint button {
   margin-left: 8px;
   border: 1px solid #a16207;
-  background: #fff;
+  background: light-dark(#fff, #1a1a1a);
   border-radius: 5px;
   padding: 1px 8px;
   cursor: pointer;

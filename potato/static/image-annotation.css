@@ -21,8 +21,8 @@
     align-items: center;
     gap: 15px;
     padding: 10px 15px;
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    background: light-dark(#f8f9fa, #1a1d20);
+    border: 1px solid light-dark(#dee2e6, #484c51);
     border-radius: 6px;
 }
 
@@ -39,7 +39,7 @@
 .tool-group-label {
     font-size: 12px;
     font-weight: 600;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     margin-right: 5px;
 }
 
@@ -205,8 +205,8 @@
 }
 
 .image-annotation-container.dark-mode .keybinding-notice-dismiss:hover {
-    background: #90c2ff;
-    color: #1a202c;
+    background: light-dark(#90c2ff, #17304f);
+    color: light-dark(#1a202c, #d0d5df);
 }
 
 /* Tool buttons */
@@ -248,7 +248,7 @@
        convey that to a colour-blind annotator (WCAG 1.4.1), so the active
        state also carries weight and an inset ring. */
     font-weight: 600;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 0 0 1px light-dark(rgba(255, 255, 255, 0.65), rgba(76, 76, 76, 0.65));
 }
 
 /* Focus ring.
@@ -277,7 +277,7 @@
 .tool-btn.active:focus,
 .label-btn.active:focus {
     /* Keep the inset ring from the active state alongside the focus ring. */
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+    box-shadow: inset 0 0 0 1px light-dark(rgba(255, 255, 255, 0.65), rgba(76, 76, 76, 0.65)),
                 0 0 0 4px color-mix(in srgb, var(--ring) 30%, transparent);
 }
 
@@ -315,7 +315,7 @@
 }
 
 .label-btn.active .label-color-dot {
-    border-color: rgba(255, 255, 255, 0.5);
+    border-color: light-dark(rgba(255, 255, 255, 0.5), rgba(76, 76, 76, 0.5));
 }
 
 /* Zoom buttons */
@@ -348,15 +348,15 @@
 /* Annotation count */
 .annotation-count {
     font-size: 13px;
-    color: #6c757d;
+    color: light-dark(#6c757d, #bec2c5);
     padding: 6px 12px;
-    background: #e9ecef;
+    background: light-dark(#e9ecef, #222528);
     border-radius: 4px;
 }
 
 .count-value {
     font-weight: 600;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
 }
 
 /* Canvas wrapper */
@@ -366,15 +366,15 @@
     min-height: 400px;
     height: 500px;  /* Explicit height for Fabric.js canvas rendering */
     max-height: calc(100vh - 200px);
-    background: #f8f9fa !important;  /* Force light background */
-    border: 2px solid #dee2e6;
+    background: light-dark(#f8f9fa, #1a1d20) !important;  /* Force light background */
+    border: 2px solid light-dark(#dee2e6, #484c51);
     border-radius: 6px;
     overflow: hidden;
 }
 
 /* Ensure Fabric.js canvas container has light background */
 .canvas-wrapper .canvas-container {
-    background: #f8f9fa !important;
+    background: light-dark(#f8f9fa, #1a1d20) !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -395,7 +395,7 @@
     position: absolute;
     inset: 0;
     z-index: 0;
-    background: #f8f9fa;
+    background: light-dark(#f8f9fa, #1a1d20);
 }
 
 .canvas-wrapper.deepzoom .canvas-container {
@@ -536,7 +536,7 @@
     font-weight: 600;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid light-dark(#dee2e6, #484c51);
     width: 100%;
 }
 
@@ -548,7 +548,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 14px;
-    color: #6c757d;
+    color: light-dark(#6c757d, #bec2c5);
 }
 
 /* Error state */
@@ -573,12 +573,12 @@
 }
 
 .image-annotation-toolbar::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: light-dark(#f1f1f1, #222222);
     border-radius: 3px;
 }
 
 .image-annotation-toolbar::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
+    background: light-dark(#c1c1c1, #333333);
     border-radius: 3px;
 }
 
@@ -607,10 +607,10 @@
 .image-annotation-container .critique-panel {
     margin-top: 10px;
     padding: 12px 14px;
-    border: 1px solid #d6dee8;
+    border: 1px solid light-dark(#d6dee8, #444c55);
     border-radius: 6px;
-    background: #f2f5f9;
-    color: #1f2937;
+    background: light-dark(#f2f5f9, #191e26);
+    color: light-dark(#1f2937, #cbd3dd);
     font-size: 13px;
     line-height: 1.45;
 }
@@ -626,14 +626,14 @@
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    color: #111827;
+    color: light-dark(#111827, #cfd6e5);
 }
 
 .image-annotation-container .critique-counts,
 .image-annotation-container .critique-provenance {
     margin: 0;
     font-size: 12px;
-    color: #55637a;
+    color: light-dark(#55637a, #bac0ca);
 }
 
 .image-annotation-container .critique-provenance {
@@ -646,9 +646,9 @@
 .image-annotation-container .critique-caveat {
     margin: 8px 0 0;
     padding-left: 10px;
-    border-left: 3px solid #cbd5e1;
+    border-left: 3px solid light-dark(#cbd5e1, #444c55);
     font-size: 12px;
-    color: #4b5563;
+    color: light-dark(#4b5563, #bcc2c9);
 }
 
 .image-annotation-container .critique-stale,
@@ -656,16 +656,16 @@
     margin: 10px 0 0;
     padding: 8px 10px;
     border-radius: 4px;
-    border: 1px solid #f0c36d;
-    background: #fdf6e3;
-    color: #6b4c11;
+    border: 1px solid light-dark(#f0c36d, #655434);
+    background: light-dark(#fdf6e3, #332a12);
+    color: light-dark(#6b4c11, #e8d5b1);
     font-size: 12px;
 }
 
 .image-annotation-container .critique-error {
     border-color: #e5a6a6;
-    background: #fdf2f2;
-    color: #7a2b2b;
+    background: light-dark(#fdf2f2, #2a1212);
+    color: light-dark(#7a2b2b, #daafaf);
 }
 
 .image-annotation-container .critique-error p {
@@ -677,14 +677,14 @@
 .image-annotation-container .critique-note {
     margin: 8px 0 0;
     font-size: 12px;
-    color: #4b5563;
+    color: light-dark(#4b5563, #bcc2c9);
 }
 
 .image-annotation-container .critique-subheading {
     margin: 14px 0 0;
     font-size: 13px;
     font-weight: 600;
-    color: #111827;
+    color: light-dark(#111827, #cfd6e5);
 }
 
 .image-annotation-container .critique-list {
@@ -698,10 +698,10 @@
 
 .image-annotation-container .critique-card {
     padding: 9px 11px;
-    border: 1px solid #e3e9f1;
+    border: 1px solid light-dark(#e3e9f1, #424b57);
     border-left: 3px solid #94a3b8;
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
 }
 
 .image-annotation-container .critique-warn {
@@ -713,8 +713,8 @@
 }
 
 .image-annotation-container .critique-muted {
-    border-left-color: #cbd5e1;
-    background: #f8fafc;
+    border-left-color: light-dark(#cbd5e1, #444c55);
+    background: light-dark(#f8fafc, #161c23);
 }
 
 /* A card the annotator has finished with recedes but stays readable.
@@ -730,8 +730,8 @@
    left accent goes neutral because a verdict that has been dealt with is no
    longer a severity worth colour-coding. */
 .image-annotation-container .critique-done {
-    background: #f4f6fa;
-    border-left-color: #cbd5e1;
+    background: light-dark(#f4f6fa, #181c25);
+    border-left-color: light-dark(#cbd5e1, #444c55);
 }
 
 .image-annotation-container .critique-card-title {
@@ -755,27 +755,27 @@
 .image-annotation-container .critique-badge {
     padding: 1px 7px;
     border-radius: 10px;
-    background: #eef2f7;
-    color: #334155 !important;
+    background: light-dark(#eef2f7, #1a2028);
+    color: light-dark(#334155, #c0c9d4) !important;
     font-size: 11px;
     font-weight: 600;
 }
 
 .image-annotation-container .critique-label {
     font-weight: 600;
-    color: #111827 !important;
+    color: light-dark(#111827, #cfd6e5) !important;
 }
 
 .image-annotation-container .critique-rationale {
     margin: 5px 0 0;
     font-size: 12px;
-    color: #374151;
+    color: light-dark(#374151, #c3c9d2);
 }
 
 .image-annotation-container .critique-card-result {
     margin: 6px 0 0;
     font-size: 12px;
-    color: #1f6f43;
+    color: light-dark(#1f6f43, #b2e0c7);
 }
 
 .image-annotation-container .critique-actions {
@@ -799,8 +799,8 @@
        boundary nobody can see is not a small problem. */
     border: 1px solid #7d8b9f;
     border-radius: 4px;
-    background: #fff;
-    color: #1f2937;
+    background: light-dark(#fff, #1a1a1a);
+    color: light-dark(#1f2937, #cbd3dd);
     font-size: 12px;
     cursor: pointer;
     /* Matches .tool-btn and friends above. Colour only, so it stays on the
@@ -810,7 +810,7 @@
 
 .image-annotation-container .critique-btn:hover:not(:disabled),
 .image-annotation-container .critique-disclosure:hover {
-    background: #eef2f7;
+    background: light-dark(#eef2f7, #1a2028);
 }
 
 .image-annotation-container .critique-btn:disabled {
@@ -846,15 +846,15 @@
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
-    color: #55637a;
+    color: light-dark(#55637a, #bac0ca);
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
 }
 
 .image-annotation-container .critique-close:hover {
-    background: #eef2f7;
-    color: #1f2937;
+    background: light-dark(#eef2f7, #1a2028);
+    color: light-dark(#1f2937, #cbd3dd);
 }
 
 /* Dark mode. Without these the panel keeps its white cards against the slate
@@ -999,7 +999,7 @@
 .text-prompt-label {
     font-size: 12px;
     font-weight: 600;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
 }
 
 .text-prompt-input {
@@ -1008,7 +1008,7 @@
     width: 190px;
     padding: 3px 6px;
     font-size: 13px;
-    border: 1px solid #b9c4d4;
+    border: 1px solid light-dark(#b9c4d4, #454b54);
     border-radius: 4px;
 }
 
@@ -1016,9 +1016,9 @@
     padding: 3px 10px;
     font-size: 13px;
     cursor: pointer;
-    border: 1px solid #b9c4d4;
+    border: 1px solid light-dark(#b9c4d4, #454b54);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
 }
 
 .text-prompt-run:disabled {
@@ -1028,17 +1028,17 @@
 
 .text-prompt-status {
     font-size: 12px;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     /* Bounded so a long message cannot reflow the toolbar mid-run. */
     max-width: 320px;
 }
 
 .text-prompt-status[data-kind="warn"] {
-    color: #8a6100;
+    color: light-dark(#8a6100, #f2daa2);
 }
 
 .text-prompt-status[data-kind="error"] {
-    color: #a02020;
+    color: light-dark(#a02020, #e0a3a3);
 }
 
 /* Visually hidden but still announced, which display:none would prevent. */

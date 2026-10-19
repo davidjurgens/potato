@@ -198,22 +198,22 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .st-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .st-audio {{ margin-bottom: 8px; }}
     .st-list {{ display: flex; flex-direction: column; gap: 8px; }}
-    .st-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                padding: 8px 12px; background: var(--card, #fff); }}
+    .st-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .st-card.st-flagged {{ border-color: #e8590c; box-shadow: inset 3px 0 0 #e8590c; }}
     .st-head {{ display: flex; gap: 10px; align-items: baseline; margin-bottom: 2px; }}
-    .st-time {{ font-family: ui-monospace, monospace; font-size: 0.78em; color: var(--muted-foreground, #71717a); }}
-    .st-speaker {{ font-size: 0.78em; font-weight: 600; color: #5f3dc4; }}
+    .st-time {{ font-family: ui-monospace, monospace; font-size: 0.78em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
+    .st-speaker {{ font-size: 0.78em; font-weight: 600; color: light-dark(#5f3dc4, #b6a9da); }}
     .st-text {{ font-size: 0.92em; margin-bottom: 6px; }}
     .st-errors {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .st-ebtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-                border-radius: 999px; background: var(--card, #fff); cursor: pointer; color: var(--foreground, #18181b); }}
-    .st-ebtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .st-ebtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .st-ebtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .st-ebtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .st-ebtn.selected {{ background: #e8590c; color: #fff; border-color: #e8590c; font-weight: 600; }}
     .st-correction {{ margin-top: 6px; width: 100%; box-sizing: border-box; padding: 4px 8px;
-                      border: 1px solid var(--border, #e4e4e7); border-radius: 6px; font-size: 0.85em; }}
-    .st-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+                      border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; font-size: 0.85em; }}
+    .st-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated speech_transcript layout for {schema_name}")

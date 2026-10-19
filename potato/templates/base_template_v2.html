@@ -8,6 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{annotation_task_name}}</title>
+    {% include '_theme_head.html' %}
 
     <!-- Warm the HTTP cache for the next instance's media. Navigation is a full
          page reload, so this has to be a real prefetch hint rather than
@@ -30,10 +31,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=38">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=40">
 
     <!-- Span Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=4">
 
     {% set frontend_assets = frontend_assets | default({}) %}
 
@@ -44,17 +45,17 @@
 
     <!-- Turn-Level Annotation Styles -->
     {% if frontend_assets.turn_annotations | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=2">
     {% endif %}
 
     <!-- Multi-Agent Discussion Styles -->
     {% if frontend_assets.multi_agent_discussion | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=2">
     {% endif %}
 
     <!-- Audio Dialogue (podcast turn annotation) Styles -->
     {% if frontend_assets.audio_dialogue | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-dialogue.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-dialogue.css') }}?v=5">
     {% endif %}
 
     <!-- Image Annotation Styles.
@@ -67,7 +68,7 @@
     {% if frontend_assets.image_annotation | default(false)
           or frontend_assets.spatial_annotation | default(false)
           or frontend_assets.episode_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=19">
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=20">
     {% endif %}
 
     <!-- Per-object attributes: image shapes, video tracks, point-cloud cuboids -->
@@ -80,67 +81,67 @@
 
     <!-- Point cloud viewer styles -->
     {% if frontend_assets.spatial_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=7">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=8">
     {% endif %}
 
     <!-- Depth map display styles -->
     {% if frontend_assets.depth_map | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='depth-viewer.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='depth-viewer.css') }}?v=3">
     {% endif %}
 
     <!-- Embodied episode timeline styles -->
     {% if frontend_assets.episode_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=3">
     {% endif %}
 
     <!-- World-model rollout evaluation styles -->
     {% if frontend_assets.rollout_evaluation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='rollout-eval.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='rollout-eval.css') }}?v=4">
     {% endif %}
 
     <!-- Grounding evaluation styles -->
     {% if frontend_assets.grounding_eval | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='grounding-eval.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='grounding-eval.css') }}?v=2">
     {% endif %}
 
     <!-- Region captioning styles -->
     {% if frontend_assets.region_caption | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='region-caption.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='region-caption.css') }}?v=2">
     {% endif %}
 
     <!-- Audio Annotation Styles -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=6">
     {% endif %}
 
     <!-- Video Annotation Styles -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}?v=4">
     {% endif %}
 
     <!-- Span Link Styles -->
     {% if frontend_assets.span_link | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='span-link-styles.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='span-link-styles.css') }}?v=6">
     {% endif %}
 
     <!-- Event Annotation Styles -->
     {% if frontend_assets.event_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}?v=2">
     {% endif %}
 
     <!-- Multi-Document Event Annotation Styles -->
     {% if frontend_assets.multi_document_event | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='multi-document-event.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-document-event.css') }}?v=3">
     {% endif %}
 
     <!-- Spreadsheet Display Styles -->
     {% if frontend_assets.spreadsheet_display | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}?v=2">
     {% endif %}
 
     <!-- Coding Trace Display Styles -->
     {% if frontend_assets.coding_trace | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='coding-trace.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='coding-trace.css') }}?v=2">
     {% endif %}
 
     <!-- Live Coding Agent Viewer -->
@@ -149,16 +150,16 @@
     {% endif %}
 
     <!-- Format Display Styles (document, code, etc.) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}?v=4">
 
     <!-- Document Bounding Box Styles -->
     {% if frontend_assets.document_bbox | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='document-bbox.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='document-bbox.css') }}?v=2">
     {% endif %}
 
     <!-- PDF Annotation Styles -->
     {% if frontend_assets.pdf_bbox | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-annotation.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-annotation.css') }}?v=2">
     {% endif %}
 
     <!-- Display Logic Styles (conditional schema branching) -->
@@ -166,46 +167,46 @@
 
     <!-- Coreference Chain Styles -->
     {% if frontend_assets.coreference | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}?v=2">
     {% endif %}
 
     <!-- Conversation Tree Styles -->
     {% if frontend_assets.conversation_tree | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}?v=3">
     {% endif %}
 
     <!-- Video Tracking Styles -->
     {% if frontend_assets.tracking | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}?v=2">
     {% endif %}
 
     <!-- Triage Styles -->
     {% if frontend_assets.triage | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/triage.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/triage.css') }}?v=2">
     {% endif %}
 
     <!-- Entity Linking Styles (knowledge base linking) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}?v=2">
 
     <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}?v=2">
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
     <!-- Agent Chat Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}?v=2">
     {% endif %}
 
     {% if chat_enabled | default(false) %}
     <!-- LLM Chat Sidebar Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/llm-chat-sidebar.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/llm-chat-sidebar.css') }}?v=2">
     {% endif %}
 
     <!-- Universal Memos sidebar styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=4">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=14">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=15">
 
     <!-- jQuery (required for span annotation) -->
     <!-- jQuery (vendored). Span annotation does not work without it, so this
@@ -332,6 +333,7 @@
                    title="Card-stack interface: one item per card, one click per label">
                     {{ ui_lang.compact_view|default('Compact view') }}
                 </a>
+                {% include '_theme_toggle.html' %}
                 <div class="user-pill">
                     <span class="username" id="username-display">{{username}}</span>
                     <a href="{{ url_prefix }}/logout" class="logout-btn">{{ ui_lang.logout }}</a>
@@ -771,7 +773,7 @@
     <!-- Device routing: send phones/tablets to /pocket when the task supports
          it; warn them when it doesn't. Unconditional — the "not mobile
          friendly" warning must work even when Pocket Mode is off. -->
-    <script src="{{ url_for('static', filename='device-routing.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='device-routing.js') }}?v=4"></script>
     <!-- Truth Serum: surprisingly-popular prediction widget (conditional) -->
     {% if truth_serum_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/truth-serum.css') }}?v=1">
@@ -815,7 +817,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=53"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=54"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -887,12 +889,12 @@
 
     <!-- Embodied episode timeline -->
     {% if frontend_assets.episode_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=2"></script>
     {% endif %}
 
     <!-- World-model rollout evaluation -->
     {% if frontend_assets.rollout_evaluation | default(false) %}
-    <script src="{{ url_for('static', filename='rollout-eval.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='rollout-eval.js') }}?v=7"></script>
     {% endif %}
 
     <!-- Per-class show/hide, shared by image and video annotation -->
@@ -907,7 +909,7 @@
          projects finding objects with nowhere to show them. -->
     {% if (ai_enabled or frontend_assets.text_prompt | default(false))
           and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=10"></script>
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=11"></script>
     {% endif %}
 
     <!-- Option highlighting dims the less-likely *discrete options* of a radio,
@@ -996,7 +998,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=6"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->
@@ -1016,7 +1018,7 @@
 
     <!-- PDF multi-page anchor + cross-page linking -->
     {% if frontend_assets.pdf_link | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-link-mode.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-link-mode.css') }}?v=2">
     <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=5"></script>
     {% endif %}
 
@@ -1041,7 +1043,7 @@
     <script src="{{ url_for('static', filename='web-agent-viewer.js') }}?v=1"></script>
     {% endif %}
     {% if frontend_assets.web_agent_playback | default(false) %}
-    <script src="{{ url_for('static', filename='web-agent-playback.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='web-agent-playback.js') }}?v=2"></script>
     {% endif %}
     <!-- Web Agent Interaction Recorder (creation mode) -->
     {% if frontend_assets.web_agent_recorder | default(false) %}
@@ -1049,8 +1051,8 @@
     {% endif %}
     <!-- Live Agent Viewer (real-time agent interaction) -->
     {% if live_agent_enabled | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/live-agent.css') }}?v=1">
-    <script src="{{ url_for('static', filename='live-agent-viewer.js') }}?v=1"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/live-agent.css') }}?v=2">
+    <script src="{{ url_for('static', filename='live-agent-viewer.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Instance height limit functionality -->

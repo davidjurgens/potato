@@ -26,7 +26,7 @@
 }
 
 .el-modal-content {
-    background: var(--background, #fff);
+    background: var(--background, light-dark(#fff, #1a1a1a));
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     max-width: 600px;
@@ -42,22 +42,22 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--border, #e5e7eb);
-    background: var(--muted, #f9fafb);
+    border-bottom: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
+    background: var(--muted, light-dark(#f9fafb, #191d20));
 }
 
 .el-modal-header h3 {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--foreground, #111827);
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
 }
 
 .el-close-btn {
     background: none;
     border: none;
     font-size: 1.5rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
     padding: 0;
     line-height: 1;
@@ -65,7 +65,7 @@
 }
 
 .el-close-btn:hover {
-    color: var(--foreground, #111827);
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
 }
 
 .el-modal-body {
@@ -76,7 +76,7 @@
 
 .el-modal-footer {
     padding: 16px 20px;
-    border-top: 1px solid var(--border, #e5e7eb);
+    border-top: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     display: flex;
     justify-content: flex-end;
     gap: 12px;
@@ -89,12 +89,12 @@
 .el-span-info {
     margin-bottom: 16px;
     padding: 12px;
-    background: var(--muted, #f9fafb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
     border-radius: 6px;
 }
 
 .el-span-info strong {
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-size: 0.85rem;
 }
 
@@ -102,7 +102,7 @@
     display: block;
     margin-top: 4px;
     font-weight: 500;
-    color: var(--foreground, #111827);
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
 }
 
 .el-search-container {
@@ -115,17 +115,17 @@
     flex: 0 0 auto;
     min-width: 160px;
     padding: 8px 12px;
-    border: 1px solid var(--border, #d1d5db);
+    border: 1px solid var(--border, light-dark(#d1d5db, #494c50));
     border-radius: 6px;
-    background: var(--background, #fff);
-    color: var(--foreground, #111827);
+    background: var(--background, light-dark(#fff, #1a1a1a));
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
     font-size: 0.9rem;
 }
 
 .el-search-input {
     flex: 1;
     padding: 8px 12px;
-    border: 1px solid var(--border, #d1d5db);
+    border: 1px solid var(--border, light-dark(#d1d5db, #494c50));
     border-radius: 6px;
     font-size: 0.9rem;
     outline: none;
@@ -161,14 +161,14 @@
     align-items: center;
     gap: 8px;
     padding: 16px;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     justify-content: center;
 }
 
 .el-spinner {
     width: 16px;
     height: 16px;
-    border: 2px solid var(--border, #e5e7eb);
+    border: 2px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-top-color: var(--primary, #6E56CF);
     border-radius: 50%;
     animation: el-spin 0.8s linear infinite;
@@ -187,7 +187,7 @@
 
 .el-result-item {
     padding: 12px;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: 6px;
     margin-bottom: 8px;
     cursor: pointer;
@@ -195,7 +195,7 @@
 }
 
 .el-result-item:hover {
-    background: var(--muted, #f9fafb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
     border-color: var(--primary, #6E56CF);
 }
 
@@ -212,21 +212,21 @@
 
 .el-result-label {
     font-weight: 600;
-    color: var(--foreground, #111827);
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
 }
 
 .el-result-id {
     font-size: 0.8rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-family: monospace;
-    background: var(--muted, #f3f4f6);
+    background: var(--muted, light-dark(#f3f4f6, #1d1f22));
     padding: 2px 6px;
     border-radius: 4px;
 }
 
 .el-result-desc {
     font-size: 0.9rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     margin-top: 4px;
     line-height: 1.4;
 }
@@ -242,7 +242,7 @@
     display: inline-block;
     margin-top: 8px;
     font-size: 0.8rem;
-    color: var(--primary, #6E56CF);
+    color: var(--primary, light-dark(#6E56CF, #b2a8db));
     text-decoration: none;
 }
 
@@ -254,7 +254,7 @@
 .el-error {
     text-align: center;
     padding: 24px;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 .el-error {
@@ -275,7 +275,7 @@
 
 .el-current-link strong {
     font-size: 0.85rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 #el-current-entity {
@@ -284,7 +284,7 @@
 
 .el-current-kb {
     font-weight: 600;
-    color: var(--primary, #6E56CF);
+    color: var(--primary, light-dark(#6E56CF, #b2a8db));
 }
 
 .el-current-id {
@@ -293,7 +293,7 @@
 }
 
 .el-current-label {
-    color: var(--foreground, #111827);
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
     font-weight: 500;
 }
 
@@ -319,9 +319,9 @@
 
 .el-cancel-btn {
     padding: 8px 20px;
-    background: var(--muted, #f3f4f6);
-    color: var(--foreground, #374151);
-    border: 1px solid var(--border, #d1d5db);
+    background: var(--muted, light-dark(#f3f4f6, #1d1f22));
+    color: var(--foreground, light-dark(#374151, #c3c9d2));
+    border: 1px solid var(--border, light-dark(#d1d5db, #494c50));
     border-radius: 6px;
     font-weight: 500;
     cursor: pointer;
@@ -329,7 +329,7 @@
 }
 
 .el-cancel-btn:hover {
-    background: var(--border, #e5e7eb);
+    background: var(--border, light-dark(#e5e7eb, #24262a));
 }
 
 .el-save-btn {
@@ -416,7 +416,7 @@
 
 .span-highlight.has-entity-link .el-link-icon {
     opacity: 1;
-    color: var(--primary, #6E56CF);
+    color: var(--primary, light-dark(#6E56CF, #b2a8db));
 }
 
 /* =============================================================================
@@ -425,8 +425,8 @@
 
 .el-entity-tooltip {
     position: fixed;
-    background: var(--background, #fff);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--background, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     padding: 10px 14px;
@@ -445,7 +445,7 @@
 .el-tooltip-kb {
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--primary, #6E56CF);
+    color: var(--primary, light-dark(#6E56CF, #b2a8db));
     text-transform: uppercase;
 }
 
@@ -457,13 +457,13 @@
 
 .el-tooltip-label {
     font-weight: 600;
-    color: var(--foreground, #111827);
+    color: var(--foreground, light-dark(#111827, #cfd6e5));
     margin-bottom: 4px;
 }
 
 .el-tooltip-desc {
     font-size: 0.85rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     line-height: 1.4;
 }
 
@@ -473,7 +473,7 @@
 
 .entity-linking-hint {
     font-size: 0.8rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     margin-bottom: 8px;
     padding: 4px 8px;
     background: rgba(110, 86, 207, 0.1);
@@ -493,64 +493,63 @@
    Dark Mode Support
    ============================================================================= */
 
-@media (prefers-color-scheme: dark) {
-    .el-modal-content {
+/* Dark theme (data-theme, set in <head>) */
+:root[data-theme="dark"] .el-modal-content {
         background: #1f2937;
     }
 
-    .el-modal-header {
+:root[data-theme="dark"] .el-modal-header {
         background: #111827;
         border-color: #374151;
     }
 
-    .el-modal-header h3 {
+:root[data-theme="dark"] .el-modal-header h3 {
         color: #f9fafb;
     }
 
-    .el-modal-footer {
+:root[data-theme="dark"] .el-modal-footer {
         border-color: #374151;
     }
 
-    .el-span-info {
+:root[data-theme="dark"] .el-span-info {
         background: #111827;
     }
 
-    .el-selected-text {
+:root[data-theme="dark"] .el-selected-text {
         color: #f9fafb;
     }
 
-    .el-kb-selector,
-    .el-search-input {
+:root[data-theme="dark"] .el-kb-selector,
+:root[data-theme="dark"] .el-search-input {
         background: #111827;
         border-color: #374151;
         color: #f9fafb;
     }
 
-    .el-result-item {
+:root[data-theme="dark"] .el-result-item {
         border-color: #374151;
     }
 
-    .el-result-item:hover {
+:root[data-theme="dark"] .el-result-item:hover {
         background: #374151;
     }
 
-    .el-result-label {
+:root[data-theme="dark"] .el-result-label {
         color: #f9fafb;
     }
 
-    .el-result-id {
+:root[data-theme="dark"] .el-result-id {
         background: #374151;
     }
 
-    .el-entity-tooltip {
+:root[data-theme="dark"] .el-entity-tooltip {
         background: #1f2937;
         border-color: #374151;
     }
 
-    .el-tooltip-label {
+:root[data-theme="dark"] .el-tooltip-label {
         color: #f9fafb;
     }
-}
 
 /* =============================================================================
    Responsive Adjustments

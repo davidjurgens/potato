@@ -990,7 +990,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "the display registry (text, image, audio, video, ...)",
         type="object", category=UI,
     ),
-    "ui": _D("Interface toggles", type="object", category=UI),
+    "ui": _D(
+        "Interface toggles. `ui.theme` (auto | light | dark, default auto) "
+        "sets the annotator pages' theme: auto follows the browser and shows a "
+        "toggle; light or dark gives every annotator that theme",
+        type="object", category=UI),
     "ui_config": _D("Additional interface settings", type="object", category=UI),
     "ui_language": _D(
         "Interface language code", type="string", default="en", category=UI,
@@ -1003,6 +1007,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Caption between the header's jump-to-unlabeled buttons (shown at "
         "1200px and wider)",
         type="string", default="Unlabeled", category=UI,
+    ),
+    "ui_language.dark_mode": _D(
+        "Label of the light/dark toggle on annotator pages",
+        type="string", default="Dark mode", category=UI,
     ),
     "ui_language.sign_in_opens_new_tab": _D(
         "Note under the single sign-on buttons when the login page is shown "

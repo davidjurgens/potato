@@ -1,0 +1,11 @@
+{# The annotator's light/dark switch. Hidden by static/theme.js when ui.theme
+   forces a theme, and absent from the page when it is forced server-side. #}
+{% if ui_theme | default('auto') == 'auto' %}
+<button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false"
+        title="{{ ui_lang.dark_mode | default('Dark mode') }}">
+    <i class="fas fa-moon theme-toggle-icon-dark" aria-hidden="true"></i>
+    <i class="fas fa-sun theme-toggle-icon-light" aria-hidden="true"></i>
+    <span class="visually-hidden">{{ ui_lang.dark_mode | default('Dark mode') }}</span>
+</button>
+<script src="{{ url_for('static', filename='theme.js') }}?v=1" defer></script>
+{% endif %}

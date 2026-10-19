@@ -22,10 +22,10 @@
 .episode-instruction {
     margin: 0 0 0.5rem;
     padding: 0.4rem 0.6rem;
-    background: var(--muted, #f4f4f5);
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
     border-left: 3px solid var(--primary, #6e56cf);
     font-size: var(--text-dense, 0.875rem);
-    color: var(--foreground, #09090b);
+    color: var(--foreground, light-dark(#09090b, #dfdfe4));
 }
 
 .episode-instruction:empty {
@@ -67,7 +67,7 @@
     font-size: var(--text-sm, 0.8125rem);
     /* Deliberately darker than --muted-foreground (#71717a), which is 4.40:1
        on --muted and below AA. Captions here sit on both surfaces. */
-    color: #5a6472;
+    color: light-dark(#5a6472, #bcc1c7);
     margin-top: 2px;
 }
 
@@ -93,8 +93,8 @@
 }
 
 .episode-play {
-    border: 1px solid var(--border, #e4e4e7);
-    background: var(--muted, #f4f4f5);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     padding: 0.3rem 0.7rem;
     font-size: var(--text-dense, 0.875rem);
@@ -103,13 +103,13 @@
 
 .episode-play:hover {
     /* One step along the same neutral ramp, not a hover colour of its own. */
-    background: var(--border, #e4e4e7);
+    background: var(--border, light-dark(#e4e4e7, #27272a));
 }
 
 .episode-time,
 .episode-frame {
     font-size: var(--text-sm, 0.8125rem);
-    color: var(--text-color, #374151);
+    color: var(--text-color, light-dark(#374151, #c3c9d2));
     /* Tabular figures and a floor on the width: these update every animation
        frame during playback, and proportional digits make the whole toolbar
        jitter as the numbers change. */
@@ -132,7 +132,7 @@
        timeline you have to scroll to see the end of cannot show you where a
        phase sits relative to the whole demonstration. */
     overflow: hidden;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
@@ -158,14 +158,14 @@
     gap: 10px;
     margin-top: 8px;
     padding: 6px 8px;
-    background: var(--muted, #f4f4f5);
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
     border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
 .episode-outcome-legend {
     font-weight: 600;
     font-size: var(--text-dense, 0.875rem);
-    color: var(--foreground, #09090b);
+    color: var(--foreground, light-dark(#09090b, #dfdfe4));
 }
 
 .episode-outcome-option {
@@ -183,12 +183,12 @@
     align-items: center;
     gap: 4px;
     font-size: var(--text-sm, 0.8125rem);
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
 }
 
 .episode-cause {
     padding: 0.25rem 0.4rem;
-    border: 1px solid var(--input, #e4e4e7);
+    border: 1px solid var(--input, light-dark(#e4e4e7, #4b4b4e));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     font-size: var(--text-dense, 0.875rem);
 }
@@ -206,20 +206,20 @@
 .episode-status {
     margin: 6px 0 0;
     font-size: var(--text-sm, 0.8125rem);
-    color: #5a6472;   /* see the .episode-stream figcaption note */
+    color: light-dark(#5a6472, #bcc1c7);   /* see the .episode-stream figcaption note */
     min-height: 1.2em;
 }
 
 .episode-status[data-kind="warn"] {
-    color: #6b4a00;
-    background: #fff6e0;
+    color: light-dark(#6b4a00, #f3dead);
+    background: light-dark(#fff6e0, #362b10);
     border-left: 3px solid #d9a406;
     padding: 0.3rem 0.55rem;
 }
 
 .episode-status[data-kind="error"] {
-    color: #7a1414;
-    background: #fdecec;
+    color: light-dark(#7a1414, #e6acac);
+    background: light-dark(#fdecec, #2e1212);
     border-left: 3px solid #c62828;
     padding: 0.3rem 0.55rem;
 }
@@ -236,21 +236,21 @@
 .episode-instruction-edit {
     margin-top: 8px;
     padding: 6px 8px;
-    background: var(--muted, #f4f4f5);
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
     border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
 .episode-instruction-edit label {
     display: block;
     font-size: var(--text-sm, 0.8125rem);
-    color: var(--text-color, #374151);
+    color: var(--text-color, light-dark(#374151, #c3c9d2));
     margin-bottom: 3px;
 }
 
 .episode-relabel {
     width: 100%;
     padding: 0.35rem 0.5rem;
-    border: 1px solid var(--input, #e4e4e7);
+    border: 1px solid var(--input, light-dark(#e4e4e7, #4b4b4e));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     font: inherit;
     font-size: var(--text-dense, 0.875rem);
@@ -265,8 +265,8 @@
 }
 
 .episode-relabel-align {
-    border: 1px solid var(--border, #e4e4e7);
-    background: var(--card, #ffffff);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+    background: var(--card, light-dark(#ffffff, #1a1a1a));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     padding: 0.25rem 0.6rem;
     font-size: var(--text-sm, 0.8125rem);
@@ -274,12 +274,12 @@
 }
 
 .episode-relabel-align:hover {
-    background: var(--muted, #f4f4f5);
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
 }
 
 .episode-relabel-span {
     font-size: var(--text-sm, 0.8125rem);
-    color: #5a6472;   /* see the .episode-stream figcaption note */
+    color: light-dark(#5a6472, #bcc1c7);   /* see the .episode-stream figcaption note */
     font-variant-numeric: tabular-nums;
 }
 

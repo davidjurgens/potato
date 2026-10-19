@@ -302,7 +302,7 @@ DYNAMIC_MULTIRATE_JS = """
 
     function buildTable(options) {
         if (!options || !Array.isArray(options) || options.length === 0) {
-            container.innerHTML = '<p style="color:#666;font-style:italic">No dynamic options available for this instance.</p>';
+            container.innerHTML = '<p style="color:light-dark(#666, #c2c2c2);font-style:italic">No dynamic options available for this instance.</p>';
             return;
         }
         var html = '<table class="shadcn-multirate-table"><thead><tr><th>&nbsp;</th>';
@@ -354,7 +354,7 @@ DYNAMIC_MULTIRATE_TEMPLATE = """
              data-ratings='{{ ratings_json }}'
              data-options-values='{{ options_values_json }}'>
             <div class="dynamic-multirate-body">
-                <p style="color:#666;font-style:italic">Loading options from instance data...</p>
+                <p style="color:light-dark(#666, #c2c2c2);font-style:italic">Loading options from instance data...</p>
             </div>
         </div>
     </fieldset>

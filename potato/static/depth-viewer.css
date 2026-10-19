@@ -34,7 +34,7 @@
     /* The same dark surface as the point-cloud viewport, which is the other
        place in the app where pixels carry measurements rather than design. */
     background: #11151c;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
     min-height: 120px;
@@ -91,7 +91,7 @@
     min-height: 1.4em;
     /* The largest text in the display, because the distance under the cursor
        is the whole reason the display exists. */
-    color: var(--foreground, #09090b);
+    color: var(--foreground, light-dark(#09090b, #dfdfe4));
     font-size: var(--text-base, 1rem);
 }
 
@@ -102,8 +102,8 @@
 .depth-note {
     margin: 0.3rem 0 0;
     font-size: var(--text-dense, 0.875rem);
-    color: #6b4a00;
-    background: #fff6e0;
+    color: light-dark(#6b4a00, #f3dead);
+    background: light-dark(#fff6e0, #362b10);
     border-left: 3px solid #d9a406;
     padding: 0.35rem 0.6rem;
 }
@@ -121,7 +121,7 @@
     flex-direction: column;
     gap: 0.15rem;
     font-size: var(--text-sm, 0.8125rem);
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     /* min-width: 0 so a flex item cannot be inflated past its track by its
        own content — the reflow bug the camera panels had at 360px. */
     min-width: 0;
@@ -130,14 +130,14 @@
 .depth-control input[type="number"] {
     width: 6.5rem;
     padding: 0.25rem 0.4rem;
-    border: 1px solid var(--input, #e4e4e7);
+    border: 1px solid var(--input, light-dark(#e4e4e7, #4b4b4e));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     font-size: var(--text-dense, 0.875rem);
 }
 
 .depth-control select {
     padding: 0.25rem 0.4rem;
-    border: 1px solid var(--input, #e4e4e7);
+    border: 1px solid var(--input, light-dark(#e4e4e7, #4b4b4e));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     font-size: var(--text-dense, 0.875rem);
 }
@@ -147,8 +147,8 @@
 }
 
 .depth-reset {
-    border: 1px solid var(--border, #e4e4e7);
-    background: var(--muted, #f4f4f5);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
     border-radius: calc(var(--radius, 0.5rem) / 2);
     padding: 0.3rem 0.7rem;
     font-size: var(--text-dense, 0.875rem);
@@ -158,7 +158,7 @@
 .depth-reset:hover {
     /* One step darker on the same neutral ramp, rather than a hover colour
        invented for this button alone. */
-    background: var(--border, #e4e4e7);
+    background: var(--border, light-dark(#e4e4e7, #27272a));
 }
 
 .depth-reset:focus-visible,
@@ -170,9 +170,9 @@
 
 .depth-placeholder {
     padding: 1rem;
-    border: 1px dashed var(--border, #e4e4e7);
+    border: 1px dashed var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: var(--radius, 0.5rem);
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     font-size: var(--text-dense, 0.875rem);
 }
 

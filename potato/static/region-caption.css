@@ -11,7 +11,7 @@
 }
 
 .region-caption-fieldset {
-    border: 1px solid var(--border, #dee2e6);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
     border-radius: var(--radius, 6px);
     padding: var(--space-md, 1rem);
     margin: 0;
@@ -21,14 +21,14 @@
     font-weight: 600;
     font-size: 1rem;
     padding: 0 0.5rem;
-    color: var(--heading-color, #212529);
+    color: var(--heading-color, light-dark(#212529, #d3d7da));
 }
 
 .region-caption-help {
     margin: 0 0 var(--space-md, 1rem) 0;
     font-size: 0.8125rem;
     line-height: 1.5;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     max-width: 70ch;
 }
 
@@ -43,23 +43,23 @@
 
 .region-caption-item {
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border, #dee2e6);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
     border-radius: var(--radius, 6px);
 }
 
 .region-caption-item.described {
-    background: #e6f4ea;
+    background: light-dark(#e6f4ea, #1d2c21);
 }
 
 .region-caption-item.undescribed {
-    background: #fdf6e7;
+    background: light-dark(#fdf6e7, #312712);
 }
 
 .region-caption-label {
     display: block;
     font-size: 0.8125rem;
     font-weight: 500;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     margin-bottom: 0.25rem;
 }
 
@@ -68,7 +68,7 @@
     width: 100%;
     min-height: 44px;
     padding: 0.5rem;
-    border: 1px solid var(--border, #dee2e6);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
     border-radius: var(--radius, 6px);
     font-size: 0.9375rem;
     line-height: 1.5;
@@ -88,11 +88,11 @@
     margin: var(--space-md, 1rem) 0 0 0;
     font-size: 0.8125rem;
     line-height: 1.5;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
 }
 
 .region-caption-container.error .region-caption-progress {
-    color: #b02a37;
+    color: light-dark(#b02a37, #dea6ab);
 }
 
 .region-caption-announce.sr-only,

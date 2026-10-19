@@ -106,12 +106,12 @@
 }
 
 .instance-text-container.max-height-limited::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: light-dark(#f1f1f1, #222222);
     border-radius: 4px;
 }
 
 .instance-text-container.max-height-limited::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
+    background: light-dark(#c1c1c1, #333333);
     border-radius: 4px;
 }
 
@@ -210,6 +210,10 @@
     background-color: var(--destructive);
 }
 
+/* In the dark theme --destructive-text is a light red that cannot carry the
+   white x; this red holds 6.5:1 under it. */
+:root[data-theme="dark"] .span-controls .span-delete-btn { background-color: #b91c1c; }
+
 .span-controls .span-delete-btn:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
@@ -289,11 +293,11 @@
 /* Hint text shown when discontinuous mode is enabled */
 .discontinuous-hint {
     font-size: 12px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
     font-style: italic;
     margin-bottom: 8px;
     padding: 4px 8px;
-    background-color: #f0f8ff;
+    background-color: light-dark(#f0f8ff, #0e1f2f);
     border-left: 3px solid #007bff;
     border-radius: 2px;
 }
@@ -383,7 +387,7 @@
 }
 
 .span-touch-highlight:disabled {
-    background: #6b7280;
+    background: var(--gray-500);
 }
 
 .span-touch-highlight[hidden] {

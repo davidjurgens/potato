@@ -2467,6 +2467,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate authentication config if present
     validate_authentication_config(config_data)
 
+    from potato.server_utils.theme import validate_ui_theme
+    validate_ui_theme(config_data)
+
     # Validate data_directory config if present
     validate_data_directory_config(config_data)
 

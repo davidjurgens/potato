@@ -179,8 +179,8 @@ class VisualAIAssistantManager {
                 align-items: center;
                 gap: 1rem;
                 padding: 0.5rem 0.75rem;
-                background: linear-gradient(to right, #f0f9ff, #e0f2fe);
-                border: 1px solid #bae6fd;
+                background: linear-gradient(to right, light-dark(#f0f9ff, #0e212f), light-dark(#e0f2fe, #112735));
+                border: 1px solid light-dark(#bae6fd, #305669);
                 border-radius: 0.375rem;
                 margin-bottom: 0.5rem;
                 flex-wrap: wrap;
@@ -188,7 +188,7 @@ class VisualAIAssistantManager {
 
             .ai-toolbar-label {
                 font-weight: 600;
-                color: #0369a1;
+                color: light-dark(#0369a1, #9bd1ef);
                 font-size: 0.85rem;
             }
 
@@ -205,7 +205,7 @@ class VisualAIAssistantManager {
                 align-items: center;
                 gap: 0.25rem;
                 padding: 0.375rem 0.75rem;
-                background: white;
+                background: light-dark(white, #1a1a1a);
                 border: 1px solid #0ea5e9;
                 border-radius: 0.25rem;
                 color: #0284c7;
@@ -229,9 +229,9 @@ class VisualAIAssistantManager {
             }
 
             .ai-btn-accept {
-                background: #dcfce7;
+                background: light-dark(#dcfce7, #143620);
                 border-color: #22c55e;
-                color: #166534;
+                color: light-dark(#166534, #b5e5c7);
             }
 
             .ai-btn-accept:hover:not(:disabled) {
@@ -240,9 +240,9 @@ class VisualAIAssistantManager {
             }
 
             .ai-btn-clear {
-                background: #fee2e2;
+                background: light-dark(#fee2e2, #341111);
                 border-color: #ef4444;
-                color: #dc2626;
+                color: light-dark(#dc2626, #e3a1a1);
             }
 
             .ai-btn-clear:hover:not(:disabled) {
@@ -259,21 +259,21 @@ class VisualAIAssistantManager {
 
             .suggestion-count {
                 font-size: 0.8rem;
-                color: #64748b;
+                color: light-dark(#64748b, #bac0c9);
             }
 
             .ai-loading-indicator {
                 display: flex;
                 align-items: center;
                 gap: 0.5rem;
-                color: #0369a1;
+                color: light-dark(#0369a1, #9bd1ef);
                 font-size: 0.8rem;
             }
 
             .ai-loading-indicator .spinner {
                 width: 1rem;
                 height: 1rem;
-                border: 2px solid #e0f2fe;
+                border: 2px solid light-dark(#e0f2fe, #305269);
                 border-top-color: #0ea5e9;
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
@@ -288,7 +288,7 @@ class VisualAIAssistantManager {
                a hint below the image, off screen, under the next question. */
             .ai-tooltip-container {
                 position: relative;
-                background: #fef3c7;
+                background: light-dark(#fef3c7, #413814);
                 border: 1px solid #f59e0b;
                 border-radius: 0.375rem;
                 padding: 0.75rem 2.25rem 0.75rem 1rem;
@@ -297,7 +297,7 @@ class VisualAIAssistantManager {
             }
 
             .ai-tooltip-container .hint-text {
-                color: #92400e;
+                color: light-dark(#92400e, #e9bda2);
                 font-size: 0.9rem;
                 line-height: 1.4;
             }
@@ -309,7 +309,7 @@ class VisualAIAssistantManager {
                 background: none;
                 border: none;
                 font-size: 1.25rem;
-                color: #92400e;
+                color: light-dark(#92400e, #e9bda2);
                 cursor: pointer;
                 padding: 0;
                 line-height: 1;
@@ -1048,7 +1048,7 @@ class VisualAIAssistantManager {
 
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
-            <div class="hint-text" style="color: #dc2626;">
+            <div class="hint-text" style="color: light-dark(#dc2626, #e3a1a1);">
                 <strong>Error:</strong> ${aiTextToSafeHtml(message)}
             </div>
         `;

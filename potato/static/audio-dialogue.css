@@ -23,8 +23,8 @@
     gap: 10px;
     padding: 8px 12px;
     margin-bottom: 12px;
-    background: var(--card, #fff);
-    border: 1px solid var(--border, #e4e4e7);
+    background: var(--card, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: 10px;
     box-shadow: 0 1px 3px rgba(24, 24, 27, 0.06);
 }
@@ -55,10 +55,10 @@
 .ad-stop {
     width: 30px;
     height: 30px;
-    background: var(--secondary, #f4f4f5);
-    color: var(--foreground, #3f3f46);
+    background: var(--secondary, light-dark(#f4f4f5, #1f1f21));
+    color: var(--foreground, light-dark(#3f3f46, #c9c9cd));
 }
-.ad-stop:hover { background: var(--muted, #e4e4e7); }
+.ad-stop:hover { background: var(--muted, light-dark(#e4e4e7, #27272a)); }
 .ad-stop::before { content: "\25A0"; font-size: 11px; }
 
 .ad-scrubwrap { flex: 1; display: flex; align-items: center; min-width: 60px; }
@@ -67,7 +67,7 @@
     height: 4px;
     -webkit-appearance: none;
     appearance: none;
-    background: var(--muted, #e4e4e7);
+    background: var(--muted, light-dark(#e4e4e7, #27272a));
     border-radius: 999px;
     cursor: pointer;
     accent-color: var(--ring, #6e56cf);
@@ -80,38 +80,38 @@
     border-radius: 50%;
     background: var(--ring, #6e56cf);
     cursor: pointer;
-    border: 2px solid var(--card, #fff);
+    border: 2px solid var(--card, light-dark(#fff, #4c4c4c));
     box-shadow: 0 1px 2px rgba(24, 24, 27, 0.25);
 }
 .ad-scrub::-moz-range-thumb {
     width: 14px; height: 14px; border-radius: 50%;
-    background: var(--ring, #6e56cf); cursor: pointer; border: 2px solid var(--card, #fff);
+    background: var(--ring, #6e56cf); cursor: pointer; border: 2px solid var(--card, light-dark(#fff, #4c4c4c));
 }
 
 .ad-clock {
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 0.78em;
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
-.ad-clock .ad-cur { color: var(--foreground, #27272a); font-weight: 600; }
+.ad-clock .ad-cur { color: var(--foreground, light-dark(#27272a, #d4d4d6)); font-weight: 600; }
 
 .ad-rate-wrap {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     font-size: 0.72em;
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     white-space: nowrap;
 }
 .ad-rate {
     font-size: inherit;
     padding: 2px 4px;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: 6px;
-    background: var(--card, #fff);
-    color: var(--foreground, #27272a);
+    background: var(--card, light-dark(#fff, #1a1a1a));
+    color: var(--foreground, light-dark(#27272a, #d4d4d6));
     cursor: pointer;
 }
 
@@ -146,10 +146,10 @@
     gap: 6px;
     padding: 3px 10px 3px 8px;
     font-size: 0.8em;
-    border: 1.5px solid var(--ad-color, #d4d4d8);
+    border: 1.5px solid var(--ad-color, light-dark(#d4d4d8, #4b4b4e));
     border-radius: 999px;
-    background: var(--card, #fff);
-    color: var(--foreground, #27272a);
+    background: var(--card, light-dark(#fff, #1a1a1a));
+    color: var(--foreground, light-dark(#27272a, #d4d4d6));
 }
 .ad-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
@@ -158,16 +158,16 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 6px 10px 10px;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: 10px;
     background:
-        linear-gradient(var(--card, #fff), var(--card, #fff)) padding-box,
-        var(--muted, #fafafa);
+        linear-gradient(var(--card, light-dark(#fff, #1a1a1a)), var(--card, light-dark(#fff, #1a1a1a))) padding-box,
+        var(--muted, light-dark(#fafafa, #1d1d1d));
     scroll-behavior: smooth;
 }
 .ad-scroll::-webkit-scrollbar { width: 10px; }
 .ad-scroll::-webkit-scrollbar-thumb {
-    background: var(--border, #d4d4d8); border-radius: 999px; border: 3px solid var(--card, #fff);
+    background: var(--border, light-dark(#d4d4d8, #313133)); border-radius: 999px; border: 3px solid var(--card, light-dark(#fff, #4c4c4c));
 }
 
 .ad-text-content { display: flex; flex-direction: column; }
@@ -179,8 +179,8 @@
     margin: 8px 0;
     padding: 8px 12px 10px;
     border-radius: var(--ad-radius);
-    background: color-mix(in srgb, var(--ad-color, #9ca3af) 8%, var(--card, #fff));
-    border: 1px solid color-mix(in srgb, var(--ad-color, #9ca3af) 22%, var(--card, #fff));
+    background: color-mix(in srgb, var(--ad-color, #9ca3af) 8%, var(--card, light-dark(#fff, #1a1a1a)));
+    border: 1px solid color-mix(in srgb, var(--ad-color, #9ca3af) 22%, var(--card, light-dark(#fff, #4c4c4c)));
     transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
@@ -191,17 +191,17 @@
 .ad-side-right {
     align-self: flex-end;
     border-bottom-right-radius: 4px;
-    background: color-mix(in srgb, var(--ad-color, #9ca3af) 12%, var(--card, #fff));
+    background: color-mix(in srgb, var(--ad-color, #9ca3af) 12%, var(--card, light-dark(#fff, #1a1a1a)));
 }
 
 .ad-turn.ad-unassigned {
     border-style: dashed;
     background: repeating-linear-gradient(
         45deg,
-        color-mix(in srgb, var(--ad-color, #9ca3af) 6%, var(--card, #fff)),
-        color-mix(in srgb, var(--ad-color, #9ca3af) 6%, var(--card, #fff)) 8px,
-        color-mix(in srgb, var(--ad-color, #9ca3af) 11%, var(--card, #fff)) 8px,
-        color-mix(in srgb, var(--ad-color, #9ca3af) 11%, var(--card, #fff)) 16px
+        color-mix(in srgb, var(--ad-color, #9ca3af) 6%, var(--card, light-dark(#fff, #1a1a1a))),
+        color-mix(in srgb, var(--ad-color, #9ca3af) 6%, var(--card, light-dark(#fff, #1a1a1a))) 8px,
+        color-mix(in srgb, var(--ad-color, #9ca3af) 11%, var(--card, light-dark(#fff, #1a1a1a))) 8px,
+        color-mix(in srgb, var(--ad-color, #9ca3af) 11%, var(--card, light-dark(#fff, #1a1a1a))) 16px
     );
 }
 
@@ -260,16 +260,16 @@
 .ad-speaker-name {
     font-weight: 600;
     font-size: 0.9em;
-    color: var(--foreground, #27272a);
+    color: var(--foreground, light-dark(#27272a, #d4d4d6));
 }
 .ad-speaker-name::before { content: attr(data-name); }
-.ad-unassigned .ad-speaker-name { color: var(--muted-foreground, #71717a); font-style: italic; }
+.ad-unassigned .ad-speaker-name { color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }
 
 .ad-time {
     margin-left: auto;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 0.72em;
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     font-variant-numeric: tabular-nums;
 }
 .ad-time::before { content: attr(data-time); }
@@ -280,7 +280,7 @@
     white-space: pre-wrap;
     word-break: break-word;
     line-height: 1.55;
-    color: var(--foreground, #27272a);
+    color: var(--foreground, light-dark(#27272a, #d4d4d6));
 }
 
 /* Speaker button — click the avatar+name to open the assignment menu. Wraps
@@ -298,7 +298,7 @@
     color: inherit;
     font: inherit;
 }
-.ad-speaker-btn:hover { background: color-mix(in srgb, var(--ad-color, #9ca3af) 12%, var(--card, #fff)); border-color: color-mix(in srgb, var(--ad-color, #9ca3af) 30%, var(--border, #e4e4e7)); }
+.ad-speaker-btn:hover { background: color-mix(in srgb, var(--ad-color, #9ca3af) 12%, var(--card, light-dark(#fff, #1a1a1a))); border-color: color-mix(in srgb, var(--ad-color, #9ca3af) 30%, var(--border, light-dark(#e4e4e7, #4b4b4e))); }
 .ad-speaker-btn:focus-visible { outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }
 .ad-speaker-caret {
     width: 0; height: 0; margin-left: 1px;
@@ -308,7 +308,7 @@
     opacity: 0.7;
 }
 .ad-unassigned .ad-speaker-btn {
-    border-color: color-mix(in srgb, var(--ad-color, #9ca3af) 45%, var(--border, #e4e4e7));
+    border-color: color-mix(in srgb, var(--ad-color, #9ca3af) 45%, var(--border, light-dark(#e4e4e7, #4b4b4e)));
     border-style: dashed;
 }
 
@@ -323,8 +323,8 @@
     max-height: 320px;
     overflow-y: auto;
     padding: 5px;
-    background: var(--card, #fff);
-    border: 1px solid var(--border, #e4e4e7);
+    background: var(--card, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: 10px;
     box-shadow: 0 8px 28px rgba(24, 24, 27, 0.16);
 }
@@ -337,13 +337,13 @@
     border: none;
     border-radius: 7px;
     background: transparent;
-    color: var(--foreground, #27272a);
+    color: var(--foreground, light-dark(#27272a, #d4d4d6));
     font-size: 0.88em;
     text-align: left;
     cursor: pointer;
 }
 .ad-menu-item:hover, .ad-menu-item:focus-visible {
-    background: var(--secondary, #f4f4f5);
+    background: var(--secondary, light-dark(#f4f4f5, #1f1f21));
     outline: none;
 }
 .ad-menu-item.is-current { font-weight: 600; }
@@ -358,20 +358,20 @@
     font-weight: 700;
 }
 .ad-menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ad-menu-check { color: var(--ring, #6e56cf); font-weight: 700; }
-.ad-menu-sep { height: 1px; margin: 4px 6px; background: var(--border, #e4e4e7); }
-.ad-menu-unassign { color: var(--muted-foreground, #71717a); }
-.ad-menu-add { color: var(--ring, #6e56cf); font-weight: 600; }
+.ad-menu-check { color: var(--ring, light-dark(#6e56cf, #b2a8db)); font-weight: 700; }
+.ad-menu-sep { height: 1px; margin: 4px 6px; background: var(--border, light-dark(#e4e4e7, #27272a)); }
+.ad-menu-unassign { color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }
+.ad-menu-add { color: var(--ring, light-dark(#6e56cf, #b2a8db)); font-weight: 600; }
 
 /* Turn-level annotation slot sits below the text (proxy widgets). */
 .ad-turn .turn-anno-slot {
     margin-top: 8px;
     padding-top: 6px;
-    border-top: 1px dashed color-mix(in srgb, var(--ad-color, #9ca3af) 30%, var(--border, #e4e4e7));
+    border-top: 1px dashed color-mix(in srgb, var(--ad-color, #9ca3af) 30%, var(--border, light-dark(#e4e4e7, #4b4b4e)));
 }
 
 .ad-placeholder {
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     font-style: italic;
     padding: 12px;
 }

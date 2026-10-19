@@ -25,7 +25,7 @@
 .triage-title {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--text-secondary, #6b7280);
+    color: var(--text-secondary, light-dark(#6b7280, #bec0c6));
     margin-bottom: 0.75rem;
     text-align: left;
     text-transform: uppercase;
@@ -106,14 +106,14 @@
    ========================================== */
 
 .triage-accept {
-    background-color: #dcfce7;
-    border-color: #86efac;
-    color: #166534;
+    background-color: light-dark(#dcfce7, #143620);
+    border-color: light-dark(#86efac, #356446);
+    color: light-dark(#166534, #b5e5c7);
 }
 
 .triage-accept:hover {
-    background-color: #bbf7d0;
-    border-color: #4ade80;
+    background-color: light-dark(#bbf7d0, #1b452a);
+    border-color: light-dark(#4ade80, #376247);
 }
 
 .triage-accept.selected {
@@ -133,13 +133,13 @@
    ========================================== */
 
 .triage-reject {
-    background-color: #fee2e2;
-    border-color: #fca5a5;
-    color: #991b1b;
+    background-color: light-dark(#fee2e2, #341111);
+    border-color: light-dark(#fca5a5, #693030);
+    color: light-dark(#991b1b, #e2a2a2);
 }
 
 .triage-reject:hover {
-    background-color: #fecaca;
+    background-color: light-dark(#fecaca, #401414);
     border-color: #f87171;
 }
 
@@ -160,13 +160,13 @@
    ========================================== */
 
 .triage-skip {
-    background-color: #f3f4f6;
-    border-color: #d1d5db;
-    color: #4b5563;
+    background-color: light-dark(#f3f4f6, #1d1f22);
+    border-color: light-dark(#d1d5db, #494c50);
+    color: light-dark(#4b5563, #bcc2c9);
 }
 
 .triage-skip:hover {
-    background-color: #e5e7eb;
+    background-color: light-dark(#e5e7eb, #24262a);
     border-color: #9ca3af;
 }
 
@@ -198,7 +198,7 @@
     flex: 1;
     max-width: 200px;
     height: 4px;
-    background-color: #e5e7eb;
+    background-color: light-dark(#e5e7eb, #24262a);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -212,14 +212,14 @@
 
 .triage-progress-text {
     font-size: 0.75rem;
-    color: var(--text-secondary, #6b7280);
+    color: var(--text-secondary, light-dark(#6b7280, #bec0c6));
     font-weight: 500;
     white-space: nowrap;
 }
 
 .triage-progress-current {
     font-weight: 700;
-    color: var(--text-primary, #1a1a1a);
+    color: var(--text-primary, light-dark(#1a1a1a, #dbdbdb));
 }
 
 /* ==========================================
@@ -253,60 +253,59 @@
    Dark Mode Support
    ========================================== */
 
-@media (prefers-color-scheme: dark) {
-    .triage-title {
+/* Dark theme (data-theme, set in <head>) */
+:root[data-theme="dark"] .triage-title {
         color: #f3f4f6;
     }
 
-    .triage-accept {
+:root[data-theme="dark"] .triage-accept {
         background-color: rgba(34, 197, 94, 0.15);
         border-color: rgba(34, 197, 94, 0.4);
         color: #86efac;
     }
 
-    .triage-accept:hover {
+:root[data-theme="dark"] .triage-accept:hover {
         background-color: rgba(34, 197, 94, 0.25);
         border-color: rgba(34, 197, 94, 0.6);
     }
 
-    .triage-reject {
+:root[data-theme="dark"] .triage-reject {
         background-color: rgba(239, 68, 68, 0.15);
         border-color: rgba(239, 68, 68, 0.4);
         color: #fca5a5;
     }
 
-    .triage-reject:hover {
+:root[data-theme="dark"] .triage-reject:hover {
         background-color: rgba(239, 68, 68, 0.25);
         border-color: rgba(239, 68, 68, 0.6);
     }
 
-    .triage-skip {
+:root[data-theme="dark"] .triage-skip {
         background-color: rgba(107, 114, 128, 0.15);
         border-color: rgba(107, 114, 128, 0.4);
         color: #d1d5db;
     }
 
-    .triage-skip:hover {
+:root[data-theme="dark"] .triage-skip:hover {
         background-color: rgba(107, 114, 128, 0.25);
         border-color: rgba(107, 114, 128, 0.6);
     }
 
-    .triage-progress {
+:root[data-theme="dark"] .triage-progress {
         background-color: rgba(255, 255, 255, 0.05);
     }
 
-    .triage-progress-bar {
+:root[data-theme="dark"] .triage-progress-bar {
         background-color: rgba(255, 255, 255, 0.1);
     }
 
-    .triage-progress-text {
+:root[data-theme="dark"] .triage-progress-text {
         color: #9ca3af;
     }
 
-    .triage-progress-current {
+:root[data-theme="dark"] .triage-progress-current {
         color: #f3f4f6;
     }
-}
 
 /* ==========================================
    Animation for Selection Feedback

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{annotation_task_name}} - Training Failed</title>
+    {% include '_theme_head.html' %}
 
     <!-- Bootstrap CSS -->
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
@@ -66,7 +67,7 @@
         }
 
         .stats-label {
-            color: #6c757d;
+            color: var(--muted-foreground);
         }
 
         .stats-value {
@@ -79,6 +80,16 @@
             padding: 1rem;
             margin-top: 1.5rem;
         }
+
+        :root[data-theme="dark"] .failed-content,
+        :root[data-theme="dark"] .contact-info {
+            background-color: var(--muted);
+            border-color: var(--border);
+        }
+        :root[data-theme="dark"] .stats-box { background-color: var(--card); border-color: var(--border); }
+        :root[data-theme="dark"] .stats-row { border-bottom-color: var(--border); }
+        :root[data-theme="dark"] .failed-icon { color: var(--destructive-text); }
+        :root[data-theme="dark"] .failed-message { color: var(--text-color); }
     </style>
 </head>
 

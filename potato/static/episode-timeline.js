@@ -24,6 +24,10 @@
 (function (root) {
     'use strict';
 
+    // Canvas fills follow the light/dark theme (templates/_theme_head.html).
+    const themeColor = (colour, role) =>
+        (root.potatoThemeColor ? root.potatoThemeColor(colour, role) : colour);
+
     /** Height of one lane in CSS pixels. */
     const LANE_HEIGHT = 34;
     /** Height of the phase lane, which carries labels and so needs more. */
@@ -197,6 +201,10 @@
             this.container = null;
             this.canvas = null;
             this.episode = null;
+            // The lanes are a canvas; repaint them when the theme flips.
+            if (typeof document !== 'undefined') {
+                document.addEventListener('potato:themechange', () => this.draw());
+            }
 
             // Annotation state. Every field is listed in clearAnnotations for
             // the reason the point cloud manager lists its own: nothing here
@@ -536,16 +544,16 @@
         }
 
         _drawLaneBackground(ctx, lane, width) {
-            ctx.fillStyle = '#f6f7f9';
+            ctx.fillStyle = themeColor('#f6f7f9', 'bg');
             ctx.fillRect(0, lane.y, width, lane.height);
-            ctx.strokeStyle = '#dfe3ea';
+            ctx.strokeStyle = themeColor('#dfe3ea', 'line');
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(0, lane.y + 0.5);
             ctx.lineTo(width, lane.y + 0.5);
             ctx.stroke();
 
-            ctx.fillStyle = '#6b7280';
+            ctx.fillStyle = themeColor('#6b7280', 'text');
             ctx.font = '11px system-ui, sans-serif';
             ctx.textBaseline = 'top';
             ctx.fillText(lane.label, 4, lane.y + 3);
@@ -577,7 +585,7 @@
             const top = lane.y + 16;
             const height = lane.height - 20;
 
-            ctx.strokeStyle = '#c9cdd6';
+            ctx.strokeStyle = themeColor('#c9cdd6', 'line');
             ctx.setLineDash([2, 3]);
             ctx.beginPath();
             ctx.moveTo(0, top + height / 2);

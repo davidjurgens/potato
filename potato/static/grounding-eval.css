@@ -16,7 +16,7 @@
 }
 
 .grounding-eval-fieldset {
-    border: 1px solid var(--border, #dee2e6);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
     border-radius: var(--radius, 6px);
     padding: var(--space-md, 1rem);
     margin: 0;
@@ -26,7 +26,7 @@
     font-weight: 600;
     font-size: 1rem;
     padding: 0 0.5rem;
-    color: var(--heading-color, #212529);
+    color: var(--heading-color, light-dark(#212529, #d3d7da));
 }
 
 /* -- the expression list --------------------------------------------------- */
@@ -53,10 +53,10 @@
     min-height: 44px;
     padding: 0.5rem 0.75rem;
     text-align: left;
-    background: var(--background, #fff);
-    border: 1px solid var(--border, #dee2e6);
+    background: var(--background, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
     border-radius: var(--radius, 6px);
-    color: var(--text-color, #212529);
+    color: var(--text-color, light-dark(#212529, #d3d7da));
     font-size: 0.9375rem;
     line-height: 1.5;
     cursor: pointer;
@@ -64,7 +64,7 @@
 }
 
 .grounding-expression-btn:hover {
-    background: var(--muted, #f8f9fa);
+    background: var(--muted, light-dark(#f8f9fa, #1a1d20));
 }
 
 /* styles.css sets `outline: none` in 25 places and its :focus-visible rules
@@ -87,15 +87,15 @@
 /* The state, as fill rather than as a badge alone: scanning a 30-phrase list
    for what is left has to work at a glance. */
 .grounding-item.state-located .grounding-expression-btn {
-    background: #e6f4ea;
+    background: light-dark(#e6f4ea, #1d2c21);
 }
 
 .grounding-item.state-absent .grounding-expression-btn {
-    background: #f6f6f7;
+    background: light-dark(#f6f6f7, #1e1e20);
 }
 
 .grounding-item.state-unanswered .grounding-expression-btn {
-    background: #fdf6e7;
+    background: light-dark(#fdf6e7, #312712);
 }
 
 .grounding-state {
@@ -103,20 +103,20 @@
     font-variant: small-caps;
     letter-spacing: 0.02em;
     white-space: nowrap;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
 }
 
 .grounding-has-prediction {
     font-size: 0.6875rem;
-    color: #5a6472;
+    color: light-dark(#5a6472, #bcc1c7);
     white-space: nowrap;
 }
 
 .grounding-warning {
     padding: 0.75rem;
     border-radius: var(--radius, 6px);
-    background: #fff8e6;
-    color: #8a5a00;
+    background: light-dark(#fff8e6, #33290f);
+    color: light-dark(#8a5a00, #f2d6a2);
     font-size: 0.875rem;
     line-height: 1.5;
 }
@@ -137,9 +137,9 @@
     min-width: 44px;
     padding: 0.5rem 0.875rem;
     border-radius: var(--radius, 6px);
-    border: 1px solid var(--border, #dee2e6);
-    background: var(--background, #fff);
-    color: var(--text-color, #212529);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
+    background: var(--background, light-dark(#fff, #1a1a1a));
+    color: var(--text-color, light-dark(#212529, #d3d7da));
     font-size: 0.875rem;
     cursor: pointer;
     transition: background-color 120ms ease-out;
@@ -147,7 +147,7 @@
 
 .grounding-absent-btn:hover,
 .grounding-clear-btn:hover {
-    background: var(--muted, #f8f9fa);
+    background: var(--muted, light-dark(#f8f9fa, #1a1d20));
 }
 
 .grounding-help {
@@ -155,7 +155,7 @@
     margin: 0;
     font-size: 0.75rem;
     line-height: 1.5;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     max-width: 62ch;
 }
 
@@ -175,12 +175,12 @@
     margin: var(--space-md, 1rem) 0 0 0;
     font-size: 0.8125rem;
     line-height: 1.5;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     max-width: 70ch;
 }
 
 .grounding-eval-container.error .grounding-progress {
-    color: #b02a37;
+    color: light-dark(#b02a37, #dea6ab);
 }
 
 .grounding-announce.sr-only,
@@ -209,22 +209,22 @@
 .grounding-caption-panel {
     margin-bottom: var(--space-md, 1rem);
     padding-bottom: var(--space-md, 1rem);
-    border-bottom: 1px solid var(--border, #dee2e6);
+    border-bottom: 1px solid var(--border, light-dark(#dee2e6, #484c51));
 }
 
 .grounding-caption-help {
     margin: 0 0 0.5rem 0;
     font-size: 0.8125rem;
     line-height: 1.5;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     max-width: 70ch;
 }
 
 .grounding-caption {
     padding: 0.75rem;
-    border: 1px solid var(--border, #dee2e6);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
     border-radius: var(--radius, 6px);
-    background: var(--background, #fff);
+    background: var(--background, light-dark(#fff, #1a1a1a));
     font-size: 1rem;
     line-height: 1.7;   /* room for the marks not to collide between lines */
     max-width: 75ch;
@@ -249,17 +249,17 @@
 }
 
 .grounding-span.state-located {
-    background: #e6f4ea;
+    background: light-dark(#e6f4ea, #1d2c21);
     border-bottom: 2px solid #1e7e34;
 }
 
 .grounding-span.state-absent {
-    background: #fdecea;
+    background: light-dark(#fdecea, #2f1512);
     border-bottom: 2px dashed #b02a37;
 }
 
 .grounding-span.state-unanswered {
-    background: #fdf6e7;
+    background: light-dark(#fdf6e7, #312712);
     border-bottom: 2px dotted #8a5a00;
 }
 
@@ -268,9 +268,9 @@
     min-height: 44px;
     padding: 0.5rem 0.875rem;
     border-radius: var(--radius, 6px);
-    border: 1px solid var(--border, #dee2e6);
-    background: var(--background, #fff);
-    color: var(--text-color, #212529);
+    border: 1px solid var(--border, light-dark(#dee2e6, #484c51));
+    background: var(--background, light-dark(#fff, #1a1a1a));
+    color: var(--text-color, light-dark(#212529, #d3d7da));
     font-size: 0.875rem;
     cursor: pointer;
 }

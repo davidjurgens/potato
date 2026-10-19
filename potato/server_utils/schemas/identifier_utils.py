@@ -279,10 +279,10 @@ def safe_generate_layout(annotation_scheme: dict, layout_function: callable, *ar
 
         # Return error HTML instead of crashing
         error_html = f"""
-        <div class="annotation-error" style="border: 2px solid #ff0000; padding: 10px; margin: 10px 0; background-color: #fff5f5;">
+        <div class="annotation-error" style="border: 2px solid #ff0000; padding: 10px; margin: 10px 0; background-color: light-dark(#fff5f5, #2c0d0d);">
             <h4 style="color: #ff0000; margin: 0 0 10px 0;">Error Generating Annotation Form</h4>
-            <p style="margin: 0; color: #666;">Schema: {escape_html_content(schema_name)}</p>
-            <p style="margin: 5px 0 0 0; color: #333;">{escape_html_content(str(e))}</p>
+            <p style="margin: 0; color: light-dark(#666, #c2c2c2);">Schema: {escape_html_content(schema_name)}</p>
+            <p style="margin: 5px 0 0 0; color: light-dark(#333, #d1d1d1);">{escape_html_content(str(e))}</p>
         </div>
         """
         return error_html, []

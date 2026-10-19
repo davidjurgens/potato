@@ -5690,6 +5690,7 @@ def create_app(config_file=None):
         # catalog (e.g. ui_language: es) + optional inline per-key overrides.
         from potato.server_utils.i18n import resolve_ui_language
         ui_lang = resolve_ui_language(config.get('ui_language'), ui_lang_defaults)
+        from potato.server_utils.theme import resolve_ui_theme
 
         # Load project-level base CSS if configured
         from potato.server_utils.front_end import load_project_base_css_html, resolve_header_logo_src
@@ -5712,6 +5713,9 @@ def create_app(config_file=None):
             'annotation_codebook_url': _sanitize_codebook_url(config.get('annotation_codebook_url', '')),
             # Multilingual UI strings
             'ui_lang': ui_lang,
+            # auto | light | dark (server_utils/theme.py); read by
+            # _theme_head.html and _theme_toggle.html on annotator pages.
+            'ui_theme': resolve_ui_theme(config),
             # Scripts and styles from loaded plugins (potato/plugins.py).
             # Here rather than in the two page-render paths so every page
             # built on the base template gets them.

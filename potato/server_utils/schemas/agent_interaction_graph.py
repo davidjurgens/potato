@@ -297,27 +297,27 @@ def _generate_internal(
     <style>
     .agent-graph-container {{ font-family: inherit; }}
     .aig-title {{ font-weight: 600; font-size: 1em; margin-bottom: 4px; }}
-    .aig-help {{ font-size: 0.82em; color: var(--muted-foreground, #71717a); margin: 0 0 8px; }}
-    .aig-canvas-wrap {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                        background: var(--card, #fff); padding: 4px; }}
+    .aig-help {{ font-size: 0.82em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin: 0 0 8px; }}
+    .aig-canvas-wrap {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                        background: var(--card, light-dark(#fff, #1a1a1a)); padding: 4px; }}
     .aig-svg {{ width: 100%; height: auto; display: block; max-height: 340px; }}
     .aig-node {{ cursor: pointer; }}
-    .aig-node-circle {{ fill: var(--secondary, #f4f4f5); stroke: var(--border, #c7c7cc); stroke-width: 1.5; transition: fill 0.12s, stroke 0.12s; }}
+    .aig-node-circle {{ fill: var(--secondary, #f4f4f5); stroke: var(--border, light-dark(#c7c7cc, #4b4b4e)); stroke-width: 1.5; transition: fill 0.12s, stroke 0.12s; }}
     .aig-node:hover .aig-node-circle {{ stroke: var(--ring, #6e56cf); }}
     .aig-node:focus-visible {{ outline: none; }}
     .aig-node:focus-visible .aig-node-circle {{ stroke: var(--ring, #6e56cf); stroke-width: 3; }}
-    .aig-node-label {{ font-size: 11px; font-family: ui-monospace, monospace; fill: var(--foreground, #18181b); pointer-events: none; }}
-    .aig-node-critical .aig-node-circle {{ fill: #6e56cf; stroke: #4c3a9e; }}
+    .aig-node-label {{ font-size: 11px; font-family: ui-monospace, monospace; fill: var(--foreground, light-dark(#18181b, #dadadd)); pointer-events: none; }}
+    .aig-node-critical .aig-node-circle {{ fill: light-dark(#6e56cf, #b2a8db); stroke: #4c3a9e; }}
     .aig-node-critical .aig-node-label {{ fill: #fff; }}
     .aig-edge {{ stroke: #9ca3af; cursor: pointer; }}
     .aig-edge:hover {{ stroke: var(--ring, #6e56cf); }}
     .aig-edge:focus-visible {{ outline: none; stroke: var(--ring, #6e56cf); stroke-dasharray: 4 3; }}
     .aig-edge-critical {{ stroke: #6e56cf; }}
     .aig-edge-problematic {{ stroke: #e03131; stroke-dasharray: 5 4; }}
-    .aig-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; margin-top: 6px; }}
+    .aig-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; margin-top: 6px; }}
     .aig-summary {{ margin-top: 8px; font-size: 0.85em; }}
     .aig-sum-line {{ margin: 3px 0; }}
-    .aig-sum-none {{ color: var(--muted-foreground, #71717a); }}
+    .aig-sum-none {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .aig-chip {{ display: inline-block; font-size: 0.72em; font-weight: 700; text-transform: uppercase;
                  letter-spacing: 0.03em; padding: 1px 7px; border-radius: 999px; margin-right: 6px; color: #fff; }}
     .aig-chip-critical {{ background: #6e56cf; }}

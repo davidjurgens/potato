@@ -7,9 +7,9 @@
 /* Document Display Base */
 .document-display {
     position: relative;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 4px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 .document-content {
@@ -112,14 +112,14 @@
 
 .document-summary {
     padding: 10px 15px;
-    background: #f8f9fa;
+    background: light-dark(#f8f9fa, #1a1d20);
     cursor: pointer;
     font-weight: 500;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid light-dark(#ddd, #4c4c4c);
 }
 
 .document-summary:hover {
-    background: #e9ecef;
+    background: light-dark(#e9ecef, #222528);
 }
 
 /* Document Themes */
@@ -145,8 +145,8 @@
     position: sticky;
     top: 0;
     padding: 15px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #ddd;
+    background: light-dark(#f8f9fa, #1a1d20);
+    border-bottom: 1px solid light-dark(#ddd, #4c4c4c);
     max-height: 200px;
     overflow-y: auto;
 }
@@ -154,7 +154,7 @@
 .outline-title {
     font-weight: 600;
     margin-bottom: 10px;
-    color: #333;
+    color: light-dark(#333, #d1d1d1);
 }
 
 .outline-list {
@@ -168,7 +168,7 @@
 }
 
 .outline-link {
-    color: #0066cc;
+    color: light-dark(#0066cc, #94c2f0);
     text-decoration: none;
     font-size: 13px;
 }
@@ -187,10 +187,10 @@
 /* Document Metadata */
 .document-metadata {
     padding: 8px 15px;
-    background: #f8f9fa;
-    border-top: 1px solid #ddd;
+    background: light-dark(#f8f9fa, #1a1d20);
+    border-top: 1px solid light-dark(#ddd, #4c4c4c);
     font-size: 12px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }
 
 /* Bounding Box Styles (drawn on canvas) */

@@ -24,6 +24,10 @@ function tieredDebugLog(...args) {
 /**
  * TieredAnnotationManager - Main class for managing tiered annotations
  */
+// Canvas fills follow the light/dark theme (templates/_theme_head.html).
+const themeColor = (colour, role) =>
+    (window.potatoThemeColor ? window.potatoThemeColor(colour, role) : colour);
+
 class TieredAnnotationManager {
     /**
      * Create a TieredAnnotationManager instance.
@@ -111,6 +115,11 @@ class TieredAnnotationManager {
         this.zoomedViewDuration = 10;  // Seconds visible in zoomed view
         this.zoomedViewStart = 0;  // Start time of zoomed view in seconds
         this.zoomedTimelineView = null;  // Will hold ZoomedTimelineView instance
+        // Canvases paint resolved colours; repaint them when the theme flips.
+        document.addEventListener('potato:themechange', () => {
+            this._renderAllTiers();
+            if (this.zoomedTimelineView) this.zoomedTimelineView.render();
+        });
     }
 
     /**
@@ -2115,7 +2124,7 @@ class TierView {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Draw background
-        this.ctx.fillStyle = '#fafafa';
+        this.ctx.fillStyle = themeColor('#fafafa', 'bg');
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Draw grid lines
@@ -2165,7 +2174,7 @@ class TierView {
         const duration = this.manager.mediaMetadata.duration;
         if (!duration) return;
 
-        this.ctx.strokeStyle = '#e0e0e0';
+        this.ctx.strokeStyle = themeColor('#e0e0e0', 'line');
         this.ctx.lineWidth = 1;
 
         // Draw line every second or more depending on zoom
@@ -2638,7 +2647,7 @@ class ZoomedTimelineView {
         const height = this.canvas.height;
 
         // Clear
-        ctx.fillStyle = '#f8f9fa';
+        ctx.fillStyle = themeColor('#f8f9fa', 'bg');
         ctx.fillRect(0, 0, width, height);
 
         const tiers = this.manager.config.tiers;
@@ -2650,11 +2659,11 @@ class ZoomedTimelineView {
             const y = i * tierHeight;
 
             // Alternating background
-            ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#f5f5f5';
+            ctx.fillStyle = themeColor(i % 2 === 0 ? '#ffffff' : '#f5f5f5', 'bg');
             ctx.fillRect(0, y, width, tierHeight);
 
             // Tier divider
-            ctx.strokeStyle = '#e0e0e0';
+            ctx.strokeStyle = themeColor('#e0e0e0', 'line');
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(0, y + tierHeight);
@@ -2720,7 +2729,7 @@ class ZoomedTimelineView {
         if (viewDuration > 30) interval = 5;
         if (viewDuration > 120) interval = 30;
 
-        ctx.strokeStyle = '#ddd';
+        ctx.strokeStyle = themeColor('#ddd', 'line');
         ctx.lineWidth = 1;
         ctx.fillStyle = '#999';
         ctx.font = '9px sans-serif';

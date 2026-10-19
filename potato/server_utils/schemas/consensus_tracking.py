@@ -252,31 +252,31 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     <style>
     .consensus-tracking-container {{ font-family: inherit; }}
     .ct-title {{ font-weight: 600; font-size: 1em; margin-bottom: 4px; }}
-    .ct-hint {{ font-size: 0.85em; color: var(--muted-foreground, #71717a); margin-bottom: 8px; }}
+    .ct-hint {{ font-size: 0.85em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin-bottom: 8px; }}
     .ct-list {{ display: flex; flex-direction: column; gap: 8px; }}
-    .ct-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                padding: 8px 12px; background: var(--card, #fff); }}
+    .ct-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .ct-card.ct-tagged {{ border-color: var(--ring, #6e56cf); }}
     .ct-link-mode .ct-card {{ cursor: crosshair; }}
     .ct-card.ct-awaiting-ref {{ outline: 2px dashed var(--ring, #6e56cf); outline-offset: 2px; }}
     .ct-head {{ display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }}
-    .ct-idx {{ font-size: 0.75em; color: var(--muted-foreground, #71717a); }}
+    .ct-idx {{ font-size: 0.75em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .ct-speaker {{ font-weight: 600; }}
     .ct-tag-badge {{ font-size: 0.75em; padding: 1px 8px; border-radius: 999px; margin-left: auto; }}
-    .ct-badge-proposal {{ background: #dbeafe; color: #1d4ed8; }}
-    .ct-badge-agreement {{ background: #dcfce7; color: #15803d; }}
-    .ct-badge-disagreement {{ background: #fee2e2; color: #b91c1c; }}
-    .ct-badge-decision {{ background: #ede9fe; color: #6d28d9; }}
-    .ct-badge-concession {{ background: #fef9c3; color: #a16207; }}
-    .ct-text {{ font-size: 0.85em; color: #3f3f46; margin: 4px 0; white-space: pre-wrap; }}
+    .ct-badge-proposal {{ background: light-dark(#dbeafe, #122238); color: light-dark(#1d4ed8, #9fb1e5); }}
+    .ct-badge-agreement {{ background: light-dark(#dcfce7, #143620); color: light-dark(#15803d, #aae5c0); }}
+    .ct-badge-disagreement {{ background: light-dark(#fee2e2, #341111); color: light-dark(#b91c1c, #e4a0a0); }}
+    .ct-badge-decision {{ background: light-dark(#ede9fe, #161031); color: light-dark(#6d28d9, #bba2e2); }}
+    .ct-badge-concession {{ background: light-dark(#fef9c3, #433f14); color: light-dark(#a16207, #edcb9b); }}
+    .ct-text {{ font-size: 0.85em; color: light-dark(#3f3f46, #c9c9cd); margin: 4px 0; white-space: pre-wrap; }}
     .ct-acts {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .ct-act {{ padding: 2px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-               border-radius: 999px; background: var(--card, #fff); cursor: pointer; }}
-    .ct-act:hover {{ background: var(--secondary, #f4f4f5); }}
+    .ct-act {{ padding: 2px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+               border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; }}
+    .ct-act:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .ct-act:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .ct-act.selected {{ background: var(--ring, #6e56cf); color: #fff; border-color: var(--ring, #6e56cf);
                         font-weight: 600; }}
-    .ct-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+    .ct-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated consensus_tracking layout for {schema_name}")

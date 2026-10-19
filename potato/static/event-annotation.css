@@ -6,8 +6,8 @@
 
 /* Container */
 .event-annotation-container {
-    background-color: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 8px;
     padding: 16px;
     margin-bottom: 16px;
@@ -27,7 +27,7 @@
     margin: 0;
     font-size: 14px;
     font-weight: 600;
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 /* Section Labels */
@@ -35,7 +35,7 @@
     display: block;
     font-size: 12px;
     font-weight: 500;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     margin-bottom: 8px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -69,12 +69,12 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border: 1px solid var(--border-color, #e5e7eb);
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
     transition: all 0.15s ease;
-    background-color: var(--card-bg, #fff);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
 }
 
 .event-type-label:hover {
@@ -96,14 +96,14 @@
 }
 
 .event-type-name {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 /* Trigger Section */
 .event-trigger-section {
     margin-bottom: 16px;
     padding: 12px;
-    background-color: var(--bg-secondary, #f9fafb);
+    background-color: var(--bg-secondary, light-dark(#f9fafb, #191d20));
     border-radius: 6px;
     min-height: 60px;
 }
@@ -117,7 +117,7 @@
 .no-trigger-message,
 .no-events-message,
 .no-arguments-message {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     font-size: 13px;
     font-style: italic;
     margin: 0;
@@ -128,7 +128,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    background-color: color-mix(in srgb, var(--event-color, #dc2626) 15%, white);
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 15%, light-dark(white, #1a1a1a));
     border: 2px solid var(--event-color, #dc2626);
     border-radius: 6px;
     font-size: 13px;
@@ -148,12 +148,12 @@
 }
 
 .trigger-text {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
     font-weight: 500;
 }
 
 .trigger-label {
-    color: var(--event-color, #dc2626);
+    color: var(--event-color, light-dark(#dc2626, #e3a1a1));
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
@@ -163,7 +163,7 @@
 .event-arguments-section {
     margin-bottom: 16px;
     padding: 12px;
-    background-color: var(--bg-secondary, #f9fafb);
+    background-color: var(--bg-secondary, light-dark(#f9fafb, #191d20));
     border-radius: 6px;
 }
 
@@ -192,11 +192,11 @@
     align-items: center;
     gap: 4px;
     padding: 6px 12px;
-    border: 1px solid var(--border-color, #e5e7eb);
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
-    background-color: var(--card-bg, #fff);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
     transition: all 0.15s ease;
     min-width: 80px;
     justify-content: center;
@@ -208,12 +208,12 @@
 
 .event-role-button.active {
     border-color: var(--event-color, #dc2626);
-    background-color: color-mix(in srgb, var(--event-color, #dc2626) 15%, white);
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 15%, light-dark(white, #1a1a1a));
     font-weight: 500;
 }
 
 .role-name {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 .required-indicator {
@@ -222,7 +222,7 @@
 }
 
 .entity-type-hint {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     font-size: 11px;
     font-style: italic;
 }
@@ -232,14 +232,14 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    background-color: var(--card-bg, #fff);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
     border: 1px solid var(--event-color, #dc2626);
     border-radius: 4px;
     font-size: 12px;
 }
 
 .argument-text {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
     max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -247,7 +247,7 @@
 }
 
 .argument-label {
-    color: var(--event-color, #dc2626);
+    color: var(--event-color, light-dark(#dc2626, #e3a1a1));
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
@@ -261,7 +261,7 @@
     height: 16px;
     border: none;
     background-color: transparent;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
@@ -270,7 +270,7 @@
 }
 
 .argument-remove-btn:hover {
-    background-color: #fee2e2;
+    background-color: light-dark(#fee2e2, #341111);
     color: #ef4444;
 }
 
@@ -311,8 +311,8 @@
     gap: 6px;
     padding: 8px 16px;
     background-color: transparent;
-    color: var(--text-muted, #6b7280);
-    border: 1px solid var(--border-color, #e5e7eb);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
@@ -320,8 +320,8 @@
 }
 
 .event-cancel-btn:hover {
-    background-color: var(--bg-secondary, #f9fafb);
-    color: var(--text-color, #1f2937);
+    background-color: var(--bg-secondary, light-dark(#f9fafb, #191d20));
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 /* Existing Events */
@@ -337,8 +337,8 @@
 
 .event-item {
     padding: 12px;
-    background-color: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-left: 3px solid var(--event-color, #dc2626);
     border-radius: 6px;
 }
@@ -368,14 +368,14 @@
     height: 24px;
     border: none;
     background-color: transparent;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.15s ease;
 }
 
 .event-delete-btn:hover {
-    background-color: #fee2e2;
+    background-color: light-dark(#fee2e2, #341111);
     color: #ef4444;
 }
 
@@ -395,20 +395,20 @@
 
 .trigger-role,
 .argument-role {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     font-weight: 500;
     min-width: 60px;
 }
 
 .trigger-value,
 .argument-value {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 /* Visual Toggle */
 .event-visual-toggle {
     padding-top: 8px;
-    border-top: 1px solid var(--border-color, #e5e7eb);
+    border-top: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
 }
 
 .event-visual-toggle label {
@@ -416,7 +416,7 @@
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
 }
 
@@ -484,7 +484,7 @@ body.event-annotation-mode-active .span-overlay-ai.event-argument-selected {
 .event-role-label {
     font-family: system-ui, -apple-system, sans-serif;
     paint-order: stroke;
-    stroke: white;
+    stroke: light-dark(white, #4c4c4c);
     stroke-width: 3px;
 }
 

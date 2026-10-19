@@ -256,33 +256,33 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .gui-trajectory-container {{ font-family: inherit; }}
     .gt-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .gt-list {{ display: flex; flex-direction: column; gap: 12px; }}
-    .gt-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                padding: 10px 12px; background: var(--card, #fff); }}
+    .gt-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                padding: 10px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .gt-card.gt-judged {{ border-color: var(--ring, #6e56cf); }}
     .gt-head {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
     .gt-step {{ font-weight: 600; }}
-    .gt-coord {{ font-size: 0.75em; font-family: ui-monospace, monospace; color: var(--muted-foreground, #71717a); }}
-    .gt-shot-wrap {{ position: relative; display: inline-block; max-width: 100%; border: 1px solid var(--border, #e4e4e7);
+    .gt-coord {{ font-size: 0.75em; font-family: ui-monospace, monospace; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
+    .gt-shot-wrap {{ position: relative; display: inline-block; max-width: 100%; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
                      border-radius: 6px; overflow: hidden; }}
     .gt-shot {{ display: block; max-width: 100%; height: auto; }}
-    .gt-shot-missing {{ font-size: 0.85em; color: var(--muted-foreground, #71717a); font-style: italic; padding: 8px 0; }}
+    .gt-shot-missing {{ font-size: 0.85em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; padding: 8px 0; }}
     .gt-marker-pending {{ display: none; }}
     .gt-marker {{ position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
                   border: 2px solid #e03131; border-radius: 50%; background: rgba(224,49,49,0.25);
-                  box-shadow: 0 0 0 2px rgba(255,255,255,0.7); }}
+                  box-shadow: 0 0 0 2px light-dark(rgba(255,255,255,0.7), rgba(76, 76, 76, 0.7)); }}
     .gt-action {{ margin: 8px 0; font-size: 0.9em; }}
-    .gt-action-lbl {{ font-weight: 600; color: var(--muted-foreground, #71717a); }}
+    .gt-action-lbl {{ font-weight: 600; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .gt-verdicts {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .gt-vbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-                border-radius: 999px; background: var(--card, #fff); cursor: pointer; color: var(--foreground, #18181b); }}
-    .gt-vbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .gt-vbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .gt-vbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .gt-vbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .gt-vbtn.selected {{ font-weight: 600; }}
     .gt-vbtn.selected.v-correct {{ background: #4caf50; color: #fff; border-color: #4caf50; }}
     .gt-vbtn.selected.v-bad {{ background: #e03131; color: #fff; border-color: #e03131; }}
     .gt-notes {{ margin-top: 6px; width: 100%; box-sizing: border-box; padding: 4px 8px;
-                 border: 1px solid var(--border, #e4e4e7); border-radius: 6px; font-size: 0.85em; }}
-    .gt-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+                 border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; font-size: 0.85em; }}
+    .gt-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated gui_trajectory layout for {schema_name}")

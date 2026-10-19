@@ -45,7 +45,7 @@
 }
 
 .memo-panel-toggle:hover { background: var(--memo-surface-2); transform: translateY(-50%) translateX(-2px); }
-.memo-panel-toggle:active { background: #eef0f6; }
+.memo-panel-toggle:active { background: light-dark(#eef0f6, #1c1e27); }
 
 .memo-panel {
     position: fixed;
@@ -126,7 +126,7 @@
     transition: border-color 140ms ease-out;
 }
 
-.memo-item:hover { border-color: #cdd1e0; }
+.memo-item:hover { border-color: light-dark(#cdd1e0, #454854); }
 
 .memo-item .memo-body {
     white-space: pre-wrap;
@@ -156,9 +156,9 @@
 }
 
 /* WCAG-AA contrast on the small badge text */
-.memo-badge.private { background: #eceef4; color: #494f63; border-color: #dcdfe9; }
-.memo-badge.shared  { background: #e2f1e7; color: #246b3c; border-color: #bcdec8; }
-.memo-badge.anchor  { background: #e8edfa; color: #2f4ea0; border-color: #c7d4f0; }
+.memo-badge.private { background: light-dark(#eceef4, #1d2028); color: light-dark(#494f63, #bcbfca); border-color: light-dark(#dcdfe9, #464953); }
+.memo-badge.shared  { background: light-dark(#e2f1e7, #1f2e24); color: light-dark(#246b3c, #b5ddc2); border-color: light-dark(#bcdec8, #425749); }
+.memo-badge.anchor  { background: light-dark(#e8edfa, #161d2e); color: light-dark(#2f4ea0, #a9b6db); border-color: light-dark(#c7d4f0, #3b465e); }
 
 .memo-actions { margin-left: auto; display: flex; gap: var(--memo-space-3); }
 
@@ -174,9 +174,9 @@
     transition: color 140ms ease-out, background-color 140ms ease-out;
 }
 
-.memo-actions button:hover { color: #2c4a93; background: #eef2fb; }
-.memo-actions button[data-act="del"] { color: #b23b3b; }
-.memo-actions button[data-act="del"]:hover { color: #8f2a2a; background: #fbeeee; }
+.memo-actions button:hover { color: light-dark(#2c4a93, #a9b7db); background: light-dark(#eef2fb, #151c2b); }
+.memo-actions button[data-act="del"] { color: light-dark(#b23b3b, #d9abab); }
+.memo-actions button[data-act="del"]:hover { color: light-dark(#8f2a2a, #dba9a9); background: light-dark(#fbeeee, #2b1515); }
 
 .memo-composer {
     border-top: 1px solid var(--memo-line);
@@ -240,9 +240,9 @@
 
 .memo-anchor-hint {
     font-size: 0.76rem;
-    color: #2f4ea0;
-    background: #e8edfa;
-    border: 1px solid #c7d4f0;
+    color: light-dark(#2f4ea0, #a9b6db);
+    background: light-dark(#e8edfa, #161d2e);
+    border: 1px solid light-dark(#c7d4f0, #3b465e);
     border-radius: 6px;
     padding: var(--memo-space-2) var(--memo-space-3);
 }
@@ -296,8 +296,8 @@
 .memo-reply .memo-body { font-size: 0.875rem; }
 .memo-item.is-open-issue { border-left: 3px solid #c2410c; }
 .memo-item.is-resolved { opacity: 0.85; }
-.memo-badge.status-open     { background: #fdecdf; color: #9a3412; border-color: #f6c9a8; }
-.memo-badge.status-resolved { background: #e2f1e7; color: #246b3c; border-color: #bcdec8; }
+.memo-badge.status-open     { background: light-dark(#fdecdf, #352112); color: light-dark(#9a3412, #e7b1a0); border-color: light-dark(#f6c9a8, #654934); }
+.memo-badge.status-resolved { background: light-dark(#e2f1e7, #1f2e24); color: light-dark(#246b3c, #b5ddc2); border-color: light-dark(#bcdec8, #425749); }
 .memo-assignee { font-style: italic; }
 .memo-meta { flex-wrap: wrap; }
 .memo-shape-link { cursor: pointer; font: inherit; font-size: 0.7rem; }
@@ -350,8 +350,8 @@
     margin: 0 var(--memo-space-4);
     padding: var(--memo-space-2) var(--memo-space-3);
     border-radius: var(--memo-radius);
-    background: #fbeeee;
-    color: #8f2a2a;
+    background: light-dark(#fbeeee, #2b1515);
+    color: light-dark(#8f2a2a, #dba9a9);
     font-size: 0.8125rem;
 }
 .memo-sr {
@@ -363,20 +363,20 @@
 .memo-assigned-count {
     margin-left: var(--memo-space-1);
     font-weight: 600;
-    color: #9a3412;
+    color: light-dark(#9a3412, #e7b1a0);
 }
 
 .memo-assigned {
     padding: var(--memo-space-3) var(--memo-space-4);
     border-bottom: 1px solid var(--memo-line);
-    background: #fff8f2;
+    background: light-dark(#fff8f2, #2e1c0d);
 }
 
 .memo-assigned-title {
     margin: 0 0 var(--memo-space-2);
     font-size: 13px;
     font-weight: 600;
-    color: #9a3412;
+    color: light-dark(#9a3412, #e7b1a0);
 }
 
 .memo-assigned-list {

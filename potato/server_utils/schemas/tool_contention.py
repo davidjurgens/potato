@@ -240,35 +240,35 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     <style>
     .tool-contention-container {{ font-family: inherit; }}
     .tc-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
-    .tc-timeline-wrap {{ display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border, #e4e4e7);
-                         border-radius: 6px; padding: 8px; background: var(--card, #fff); }}
+    .tc-timeline-wrap {{ display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                         border-radius: 6px; padding: 8px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .tc-lane-row {{ display: flex; align-items: center; gap: 8px; }}
     .tc-lane-label {{ width: 90px; flex-shrink: 0; font-size: 0.75em; font-family: ui-monospace, monospace;
-                      text-align: right; color: var(--muted-foreground, #71717a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    .tc-lane {{ position: relative; flex: 1; height: 26px; background: var(--secondary, #f4f4f5); border-radius: 4px; overflow: hidden; }}
+                      text-align: right; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .tc-lane {{ position: relative; flex: 1; height: 26px; background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); border-radius: 4px; overflow: hidden; }}
     .tc-call {{ position: absolute; top: 3px; height: 20px; background: #6e56cf; color: #fff; border-radius: 3px;
                 font-size: 0.68em; line-height: 20px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
     .tc-band {{ position: absolute; top: 0; bottom: 0; background: rgba(224,49,49,0.22);
                 border-left: 1px solid #e03131; border-right: 1px solid #e03131; pointer-events: none; }}
     .tc-head {{ margin: 10px 0 4px; font-size: 0.78em; font-weight: 700; text-transform: uppercase;
-                letter-spacing: 0.03em; color: var(--muted-foreground, #71717a); }}
+                letter-spacing: 0.03em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .tc-list {{ display: flex; flex-direction: column; gap: 8px; }}
-    .tc-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                padding: 8px 12px; background: var(--card, #fff); }}
+    .tc-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .tc-card.tc-judged {{ border-color: var(--ring, #6e56cf); }}
     .tc-chead {{ display: flex; justify-content: space-between; align-items: baseline; }}
-    .tc-res {{ font-family: ui-monospace, monospace; font-weight: 600; color: #e03131; }}
-    .tc-ctime {{ font-size: 0.78em; color: var(--muted-foreground, #71717a); }}
+    .tc-res {{ font-family: ui-monospace, monospace; font-weight: 600; color: light-dark(#e03131, #e4a0a0); }}
+    .tc-ctime {{ font-size: 0.78em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .tc-pair {{ font-size: 0.85em; margin: 4px 0; font-family: ui-monospace, monospace; }}
     .tc-pills {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .tc-lbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-                border-radius: 999px; background: var(--card, #fff); cursor: pointer; color: var(--foreground, #18181b); }}
-    .tc-lbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .tc-lbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .tc-lbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .tc-lbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .tc-lbtn.selected {{ font-weight: 600; }}
     .tc-lbtn.selected.v-benign {{ background: #4caf50; color: #fff; border-color: #4caf50; }}
     .tc-lbtn.selected.v-bad {{ background: #e03131; color: #fff; border-color: #e03131; }}
-    .tc-none {{ color: var(--muted-foreground, #71717a); font-style: italic; margin: 8px 0; }}
+    .tc-none {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; margin: 8px 0; }}
     </style>
     """
     logger.info(f"Successfully generated tool_contention layout for {schema_name}")

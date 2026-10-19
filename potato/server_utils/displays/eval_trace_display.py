@@ -464,64 +464,64 @@ class EvalTraceDisplay(BaseDisplay):
         gap = "8px" if compact else "12px"
         return f'''
         .eval-trace-display {{ font-family: inherit; width: 100%; }}
-        .eval-trace-empty {{ padding: 16px; color: #777; font-style: italic; }}
+        .eval-trace-empty {{ padding: 16px; color: light-dark(#777, #c2c2c2); font-style: italic; }}
         .eval-trace-panes {{
             display: flex; gap: {gap}; align-items: stretch; width: 100%;
         }}
         .eval-pane {{
             flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
-            border: 1px solid #e3e6ea; border-radius: 8px; overflow: hidden;
-            background: #fff;
+            border: 1px solid light-dark(#e3e6ea, #484c51); border-radius: 8px; overflow: hidden;
+            background: light-dark(#fff, #1a1a1a);
         }}
         .eval-pane-header {{
             padding: 8px 12px; font-weight: 600; font-size: 0.85em;
-            letter-spacing: 0.02em; text-transform: uppercase; color: #4a5568;
-            background: #f7f8fa; border-bottom: 1px solid #e3e6ea;
+            letter-spacing: 0.02em; text-transform: uppercase; color: light-dark(#4a5568, #bac0ca);
+            background: light-dark(#f7f8fa, #1a1c21); border-bottom: 1px solid light-dark(#e3e6ea, #484c51);
         }}
-        .eval-pane-reasoning .eval-pane-header {{ color: #1565c0; }}
-        .eval-pane-calls .eval-pane-header {{ color: #c2410c; }}
-        .eval-pane-answer .eval-pane-header {{ color: #2e7d32; }}
+        .eval-pane-reasoning .eval-pane-header {{ color: light-dark(#1565c0, #9dbfe7); }}
+        .eval-pane-calls .eval-pane-header {{ color: light-dark(#c2410c, #eab199); }}
+        .eval-pane-answer .eval-pane-header {{ color: light-dark(#2e7d32, #afd8b1); }}
         .eval-pane-body {{ padding: {gap}; display: flex; flex-direction: column; gap: {gap}; }}
         .eval-empty {{ color: #aaa; font-size: 0.9em; padding: 4px; }}
         .eval-card {{
-            border-radius: 6px; padding: {pad}; border-left: 3px solid #cbd5e0;
-            background: #f8fafc; transition: box-shadow .12s, outline .12s;
+            border-radius: 6px; padding: {pad}; border-left: 3px solid light-dark(#cbd5e0, #454c54);
+            background: light-dark(#f8fafc, #161c23); transition: box-shadow .12s, outline .12s;
             outline: 2px solid transparent;
         }}
         /* Only linkable cards are interactive (they carry role=button). */
         .eval-card[role="button"] {{ cursor: pointer; }}
         .eval-card[role="button"]:hover {{ box-shadow: 0 1px 6px rgba(15,23,42,0.12); }}
         .eval-card:focus-visible {{ outline: 2px solid #90cdf4; }}
-        .eval-card-thought, .eval-card-system {{ background: #e8f4fd; border-left-color: #2196F3; }}
-        .eval-card-action {{ background: #fff3e0; border-left-color: #FF9800; }}
-        .eval-card-answer {{ background: #e8f5e9; border-left-color: #4CAF50; }}
-        .eval-card-error {{ background: #ffebee; border-left-color: #f44336; }}
+        .eval-card-thought, .eval-card-system {{ background: light-dark(#e8f4fd, #122330); border-left-color: #2196F3; }}
+        .eval-card-action {{ background: light-dark(#fff3e0, #362710); border-left-color: #FF9800; }}
+        .eval-card-answer {{ background: light-dark(#e8f5e9, #1c2b1d); border-left-color: #4CAF50; }}
+        .eval-card-error {{ background: light-dark(#ffebee, #310e13); border-left-color: #f44336; }}
         /* Linked-step highlight: an indigo ring distinct from the orange
            action accent, plus a soft lift, so "linked" never reads as "action". */
         .eval-card.eval-linked {{ box-shadow: 0 0 0 2px #6366f1, 0 2px 8px rgba(99,102,241,0.18); }}
         .eval-card-head {{ display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }}
         .eval-step-num {{ color: #718096; font-size: 0.78em; font-weight: 600; }}
         .eval-badge {{
-            padding: 1px 7px; border-radius: 10px; font-size: 0.75em; font-weight: 600; color: #2d3748;
+            padding: 1px 7px; border-radius: 10px; font-size: 0.75em; font-weight: 600; color: light-dark(#2d3748, #c6ccd7);
         }}
         .badge-thought, .badge-system {{ background: rgba(33,150,243,0.18); }}
         .eval-card-text {{ white-space: pre-wrap; word-break: break-word; line-height: 1.45; font-size: 0.92em; }}
         .eval-call-line {{ display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }}
         .eval-tool-badge {{
-            background: rgba(255,152,0,0.22); color: #b45309; padding: 1px 7px;
+            background: rgba(255,152,0,0.22); color: light-dark(#b45309, #ebbc98); padding: 1px 7px;
             border-radius: 4px; font-size: 0.78em; font-weight: 700;
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         }}
         .eval-call-code {{
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 0.85em; word-break: break-word; color: #44403c;
+            font-size: 0.85em; word-break: break-word; color: light-dark(#44403c, #ceccca);
         }}
         .eval-result {{ margin-top: 6px; display: flex; gap: 4px; align-items: flex-start; }}
         .eval-result-arrow {{ color: #16a34a; font-weight: 700; flex: 0 0 auto; }}
         .eval-result-pre {{
             margin: 0; white-space: pre-wrap; word-break: break-word;
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 0.82em; color: #57534e; background: rgba(0,0,0,0.03);
+            font-size: 0.82em; color: light-dark(#57534e, #c7c5c2); background: rgba(0,0,0,0.03);
             padding: 4px 6px; border-radius: 4px; flex: 1 1 auto; min-width: 0;
         }}
         details.eval-result {{ display: block; }}

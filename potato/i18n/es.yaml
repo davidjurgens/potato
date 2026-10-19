@@ -53,6 +53,7 @@ choose_username_placeholder: "Elige un nombre de usuario"
 create_password_placeholder: "Crea una contraseña"
 sign_in_with: "Iniciar sesión con"
 sign_in_opens_new_tab: "El inicio de sesión se abre en una pestaña nueva."
+dark_mode: "Modo oscuro"
 or_divider: "o"
 
 # Footer

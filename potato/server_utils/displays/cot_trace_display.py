@@ -25,6 +25,7 @@ format type their steps identically to ``agent_trace``/``eval_trace``.
 import html
 from typing import Dict, Any, List
 
+from potato.server_utils.theme import themed_background
 from .base import BaseDisplay
 from ._trace_normalize import (
     DEFAULT_STEP_COLORS,
@@ -236,35 +237,35 @@ class CotTraceDisplay(BaseDisplay):
         '''
 
     def _build_css(self, colors: Dict[str, str], compact: bool) -> str:
-        thought = colors.get("thought", DEFAULT_STEP_COLORS["thought"])
-        action = colors.get("action", DEFAULT_STEP_COLORS["action"])
-        obs = colors.get("observation", DEFAULT_STEP_COLORS["observation"])
+        thought = themed_background(colors.get("thought", DEFAULT_STEP_COLORS["thought"]))
+        action = themed_background(colors.get("action", DEFAULT_STEP_COLORS["action"]))
+        obs = themed_background(colors.get("observation", DEFAULT_STEP_COLORS["observation"]))
         system = colors.get("system", DEFAULT_STEP_COLORS["system"])
         error = colors.get("error", DEFAULT_STEP_COLORS["error"])
         pad = "8px 12px" if compact else "12px 16px"
         gap = "6px" if compact else "10px"
         return f'''
         .cot-trace-display {{ font-family: inherit; max-width: 100%; }}
-        .cot-trace-placeholder {{ padding: 12px; color: var(--muted-foreground,#71717a); font-style: italic; }}
+        .cot-trace-placeholder {{ padding: 12px; color: var(--muted-foreground,light-dark(#71717a, #c0c0c4)); font-style: italic; }}
 
         /* Sticky header (sticks to page scroll over the tall step column). */
         .cot-trace-header {{
             position: sticky; top: 0; z-index: 5;
             display: flex; align-items: center; gap: 12px;
             padding: 8px 12px; margin-bottom: 8px;
-            background: var(--card,#fff); border: 1px solid var(--border,#e4e4e7);
+            background: var(--card,light-dark(#fff, #1a1a1a)); border: 1px solid var(--border,light-dark(#e4e4e7, #4b4b4e));
             border-radius: var(--radius,0.5rem);
         }}
         .cot-progress-label {{ font-weight: 600; }}
-        .cot-progress-counts {{ font-size: 0.85em; color: var(--muted-foreground,#71717a); margin-left: 6px; }}
-        .cot-progress-counts .cot-c-correct {{ color:#2e7d32; font-weight:500; }}
-        .cot-progress-counts .cot-c-incorrect {{ color:#c62828; font-weight:500; }}
-        .cot-progress-counts .cot-c-neutral {{ color:#b26a00; font-weight:500; }}
-        .cot-progress-counts .cot-c-pending {{ color:#6a5acd; font-weight:500; }}
+        .cot-progress-counts {{ font-size: 0.85em; color: var(--muted-foreground,light-dark(#71717a, #c0c0c4)); margin-left: 6px; }}
+        .cot-progress-counts .cot-c-correct {{ color:light-dark(#2e7d32, #afd8b1); font-weight:500; }}
+        .cot-progress-counts .cot-c-incorrect {{ color:light-dark(#c62828, #e0a3a3); font-weight:500; }}
+        .cot-progress-counts .cot-c-neutral {{ color:light-dark(#b26a00, #f0cb94); font-weight:500; }}
+        .cot-progress-counts .cot-c-pending {{ color:light-dark(#6a5acd, #b0a9da); font-weight:500; }}
         .cot-jump-next {{
             margin-left: auto; padding: 5px 12px; font-size: 0.85em;
-            border: 1px solid var(--border,#e4e4e7); border-radius: var(--radius,0.5rem);
-            background: var(--card,#fff); cursor: pointer; white-space: nowrap;
+            border: 1px solid var(--border,light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius,0.5rem);
+            background: var(--card,light-dark(#fff, #1a1a1a)); cursor: pointer; white-space: nowrap;
         }}
         .cot-jump-next:hover {{ background: var(--secondary,#f4f4f5); }}
         .cot-jump-next:focus-visible {{ outline: 2px solid var(--ring,#6e56cf); outline-offset: 2px; }}
@@ -278,16 +279,16 @@ class CotTraceDisplay(BaseDisplay):
         .cot-trace-rail {{
             flex: 0 0 auto; position: sticky; top: 56px; align-self: flex-start;
             max-height: 78vh; overflow-y: auto;
-            border: 1px solid var(--border,#e4e4e7); border-radius: var(--radius,0.5rem);
-            padding: 8px; background: var(--card,#fff);
+            border: 1px solid var(--border,light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius,0.5rem);
+            padding: 8px; background: var(--card,light-dark(#fff, #1a1a1a));
         }}
         .cot-rail-title {{ font-size: 0.72em; font-weight: 600; text-transform: uppercase;
-            color: var(--muted-foreground,#71717a); margin-bottom: 6px; text-align: center; }}
+            color: var(--muted-foreground,light-dark(#71717a, #c0c0c4)); margin-bottom: 6px; text-align: center; }}
         .cot-rail-dots {{ display: flex; flex-direction: column; gap: 4px; }}
         .cot-rail-dot {{
             width: 30px; height: 24px; border-radius: 6px; cursor: pointer;
-            border: 1px solid var(--border,#e4e4e7); background: var(--secondary,#f4f4f5);
-            color: var(--muted-foreground,#71717a); font-size: 0.72em; font-weight: 600;
+            border: 1px solid var(--border,light-dark(#e4e4e7, #4b4b4e)); background: var(--secondary,light-dark(#f4f4f5, #1f1f21));
+            color: var(--muted-foreground,light-dark(#71717a, #c0c0c4)); font-size: 0.72em; font-weight: 600;
             display: flex; align-items: center; justify-content: center; padding: 0;
         }}
         .cot-rail-dot:hover {{ border-color:#999; }}
@@ -295,13 +296,13 @@ class CotTraceDisplay(BaseDisplay):
         .cot-rail-dot.cot-active {{ box-shadow: 0 0 0 2px var(--ring,#6e56cf); }}
         .cot-rail-dot.cot-dot-correct {{ background:#4caf50; color:#fff; border-color:#4caf50; }}
         .cot-rail-dot.cot-dot-incorrect {{ background:#f44336; color:#fff; border-color:#f44336; }}
-        .cot-rail-dot.cot-dot-neutral {{ background:#ffb300; color:#fff; border-color:#ffb300; }}
-        .cot-rail-dot.cot-dot-pending {{ background:#ede9fe; color:#5b21b6; border-color:#a78bfa; border-style: dashed; }}
+        .cot-rail-dot.cot-dot-neutral {{ background:light-dark(#ffb300, #4f3e17); color:#fff; border-color:light-dark(#ffb300, #6b592e); }}
+        .cot-rail-dot.cot-dot-pending {{ background:light-dark(#ede9fe, #161031); color:light-dark(#5b21b6, #bba2e2); border-color:#a78bfa; border-style: dashed; }}
 
         .cot-step {{
             padding: {pad}; border-radius: var(--radius,0.5rem);
-            border: 1px solid var(--border,#e4e4e7); border-left: 4px solid #ccc;
-            background: var(--card,#fff); scroll-margin-top: 64px;
+            border: 1px solid var(--border,light-dark(#e4e4e7, #4b4b4e)); border-left: 4px solid light-dark(#ccc, #4c4c4c);
+            background: var(--card,light-dark(#fff, #1a1a1a)); scroll-margin-top: 64px;
         }}
         .step-type-thought {{ border-left-color: #2196F3; background: {thought}; }}
         .step-type-action {{ border-left-color: #FF9800; background: {action}; }}
@@ -309,8 +310,8 @@ class CotTraceDisplay(BaseDisplay):
         .step-type-system {{ border-left-color: #9C27B0; background: {system}; }}
         .step-type-error {{ border-left-color: #f44336; background: {error}; }}
         .cot-step-header {{ display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }}
-        .cot-step-num {{ font-size: 0.8em; font-weight: 600; color: var(--muted-foreground,#71717a); }}
-        .cot-step-badge {{ padding: 2px 8px; border-radius: 4px; font-size: 0.78em; font-weight: 600; color:#333; }}
+        .cot-step-num {{ font-size: 0.8em; font-weight: 600; color: var(--muted-foreground,light-dark(#71717a, #c0c0c4)); }}
+        .cot-step-badge {{ padding: 2px 8px; border-radius: 4px; font-size: 0.78em; font-weight: 600; color:light-dark(#333, #d1d1d1); }}
         .badge-thought {{ background: rgba(33,150,243,0.2); }}
         .badge-action {{ background: rgba(255,152,0,0.2); }}
         .badge-observation {{ background: rgba(76,175,80,0.2); }}
@@ -324,15 +325,15 @@ class CotTraceDisplay(BaseDisplay):
         }}
         .cot-step-expand {{
             margin-top: 4px; padding: 2px 8px; font-size: 0.8em; cursor: pointer;
-            border: 1px solid var(--border,#e4e4e7); border-radius: 6px;
-            background: var(--secondary,#f4f4f5); color: var(--foreground,#18181b);
+            border: 1px solid var(--border,light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px;
+            background: var(--secondary,light-dark(#f4f4f5, #1f1f21)); color: var(--foreground,light-dark(#18181b, #dadadd));
         }}
         .cot-step-expand:hover {{ background: var(--muted,#e4e4e7); }}
 
         /* Verification tints (set by the process_reward inline controls). */
         .cot-step.prm-turn-correct {{ box-shadow: inset 3px 0 0 #4caf50; }}
         .cot-step.prm-turn-incorrect {{ box-shadow: inset 3px 0 0 #f44336; }}
-        .cot-step.prm-turn-neutral {{ box-shadow: inset 3px 0 0 #ffb300; }}
+        .cot-step.prm-turn-neutral {{ box-shadow: inset 3px 0 0 light-dark(#ffb300, #6b592e); }}
         .cot-step.prm-ai-pending {{ outline: 2px dashed #a78bfa; outline-offset: -2px; }}
 
         @media (max-width: 640px) {{

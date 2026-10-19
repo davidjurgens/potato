@@ -29,6 +29,10 @@
 (function (root) {
     'use strict';
 
+    // Canvas fills follow the light/dark theme (templates/_theme_head.html).
+    const themeColor = (colour, role) =>
+        (root.potatoThemeColor ? root.potatoThemeColor(colour, role) : colour);
+
     /** Height of one stream lane on the timeline, in CSS pixels. */
     const LANE_HEIGHT = 30;
     /** Pointer slop for grabbing a mark, in pixels. */
@@ -175,6 +179,10 @@
             this.container = null;
             this.canvas = null;
             this.set = null;
+            // The timeline is a canvas; repaint it when the theme flips.
+            if (typeof document !== 'undefined') {
+                document.addEventListener('potato:themechange', () => this.draw());
+            }
 
             // Annotation state. Every field is listed in clearAnnotations for
             // the reason the episode and point-cloud managers list theirs:
@@ -891,11 +899,11 @@
                 (v) => v.stream === lane.streamId);
             const clear = this.clean.indexOf(lane.streamId) !== -1;
             if (clear) {
-                ctx.fillStyle = '#e6f4ea';        // answered: no breaks
+                ctx.fillStyle = themeColor('#e6f4ea', 'bg');   // answered: no breaks
             } else if (marked) {
-                ctx.fillStyle = '#f6f6f7';        // answered: has breaks
+                ctx.fillStyle = themeColor('#f6f6f7', 'bg');   // answered: has breaks
             } else {
-                ctx.fillStyle = '#fdf6e7';        // not answered yet
+                ctx.fillStyle = themeColor('#fdf6e7', 'bg');   // not answered yet
             }
             ctx.fillRect(0, lane.y, width, lane.height - 2);
 
@@ -904,7 +912,7 @@
                 ctx.fillRect(0, lane.y, 3, lane.height - 2);
             }
 
-            ctx.fillStyle = '#5a6472';
+            ctx.fillStyle = themeColor('#5a6472', 'text');
             ctx.font = '12px system-ui, sans-serif';
             ctx.textBaseline = 'middle';
             ctx.fillText(this._streamName(lane.streamId), 6,
@@ -949,7 +957,7 @@
 
         _drawPlayhead(ctx, width, height) {
             const x = timeToX(this.currentTime, this.duration, width);
-            ctx.strokeStyle = '#11151c';
+            ctx.strokeStyle = themeColor('#11151c', 'text');   // the playhead
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(x, 0);

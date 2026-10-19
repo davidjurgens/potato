@@ -5529,7 +5529,7 @@
       "type": "object"
     },
     "ui": {
-      "description": "Interface toggles",
+      "description": "Interface toggles. `ui.theme` (auto | light | dark, default auto) sets the annotator pages' theme: auto follows the browser and shows a toggle; light or dark gives every annotator that theme",
       "type": "object"
     },
     "ui_config": {
@@ -5779,6 +5779,11 @@
         "codebook": {},
         "continue_button": {},
         "create_password_placeholder": {},
+        "dark_mode": {
+          "default": "Dark mode",
+          "description": "Label of the light/dark toggle on annotator pages",
+          "type": "string"
+        },
         "dash_assigned_completed": {},
         "dash_back_to_annotating": {},
         "dash_error": {},

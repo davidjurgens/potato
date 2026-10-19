@@ -87,6 +87,7 @@ UI_LANG_DEFAULTS = {
     'create_password_placeholder': 'Create a password',
     'sign_in_with': 'Sign in with',
     'sign_in_opens_new_tab': 'Sign-in opens in a new tab.',
+    'dark_mode': 'Dark mode',
     'or_divider': 'or',
     # Footer
     'powered_by': 'Powered by',

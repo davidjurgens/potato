@@ -256,9 +256,9 @@
 .cb-error {
     font-size: 0.78rem;
     font-weight: 600;
-    color: #b23b3b;
-    background: #fbeeee;
-    border: 1px solid #f0d2d2;
+    color: light-dark(#b23b3b, #d9abab);
+    background: light-dark(#fbeeee, #2b1515);
+    border: 1px solid light-dark(#f0d2d2, #5c3d3d);
     border-radius: 6px;
     padding: var(--cb-space-2) var(--cb-space-3);
 }

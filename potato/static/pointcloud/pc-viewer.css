@@ -58,7 +58,7 @@
     /* The scene background is set in JS; this matches it so there is no flash
        of white before the first frame. */
     background: #11151c;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: var(--radius, 0.5rem);
     cursor: grab;
     /* The viewer owns the wheel and drag gestures. Without this, a scroll over
@@ -84,7 +84,7 @@
     /* Not --muted-foreground (#71717a): on the white form background that is 4.68:1, which passes,
        but this line carries the "showing N of M points" caveat and is the one
        piece of text an annotator must not skim past. */
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     min-height: 1.2em;
 }
 
@@ -118,18 +118,18 @@
 .pointcloud-annotation-container .pc-frame-label {
     font-size: var(--text-sm, 0.875rem);
     font-variant-numeric: tabular-nums;
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     min-width: 8em;
 }
 
 .pointcloud-annotation-container .pc-status[data-kind="warn"] {
     /* 4.6:1 on white. */
-    color: #8a5a00;
+    color: light-dark(#8a5a00, #f2d6a2);
 }
 
 .pointcloud-annotation-container .pc-status[data-kind="error"] {
     /* 5.9:1 on white. */
-    color: #b02a37;
+    color: light-dark(#b02a37, #dea6ab);
     font-weight: 600;
 }
 
@@ -211,7 +211,7 @@
        exactly the point the column stops being able to hold it. */
     min-width: 380px;
     height: auto;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: var(--radius, 0.5rem);
     background: #11151c;
 }
@@ -227,7 +227,7 @@
 
 .pointcloud-annotation-container .pc-camera figcaption {
     font-size: var(--text-xs, 0.75rem);
-    color: #495057;
+    color: light-dark(#495057, #c2c6c9);
     padding-top: 4px;
     line-height: 1.3;
 }
@@ -239,7 +239,7 @@
 }
 
 .pointcloud-annotation-container .pc-camera-broken figcaption {
-    color: #8a5a00;
+    color: light-dark(#8a5a00, #f2d6a2);
 }
 
 .pointcloud-annotation-container.dark-mode .pc-camera-image {
@@ -311,7 +311,7 @@
        aspect-ratio rather than a fixed height so it tracks the column width. */
     aspect-ratio: 1 / 1;
     background: #11151c;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: var(--radius, 0.5rem);
     /* The panels are draggable, so they must not also scroll the page under a
        touch gesture. */
@@ -333,19 +333,19 @@
 .pointcloud-annotation-container .pc-mpr-help {
     margin: 6px 0 0;
     font-size: var(--text-sm, 0.8125rem);
-    color: #5a6472;   /* see the .pc-status note */
+    color: light-dark(#5a6472, #bcc1c7);   /* see the .pc-status note */
 }
 
 .pointcloud-annotation-container .pc-mpr-help kbd {
     font: inherit;
     font-variant-numeric: tabular-nums;
     padding: 0 0.25em;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     /* Half the panel radius: a key cap that is as round as the panel it
        sits in reads as a button rather than a key. */
     border-radius: calc(var(--radius, 0.5rem) / 2);
-    background: var(--muted, #f4f4f5);
-    color: var(--text-color, #374151);
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
+    color: var(--text-color, light-dark(#374151, #c3c9d2));
 }
 
 /* Live region for edits that only redraw canvas pixels. Clipped rather than
@@ -364,7 +364,7 @@
 
 .pointcloud-annotation-container .pc-slab figcaption {
     font-size: var(--text-sm, 0.8125rem);
-    color: #5a6472;   /* see the .pc-status note */
+    color: light-dark(#5a6472, #bcc1c7);   /* see the .pc-status note */
     margin-top: 3px;
     /* Reports the slab thickness, which the wheel changes. Tabular figures so
        the caption does not jitter as the number scrolls. */

@@ -308,25 +308,25 @@ def _generate_internal(
     .asc-title {{ font-weight: 600; font-size: 1em; margin-bottom: 8px; }}
     .asc-section {{ margin-bottom: 14px; }}
     .asc-heading {{ font-size: 0.8em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-                    color: var(--muted-foreground, #71717a); margin: 0 0 6px; }}
+                    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin: 0 0 6px; }}
     .asc-agent-grid {{ display: flex; flex-direction: column; gap: 8px; }}
-    .asc-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                 padding: 8px 12px; background: var(--card, #fff); }}
+    .asc-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                 padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .asc-agent-name {{ font-weight: 600; font-family: ui-monospace, monospace; margin-bottom: 6px; }}
     .asc-row {{ display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 0; }}
-    .asc-dim {{ font-size: 0.85em; color: var(--foreground, #18181b); }}
+    .asc-dim {{ font-size: 0.85em; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
     .asc-scale {{ display: flex; gap: 4px; }}
-    .asc-sbtn {{ width: 28px; height: 28px; border: 1px solid var(--border, #e4e4e7);
-                 border-radius: 6px; background: var(--card, #fff); cursor: pointer; font-size: 0.85em;
-                 color: var(--foreground, #18181b); }}
-    .asc-sbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .asc-sbtn {{ width: 28px; height: 28px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                 border-radius: 6px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; font-size: 0.85em;
+                 color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .asc-sbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .asc-sbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .asc-sbtn.selected {{ background: var(--ring, #6e56cf); color: #fff; border-color: var(--ring, #6e56cf); font-weight: 600; }}
-    .asc-team-grid {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                      padding: 8px 12px; background: var(--secondary, #f9f9fb); }}
+    .asc-team-grid {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                      padding: 8px 12px; background: var(--secondary, light-dark(#f9f9fb, #191920)); }}
     .asc-ms {{ display: block; font-size: 0.9em; padding: 3px 0; cursor: pointer; }}
     .asc-ms input {{ margin-right: 6px; }}
-    .asc-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+    .asc-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated agent_scorecard layout for {schema_name}")

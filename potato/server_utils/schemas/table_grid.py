@@ -196,32 +196,32 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .table-grid-container {{ font-family: inherit; }}
     .tbg-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .tbg-image {{ margin-bottom: 8px; }}
-    .tbg-img {{ max-width: 100%; height: auto; border: 1px solid var(--border, #e4e4e7); border-radius: 6px; display: block; }}
-    .tbg-noimg {{ color: var(--muted-foreground, #71717a); font-style: italic; font-size: 0.85em; }}
+    .tbg-img {{ max-width: 100%; height: auto; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; display: block; }}
+    .tbg-noimg {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; font-size: 0.85em; }}
     .tbg-dims {{ display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 0.85em; }}
-    .tbg-dims input {{ width: 56px; padding: 4px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 6px; margin-left: 4px; }}
+    .tbg-dims input {{ width: 56px; padding: 4px 6px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; margin-left: 4px; }}
     .tbg-dims input:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
-    .tbg-hint {{ color: var(--muted-foreground, #71717a); }}
+    .tbg-hint {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .tbg-grid {{ display: grid; gap: 3px; max-width: 100%; overflow: auto; }}
-    .tbg-cell {{ min-height: 40px; max-height: 56px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
-                 background: var(--card, #fff); cursor: pointer; font-size: 0.78em; font-weight: 700; color: var(--foreground, #18181b);
+    .tbg-cell {{ min-height: 40px; max-height: 56px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 4px;
+                 background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; font-size: 0.78em; font-weight: 700; color: var(--foreground, light-dark(#18181b, #dadadd));
                  display: flex; align-items: center; justify-content: center; }}
     .tbg-cell:hover {{ outline: 1px solid var(--ring, #6e56cf); }}
     .tbg-cell:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
-    .tbg-cell.role-data {{ background: var(--card, #fff); }}
-    .tbg-cell.role-col_header {{ background: #d0bfff; color: #3b2a7a; }}
-    .tbg-cell.role-row_header {{ background: #a5d8ff; color: #11497a; }}
-    .tbg-cell.role-header {{ background: #d0bfff; color: #3b2a7a; }}
-    .tbg-cell.role-empty {{ background: var(--secondary, #f4f4f5); color: var(--muted-foreground, #adb5bd); }}
-    .tbg-cell.role-merged {{ background: #ffe8cc; color: #a8500c; }}
+    .tbg-cell.role-data {{ background: var(--card, light-dark(#fff, #1a1a1a)); }}
+    .tbg-cell.role-col_header {{ background: light-dark(#d0bfff, #211445); color: light-dark(#3b2a7a, #b8afda); }}
+    .tbg-cell.role-row_header {{ background: light-dark(#a5d8ff, #17374f); color: light-dark(#11497a, #accce8); }}
+    .tbg-cell.role-header {{ background: light-dark(#d0bfff, #211445); color: light-dark(#3b2a7a, #b8afda); }}
+    .tbg-cell.role-empty {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); color: var(--muted-foreground, #adb5bd); }}
+    .tbg-cell.role-merged {{ background: light-dark(#ffe8cc, #3f2b12); color: light-dark(#a8500c, #eabd9a); }}
     .tbg-legend {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 0.75em; }}
     .tbg-leg {{ padding: 1px 8px; border-radius: 4px; }}
-    .tbg-leg.role-data {{ border: 1px solid var(--border, #e4e4e7); }}
-    .tbg-leg.role-col_header {{ background: #d0bfff; color: #3b2a7a; }}
-    .tbg-leg.role-row_header {{ background: #a5d8ff; color: #11497a; }}
-    .tbg-leg.role-header {{ background: #d0bfff; color: #3b2a7a; }}
-    .tbg-leg.role-empty {{ background: var(--secondary, #f4f4f5); color: var(--muted-foreground, #71717a); }}
-    .tbg-leg.role-merged {{ background: #ffe8cc; color: #a8500c; }}
+    .tbg-leg.role-data {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); }}
+    .tbg-leg.role-col_header {{ background: light-dark(#d0bfff, #211445); color: light-dark(#3b2a7a, #b8afda); }}
+    .tbg-leg.role-row_header {{ background: light-dark(#a5d8ff, #17374f); color: light-dark(#11497a, #accce8); }}
+    .tbg-leg.role-header {{ background: light-dark(#d0bfff, #211445); color: light-dark(#3b2a7a, #b8afda); }}
+    .tbg-leg.role-empty {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
+    .tbg-leg.role-merged {{ background: light-dark(#ffe8cc, #3f2b12); color: light-dark(#a8500c, #eabd9a); }}
     </style>
     """
     logger.info(f"Successfully generated table_grid layout for {schema_name}")

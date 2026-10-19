@@ -147,7 +147,7 @@ def _generate_extractive_qa_layout_internal(annotation_scheme):
             }} catch(e) {{
                 // If surroundContents fails (cross-element selection), use simple approach
                 container.innerHTML = passageText.substring(0, start) +
-                    '<span class="eqa-highlight" style="background-color:' + (container.dataset.highlightColor || '#FFEB3B') + '">' +
+                    '<span class="eqa-highlight" style="background-color:' + (container.dataset.highlightColor || 'light-dark(#FFEB3B, #4f4917)') + '">' +
                     passageText.substring(start, end) + '</span>' +
                     passageText.substring(end);
             }}

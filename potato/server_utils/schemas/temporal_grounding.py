@@ -286,31 +286,31 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .tg-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .tg-video {{ margin-bottom: 10px; }}
     .tg-list {{ display: flex; flex-direction: column; gap: 10px; }}
-    .tg-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                padding: 10px 12px; background: var(--card, #fff); }}
+    .tg-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                padding: 10px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .tg-card.tg-set {{ border-color: var(--ring, #6e56cf); }}
     .tg-prompt {{ font-weight: 600; font-size: 0.92em; margin-bottom: 6px; }}
     .tg-controls {{ display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }}
-    .tg-controls input {{ width: 80px; padding: 4px 6px; border: 1px solid var(--border, #e4e4e7);
+    .tg-controls input {{ width: 80px; padding: 4px 6px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
                           border-radius: 6px; font-size: 0.85em; }}
-    .tg-setin, .tg-setout {{ padding: 4px 8px; font-size: 0.78em; border: 1px solid var(--border, #e4e4e7);
-                             border-radius: 6px; background: var(--card, #fff); cursor: pointer; color: var(--foreground, #18181b); }}
-    .tg-setin:hover, .tg-setout:hover {{ background: var(--secondary, #f4f4f5); }}
+    .tg-setin, .tg-setout {{ padding: 4px 8px; font-size: 0.78em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                             border-radius: 6px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .tg-setin:hover, .tg-setout:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .tg-setin:focus-visible, .tg-setout:focus-visible, .tg-controls input:focus-visible {{
         outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .tg-meta {{ display: flex; justify-content: space-between; align-items: baseline; margin: 6px 0 2px; }}
-    .tg-pred {{ font-size: 0.78em; color: var(--muted-foreground, #71717a); font-family: ui-monospace, monospace; }}
+    .tg-pred {{ font-size: 0.78em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-family: ui-monospace, monospace; }}
     .tg-iou {{ font-size: 0.8em; font-weight: 700; }}
     .tg-iou-good {{ color: #2f9e44; }}
     .tg-iou-mid {{ color: #e8590c; }}
-    .tg-iou-bad {{ color: #e03131; }}
+    .tg-iou-bad {{ color: light-dark(#e03131, #e4a0a0); }}
     .tg-barrow {{ display: flex; align-items: center; gap: 6px; margin-top: 3px; }}
-    .tg-barlbl {{ width: 64px; font-size: 0.72em; color: var(--muted-foreground, #71717a); text-align: right; }}
-    .tg-bartrack {{ position: relative; flex: 1; height: 12px; background: var(--secondary, #f4f4f5); border-radius: 3px; }}
+    .tg-barlbl {{ width: 64px; font-size: 0.72em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); text-align: right; }}
+    .tg-bartrack {{ position: relative; flex: 1; height: 12px; background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); border-radius: 3px; }}
     .tg-barfill {{ position: absolute; top: 0; bottom: 0; border-radius: 3px; }}
     .tg-bar-pred {{ background: #adb5bd; }}
     .tg-bar-gold {{ background: #6e56cf; }}
-    .tg-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+    .tg-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated temporal_grounding layout for {schema_name}")

@@ -183,25 +183,25 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .tool-call-review-container {{ font-family: inherit; }}
     .tcr-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .tcr-list {{ display: flex; flex-direction: column; gap: 8px; }}
-    .tcr-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                 padding: 8px 12px; background: var(--card, #fff); }}
+    .tcr-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                 padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .tcr-card.tcr-judged {{ border-color: var(--ring, #6e56cf); }}
     .tcr-head {{ display: flex; justify-content: space-between; align-items: baseline; }}
     .tcr-tool {{ font-weight: 600; font-family: ui-monospace, monospace; }}
-    .tcr-step {{ font-size: 0.75em; color: var(--muted-foreground, #71717a); }}
-    .tcr-args {{ margin: 6px 0; padding: 6px 8px; background: var(--secondary, #f4f4f5);
+    .tcr-step {{ font-size: 0.75em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
+    .tcr-args {{ margin: 6px 0; padding: 6px 8px; background: var(--secondary, light-dark(#f4f4f5, #1f1f21));
                  border-radius: 6px; font-size: 0.8em; max-height: 140px; overflow: auto; white-space: pre-wrap; }}
     .tcr-verdicts {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .tcr-vbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-                 border-radius: 999px; background: var(--card, #fff); cursor: pointer; }}
-    .tcr-vbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .tcr-vbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                 border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; }}
+    .tcr-vbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .tcr-vbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .tcr-vbtn.selected {{ font-weight: 600; }}
     .tcr-vbtn.selected.v-correct {{ background: #4caf50; color: #fff; border-color: #4caf50; }}
     .tcr-vbtn.selected.v-wrong_tool, .tcr-vbtn.selected.v-wrong_args {{ background: #f44336; color: #fff; border-color: #f44336; }}
     .tcr-notes {{ margin-top: 6px; width: 100%; box-sizing: border-box; padding: 4px 8px;
-                  border: 1px solid var(--border, #e4e4e7); border-radius: 6px; font-size: 0.85em; }}
-    .tcr-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+                  border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; font-size: 0.85em; }}
+    .tcr-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated tool_call_review layout for {schema_name}")

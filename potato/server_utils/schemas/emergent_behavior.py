@@ -182,24 +182,24 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .emergent-behavior-container {{ font-family: inherit; }}
     .eb-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .eb-list {{ display: flex; flex-direction: column; gap: 8px; }}
-    .eb-block {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                 padding: 8px 12px; background: var(--card, #fff); }}
+    .eb-block {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                 padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .eb-block.eb-active {{ border-color: var(--ring, #6e56cf); box-shadow: inset 3px 0 0 var(--ring, #6e56cf); }}
     .eb-bhead {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
     .eb-bname {{ font-weight: 600; text-transform: capitalize; }}
-    .eb-count {{ font-size: 0.75em; color: var(--ring, #6e56cf); font-weight: 600; }}
+    .eb-count {{ font-size: 0.75em; color: var(--ring, light-dark(#6e56cf, #b2a8db)); font-weight: 600; }}
     .eb-turns {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .eb-turn {{ display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border, #e4e4e7);
-                border-radius: 999px; cursor: pointer; font-size: 0.78em; background: var(--card, #fff); }}
-    .eb-turn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .eb-turn {{ display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                border-radius: 999px; cursor: pointer; font-size: 0.78em; background: var(--card, light-dark(#fff, #1a1a1a)); }}
+    .eb-turn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .eb-turn input {{ margin: 0; }}
-    .eb-turn-on {{ background: #ede9fe; border-color: var(--ring, #6e56cf); }}
+    .eb-turn-on {{ background: light-dark(#ede9fe, #161031); border-color: var(--ring, #6e56cf); }}
     .eb-turn-n {{ font-weight: 700; font-family: ui-monospace, monospace; }}
-    .eb-turn-a {{ color: var(--muted-foreground, #71717a); }}
+    .eb-turn-a {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .eb-turn:focus-within {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .eb-note {{ margin-top: 6px; width: 100%; box-sizing: border-box; padding: 4px 8px;
-                border: 1px solid var(--border, #e4e4e7); border-radius: 6px; font-size: 0.85em; }}
-    .eb-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+                border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; font-size: 0.85em; }}
+    .eb-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated emergent_behavior layout for {schema_name}")

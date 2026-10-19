@@ -341,9 +341,9 @@ def _generate_html(
                 </div>
 
                 <!-- Instructions panel (collapsible) -->
-                <details class="video-instructions" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 0.375rem; font-size: 0.8rem;">
-                    <summary style="cursor: pointer; font-weight: 600; color: #0369a1;">How to annotate video segments (click to expand)</summary>
-                    <div style="margin-top: 0.5rem; color: #475569; line-height: 1.5;">
+                <details class="video-instructions" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: light-dark(#f0f9ff, #0e212f); border: 1px solid light-dark(#bae6fd, #305669); border-radius: 0.375rem; font-size: 0.8rem;">
+                    <summary style="cursor: pointer; font-weight: 600; color: light-dark(#0369a1, #9bd1ef);">How to annotate video segments (click to expand)</summary>
+                    <div style="margin-top: 0.5rem; color: light-dark(#475569, #bac1cb); line-height: 1.5;">
                         <p style="margin: 0.25rem 0;"><strong>To create a segment:</strong></p>
                         <ol style="margin: 0.25rem 0 0.5rem 1.25rem; padding: 0;">
                             <li>Select a label (colored buttons below)</li>
@@ -404,9 +404,9 @@ def _generate_html(
 
                 <!-- Timeline (Peaks.js) -->
                 <div class="timeline-wrapper">
-                    <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Timeline <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
+                    <div class="zoomview-label" style="font-size: 0.85em; color: light-dark(#666, #c2c2c2); margin-bottom: 4px;">Timeline <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
                     <div id="zoomview-{escaped_name}" class="timeline-container" style="height: {timeline_height}px;"></div>
-                    <div class="overview-label" style="font-size: 0.85em; color: #666; margin: 8px 0 4px;">Full Video Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
+                    <div class="overview-label" style="font-size: 0.85em; color: light-dark(#666, #c2c2c2); margin: 8px 0 4px;">Full Video Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
                     <div id="overview-{escaped_name}" class="overview-container" style="height: {overview_height}px;"></div>
                 </div>
 
@@ -426,7 +426,7 @@ def _generate_html(
                 <!-- Tracking panel (for tracking mode) -->
                 <div id="tracking-panel-{escaped_name}" class="tracking-panel" style="display: {'block' if mode in ['tracking', 'combined'] else 'none'};">
                     <h4>Object Tracks</h4>
-                    <div class="tracking-instructions" style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">
+                    <div class="tracking-instructions" style="font-size: 0.8rem; color: light-dark(#666, #c2c2c2); margin-bottom: 0.5rem;">
                         Click "+ Track" to create a track, then draw bounding boxes on the video. Boxes are interpolated between keyframes.
                     </div>
                     <div class="tracking-track-list"></div>
@@ -571,7 +571,7 @@ def _generate_html(
                             console.error('[VideoAnnotation ERROR] Could not find video URL!');
                             // Show visible error message
                             var errorDiv = document.createElement('div');
-                            errorDiv.style.cssText = 'background: #fee2e2; border: 2px solid #ef4444; color: #dc2626; padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
+                            errorDiv.style.cssText = 'background: light-dark(#fee2e2, #341111); border: 2px solid #ef4444; color: light-dark(#dc2626, #e3a1a1); padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
                             errorDiv.innerHTML = '<strong>Video URL not found!</strong><br>Check browser console for details.';
                             container.insertBefore(errorDiv, container.firstChild);
                         }} else {{
@@ -586,7 +586,7 @@ def _generate_html(
                         if (!videoElement) {{
                             console.error('[VideoAnnotation ERROR] Video element not found!');
                             var errorDiv = document.createElement('div');
-                            errorDiv.style.cssText = 'background: #fee2e2; border: 2px solid #ef4444; color: #dc2626; padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
+                            errorDiv.style.cssText = 'background: light-dark(#fee2e2, #341111); border: 2px solid #ef4444; color: light-dark(#dc2626, #e3a1a1); padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
                             errorDiv.innerHTML = '<strong>Video element not found!</strong><br>Expected element with ID: ' + videoId;
                             container.insertBefore(errorDiv, container.firstChild);
                             return;

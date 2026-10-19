@@ -956,6 +956,7 @@ class FlaskTestServer:
                     # test harness renders the full ui_lang key set.
                     from potato.server_utils.i18n import UI_LANG_DEFAULTS, resolve_ui_language
                     from potato.plugins import plugin_assets
+                    from potato.server_utils.theme import resolve_ui_theme
                     ui_lang = resolve_ui_language(config.get('ui_language'), UI_LANG_DEFAULTS)
                     return {
                         'ui_debug': is_ui_debug_enabled(),
@@ -964,6 +965,7 @@ class FlaskTestServer:
                         'debug_phase': config.get('debug_phase'),
                         'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
                         'ui_lang': ui_lang,
+                        'ui_theme': resolve_ui_theme(config),
                         'plugin_assets': plugin_assets(config.get('plugins')),
                     }
 

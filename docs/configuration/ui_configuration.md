@@ -175,6 +175,47 @@ ui:
 - `allow_navigation`: Enable previous/next navigation buttons
 - `allow_editing`: Allow users to modify existing annotations
 
+### 4. Light and Dark Theme
+
+**Option**: `theme`
+
+**Description**: Chooses between the light and dark theme on the pages
+annotators see: sign-in and password pages; consent, instructions, training
+and survey pages; the annotation page; and the completion and error pages.
+Admin pages are always light.
+
+**Type**: String, one of `auto`, `light`, `dark`
+
+**Default**: `auto`
+
+- `auto`: each page follows the annotator's browser or operating system
+  setting. A sun/moon button in the header (and in the corner of the sign-in
+  page) switches theme. The choice is kept in that browser and survives
+  Next, Previous and reloads. Until the annotator presses the button, the page
+  follows the system setting as it changes.
+- `light` or `dark`: every annotator gets that theme and the button is not
+  shown. Use this when a study needs the same viewing conditions for
+  everyone.
+
+**Example**:
+```yaml
+ui:
+  theme: light    # same theme for every annotator
+```
+
+The theme is chosen before the page draws, so a dark page does not flash
+white. Without JavaScript the pages are light.
+
+Highlight and label colours set in the config (`label_colors`, span colours)
+are used as given in both themes; text on a span highlight stays dark so it
+reads on any colour. Custom CSS (`base_css`) that sets colours should use the
+theme variables in `potato/static/styles.css` (`--background`, `--card`,
+`--foreground`, `--muted-foreground`, `--border`, `--primary`) so it follows
+the theme; a hard-coded colour stays the same in both. For a colour with no
+matching variable, `light-dark(<light>, <dark>)` picks one per theme, e.g.
+`background: light-dark(#e8f4fd, #122330)`. Potato's own component styles use
+it the same way.
+
 ## Task Layout Customization
 
 Potato automatically generates HTML layouts for your annotation task based on your configuration. You can customize these layouts or provide your own.

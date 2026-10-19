@@ -14,7 +14,7 @@
 }
 
 .tiered-annotation-container fieldset {
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 6px;
     padding: 15px;
 }
@@ -22,7 +22,7 @@
 .tiered-annotation-container legend {
     font-size: 14px;
     font-weight: 500;
-    color: #333;
+    color: light-dark(#333, #d1d1d1);
     padding: 0 8px;
 }
 
@@ -55,7 +55,7 @@
     align-items: center;
     gap: 15px;
     padding: 10px 12px;
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
     border-radius: 6px;
     flex-wrap: wrap;
 }
@@ -82,16 +82,16 @@
 .tier-select-label {
     font-size: 13px;
     font-weight: 500;
-    color: #555;
+    color: light-dark(#555, #c4c4c4);
     white-space: nowrap;
 }
 
 .tier-select {
     padding: 5px 10px;
     font-size: 13px;
-    border: 1px solid #ccc;
+    border: 1px solid light-dark(#ccc, #4c4c4c);
     border-radius: 4px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     min-width: 120px;
 }
 
@@ -137,13 +137,13 @@
 }
 
 .playback-rate-control label {
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }
 
 .playback-rate-select {
     padding: 3px 6px;
     font-size: 12px;
-    border: 1px solid #ccc;
+    border: 1px solid light-dark(#ccc, #4c4c4c);
     border-radius: 3px;
 }
 
@@ -160,11 +160,11 @@
 .time-display {
     font-family: 'Courier New', monospace;
     font-size: 12px;
-    color: #333;
-    background: white;
+    color: light-dark(#333, #d1d1d1);
+    background: light-dark(white, #1a1a1a);
     padding: 4px 8px;
     border-radius: 3px;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
 }
 
 .time-separator {
@@ -174,17 +174,17 @@
 
 /* Timeline Container */
 .tiered-timeline-container {
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 6px;
     overflow: hidden;
     position: relative;
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 /* Waveform Overview (full media at-a-glance) */
 .waveform-overview-container {
-    border-bottom: 1px solid #eee;
-    background: #f9f9f9;
+    border-bottom: 1px solid light-dark(#eee, #4c4c4c);
+    background: light-dark(#f9f9f9, #1d1d1d);
 }
 
 .waveform-overview {
@@ -211,8 +211,8 @@
 
 /* Zoomed Timeline View (for fine-grained editing) */
 .zoomed-timeline-container {
-    border-bottom: 1px solid #ddd;
-    background: #fff;
+    border-bottom: 1px solid light-dark(#ddd, #4c4c4c);
+    background: light-dark(#fff, #1a1a1a);
     padding: 8px;
 }
 
@@ -226,7 +226,7 @@
 
 .zoomed-timeline-label {
     font-weight: 500;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }
 
 .zoomed-timeline-range {
@@ -238,8 +238,8 @@
 /* Peaks.js zoomview waveform */
 .zoomed-waveform {
     height: 60px;
-    background: linear-gradient(to bottom, #f0f4f8 0%, #e8ecf0 100%);
-    border: 1px solid #d0d4d8;
+    background: linear-gradient(to bottom, light-dark(#f0f4f8, #1a2027) 0%, light-dark(#e8ecf0, #212529) 100%);
+    border: 1px solid light-dark(#d0d4d8, #4a4d4f);
     border-bottom: none;
     border-radius: 4px 4px 0 0;
     margin-bottom: 0;
@@ -266,8 +266,8 @@
 .zoomed-timeline-scroll {
     position: relative;
     height: 100px;
-    background: #f8f9fa;
-    border: 1px solid #d0d4d8;
+    background: light-dark(#f8f9fa, #1a1d20);
+    border: 1px solid light-dark(#d0d4d8, #4a4d4f);
     border-top: none;
     border-radius: 0 0 4px 4px;
     overflow: hidden;
@@ -297,7 +297,7 @@
     height: 6px;
     -webkit-appearance: none;
     appearance: none;
-    background: #e0e0e0;
+    background: light-dark(#e0e0e0, #2c2c2c);
     border-radius: 3px;
     outline: none;
 }
@@ -329,7 +329,7 @@
 
 .tier-row {
     display: flex;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid light-dark(#eee, #4c4c4c);
     transition: background-color 0.15s ease;
 }
 
@@ -338,11 +338,11 @@
 }
 
 .tier-row.active {
-    background: #e8f5f4;
+    background: light-dark(#e8f5f4, #1c2b2a);
 }
 
 .tier-row.active .tier-label {
-    background: #d4efed;
+    background: light-dark(#d4efed, #203634);
 }
 
 .tier-row.collapsed {
@@ -355,7 +355,7 @@
 
 /* Dependent tier styling */
 .tier-row.tier-dependent {
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
 }
 
 .tier-row.tier-dependent .tier-label {
@@ -375,13 +375,13 @@
     width: 120px;
     min-width: 120px;
     padding: 5px 10px;
-    background: #f9f9f9;
+    background: light-dark(#f9f9f9, #1d1d1d);
     font-weight: 500;
     font-size: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-right: 1px solid #ddd;
+    border-right: 1px solid light-dark(#ddd, #4c4c4c);
     position: relative;
 }
 
@@ -428,18 +428,18 @@
 /* Time Axis */
 .time-axis {
     height: 20px;
-    background: #f5f5f5;
-    border-top: 1px solid #ddd;
+    background: light-dark(#f5f5f5, #1f1f1f);
+    border-top: 1px solid light-dark(#ddd, #4c4c4c);
     padding-left: 120px;
     font-size: 10px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
     display: flex;
     align-items: center;
 }
 
 /* Annotation List Panel */
 .tiered-annotation-list-panel {
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 6px;
     overflow: hidden;
 }
@@ -449,14 +449,14 @@
     justify-content: space-between;
     align-items: center;
     padding: 8px 12px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+    background: light-dark(#f5f5f5, #1f1f1f);
+    border-bottom: 1px solid light-dark(#ddd, #4c4c4c);
 }
 
 .annotation-list-title {
     font-weight: 500;
     font-size: 13px;
-    color: #333;
+    color: light-dark(#333, #d1d1d1);
 }
 
 .annotation-list-toggle {
@@ -475,11 +475,11 @@
 
 .annotation-list-tier-header {
     padding: 6px 12px;
-    background: #f9f9f9;
+    background: light-dark(#f9f9f9, #1d1d1d);
     font-size: 11px;
     font-weight: 600;
-    color: #666;
-    border-bottom: 1px solid #eee;
+    color: light-dark(#666, #c2c2c2);
+    border-bottom: 1px solid light-dark(#eee, #4c4c4c);
 }
 
 .annotation-list-item {
@@ -487,7 +487,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid light-dark(#f0f0f0, #4c4c4c);
     cursor: pointer;
     transition: background-color 0.1s;
 }
@@ -497,11 +497,11 @@
 }
 
 .annotation-list-item:hover {
-    background: #f8f8f8;
+    background: light-dark(#f8f8f8, #1e1e1e);
 }
 
 .annotation-list-item.selected {
-    background: #e8f5f4;
+    background: light-dark(#e8f5f4, #1c2b2a);
 }
 
 .annotation-color {
@@ -514,7 +514,7 @@
 .annotation-label {
     font-size: 12px;
     font-weight: 500;
-    color: #333;
+    color: light-dark(#333, #d1d1d1);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -524,7 +524,7 @@
 .annotation-time {
     font-size: 11px;
     font-family: 'Courier New', monospace;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
     white-space: nowrap;
 }
 

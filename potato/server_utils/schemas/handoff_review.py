@@ -239,26 +239,26 @@ def _generate_internal(
     .handoff-review-container {{ font-family: inherit; }}
     .hr-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .hr-list {{ display: flex; flex-direction: column; gap: 8px; }}
-    .hr-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                padding: 8px 12px; background: var(--card, #fff); }}
+    .hr-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .hr-card.hr-flagged {{ border-color: #e0a800; box-shadow: inset 3px 0 0 #e0a800; }}
     .hr-head {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
     .hr-edge {{ font-family: ui-monospace, monospace; font-weight: 600; }}
-    .hr-arrow {{ margin: 0 6px; color: var(--muted-foreground, #71717a); }}
-    .hr-step {{ font-size: 0.75em; color: var(--muted-foreground, #71717a); }}
+    .hr-arrow {{ margin: 0 6px; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
+    .hr-step {{ font-size: 0.75em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .hr-flags-row, .hr-quality-row {{ display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }}
-    .hr-lbl {{ font-size: 0.78em; color: var(--muted-foreground, #71717a); min-width: 48px; }}
-    .hr-flag {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-                border-radius: 999px; background: var(--card, #fff); cursor: pointer; color: var(--foreground, #18181b); }}
-    .hr-flag:hover {{ background: var(--secondary, #f4f4f5); }}
+    .hr-lbl {{ font-size: 0.78em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); min-width: 48px; }}
+    .hr-flag {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .hr-flag:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .hr-flag:focus-visible, .hr-qbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .hr-flag.selected {{ background: #f59f00; color: #fff; border-color: #f59f00; font-weight: 600; }}
     .hr-quality {{ display: flex; gap: 4px; }}
-    .hr-qbtn {{ width: 26px; height: 26px; border: 1px solid var(--border, #e4e4e7); border-radius: 6px;
-                background: var(--card, #fff); cursor: pointer; font-size: 0.8em; color: var(--foreground, #18181b); }}
-    .hr-qbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .hr-qbtn {{ width: 26px; height: 26px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px;
+                background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; font-size: 0.8em; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .hr-qbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .hr-qbtn.selected {{ background: var(--ring, #6e56cf); color: #fff; border-color: var(--ring, #6e56cf); font-weight: 600; }}
-    .hr-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+    .hr-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated handoff_review layout for {schema_name}")

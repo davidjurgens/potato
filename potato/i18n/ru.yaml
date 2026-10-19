@@ -46,6 +46,7 @@ choose_username_placeholder: "Придумайте имя пользовател
 create_password_placeholder: "Создайте пароль"
 sign_in_with: "Войти через"
 sign_in_opens_new_tab: "Вход откроется в новой вкладке."
+dark_mode: "Тёмная тема"
 or_divider: "или"
 powered_by: "Работает на"
 cite_us: "Цитировать нас"

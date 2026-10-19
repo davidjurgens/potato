@@ -56,6 +56,7 @@ choose_username_placeholder: "اختر اسم مستخدم"
 create_password_placeholder: "أنشئ كلمة مرور"
 sign_in_with: "تسجيل الدخول باستخدام"
 sign_in_opens_new_tab: "يُفتح تسجيل الدخول في علامة تبويب جديدة."
+dark_mode: "الوضع الداكن"
 or_divider: "أو"
 
 # Footer

@@ -11,9 +11,9 @@
 /* ==================== Container ==================== */
 
 .audio-annotation-container {
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
-    background: var(--card, #ffffff);
+    background: var(--card, light-dark(#ffffff, #1a1a1a));
     padding: 1rem;
     margin-bottom: 1rem;
 }
@@ -26,7 +26,7 @@
     gap: 0.75rem;
     align-items: center;
     padding: 0.75rem;
-    background: var(--muted, #f9fafb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
     border-radius: var(--radius, 0.5rem);
     margin-bottom: 1rem;
 }
@@ -40,7 +40,7 @@
 .tool-group-label {
     font-size: 0.75rem;
     font-weight: 500;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     margin-right: 0.25rem;
 }
 
@@ -58,17 +58,17 @@
     width: 2rem;
     height: 2rem;
     padding: 0;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .playback-btn:hover {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
     border-color: var(--primary, #6e56cf);
 }
 
@@ -80,7 +80,7 @@
 .time-display {
     font-size: 0.75rem;
     font-family: monospace;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     padding: 0 0.5rem;
 }
 
@@ -94,9 +94,9 @@
 .playback-rate-select {
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
     cursor: pointer;
 }
 
@@ -115,21 +115,21 @@
     padding: 0.375rem 0.75rem;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .label-btn:hover {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
 }
 
 .label-btn.active {
     border-color: var(--label-color, var(--primary, #6e56cf));
-    background: color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 15%, white);
+    background: color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 15%, light-dark(white, #1a1a1a));
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 25%, transparent);
 }
 
@@ -156,16 +156,16 @@
     padding: 0 0.5rem;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .zoom-btn:hover {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
     border-color: var(--primary, #6e56cf);
 }
 
@@ -183,16 +183,16 @@
     padding: 0.375rem 0.75rem;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .segment-btn:hover:not(:disabled) {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
     border-color: var(--primary, #6e56cf);
 }
 
@@ -214,12 +214,12 @@
 
 .segment-count {
     font-size: 0.75rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 .count-value {
     font-weight: 600;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
 }
 
 /* ==================== Waveform ==================== */
@@ -230,8 +230,8 @@
 
 .waveform-container {
     height: 200px;
-    background: var(--muted, #f9fafb);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
     margin-bottom: 0.5rem;
@@ -239,8 +239,8 @@
 
 .overview-container {
     height: 50px;
-    background: var(--muted, #f9fafb);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
 }
@@ -250,7 +250,7 @@
 .overview-hint,
 .zoomview-hint {
     font-style: italic;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-weight: 400;
 }
 
@@ -263,7 +263,7 @@
 .segment-list-container h4 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     margin-bottom: 0.75rem;
 }
 
@@ -280,20 +280,20 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem;
-    background: var(--background, #ffffff);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .segment-item:hover {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
 }
 
 .segment-item.active {
     border-color: var(--primary, #6e56cf);
-    background: color-mix(in srgb, var(--primary, #6e56cf) 5%, white);
+    background: color-mix(in srgb, var(--primary, #6e56cf) 5%, light-dark(white, #1a1a1a));
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #6e56cf) 15%, transparent);
 }
 
@@ -313,7 +313,7 @@
     display: block;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -323,7 +323,7 @@
     display: block;
     font-size: 0.75rem;
     font-family: monospace;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 .segment-actions {
@@ -342,15 +342,15 @@
     border: 1px solid transparent;
     border-radius: var(--radius, 0.375rem);
     background: transparent;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .segment-play-btn:hover {
-    background: var(--accent, #f3f4f6);
-    color: var(--primary, #6e56cf);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
+    color: var(--primary, light-dark(#6e56cf, #b2a8db));
     border-color: var(--primary, #6e56cf);
 }
 
@@ -365,15 +365,15 @@
 .segment-questions-panel {
     margin-top: 1rem;
     padding: 1rem;
-    background: var(--muted, #f9fafb);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
 }
 
 .segment-questions-panel h4 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     margin-bottom: 0.75rem;
 }
 
@@ -383,15 +383,15 @@
 
 .segment-questions-header {
     font-size: 0.875rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     margin-bottom: 1rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border, #e5e7eb);
+    border-bottom: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
 }
 
 .segment-questions-placeholder {
     font-size: 0.875rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-style: italic;
 }
 
@@ -403,7 +403,7 @@
     text-align: center;
     padding: 2rem;
     font-size: 0.875rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 /* ==================== Responsive ==================== */
@@ -446,7 +446,7 @@
     position: relative;
     height: 150px;
     background: var(--muted, #1a1a1a);
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
 }
@@ -470,7 +470,7 @@
 
 .spectrogram-label {
     font-size: 0.85em;
-    color: var(--muted-foreground, #666);
+    color: var(--muted-foreground, light-dark(#666, #c2c2c2));
     margin-bottom: 4px;
 }
 
@@ -485,9 +485,9 @@
 .spectrogram-colormap-select {
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
     cursor: pointer;
 }
 

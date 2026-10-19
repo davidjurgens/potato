@@ -239,21 +239,21 @@ class GalleryDisplay(BaseDisplay):
         return f'''
         .gallery-display {{ font-family: inherit; }}
         .gallery-item {{
-            border: 1px solid #e0e0e0; border-radius: 6px;
-            overflow: hidden; background: #fafafa;
+            border: 1px solid light-dark(#e0e0e0, #4c4c4c); border-radius: 6px;
+            overflow: hidden; background: light-dark(#fafafa, #1d1d1d);
         }}
         .gallery-img-wrapper {{ display: flex; justify-content: center; padding: 4px; }}
         .gallery-img {{ border-radius: 4px; }}
         .gallery-caption {{
-            padding: 6px 10px; font-size: 0.85em; color: #555;
-            background: #f5f5f5; border-top: 1px solid #e0e0e0;
+            padding: 6px 10px; font-size: 0.85em; color: light-dark(#555, #c4c4c4);
+            background: light-dark(#f5f5f5, #1f1f1f); border-top: 1px solid light-dark(#e0e0e0, #4c4c4c);
             text-align: center;
         }}
         .gallery-nav {{
             display: flex; justify-content: center; padding: 4px 0;
             margin-bottom: 8px;
         }}
-        .gallery-counter {{ font-size: 0.85em; color: #666; }}
+        .gallery-counter {{ font-size: 0.85em; color: light-dark(#666, #c2c2c2); }}
         {layout_css}
         {zoom_css}
         '''

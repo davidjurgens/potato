@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }} - Preview</title>
+    {% include '_theme_head.html' %}
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
     <style>
@@ -29,6 +30,9 @@
             border-radius: 8px;
             padding: 20px;
         }
+        /* No styles.css here; Bootstrap's own dark variables carry the card. */
+        :root[data-theme="dark"] body { background-color: var(--bs-body-bg); }
+        :root[data-theme="dark"] .accept-hint { background-color: #3a2a0c; color: #fcd34d; }
     </style>
 </head>
 <body>

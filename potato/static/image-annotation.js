@@ -4577,8 +4577,8 @@ class ImageAnnotationManager {
             note.className = 'image-annotation-notice';
             note.setAttribute('role', 'status');
             note.style.cssText = 'margin:8px 0 0;padding:8px 12px;border-radius:6px;' +
-                'font-size:14px;line-height:1.4;background:var(--muted,#f4f4f5);' +
-                'color:var(--foreground,#09090b);border:1px solid var(--border,#e4e4e7);';
+                'font-size:14px;line-height:1.4;background:var(--muted,light-dark(#f4f4f5, #1f1f21));' +
+                'color:var(--foreground,light-dark(#09090b, #dfdfe4));border:1px solid var(--border,light-dark(#e4e4e7, #4b4b4e));';
             container.appendChild(note);
         }
         note.textContent = message;

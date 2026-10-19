@@ -245,10 +245,10 @@ def _generate_internal(
     .failure-attribution-container {{ font-family: inherit; }}
     .fa-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .fa-field {{ margin-bottom: 10px; display: flex; flex-direction: column; gap: 3px; }}
-    .fa-field label {{ font-size: 0.85em; font-weight: 600; color: var(--muted-foreground, #71717a); }}
+    .fa-field label {{ font-size: 0.85em; font-weight: 600; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .fa-agent, .fa-step, .fa-reason {{
-        padding: 6px 10px; border: 1px solid var(--border, #e4e4e7);
-        border-radius: var(--radius, 0.5rem); background: var(--card, #fff);
+        padding: 6px 10px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+        border-radius: var(--radius, 0.5rem); background: var(--card, light-dark(#fff, #1a1a1a));
         font-size: 0.9em; font-family: inherit; width: 100%; box-sizing: border-box;
     }}
     .fa-agent:focus-visible, .fa-step:focus-visible, .fa-reason:focus-visible {{

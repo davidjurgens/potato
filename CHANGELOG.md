@@ -6,6 +6,18 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Dark mode on annotator pages.** Sign-in, phase, annotation and
+  completion pages follow the browser's light or dark setting, with a header
+  button annotators can use to switch, remembered per browser.
+  `ui.theme: light` or `dark` gives everyone the same theme and hides the
+  button. Admin pages stay light. In the light theme, hard-coded neutral
+  colours became tokens with the same values; the grey of the links on the
+  sign-in and password pages, and of the training progress line, moved to
+  the standard muted grey. Component styles, and the inline styles that
+  displays and schemas generate, give each light colour a dark twin of the
+  same hue with CSS `light-dark()`, which returns the original colour in the
+  light theme. Canvas timelines (tiered annotation, rollout and episode lanes)
+  take the same twins when they paint and repaint when the theme changes.
 - **Sign in with Hugging Face on a Space.** `potato deploy up --provider
   huggingface --hf-oauth` makes annotators sign in with their Hugging Face
   account, keyed by their account id, which survives a rename;
@@ -237,6 +249,16 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **An armed image label's name was dark grey on the purple chip.** A rule
+  forcing page text onto every span in a form put it at 2.3:1. The image
+  toolbar's armed label and tool now use the chip's white.
+- **Conversation-tree speakers changed colour on every restart.** The colour
+  came from Python's `hash()` of the name, which is salted per process; it
+  now comes from a stable hash.
+- **Some components turned dark on a light page.** Dialogue turns, triage
+  and entity-linking panels had `prefers-color-scheme: dark` rules, so on a
+  computer set to dark they used dark-theme colours inside an otherwise light
+  page. They now follow the page's theme.
 - **The `huggingface` sign-in provider never worked.** Config validation
   demanded a `discovery_url` for it, and the backend registered it without
   its OpenID metadata, so the sign-in redirect failed. Both are fixed, and the

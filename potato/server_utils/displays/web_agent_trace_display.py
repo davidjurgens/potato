@@ -300,7 +300,7 @@ class WebAgentTraceDisplay(BaseDisplay):
         .web-agent-viewer {{ font-family: inherit; }}
         .web-agent-task, .web-agent-site {{
             padding: 6px 12px; margin-bottom: 8px;
-            background: #f8f9fa; border-radius: 4px; font-size: 0.95em;
+            background: light-dark(#f8f9fa, #1a1d20); border-radius: 4px; font-size: 0.95em;
         }}
         .web-agent-main {{
             display: flex; gap: 16px; margin-bottom: 12px;
@@ -310,7 +310,7 @@ class WebAgentTraceDisplay(BaseDisplay):
         }}
         .screenshot-container {{
             position: relative; display: inline-block;
-            border: 1px solid #ddd; border-radius: 6px; overflow: hidden;
+            border: 1px solid light-dark(#ddd, #4c4c4c); border-radius: 6px; overflow: hidden;
             background: #1a1a1a;
         }}
         .step-screenshot {{
@@ -325,29 +325,29 @@ class WebAgentTraceDisplay(BaseDisplay):
         .screenshot-placeholder {{
             width: {css_length(max_w)}; height: 300px;
             display: flex; align-items: center; justify-content: center;
-            background: #f0f0f0; color: #999; font-size: 0.9em;
+            background: light-dark(#f0f0f0, #232323); color: #999; font-size: 0.9em;
         }}
         .step-nav {{
             display: flex; align-items: center; justify-content: center;
             gap: 12px; padding: 8px 0;
         }}
         .step-nav button {{
-            padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px;
-            background: #fff; cursor: pointer; font-size: 0.85em;
+            padding: 4px 12px; border: 1px solid light-dark(#ccc, #4c4c4c); border-radius: 4px;
+            background: light-dark(#fff, #1a1a1a); cursor: pointer; font-size: 0.85em;
         }}
         .step-nav button:disabled {{
             opacity: 0.4; cursor: default;
         }}
         .step-nav button:not(:disabled):hover {{
-            background: #e8f4fd; border-color: #2196F3;
+            background: light-dark(#e8f4fd, #122330); border-color: #2196F3;
         }}
         .step-counter {{
-            font-size: 0.9em; font-weight: 600; color: #555;
+            font-size: 0.9em; font-weight: 600; color: light-dark(#555, #c4c4c4);
         }}
         .step-details-panel {{
             flex: 1; min-width: 250px; max-width: 400px;
-            border: 1px solid #e0e0e0; border-radius: 6px;
-            padding: 12px; background: #fafafa; overflow-y: auto;
+            border: 1px solid light-dark(#e0e0e0, #4c4c4c); border-radius: 6px;
+            padding: 12px; background: light-dark(#fafafa, #1d1d1d); overflow-y: auto;
             max-height: calc({css_length(max_h)} + 50px);
         }}
         .step-details-content {{
@@ -360,37 +360,37 @@ class WebAgentTraceDisplay(BaseDisplay):
         }}
         .step-timestamp {{ color: #888; font-size: 0.8em; }}
         .step-thought {{
-            padding: 8px; background: #e8f4fd;
+            padding: 8px; background: light-dark(#e8f4fd, #122330);
             border-left: 3px solid #2196F3; border-radius: 4px;
             font-size: 0.9em;
         }}
         .step-element {{
-            font-size: 0.85em; color: #555;
+            font-size: 0.85em; color: light-dark(#555, #c4c4c4);
         }}
         .step-element code {{
-            background: #f0f0f0; padding: 2px 4px; border-radius: 2px;
+            background: light-dark(#f0f0f0, #232323); padding: 2px 4px; border-radius: 2px;
             font-size: 0.9em;
         }}
-        .step-coords {{ font-size: 0.85em; color: #666; }}
+        .step-coords {{ font-size: 0.85em; color: light-dark(#666, #c2c2c2); }}
         .step-typed {{
-            padding: 6px 8px; background: #e8f4fd;
+            padding: 6px 8px; background: light-dark(#e8f4fd, #122330);
             border-radius: 4px; font-size: 0.9em;
         }}
         .step-observation {{
-            padding: 8px; background: #e8f5e9;
+            padding: 8px; background: light-dark(#e8f5e9, #1c2b1d);
             border-left: 3px solid #4CAF50; border-radius: 4px;
             font-size: 0.9em;
         }}
         .filmstrip {{
             display: flex; gap: 4px; overflow-x: auto;
-            padding: 8px 4px; background: #f5f5f5;
+            padding: 8px 4px; background: light-dark(#f5f5f5, #1f1f1f);
             border-radius: 6px; margin-top: 4px;
         }}
         .filmstrip-thumb {{
             flex: 0 0 auto; width: {filmstrip_size}px;
             cursor: pointer; border: 2px solid transparent;
             border-radius: 4px; overflow: hidden;
-            text-align: center; background: #fff;
+            text-align: center; background: light-dark(#fff, #1a1a1a);
             transition: border-color 0.2s;
         }}
         .filmstrip-thumb:hover {{ border-color: #90CAF9; }}
@@ -402,21 +402,21 @@ class WebAgentTraceDisplay(BaseDisplay):
         .filmstrip-placeholder {{
             width: 100%; height: {int(filmstrip_size * 0.65)}px;
             display: flex; align-items: center; justify-content: center;
-            background: #eee; color: #999; font-size: 0.8em;
+            background: light-dark(#eee, #242424); color: #999; font-size: 0.8em;
         }}
         .filmstrip-label {{
-            font-size: 0.7em; color: #666; padding: 2px 0;
+            font-size: 0.7em; color: light-dark(#666, #c2c2c2); padding: 2px 0;
         }}
         .overlay-controls {{
             display: flex; gap: 12px; padding: 6px 0;
-            font-size: 0.8em; color: #555;
+            font-size: 0.8em; color: light-dark(#555, #c4c4c4);
         }}
         .overlay-controls label {{
             display: flex; align-items: center; gap: 4px; cursor: pointer;
         }}
         .web-agent-per-step-annotations {{
             margin-top: 12px; padding-top: 12px;
-            border-top: 1px solid #e0e0e0;
+            border-top: 1px solid light-dark(#e0e0e0, #4c4c4c);
         }}
 
         /* SVG overlay styles */

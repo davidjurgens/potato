@@ -20,16 +20,16 @@
     "version": "2"
   },
   "audio-annotation.css": {
-    "sha256": "21cc43d0794ead1d",
-    "version": "5"
+    "sha256": "f81f3a2e240ff3ea",
+    "version": "6"
   },
   "audio-annotation.js": {
     "sha256": "78327d8ec22280d9",
     "version": "8"
   },
   "audio-dialogue.css": {
-    "sha256": "296a7735e2b2f3f2",
-    "version": "4"
+    "sha256": "141904f6914ed5e2",
+    "version": "5"
   },
   "audio-dialogue.js": {
     "sha256": "b2738a5168ffaa33",
@@ -44,8 +44,8 @@
     "version": "17"
   },
   "coding-trace.css": {
-    "sha256": "474a0e265bfd76ad",
-    "version": "1"
+    "sha256": "4bca924e005a6ca3",
+    "version": "2"
   },
   "conversation-tree.js": {
     "sha256": "40a15d32a7ae6bca",
@@ -56,68 +56,68 @@
     "version": "6"
   },
   "css/agent-chat.css": {
-    "sha256": "13829ca669ee01b7",
-    "version": "1"
+    "sha256": "3bba41a852d6913f",
+    "version": "2"
   },
   "css/boundary.css": {
     "sha256": "f53c04d1f22adff3",
     "version": "5"
   },
   "css/codebook.css": {
-    "sha256": "d4ac13717b505eab",
-    "version": "14"
+    "sha256": "ba44244f906c48d8",
+    "version": "15"
   },
   "css/conversation-tree.css": {
-    "sha256": "7aec08ceff12adf5",
-    "version": "2"
-  },
-  "css/coreference.css": {
-    "sha256": "0623296ca5b777ec",
-    "version": "1"
-  },
-  "css/entity-linking.css": {
-    "sha256": "c9daba247b4a01b5",
-    "version": "1"
-  },
-  "css/format-displays.css": {
-    "sha256": "e922eb09ead3638a",
+    "sha256": "7299fa164ab8f394",
     "version": "3"
   },
+  "css/coreference.css": {
+    "sha256": "f22805cd1a786197",
+    "version": "2"
+  },
+  "css/entity-linking.css": {
+    "sha256": "5a6827066378f64d",
+    "version": "2"
+  },
+  "css/format-displays.css": {
+    "sha256": "5af93dd5f5e6a668",
+    "version": "4"
+  },
   "css/live-agent.css": {
-    "sha256": "e5dd8cb6d35c5d49",
-    "version": "1"
+    "sha256": "4a5a3f9110f42db8",
+    "version": "2"
   },
   "css/llm-chat-sidebar.css": {
-    "sha256": "74cd5b513de4b812",
-    "version": "1"
+    "sha256": "975c3e0c64f160f7",
+    "version": "2"
   },
   "css/memos.css": {
-    "sha256": "f0bcb3944c79c20b",
-    "version": "4"
+    "sha256": "ae579d3029c057a8",
+    "version": "5"
   },
   "css/object-attributes.css": {
     "sha256": "871f05a62d8612ee",
     "version": "1"
   },
   "css/search.css": {
-    "sha256": "8dfdb84e238d4ee2",
-    "version": "2"
+    "sha256": "487866acbf1d3c23",
+    "version": "3"
   },
   "css/thinkaloud.css": {
     "sha256": "de53b4e35a2f57e2",
     "version": "1"
   },
   "css/tiered-annotation.css": {
-    "sha256": "73ab61a30bfeeed3",
-    "version": "1"
+    "sha256": "9bfefdcd08eb1153",
+    "version": "2"
   },
   "css/tracking.css": {
-    "sha256": "0505e17c3d4db747",
-    "version": "1"
+    "sha256": "54510457266d1f9d",
+    "version": "2"
   },
   "css/triage.css": {
-    "sha256": "3f229062e0a5060f",
-    "version": "1"
+    "sha256": "86f82390686aedcc",
+    "version": "2"
   },
   "css/truth-serum.css": {
     "sha256": "02c79d937977c083",
@@ -128,16 +128,16 @@
     "version": "1"
   },
   "depth-viewer.css": {
-    "sha256": "42db20efa77dca28",
-    "version": "2"
+    "sha256": "e8775174ac8f510c",
+    "version": "3"
   },
   "depth-viewer.js": {
     "sha256": "dd95701e4bf3ead7",
     "version": "2"
   },
   "device-routing.js": {
-    "sha256": "bb9469cf15c13e06",
-    "version": "3"
+    "sha256": "002b5c354867e2db",
+    "version": "4"
   },
   "display-logic.css": {
     "sha256": "e74030575f27db93",
@@ -148,8 +148,8 @@
     "version": "4"
   },
   "document-bbox.css": {
-    "sha256": "58cd936046af536e",
-    "version": "1"
+    "sha256": "d8710e81e67457ae",
+    "version": "2"
   },
   "document-bbox.js": {
     "sha256": "b53b7ebb08d21ec5",
@@ -160,16 +160,16 @@
     "version": "2"
   },
   "episode-timeline.css": {
-    "sha256": "f938355bab7209db",
-    "version": "2"
+    "sha256": "7a4f9db2b01a4f68",
+    "version": "3"
   },
   "episode-timeline.js": {
-    "sha256": "ef0e60f89afd0413",
-    "version": "1"
+    "sha256": "70d13db0f4220f4a",
+    "version": "2"
   },
   "event-annotation.css": {
-    "sha256": "9397cddac45f41e5",
-    "version": "1"
+    "sha256": "72e6096527ab3ad2",
+    "version": "2"
   },
   "event-annotation.js": {
     "sha256": "c177e47b974a3e0d",
@@ -180,20 +180,20 @@
     "version": "6"
   },
   "grounding-eval.css": {
-    "sha256": "0913d758fc309574",
-    "version": "1"
+    "sha256": "6f947831b1b92db6",
+    "version": "2"
   },
   "grounding-eval.js": {
     "sha256": "883d7b4f342a1b9d",
     "version": "1"
   },
   "image-annotation.css": {
-    "sha256": "aa59948824ad9f28",
-    "version": "19"
+    "sha256": "4b620abc809b8aa0",
+    "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "b0f7e2626ec80428",
-    "version": "53"
+    "sha256": "81c8bef5c9fcb651",
+    "version": "54"
   },
   "instance-display.js": {
     "sha256": "1f97e150e3d901c4",
@@ -224,8 +224,8 @@
     "version": "2"
   },
   "live-agent-viewer.js": {
-    "sha256": "b019b3accc059e6d",
-    "version": "1"
+    "sha256": "fd3a2f51e3383b10",
+    "version": "2"
   },
   "live-coding-agent-viewer.js": {
     "sha256": "4e3e4daffd673849",
@@ -244,16 +244,16 @@
     "version": "6"
   },
   "multi-agent-discussion.css": {
-    "sha256": "276ac528ca3f2b51",
-    "version": "1"
+    "sha256": "69ce41d19ea43bb4",
+    "version": "2"
   },
   "multi-agent-discussion.js": {
     "sha256": "03a62e40820b5bf4",
     "version": "1"
   },
   "multi-document-event.css": {
-    "sha256": "4d3b34eafb844441",
-    "version": "2"
+    "sha256": "9310512ecbbf0cc0",
+    "version": "3"
   },
   "multi-document-event.js": {
     "sha256": "e41b3239c9740446",
@@ -268,16 +268,16 @@
     "version": "2"
   },
   "pdf-annotation.css": {
-    "sha256": "8bd6cce93c6751f8",
-    "version": "1"
+    "sha256": "515f9f99f1787051",
+    "version": "2"
   },
   "pdf-bbox.js": {
     "sha256": "d3114fbbb9a05d54",
     "version": "3"
   },
   "pdf-link-mode.css": {
-    "sha256": "563401a9e7b38403",
-    "version": "1"
+    "sha256": "a2f3698e96b00223",
+    "version": "2"
   },
   "pdf-link-mode.js": {
     "sha256": "3f6e8969e0d06d39",
@@ -304,8 +304,8 @@
     "version": "2"
   },
   "pointcloud/pc-viewer.css": {
-    "sha256": "c06b5feeed1c02a7",
-    "version": "7"
+    "sha256": "218c6fa81211acbe",
+    "version": "8"
   },
   "pointcloud/pc-viewer.js": {
     "sha256": "5a01da384c29c68b",
@@ -316,20 +316,20 @@
     "version": "3"
   },
   "region-caption.css": {
-    "sha256": "8f898abad57c7a4b",
-    "version": "1"
+    "sha256": "c151ae630d94fed9",
+    "version": "2"
   },
   "region-caption.js": {
     "sha256": "faf81b57803c5c91",
     "version": "3"
   },
   "rollout-eval.css": {
-    "sha256": "ba9d2abeb5a3da52",
-    "version": "3"
+    "sha256": "6440ece9f7609138",
+    "version": "4"
   },
   "rollout-eval.js": {
-    "sha256": "e2b0e06f19043e2e",
-    "version": "6"
+    "sha256": "941baa74136fb2f2",
+    "version": "7"
   },
   "run-tree.js": {
     "sha256": "074d3ccc44b64809",
@@ -380,32 +380,32 @@
     "version": "16"
   },
   "span-link-styles.css": {
-    "sha256": "244fc855ca30f10c",
-    "version": "5"
+    "sha256": "2cd95f97873ba162",
+    "version": "6"
   },
   "span-styles.css": {
-    "sha256": "e86615f90233da95",
-    "version": "3"
+    "sha256": "d726248d79c4d2a9",
+    "version": "4"
   },
   "span-touch.js": {
     "sha256": "c35d731585c1f6b9",
     "version": "2"
   },
   "spreadsheet-display.css": {
-    "sha256": "b09c16ed83007f42",
-    "version": "1"
+    "sha256": "b7ae8488ab879d3c",
+    "version": "2"
   },
   "styles.css": {
-    "sha256": "976a6477d4a8824f",
-    "version": "38"
+    "sha256": "3ddebf5bb28e85a7",
+    "version": "40"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",
     "version": "2"
   },
   "tiered-annotation.js": {
-    "sha256": "aa50275b61cdbab8",
-    "version": "5"
+    "sha256": "04bdf8b1039ec34f",
+    "version": "6"
   },
   "tracking-interpolation.js": {
     "sha256": "da8bd01cf9b79b92",
@@ -424,32 +424,32 @@
     "version": "2"
   },
   "turn-annotations.css": {
-    "sha256": "5e961c420f64a143",
-    "version": "1"
+    "sha256": "184dcadf5ee32b10",
+    "version": "2"
   },
   "turn-annotations.js": {
     "sha256": "2f58c72a0d1f8f46",
     "version": "1"
   },
   "video-annotation.css": {
-    "sha256": "517aeca9517f0ffb",
-    "version": "3"
+    "sha256": "d7271aa5b46047d0",
+    "version": "4"
   },
   "video-annotation.js": {
     "sha256": "bbbf5a64a152d59a",
     "version": "23"
   },
   "visual_ai_assistant.js": {
-    "sha256": "fa202ba429c0f9b1",
-    "version": "10"
+    "sha256": "f388e903a142dc96",
+    "version": "11"
   },
   "web-agent-overlays.js": {
     "sha256": "ba2cd17c89c458af",
     "version": "1"
   },
   "web-agent-playback.js": {
-    "sha256": "a8c78bffdd6b21cb",
-    "version": "1"
+    "sha256": "30dbaa8d788547fe",
+    "version": "2"
   },
   "web-agent-recorder.js": {
     "sha256": "3344eeff539f2cef",

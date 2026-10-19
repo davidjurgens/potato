@@ -11,9 +11,9 @@
 /* Track Panel */
 .tracking-panel {
     margin: 8px 0;
-    border: 1px solid #e2e8f0;
+    border: 1px solid light-dark(#e2e8f0, #434b56);
     border-radius: 6px;
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
     overflow: hidden;
 }
 
@@ -22,14 +22,14 @@
     justify-content: space-between;
     align-items: center;
     padding: 8px 10px;
-    background: #f1f5f9;
-    border-bottom: 1px solid #e2e8f0;
+    background: light-dark(#f1f5f9, #192026);
+    border-bottom: 1px solid light-dark(#e2e8f0, #434b56);
 }
 
 .tracking-panel-title {
     font-size: 0.85rem;
     font-weight: 600;
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
 }
 
 .tracking-panel-actions {
@@ -39,16 +39,16 @@
 
 .tracking-panel-btn {
     padding: 3px 10px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid light-dark(#cbd5e1, #444c55);
     border-radius: 4px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     font-size: 0.75rem;
     cursor: pointer;
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
 }
 
 .tracking-panel-btn:hover {
-    background: #e2e8f0;
+    background: light-dark(#e2e8f0, #20262d);
 }
 
 .tracking-track-list {
@@ -80,7 +80,7 @@
 }
 
 .tracking-track-item:hover {
-    background: #f8fafc;
+    background: light-dark(#f8fafc, #161c23);
 }
 
 .tracking-track-item.active {
@@ -97,7 +97,7 @@
 
 .tracking-track-label {
     font-weight: 600;
-    color: #1e293b;
+    color: light-dark(#1e293b, #c9d1de);
     flex: 1;
 }
 
@@ -118,17 +118,17 @@
 }
 
 .tracking-track-delete:hover {
-    background: #fef2f2;
+    background: light-dark(#fef2f2, #2c1010);
     color: #ef4444;
 }
 
 /* Interpolation type selector */
 .tracking-interpolation-select {
     padding: 2px 6px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid light-dark(#cbd5e1, #444c55);
     border-radius: 4px;
     font-size: 0.75rem;
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 /* Timeline track bars */
@@ -150,7 +150,7 @@
     height: 6px;
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    border: 1px solid white;
+    border: 1px solid light-dark(white, #4c4c4c);
     cursor: pointer;
 }
 
@@ -160,24 +160,24 @@
     align-items: center;
     gap: 4px;
     padding: 0 8px;
-    border-left: 1px solid #e2e8f0;
+    border-left: 1px solid light-dark(#e2e8f0, #434b56);
 }
 
 .tracking-btn {
     padding: 4px 12px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid light-dark(#cbd5e1, #444c55);
     border-radius: 4px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     font-size: 0.8rem;
     cursor: pointer;
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
     transition: all 0.15s;
 }
 
 .tracking-btn:hover:not(:disabled) {
-    background: #f1f5f9;
+    background: light-dark(#f1f5f9, #192026);
     border-color: #6E56CF;
-    color: #6E56CF;
+    color: light-dark(#6E56CF, #b2a8db);
 }
 
 .tracking-btn:disabled {
@@ -186,18 +186,18 @@
 }
 
 .tracking-btn.delete-btn:hover:not(:disabled) {
-    background: #fef2f2;
+    background: light-dark(#fef2f2, #2c1010);
     border-color: #ef4444;
     color: #ef4444;
 }
 
 .interpolation-select {
     padding: 4px 8px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid light-dark(#cbd5e1, #444c55);
     border-radius: 4px;
     font-size: 0.8rem;
-    background: white;
-    color: #475569;
+    background: light-dark(white, #1a1a1a);
+    color: light-dark(#475569, #bac1cb);
     cursor: pointer;
 }
 
@@ -208,8 +208,8 @@
 /* Tracking instructions */
 .tracking-instructions {
     font-size: 0.8rem;
-    color: #64748b;
+    color: light-dark(#64748b, #bac0c9);
     padding: 8px 10px;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
+    background: light-dark(#f8fafc, #161c23);
+    border-bottom: 1px solid light-dark(#e2e8f0, #434b56);
 }

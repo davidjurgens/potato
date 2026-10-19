@@ -67,14 +67,14 @@
         // screen for the whole session after being read once.
         banner.style.cssText =
             "position:relative;z-index:2000;display:flex;align-items:center;" +
-            "gap:12px;padding:10px 16px;background:#fdf3e2;color:#7a5310;" +
-            "border-bottom:1px solid #e2c185;font-size:14px;line-height:1.4;";
+            "gap:12px;padding:10px 16px;background:light-dark(#fdf3e2, #332712);color:light-dark(#7a5310, #e8d2ab);" +
+            "border-bottom:1px solid light-dark(#e2c185, #5f523a);font-size:14px;line-height:1.4;";
         banner.innerHTML = html;
         var dismiss = document.createElement("button");
         dismiss.type = "button";
         dismiss.textContent = "Dismiss";
         dismiss.style.cssText =
-            "margin-left:auto;min-height:38px;padding:6px 14px;border:1px solid #e2c185;" +
+            "margin-left:auto;min-height:38px;padding:6px 14px;border:1px solid light-dark(#e2c185, #5f523a);" +
             "border-radius:8px;background:transparent;color:inherit;cursor:pointer;";
         dismiss.addEventListener("click", function () {
             banner.remove();

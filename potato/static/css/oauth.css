@@ -13,23 +13,23 @@
     justify-content: center;
     gap: 0.75rem;
     padding: 0.7rem 1rem;
-    border: 1px solid #d0d5dd;
+    border: 1px solid light-dark(#d0d5dd, #484b51);
     border-radius: 8px;
     font-size: 0.95rem;
     font-weight: 500;
     text-decoration: none;
     cursor: pointer;
     transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
-    color: #344054;
-    background: #fff;
+    color: light-dark(#344054, #c1c8d4);
+    background: light-dark(#fff, #1a1a1a);
 }
 
 .oauth-login-btn:hover {
-    background-color: #f9fafb;
+    background-color: light-dark(#f9fafb, #191d20);
     border-color: #98a2b3;
     box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1);
     text-decoration: none;
-    color: #344054;
+    color: light-dark(#344054, #c1c8d4);
 }
 
 .oauth-login-btn i {
@@ -40,10 +40,10 @@
 
 /* Google */
 .oauth-btn-google {
-    border-color: #dadce0;
+    border-color: light-dark(#dadce0, #4a4c4f);
 }
 .oauth-btn-google:hover {
-    background-color: #f8f9fa;
+    background-color: light-dark(#f8f9fa, #1a1d20);
     border-color: #4285f4;
 }
 .oauth-btn-google i {
@@ -67,35 +67,35 @@
 
 /* HuggingFace */
 .oauth-btn-huggingface {
-    background-color: #FFD21E;
-    color: #1a1a2e;
-    border-color: #FFD21E;
+    background-color: light-dark(#FFD21E, #4f4417);
+    color: light-dark(#1a1a2e, #cfcfdf);
+    border-color: light-dark(#FFD21E, #6b5f2e);
 }
 .oauth-btn-huggingface:hover {
-    background-color: #FFDC4E;
-    color: #1a1a2e;
-    border-color: #FFDC4E;
+    background-color: light-dark(#FFDC4E, #4f4417);
+    color: light-dark(#1a1a2e, #cfcfdf);
+    border-color: light-dark(#FFDC4E, #6b5f2e);
 }
 .oauth-btn-huggingface i {
-    color: #1a1a2e;
+    color: light-dark(#1a1a2e, #cfcfdf);
 }
 
 /* Generic / OIDC */
 .oauth-btn-generic {
-    border-color: #d0d5dd;
+    border-color: light-dark(#d0d5dd, #484b51);
 }
 .oauth-btn-generic:hover {
-    background-color: #f2f4f7;
+    background-color: light-dark(#f2f4f7, #1c1f24);
 }
 .oauth-btn-generic i {
-    color: #667085;
+    color: light-dark(#667085, #bcc0c8);
 }
 
 /* Divider between SSO and local login */
 /* Shown when the page is framed and sign-in opens in a new tab. */
 .oauth-new-tab-note {
     margin: -0.25rem 0 0;
-    color: #475467;
+    color: light-dark(#475467, #bac1cb);
     font-size: 0.85rem;
     text-align: center;
 }
@@ -111,7 +111,7 @@
 .oauth-divider::after {
     content: "";
     flex: 1;
-    border-bottom: 1px solid #e4e7ec;
+    border-bottom: 1px solid light-dark(#e4e7ec, #474b52);
 }
 .oauth-divider span {
     padding: 0 0.75rem;

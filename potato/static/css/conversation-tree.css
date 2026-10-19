@@ -12,16 +12,16 @@
 
 .conv-tree-btn {
     padding: 3px 10px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid light-dark(#cbd5e1, #444c55);
     border-radius: 4px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     font-size: 0.78rem;
     cursor: pointer;
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
 }
 
 .conv-tree-btn:hover {
-    background: #f1f5f9;
+    background: light-dark(#f1f5f9, #192026);
     border-color: #94a3b8;
 }
 
@@ -47,9 +47,9 @@
 }
 
 .conv-tree-node.card {
-    border: 1px solid #e2e8f0;
+    border: 1px solid light-dark(#e2e8f0, #434b56);
     border-radius: 6px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     padding: 0;
     overflow: hidden;
 }
@@ -66,7 +66,7 @@
     font-size: 0.85rem;
     font-weight: 600;
     cursor: default;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid light-dark(#f1f5f9, #404d59);
 }
 
 .conv-tree-toggle {
@@ -79,7 +79,7 @@
 }
 
 .conv-tree-toggle:hover {
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
 }
 
 .conv-tree-speaker {
@@ -103,21 +103,21 @@
     padding: 8px 10px;
     font-size: 0.9rem;
     line-height: 1.5;
-    color: #1e293b;
+    color: light-dark(#1e293b, #c9d1de);
     white-space: pre-wrap;
 }
 
 /* Speaker colors */
-.conv-tree-speaker-0 { background-color: #ede9fe; color: #6E56CF; }
-.conv-tree-speaker-1 { background-color: #dbeafe; color: #2563EB; }
-.conv-tree-speaker-2 { background-color: #dcfce7; color: #16a34a; }
-.conv-tree-speaker-3 { background-color: #fef3c7; color: #d97706; }
-.conv-tree-speaker-4 { background-color: #fce7f3; color: #db2777; }
-.conv-tree-speaker-5 { background-color: #e0f2fe; color: #0284c7; }
+.conv-tree-speaker-0 { background-color: light-dark(#ede9fe, #161031); color: light-dark(#6E56CF, #b2a8db); }
+.conv-tree-speaker-1 { background-color: light-dark(#dbeafe, #122238); color: light-dark(#2563EB, #9cb4e8); }
+.conv-tree-speaker-2 { background-color: light-dark(#dcfce7, #143620); color: #16a34a; }
+.conv-tree-speaker-3 { background-color: light-dark(#fef3c7, #413814); color: #d97706; }
+.conv-tree-speaker-4 { background-color: light-dark(#fce7f3, #301324); color: light-dark(#db2777, #e3a1be); }
+.conv-tree-speaker-5 { background-color: light-dark(#e0f2fe, #112735); color: #0284c7; }
 
 .conv-tree-children {
     padding: 4px 0 4px 4px;
-    border-left: 2px solid #e2e8f0;
+    border-left: 2px solid light-dark(#e2e8f0, #434b56);
     margin-left: 12px;
 }
 
@@ -133,7 +133,7 @@
 
 .conv-tree-node.selected {
     border-color: #6E56CF;
-    background-color: #faf5ff;
+    background-color: light-dark(#faf5ff, #1c0d2c);
 }
 
 .conv-tree-node.on-path {
@@ -147,7 +147,7 @@
     content: "\2713";
     float: right;
     margin-left: 8px;
-    color: #6E56CF;
+    color: light-dark(#6E56CF, #b2a8db);
     font-weight: 700;
     line-height: 1;
 }
@@ -170,9 +170,9 @@
 .tree-ann-container {
     margin: 10px 0;
     padding: 12px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid light-dark(#e2e8f0, #434b56);
     border-radius: 8px;
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
 }
 
 .tree-ann-header {
@@ -183,19 +183,19 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
-    color: #1a1a2e;
+    color: light-dark(#1a1a2e, #cfcfdf);
 }
 
 .tree-ann-hint {
     font-size: 0.85rem;
-    color: #64748b;
+    color: light-dark(#64748b, #bac0c9);
     margin: 4px 0;
 }
 
 .tree-ann-section-title {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
     margin: 8px 0 4px;
 }
 
@@ -204,7 +204,7 @@
     padding: 10px;
     border: 2px solid #6E56CF;
     border-radius: 6px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 .tree-ann-node-panel-header {
@@ -213,12 +213,12 @@
     align-items: center;
     margin-bottom: 8px;
     padding-bottom: 6px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid light-dark(#e2e8f0, #434b56);
 }
 
 .tree-ann-node-panel-title {
     font-size: 0.85rem;
-    color: #475569;
+    color: light-dark(#475569, #bac1cb);
 }
 
 .tree-ann-close-panel {
@@ -236,21 +236,21 @@
 .tree-ann-path-selection {
     margin-top: 10px;
     padding: 8px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid light-dark(#e2e8f0, #434b56);
     border-radius: 6px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 .tree-ann-path-desc {
     font-size: 0.85rem;
-    color: #64748b;
+    color: light-dark(#64748b, #bac0c9);
     margin: 2px 0 6px;
 }
 
 .tree-ann-selected-path {
     min-height: 30px;
     padding: 6px;
-    background: #f8fafc;
+    background: light-dark(#f8fafc, #161c23);
     border-radius: 4px;
     font-size: 0.85rem;
 }

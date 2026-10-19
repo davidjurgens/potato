@@ -218,36 +218,36 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .mmr-container {{ font-family: inherit; }}
     .mmr-title {{ font-weight: 600; font-size: 1em; margin-bottom: 6px; }}
     .mmr-list {{ display: flex; flex-direction: column; gap: 10px; }}
-    .mmr-card {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                 padding: 10px 12px; background: var(--card, #fff); }}
+    .mmr-card {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                 padding: 10px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .mmr-card.mmr-judged {{ border-color: var(--ring, #6e56cf); }}
     .mmr-head {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
     .mmr-step {{ font-weight: 600; }}
     .mmr-type {{ font-size: 0.68em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-                 padding: 1px 7px; border-radius: 999px; background: var(--secondary, #f4f4f5); color: var(--muted-foreground, #71717a); }}
-    .mmr-type-image {{ background: #e7f5ff; color: #1971c2; }}
-    .mmr-type-tool {{ background: #f3f0ff; color: #5f3dc4; }}
-    .mmr-type-action {{ background: #fff4e6; color: #e8590c; }}
+                 padding: 1px 7px; border-radius: 999px; background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
+    .mmr-type-image {{ background: light-dark(#e7f5ff, #0f2433); color: light-dark(#1971c2, #9ec3e5); }}
+    .mmr-type-tool {{ background: light-dark(#f3f0ff, #140e2f); color: light-dark(#5f3dc4, #b6a9da); }}
+    .mmr-type-action {{ background: light-dark(#fff4e6, #33230f); color: #e8590c; }}
     .mmr-block {{ font-size: 0.9em; margin-bottom: 8px; }}
     .mmr-text {{ white-space: pre-wrap; }}
-    .mmr-img {{ max-width: 100%; height: auto; border: 1px solid var(--border, #e4e4e7); border-radius: 6px; display: block; }}
-    .mmr-caption {{ font-size: 0.8em; color: var(--muted-foreground, #71717a); margin-top: 3px; }}
+    .mmr-img {{ max-width: 100%; height: auto; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; display: block; }}
+    .mmr-caption {{ font-size: 0.8em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin-top: 3px; }}
     .mmr-tool-name {{ font-family: ui-monospace, monospace; font-weight: 600; }}
-    .mmr-args {{ margin: 4px 0 0; padding: 6px 8px; background: var(--secondary, #f4f4f5); border-radius: 6px;
+    .mmr-args {{ margin: 4px 0 0; padding: 6px 8px; background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); border-radius: 6px;
                  font-size: 0.8em; max-height: 140px; overflow: auto; white-space: pre-wrap; }}
     .mmr-action {{ font-style: italic; }}
-    .mmr-missing {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+    .mmr-missing {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     .mmr-verdicts {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .mmr-vbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, #e4e4e7);
-                 border-radius: 999px; background: var(--card, #fff); cursor: pointer; color: var(--foreground, #18181b); }}
-    .mmr-vbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .mmr-vbtn {{ padding: 3px 10px; font-size: 0.8em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                 border-radius: 999px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
+    .mmr-vbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .mmr-vbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .mmr-vbtn.selected {{ font-weight: 600; }}
     .mmr-vbtn.selected.v-good {{ background: #4caf50; color: #fff; border-color: #4caf50; }}
     .mmr-vbtn.selected.v-bad {{ background: #e03131; color: #fff; border-color: #e03131; }}
     .mmr-notes {{ margin-top: 6px; width: 100%; box-sizing: border-box; padding: 4px 8px;
-                  border: 1px solid var(--border, #e4e4e7); border-radius: 6px; font-size: 0.85em; }}
-    .mmr-empty {{ color: var(--muted-foreground, #71717a); font-style: italic; }}
+                  border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 6px; font-size: 0.85em; }}
+    .mmr-empty {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; }}
     </style>
     """
     logger.info(f"Successfully generated multimodal_reasoning layout for {schema_name}")

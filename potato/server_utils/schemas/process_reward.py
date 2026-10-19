@@ -740,35 +740,35 @@ def _generate_internal(
     .process-reward-container {{ font-family: inherit; }}
     .prm-title {{ font-weight: 600; font-size: 1em; margin-bottom: 4px; }}
     .prm-mode-label {{
-        font-size: 0.85em; color: var(--muted-foreground, #71717a); margin-bottom: 8px;
-        padding: 4px 8px; background: var(--secondary, #f4f4f5); border-radius: var(--radius, 0.5rem);
+        font-size: 0.85em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin-bottom: 8px;
+        padding: 4px 8px; background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); border-radius: var(--radius, 0.5rem);
     }}
     .prm-steps-container {{ display: flex; flex-direction: column; gap: 4px; }}
     .prm-step-card {{
         display: flex; align-items: center; gap: 8px;
-        padding: 10px 14px; border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-        background: var(--card, #fff); transition: background 0.15s, border-color 0.15s;
+        padding: 10px 14px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+        background: var(--card, light-dark(#fff, #1a1a1a)); transition: background 0.15s, border-color 0.15s;
     }}
     .prm-step-card.prm-correct {{
-        background: #e8f5e9; border-color: #66bb6a;
+        background: light-dark(#e8f5e9, #1c2b1d); border-color: #66bb6a;
     }}
     .prm-step-card.prm-incorrect {{
-        background: #ffebee; border-color: #ef5350;
+        background: light-dark(#ffebee, #310e13); border-color: #ef5350;
     }}
     .prm-step-card.prm-neutral {{
-        background: #fff8e1; border-color: #ffb300;
+        background: light-dark(#fff8e1, #352d10); border-color: light-dark(#ffb300, #6b592e);
     }}
     .prm-step-header {{
         display: flex; flex-direction: column; align-items: center;
         min-width: 60px; flex: 0 0 auto;
     }}
     .prm-step-num {{
-        font-size: 0.8em; font-weight: 600; color: var(--muted-foreground, #71717a);
+        font-size: 0.8em; font-weight: 600; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     }}
     .prm-step-status {{ font-size: 0.75em; margin-top: 2px; }}
-    .prm-status-correct {{ color: #2e7d32; }}
-    .prm-status-incorrect {{ color: #c62828; }}
-    .prm-status-neutral {{ color: #b26a00; }}
+    .prm-status-correct {{ color: light-dark(#2e7d32, #afd8b1); }}
+    .prm-status-incorrect {{ color: light-dark(#c62828, #e0a3a3); }}
+    .prm-status-neutral {{ color: light-dark(#b26a00, #f0cb94); }}
     .prm-step-text {{
         flex: 1; font-size: 0.9em; white-space: pre-wrap;
         word-break: break-word; line-height: 1.4;
@@ -778,12 +778,12 @@ def _generate_internal(
         display: flex; gap: 6px; flex: 0 0 auto;
     }}
     .prm-btn {{
-        height: 36px; border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-        background: var(--card, #fff); cursor: pointer; font-size: 13px;
+        height: 36px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+        background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; font-size: 13px;
         padding: 0 12px; transition: all 0.15s; display: inline-flex;
         align-items: center; gap: 4px; white-space: nowrap;
     }}
-    .prm-btn:hover {{ border-color: #999; background: var(--secondary, #f4f4f5); }}
+    .prm-btn:hover {{ border-color: #999; background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .prm-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .prm-btn-correct.selected {{
         background: #4caf50; color: #fff; border-color: #4caf50;
@@ -792,27 +792,27 @@ def _generate_internal(
         background: #f44336; color: #fff; border-color: #f44336;
     }}
     .prm-btn-neutral.selected {{
-        background: #ffb300; color: #fff; border-color: #ffb300;
+        background: light-dark(#ffb300, #4f3e17); color: #fff; border-color: light-dark(#ffb300, #6b592e);
     }}
     .prm-footer {{
         margin-top: 10px; display: flex; align-items: center; gap: 12px;
     }}
     .prm-count {{
-        font-size: 0.85em; color: var(--muted-foreground, #71717a); flex: 1;
+        font-size: 0.85em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); flex: 1;
     }}
-    .prm-count-correct {{ color: #2e7d32; font-weight: 500; }}
-    .prm-count-incorrect {{ color: #c62828; font-weight: 500; }}
-    .prm-count-neutral {{ color: #b26a00; font-weight: 500; }}
-    .prm-count-unmarked {{ color: var(--muted-foreground, #71717a); }}
+    .prm-count-correct {{ color: light-dark(#2e7d32, #afd8b1); font-weight: 500; }}
+    .prm-count-incorrect {{ color: light-dark(#c62828, #e0a3a3); font-weight: 500; }}
+    .prm-count-neutral {{ color: light-dark(#b26a00, #f0cb94); font-weight: 500; }}
+    .prm-count-unmarked {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .prm-reset-btn {{
-        padding: 4px 12px; font-size: 0.85em; border: 1px solid var(--border, #e4e4e7);
-        border-radius: var(--radius, 0.5rem); background: var(--card, #fff);
-        cursor: pointer; color: var(--muted-foreground, #71717a);
+        padding: 4px 12px; font-size: 0.85em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+        border-radius: var(--radius, 0.5rem); background: var(--card, light-dark(#fff, #1a1a1a));
+        cursor: pointer; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     }}
-    .prm-reset-btn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .prm-reset-btn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .prm-reset-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .prm-no-steps {{
-        padding: 12px; color: var(--muted-foreground, #71717a); font-style: italic; text-align: center;
+        padding: 12px; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; text-align: center;
     }}
 
     /* ---- Inline mode: control sits to the right of each trace step ---- */
@@ -853,7 +853,7 @@ def _generate_internal(
         box-shadow: inset 3px 0 0 #f44336; background: rgba(244, 67, 54, 0.05);
     }}
     [data-turn-index].prm-turn-neutral {{
-        box-shadow: inset 3px 0 0 #ffb300; background: rgba(255, 179, 0, 0.05);
+        box-shadow: inset 3px 0 0 light-dark(#ffb300, #6b592e); background: light-dark(rgba(255, 179, 0, 0.05), rgba(79, 62, 23, 0.05));
     }}
 
     /* ---- AI pre-label / verification ---- */
@@ -864,28 +864,28 @@ def _generate_internal(
     .prm-ai-btn, .prm-ai-accept {{
         padding: 5px 12px; font-size: 0.85em; cursor: pointer;
         border-radius: var(--radius, 0.5rem); border: 1px solid #a78bfa;
-        background: #ede9fe; color: #5b21b6; font-weight: 500;
+        background: light-dark(#ede9fe, #161031); color: light-dark(#5b21b6, #bba2e2); font-weight: 500;
     }}
-    .prm-ai-btn:hover, .prm-ai-accept:hover {{ background: #ddd6fe; }}
+    .prm-ai-btn:hover, .prm-ai-accept:hover {{ background: light-dark(#ddd6fe, #19123a); }}
     .prm-ai-btn:disabled {{ opacity: 0.6; cursor: default; }}
     .prm-ai-btn:focus-visible, .prm-ai-accept:focus-visible {{
         outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px;
     }}
-    .prm-ai-accept {{ border-color: #4caf50; background: #e8f5e9; color: #2e7d32; }}
-    .prm-ai-accept:hover {{ background: #d7efda; }}
-    .prm-ai-status {{ font-size: 0.82em; color: var(--muted-foreground, #71717a); }}
+    .prm-ai-accept {{ border-color: #4caf50; background: light-dark(#e8f5e9, #1c2b1d); color: light-dark(#2e7d32, #afd8b1); }}
+    .prm-ai-accept:hover {{ background: light-dark(#d7efda, #203423); }}
+    .prm-ai-status {{ font-size: 0.82em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
 
     /* AI suggestion badge (dashed until verified). */
     .prm-ai-badge {{ font-size: 0.72em; font-weight: 600; white-space: nowrap; }}
     .prm-ai-badge.prm-ai-unverified {{
         padding: 1px 6px; border-radius: 4px; border: 1px dashed #a78bfa;
-        background: #f5f3ff; color: #5b21b6; cursor: help;
+        background: light-dark(#f5f3ff, #120d2d); color: light-dark(#5b21b6, #bba2e2); cursor: help;
     }}
-    .prm-ai-badge.prm-ai-verified {{ color: var(--muted-foreground, #71717a); border: 0; padding: 0; cursor: help; }}
+    .prm-ai-badge.prm-ai-verified {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); border: 0; padding: 0; cursor: help; }}
 
     /* A step showing an unverified AI suggestion. */
     .prm-step-card.prm-pending {{ outline: 1px dashed #a78bfa; outline-offset: -1px; }}
-    .prm-count-pending {{ color: #6a5acd; font-weight: 500; }}
+    .prm-count-pending {{ color: light-dark(#6a5acd, #b0a9da); font-weight: 500; }}
 
     @media (prefers-reduced-motion: reduce) {{
         .prm-btn, .prm-step-card {{ transition: none; }}

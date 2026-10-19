@@ -7,9 +7,9 @@
 /* PDF Display Container */
 .pdf-display {
     position: relative;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 4px;
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
     overflow: hidden;
 }
 
@@ -126,7 +126,7 @@
 
 .pdf-canvas {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 .pdf-bbox-canvas {
@@ -169,14 +169,14 @@
     justify-content: center;
     gap: 10px;
     padding: 40px;
-    color: #666;
-    background: white;
+    color: light-dark(#666, #c2c2c2);
+    background: light-dark(white, #1a1a1a);
 }
 
 .pdf-loading-spinner {
     width: 24px;
     height: 24px;
-    border: 3px solid #eee;
+    border: 3px solid light-dark(#eee, #4c4c4c);
     border-top-color: #666;
     border-radius: 50%;
     animation: pdf-spin 1s linear infinite;
@@ -189,10 +189,10 @@
 /* Error State */
 .pdf-error {
     padding: 20px;
-    color: #dc3545;
+    color: light-dark(#dc3545, #e2a1a8);
     text-align: center;
-    background: #fff5f5;
-    border-top: 1px solid #ffcccc;
+    background: light-dark(#fff5f5, #2c0d0d);
+    border-top: 1px solid light-dark(#ffcccc, #6b2e2e);
 }
 
 /* Bounding Box Info Panel */
@@ -200,10 +200,10 @@
     display: flex;
     gap: 20px;
     padding: 8px 12px;
-    background: #f8f9fa;
-    border-top: 1px solid #ddd;
+    background: light-dark(#f8f9fa, #1a1d20);
+    border-top: 1px solid light-dark(#ddd, #4c4c4c);
     font-size: 13px;
-    color: #555;
+    color: light-dark(#555, #c4c4c4);
 }
 
 /* Extracted PDF Content */
@@ -213,15 +213,15 @@
 
 .pdf-extracted .pdf-content-wrapper {
     padding: 20px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
 }
 
 .pdf-metadata {
     padding: 8px 12px;
-    background: #e9ecef;
+    background: light-dark(#e9ecef, #222528);
     font-size: 13px;
-    color: #666;
-    border-bottom: 1px solid #ddd;
+    color: light-dark(#666, #c2c2c2);
+    border-bottom: 1px solid light-dark(#ddd, #4c4c4c);
 }
 
 /* PDF Pages Container */
@@ -236,7 +236,7 @@
 
 .pdf-page-wrapper {
     position: relative;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
@@ -250,7 +250,7 @@
 
 .pdf-page {
     padding: 20px;
-    background: white;
+    background: light-dark(white, #1a1a1a);
     margin-bottom: 10px;
 }
 
@@ -279,7 +279,7 @@
 }
 
 .pdf-word.highlighted {
-    background: rgba(255, 200, 0, 0.4);
+    background: light-dark(rgba(255, 200, 0, 0.4), rgba(79, 67, 23, 0.4));
 }
 
 /* Bounding Box Styles (drawn on canvas via JS) */

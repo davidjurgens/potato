@@ -13,7 +13,7 @@
     .live-agent-side-panel {
         width: 100% !important;
         border-left: none !important;
-        border-top: 1px solid #ddd;
+        border-top: 1px solid light-dark(#ddd, #4c4c4c);
     }
     .live-agent-screenshot-panel {
         max-width: 100% !important;
@@ -38,6 +38,6 @@
     height: 4px;
 }
 .live-agent-filmstrip::-webkit-scrollbar-thumb {
-    background: #ccc;
+    background: light-dark(#ccc, #333333);
     border-radius: 2px;
 }

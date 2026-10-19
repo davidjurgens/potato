@@ -12,6 +12,7 @@ for agent trace data, with step-type-aware styling and summary headers.
 import html
 from typing import Dict, Any, List, Optional
 
+from potato.server_utils.theme import themed_background
 from .base import BaseDisplay
 from ._trace_normalize import (
     DEFAULT_STEP_COLORS,
@@ -320,11 +321,11 @@ class AgentTraceDisplay(BaseDisplay):
         Run-tree rules are only emitted when a sub-agent tree is present, so a
         trace without a tree carries no run-tree markup at all.
         """
-        thought_color = colors.get("thought", DEFAULT_STEP_COLORS["thought"])
-        action_color = colors.get("action", DEFAULT_STEP_COLORS["action"])
-        obs_color = colors.get("observation", DEFAULT_STEP_COLORS["observation"])
-        system_color = colors.get("system", DEFAULT_STEP_COLORS["system"])
-        error_color = colors.get("error", DEFAULT_STEP_COLORS["error"])
+        thought_color = themed_background(colors.get("thought", DEFAULT_STEP_COLORS["thought"]))
+        action_color = themed_background(colors.get("action", DEFAULT_STEP_COLORS["action"]))
+        obs_color = themed_background(colors.get("observation", DEFAULT_STEP_COLORS["observation"]))
+        system_color = themed_background(colors.get("system", DEFAULT_STEP_COLORS["system"]))
+        error_color = themed_background(colors.get("error", DEFAULT_STEP_COLORS["error"]))
 
         padding = "8px 12px" if compact else "12px 16px"
         margin = "4px 0" if compact else "8px 0"
@@ -334,7 +335,7 @@ class AgentTraceDisplay(BaseDisplay):
         .agent-trace-summary {{
             display: flex; align-items: center; gap: 8px;
             padding: 8px 12px; margin-bottom: 12px;
-            background: #f8f9fa; border-radius: 6px; font-size: 0.9em;
+            background: light-dark(#f8f9fa, #1a1d20); border-radius: 6px; font-size: 0.9em;
         }}
         .summary-total {{ font-weight: 600; }}
         .summary-badge {{
@@ -342,7 +343,7 @@ class AgentTraceDisplay(BaseDisplay):
         }}
         .agent-trace-step {{
             padding: {padding}; margin: {margin};
-            border-radius: 6px; border-left: 4px solid #ccc;
+            border-radius: 6px; border-left: 4px solid light-dark(#ccc, #4c4c4c);
         }}
         .step-type-thought {{ background: {thought_color}; border-left-color: #2196F3; }}
         .step-type-action {{ background: {action_color}; border-left-color: #FF9800; }}
@@ -354,24 +355,24 @@ class AgentTraceDisplay(BaseDisplay):
         }}
         .step-badge {{
             padding: 2px 8px; border-radius: 4px; font-size: 0.8em;
-            font-weight: 600; color: #333;
+            font-weight: 600; color: light-dark(#333, #d1d1d1);
         }}
         .badge-thought {{ background: rgba(33,150,243,0.2); }}
         .badge-action {{ background: rgba(255,152,0,0.2); }}
         .badge-observation {{ background: rgba(76,175,80,0.2); }}
         .badge-system {{ background: rgba(156,39,176,0.2); }}
         .badge-error {{ background: rgba(244,67,54,0.2); }}
-        .step-number {{ color: #666; font-size: 0.8em; }}
+        .step-number {{ color: light-dark(#666, #c2c2c2); font-size: 0.8em; }}
         .step-timestamp {{ color: #999; font-size: 0.75em; margin-left: auto; }}
         .step-text {{ white-space: pre-wrap; word-break: break-word; line-height: 1.5; }}
         .step-screenshot {{ margin-top: 8px; }}
         .step-screenshot-img {{
             max-width: 300px; max-height: 200px; border-radius: 4px;
-            border: 1px solid #ddd; cursor: pointer;
+            border: 1px solid light-dark(#ddd, #4c4c4c); cursor: pointer;
         }}
         .step-screenshot-img:hover {{ box-shadow: 0 2px 8px rgba(0,0,0,0.15); }}
         .step-collapsible summary {{
-            cursor: pointer; color: #666; font-size: 0.9em; padding: 4px 0;
+            cursor: pointer; color: light-dark(#666, #c2c2c2); font-size: 0.9em; padding: 4px 0;
         }}
         .agent-trace-body {{ display: block; }}
         '''
@@ -386,35 +387,35 @@ class AgentTraceDisplay(BaseDisplay):
         .has-run-tree .agent-trace-steps { flex: 1; min-width: 0; }
         .run-tree {
             flex: 0 0 220px; max-width: 260px; position: sticky; top: 8px;
-            border: 1px solid #e0e0e0; border-radius: 6px;
-            padding: 8px; background: #fafafa; font-size: 0.85em;
+            border: 1px solid light-dark(#e0e0e0, #4c4c4c); border-radius: 6px;
+            padding: 8px; background: light-dark(#fafafa, #1d1d1d); font-size: 0.85em;
             max-height: 70vh; overflow-y: auto;
         }
-        .rt-title { font-weight: 600; margin-bottom: 6px; color: #555; }
+        .rt-title { font-weight: 600; margin-bottom: 6px; color: light-dark(#555, #c4c4c4); }
         .run-tree ul { list-style: none; margin: 0; padding: 0; }
-        .run-tree .rt-children { padding-left: 14px; border-left: 1px dotted #ccc; margin-left: 6px; }
+        .run-tree .rt-children { padding-left: 14px; border-left: 1px dotted light-dark(#ccc, #4c4c4c); margin-left: 6px; }
         .rt-node {
             display: flex; align-items: center; gap: 6px; width: 100%;
             text-align: left; background: none; border: none; cursor: pointer;
             padding: 3px 6px; margin: 1px 0; border-radius: 4px; font: inherit;
         }
         .rt-node:hover { background: #eef2f7; }
-        .rt-node.rt-active { background: #e3f2fd; outline: 1px solid #90caf9; }
+        .rt-node.rt-active { background: light-dark(#e3f2fd, #122533); outline: 1px solid light-dark(#90caf9, #314f68); }
         .rt-type {
             font-size: 0.72em; font-weight: 600; padding: 1px 5px;
             border-radius: 8px; text-transform: uppercase; flex-shrink: 0;
         }
-        .rt-type-chain { background: rgba(96,125,139,0.18); color: #455a64; }
-        .rt-type-llm { background: rgba(33,150,243,0.18); color: #1565c0; }
-        .rt-type-tool { background: rgba(255,152,0,0.22); color: #b26a00; }
-        .rt-type-retriever { background: rgba(76,175,80,0.18); color: #2e7d32; }
+        .rt-type-chain { background: rgba(96,125,139,0.18); color: light-dark(#455a64, #bcc7cc); }
+        .rt-type-llm { background: rgba(33,150,243,0.18); color: light-dark(#1565c0, #9dbfe7); }
+        .rt-type-tool { background: rgba(255,152,0,0.22); color: light-dark(#b26a00, #f0cb94); }
+        .rt-type-retriever { background: rgba(76,175,80,0.18); color: light-dark(#2e7d32, #afd8b1); }
         .rt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .rt-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .rt-status-ok { background: #4CAF50; }
         .rt-status-error { background: #f44336; }
         .rt-range { margin-left: auto; color: #999; font-size: 0.78em; flex-shrink: 0; }
         .agent-trace-step.rt-dim { opacity: 0.25; }
-        .agent-trace-step.rt-focus { outline: 2px solid #90caf9; }
+        .agent-trace-step.rt-focus { outline: 2px solid light-dark(#90caf9, #314f68); }
         '''
 
     def get_css_classes(self, field_config: Dict[str, Any]) -> List[str]:

@@ -27,6 +27,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title|default(ui_lang.login_title|default("Annotation Platform")) }}</title>
+    {% include '_theme_head.html' %}
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
@@ -35,6 +36,7 @@
     {% endif %}
 </head>
 <body class="potato-page-center">
+    <div class="theme-toggle-corner">{% include '_theme_toggle.html' %}</div>
     <div style="width: 100%; max-width: 420px;">
         <div style="text-align: center; margin-bottom: 2rem;">
             <h1 class="potato-page-title">{{ title|default(ui_lang.login_title|default("Annotation Platform")) }}</h1>
@@ -106,7 +108,7 @@
 
                     {% if require_password %}
                     <div style="text-align: center; margin-top: 0.75rem;">
-                        <a href="{{ url_prefix }}/forgot-password" style="color: #6c757d; font-size: 0.875rem; text-decoration: none;">{{ ui_lang.forgot_password|default('Forgot Password?') }}</a>
+                        <a href="{{ url_prefix }}/forgot-password" style="color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none;">{{ ui_lang.forgot_password|default('Forgot Password?') }}</a>
                     </div>
                     {% endif %}
                 </form>

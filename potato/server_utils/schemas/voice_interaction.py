@@ -269,11 +269,11 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .vi-audio {{ margin-bottom: 8px; }}
     .vi-timeline-wrap {{ display: flex; align-items: stretch; gap: 8px; }}
     .vi-lane-labels {{ display: flex; flex-direction: column; justify-content: space-around;
-                       font-size: 0.72em; color: var(--muted-foreground, #71717a); text-align: right; width: 42px; }}
-    .vi-timeline {{ position: relative; flex: 1; height: 64px; border: 1px solid var(--border, #e4e4e7);
-                    border-radius: 6px; background: var(--card, #fff); overflow: hidden; }}
+                       font-size: 0.72em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); text-align: right; width: 42px; }}
+    .vi-timeline {{ position: relative; flex: 1; height: 64px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+                    border-radius: 6px; background: var(--card, light-dark(#fff, #1a1a1a)); overflow: hidden; }}
     .vi-lane {{ position: absolute; left: 0; right: 0; height: 50%; }}
-    .vi-lane-user {{ top: 0; border-bottom: 1px dashed var(--border, #e4e4e7); }}
+    .vi-lane-user {{ top: 0; border-bottom: 1px dashed var(--border, light-dark(#e4e4e7, #4b4b4e)); }}
     .vi-lane-agent {{ top: 50%; }}
     .vi-turn {{ position: absolute; top: 14%; height: 72%; border-radius: 3px; }}
     .vi-turn-user {{ background: #4dabf7; }}
@@ -281,25 +281,25 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .vi-overlap-band {{ position: absolute; top: 0; bottom: 0; background: rgba(224,49,49,0.22);
                         border-left: 1px solid #e03131; border-right: 1px solid #e03131; pointer-events: none; }}
     .vi-overlaps-head {{ margin: 10px 0 4px; font-size: 0.78em; font-weight: 700; text-transform: uppercase;
-                         letter-spacing: 0.03em; color: var(--muted-foreground, #71717a); }}
+                         letter-spacing: 0.03em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .vi-overlaps {{ display: flex; flex-direction: column; gap: 8px; }}
-    .vi-ocard {{ border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
-                 padding: 8px 12px; background: var(--card, #fff); }}
+    .vi-ocard {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
+                 padding: 8px 12px; background: var(--card, light-dark(#fff, #1a1a1a)); }}
     .vi-ocard.vi-judged {{ border-color: var(--ring, #6e56cf); }}
-    .vi-otime {{ font-family: ui-monospace, monospace; font-size: 0.8em; color: #e03131; font-weight: 600; }}
+    .vi-otime {{ font-family: ui-monospace, monospace; font-size: 0.8em; color: light-dark(#e03131, #e4a0a0); font-weight: 600; }}
     .vi-oturns {{ font-size: 0.85em; margin: 4px 0; }}
-    .vi-ou {{ color: #1971c2; font-weight: 600; }}
-    .vi-og {{ color: #5f3dc4; font-weight: 600; }}
+    .vi-ou {{ color: light-dark(#1971c2, #9ec3e5); font-weight: 600; }}
+    .vi-og {{ color: light-dark(#5f3dc4, #b6a9da); font-weight: 600; }}
     .vi-opills {{ display: flex; gap: 6px; flex-wrap: wrap; }}
-    .vi-lbtn, .vi-rbtn {{ border: 1px solid var(--border, #e4e4e7); background: var(--card, #fff);
-                          cursor: pointer; color: var(--foreground, #18181b); }}
+    .vi-lbtn, .vi-rbtn {{ border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); background: var(--card, light-dark(#fff, #1a1a1a));
+                          cursor: pointer; color: var(--foreground, light-dark(#18181b, #dadadd)); }}
     .vi-lbtn {{ padding: 3px 10px; font-size: 0.8em; border-radius: 999px; }}
-    .vi-lbtn:hover, .vi-rbtn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .vi-lbtn:hover, .vi-rbtn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .vi-lbtn:focus-visible, .vi-rbtn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .vi-lbtn.selected, .vi-rbtn.selected {{ background: var(--ring, #6e56cf); color: #fff; border-color: var(--ring, #6e56cf); font-weight: 600; }}
-    .vi-none {{ color: var(--muted-foreground, #71717a); font-style: italic; margin: 8px 0; }}
+    .vi-none {{ color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); font-style: italic; margin: 8px 0; }}
     .vi-rating-row {{ display: flex; align-items: center; gap: 8px; margin-top: 12px; }}
-    .vi-rating-lbl {{ font-size: 0.85em; color: var(--muted-foreground, #71717a); }}
+    .vi-rating-lbl {{ font-size: 0.85em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); }}
     .vi-rating {{ display: flex; gap: 4px; }}
     .vi-rbtn {{ width: 26px; height: 26px; border-radius: 6px; font-size: 0.8em; }}
     </style>

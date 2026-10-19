@@ -6,8 +6,8 @@
     right: 0;
     width: 380px;
     height: calc(100vh - 56px);
-    background: var(--bg-primary, #ffffff);
-    border-left: 1px solid var(--border-color, #dee2e6);
+    background: var(--bg-primary, light-dark(#ffffff, #1a1a1a));
+    border-left: 1px solid var(--border-color, light-dark(#dee2e6, #484c51));
     box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
@@ -32,8 +32,8 @@ body.llm-chat-open .main-container {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color, #dee2e6);
-    background: var(--bg-secondary, #f8f9fa);
+    border-bottom: 1px solid var(--border-color, light-dark(#dee2e6, #484c51));
+    background: var(--bg-secondary, light-dark(#f8f9fa, #1a1d20));
     flex-shrink: 0;
 }
 
@@ -41,7 +41,7 @@ body.llm-chat-open .main-container {
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    color: var(--text-primary, #212529);
+    color: var(--text-primary, light-dark(#212529, #d3d7da));
 }
 
 .llm-chat-close-btn {
@@ -49,13 +49,13 @@ body.llm-chat-open .main-container {
     border: none;
     font-size: 20px;
     cursor: pointer;
-    color: var(--text-secondary, #6c757d);
+    color: var(--text-secondary, light-dark(#6c757d, #bec2c5));
     padding: 0 4px;
     line-height: 1;
 }
 
 .llm-chat-close-btn:hover {
-    color: var(--text-primary, #212529);
+    color: var(--text-primary, light-dark(#212529, #d3d7da));
 }
 
 /* Messages area */
@@ -70,7 +70,7 @@ body.llm-chat-open .main-container {
 
 .llm-chat-empty {
     text-align: center;
-    color: var(--text-secondary, #6c757d);
+    color: var(--text-secondary, light-dark(#6c757d, #bec2c5));
     padding: 40px 20px;
     font-size: 14px;
 }
@@ -94,15 +94,15 @@ body.llm-chat-open .main-container {
 
 .llm-chat-message.assistant {
     align-self: flex-start;
-    background: var(--bg-secondary, #f0f0f0);
-    color: var(--text-primary, #212529);
+    background: var(--bg-secondary, light-dark(#f0f0f0, #232323));
+    color: var(--text-primary, light-dark(#212529, #d3d7da));
     border-bottom-left-radius: 4px;
 }
 
 .llm-chat-message.error {
     align-self: flex-start;
-    background: #fff3f3;
-    color: #dc3545;
+    background: light-dark(#fff3f3, #2d0d0d);
+    color: light-dark(#dc3545, #e2a1a8);
     border-bottom-left-radius: 4px;
     font-style: italic;
 }
@@ -111,7 +111,7 @@ body.llm-chat-open .main-container {
 .llm-chat-typing {
     align-self: flex-start;
     padding: 10px 14px;
-    background: var(--bg-secondary, #f0f0f0);
+    background: var(--bg-secondary, light-dark(#f0f0f0, #232323));
     border-radius: 12px;
     border-bottom-left-radius: 4px;
     display: none;
@@ -149,15 +149,15 @@ body.llm-chat-open .main-container {
     display: flex;
     gap: 8px;
     padding: 12px 16px;
-    border-top: 1px solid var(--border-color, #dee2e6);
-    background: var(--bg-primary, #ffffff);
+    border-top: 1px solid var(--border-color, light-dark(#dee2e6, #484c51));
+    background: var(--bg-primary, light-dark(#ffffff, #1a1a1a));
     flex-shrink: 0;
 }
 
 .llm-chat-input {
     flex: 1;
     padding: 8px 12px;
-    border: 1px solid var(--border-color, #dee2e6);
+    border: 1px solid var(--border-color, light-dark(#dee2e6, #484c51));
     border-radius: 8px;
     font-size: 14px;
     resize: none;
@@ -198,12 +198,12 @@ body.llm-chat-open .main-container {
 /* Navbar toggle button */
 .llm-chat-toggle-btn {
     background: none;
-    border: 1px solid var(--border-color, #dee2e6);
+    border: 1px solid var(--border-color, light-dark(#dee2e6, #484c51));
     border-radius: 6px;
     padding: 4px 10px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--text-primary, #212529);
+    color: var(--text-primary, light-dark(#212529, #d3d7da));
     display: flex;
     align-items: center;
     gap: 5px;
@@ -212,7 +212,7 @@ body.llm-chat-open .main-container {
 }
 
 .llm-chat-toggle-btn:hover {
-    background: var(--bg-secondary, #f8f9fa);
+    background: var(--bg-secondary, light-dark(#f8f9fa, #1a1d20));
 }
 
 .llm-chat-toggle-btn.active {

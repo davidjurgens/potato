@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }} - Complete</title>
+    {% include '_theme_head.html' %}
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
@@ -54,7 +55,7 @@
         .platform-btn-prolific:hover { background: #4959bd; color: white; }
         .platform-btn-mturk { background: #ff9900; color: #111; }
         .platform-btn-mturk:hover { background: #e68a00; color: #111; }
-        .platform-btn-generic { background: var(--primary, #6e56cf); color: white; }
+        .platform-btn-generic { background: var(--primary, #6e56cf); color: var(--primary-foreground, white); }
         .platform-btn-generic:hover { filter: brightness(0.92); color: white; }
     </style>
 </head>
@@ -136,7 +137,7 @@
                 codeBox.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
                 codeBox.style.borderColor = 'var(--success-color)';
                 codeBox.style.background = 'rgba(16, 185, 129, 0.08)';
-                codeBox.style.color = '#065f46';
+                codeBox.style.color = 'var(--success-text)';
                 setTimeout(function() {
                     codeBox.innerText = originalText;
                     codeBox.style.borderColor = '';

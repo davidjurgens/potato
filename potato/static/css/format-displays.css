@@ -10,9 +10,9 @@
 
 .document-display {
     position: relative;
-    border: 1px solid #e0e0e0;
+    border: 1px solid light-dark(#e0e0e0, #4c4c4c);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
 }
 
 .document-content {
@@ -61,7 +61,7 @@
 
 .document-theme-print .document-content {
     font-family: "Times New Roman", serif;
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
 }
 
 /* Collapsible documents */
@@ -72,26 +72,26 @@
 .document-summary {
     cursor: pointer;
     padding: 10px 15px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #e0e0e0;
+    background: light-dark(#f5f5f5, #1f1f1f);
+    border-bottom: 1px solid light-dark(#e0e0e0, #4c4c4c);
     font-weight: 500;
 }
 
 .document-summary:hover {
-    background: #ececec;
+    background: light-dark(#ececec, #252525);
 }
 
 /* Document outline */
 .document-outline {
     padding: 15px;
-    background: #fafafa;
-    border-bottom: 1px solid #e0e0e0;
+    background: light-dark(#fafafa, #1d1d1d);
+    border-bottom: 1px solid light-dark(#e0e0e0, #4c4c4c);
 }
 
 .outline-title {
     font-weight: 600;
     margin-bottom: 10px;
-    color: #333;
+    color: light-dark(#333, #d1d1d1);
 }
 
 .outline-list {
@@ -112,7 +112,7 @@
 .outline-level-6 { padding-left: 75px; }
 
 .outline-link {
-    color: #1976d2;
+    color: light-dark(#1976d2, #9ec2e6);
     text-decoration: none;
     font-size: 14px;
 }
@@ -124,10 +124,10 @@
 /* Document metadata */
 .document-metadata {
     padding: 10px 15px;
-    background: #f5f5f5;
-    border-top: 1px solid #e0e0e0;
+    background: light-dark(#f5f5f5, #1f1f1f);
+    border-top: 1px solid light-dark(#e0e0e0, #4c4c4c);
     font-size: 12px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }
 
 /* DOCX specific styles */
@@ -159,7 +159,7 @@
 
 .docx-table td,
 .docx-table th {
-    border: 1px solid #ccc;
+    border: 1px solid light-dark(#ccc, #4c4c4c);
     padding: 8px;
 }
 
@@ -179,14 +179,14 @@
 }
 
 .markdown-content code {
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 0.9em;
 }
 
 .markdown-content pre {
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
     padding: 12px;
     border-radius: 4px;
     overflow-x: auto;
@@ -198,10 +198,10 @@
 }
 
 .markdown-content blockquote {
-    border-left: 4px solid #ddd;
+    border-left: 4px solid light-dark(#ddd, #4c4c4c);
     margin: 1em 0;
     padding-left: 15px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }
 
 .markdown-content table {
@@ -211,12 +211,12 @@
 
 .markdown-content th,
 .markdown-content td {
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     padding: 8px 12px;
 }
 
 .markdown-content th {
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
 }
 
 
@@ -225,9 +225,9 @@
    ============================================ */
 
 .spreadsheet-display {
-    border: 1px solid #e0e0e0;
+    border: 1px solid light-dark(#e0e0e0, #4c4c4c);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
 }
 
 .spreadsheet-table {
@@ -238,13 +238,13 @@
 
 .spreadsheet-table th,
 .spreadsheet-table td {
-    border: 1px solid #e0e0e0;
+    border: 1px solid light-dark(#e0e0e0, #4c4c4c);
     padding: 8px 12px;
     text-align: left;
 }
 
 .spreadsheet-table th {
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
     font-weight: 600;
     position: sticky;
     top: 0;
@@ -256,17 +256,17 @@
 }
 
 .spreadsheet-table th[data-sortable="true"]:hover {
-    background: #e8e8e8;
+    background: light-dark(#e8e8e8, #272727);
 }
 
 /* Striped rows */
 .table-striped tbody tr:nth-child(even) {
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
 }
 
 /* Hoverable rows */
 .table-hoverable tbody tr:hover {
-    background: #f0f7ff;
+    background: light-dark(#f0f7ff, #0e1d2f);
 }
 
 /* Compact mode */
@@ -287,21 +287,21 @@
 }
 
 .selectable-row.selected {
-    background: #e3f2fd !important;
+    background: light-dark(#e3f2fd, #122533) !important;
 }
 
 .selectable-cell.selected {
-    background: #bbdefb !important;
+    background: light-dark(#bbdefb, #183146) !important;
     outline: 2px solid #2196f3;
 }
 
 /* Selection summary */
 .spreadsheet-selection-summary {
     padding: 8px 12px;
-    background: #f5f5f5;
-    border-top: 1px solid #e0e0e0;
+    background: light-dark(#f5f5f5, #1f1f1f);
+    border-top: 1px solid light-dark(#e0e0e0, #4c4c4c);
     font-size: 13px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }
 
 /* Span annotation mode */
@@ -316,9 +316,9 @@
 
 .code-display {
     position: relative;
-    border: 1px solid #e0e0e0;
+    border: 1px solid light-dark(#e0e0e0, #4c4c4c);
     border-radius: 4px;
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
     font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", monospace;
 }
 
@@ -363,8 +363,8 @@
     padding: 0 12px;
     text-align: right;
     color: #999;
-    background: #f0f0f0;
-    border-right: 1px solid #e0e0e0;
+    background: light-dark(#f0f0f0, #232323);
+    border-right: 1px solid light-dark(#e0e0e0, #4c4c4c);
     user-select: none;
     position: sticky;
     left: 0;
@@ -391,11 +391,11 @@
 
 /* Highlighted lines */
 .highlighted-line {
-    background: #fff8e1;
+    background: light-dark(#fff8e1, #352d10);
 }
 
 .highlighted-line .line-number {
-    background: #ffecb3;
+    background: light-dark(#ffecb3, #4b3e16);
 }
 
 /* Copy button */
@@ -404,9 +404,9 @@
     top: 8px;
     right: 8px;
     padding: 6px 8px;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.2s;
@@ -418,7 +418,7 @@
 }
 
 .code-copy-btn:hover {
-    background: #f5f5f5;
+    background: light-dark(#f5f5f5, #1f1f1f);
 }
 
 .code-copy-btn.copied {
@@ -452,9 +452,9 @@
 
 .code-highlight .linenos {
     color: #999;
-    background: #f0f0f0;
+    background: light-dark(#f0f0f0, #232323);
     padding-right: 10px;
-    border-right: 1px solid #e0e0e0;
+    border-right: 1px solid light-dark(#e0e0e0, #4c4c4c);
 }
 
 /* Span annotation for code */

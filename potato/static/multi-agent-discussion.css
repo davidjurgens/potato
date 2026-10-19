@@ -16,14 +16,14 @@
     gap: 6px;
     padding: 8px 10px;
     margin-bottom: 12px;
-    background: var(--muted, #f8f9fa);
+    background: var(--muted, light-dark(#f8f9fa, #1a1d20));
     border-radius: 8px;
 }
 
 .mad-legend-label {
     font-size: 0.85em;
     font-weight: 600;
-    color: var(--muted-foreground, #52525b);
+    color: var(--muted-foreground, light-dark(#52525b, #c1c1c5));
     margin-right: 2px;
 }
 
@@ -33,9 +33,9 @@
     gap: 6px;
     padding: 3px 10px 3px 4px;
     font-size: 0.85em;
-    border: 1.5px solid var(--agent-color, #d4d4d8);
+    border: 1.5px solid var(--agent-color, light-dark(#d4d4d8, #4b4b4e));
     border-radius: 999px;
-    background: var(--card, #fff);
+    background: var(--card, light-dark(#fff, #1a1a1a));
     cursor: pointer;
     line-height: 1.4;
 }
@@ -71,7 +71,7 @@
     padding: 8px 12px;
     border-left: 4px solid var(--agent-color, #9ca3af);
     border-radius: 6px;
-    background: color-mix(in srgb, var(--agent-color, #9ca3af) 6%, var(--card, #fff));
+    background: color-mix(in srgb, var(--agent-color, #9ca3af) 6%, var(--card, light-dark(#fff, #1a1a1a)));
 }
 
 .mad-turn.mad-hidden {
@@ -102,22 +102,22 @@
 
 .mad-speaker {
     font-weight: 600;
-    color: var(--foreground, #27272a);
+    color: var(--foreground, light-dark(#27272a, #d4d4d6));
 }
 
 .mad-role {
     font-size: 0.75em;
     padding: 1px 8px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--agent-color, #9ca3af) 15%, var(--card, #fff));
+    background: color-mix(in srgb, var(--agent-color, #9ca3af) 15%, var(--card, light-dark(#fff, #1a1a1a)));
     color: var(--foreground, #3f3f46);
 }
 
 .mad-addressee {
     font-size: 0.8em;
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     padding: 1px 8px;
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: 999px;
 }
 
@@ -134,13 +134,13 @@
 
 .mad-env-collapsible summary {
     cursor: pointer;
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     font-size: 0.9em;
     padding: 2px 0;
 }
 
 .mad-placeholder {
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
     font-style: italic;
     padding: 12px;
 }

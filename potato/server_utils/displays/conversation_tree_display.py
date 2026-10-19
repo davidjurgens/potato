@@ -14,6 +14,7 @@ Input data format:
 """
 
 import json
+import zlib
 from html import escape
 from typing import Dict, Any, List
 
@@ -123,8 +124,10 @@ class ConversationTreeDisplay(BaseDisplay):
         children = node.get("children", [])
         is_collapsed = depth >= collapsed_depth and len(children) > 0
 
-        # Speaker color class based on name hash
-        speaker_class = f"conv-tree-speaker-{abs(hash(speaker)) % 6}"
+        # Speaker colour from a stable hash of the name. Python's hash() of a
+        # str is salted per process, so a speaker changed colour every time
+        # the server restarted.
+        speaker_class = f"conv-tree-speaker-{zlib.crc32(speaker.encode('utf-8')) % 6}"
 
         parts = []
         parts.append(
