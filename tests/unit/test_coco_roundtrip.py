@@ -315,3 +315,28 @@ class TestTheGeneratedExample:
                         and isinstance(a["segmentation"], dict)
                         and a["iscrowd"] == 0]
         assert len(person_masks) == 2
+
+
+def test_per_object_attributes_survive_export_then_import(tmp_path):
+    """Potato's COCO export writes `attributes`; its importer must read them back."""
+    import json as _json
+    from potato.export.base import ExportContext
+    from potato.export.coco_exporter import COCOExporter
+    from potato.importers.coco_importer import COCOImporter
+
+    annotations = [{
+        "instance_id": "img1", "user_id": "u",
+        "image_annotations": {"img": [
+            {"type": "bbox", "label": "car", "x": 1, "y": 2, "width": 30, "height": 40,
+             "attributes": {"occlusion": "heavy", "parked": True}}]},
+    }]
+    ctx = ExportContext(config={}, annotations=annotations,
+                        items={"img1": {"image": "a.jpg", "image_width": 100, "image_height": 100}},
+                        schemas=[{"annotation_type": "image_annotation", "name": "img",
+                                  "labels": [{"name": "car"}]}],
+                        output_dir="")
+    assert COCOExporter().export(ctx, str(tmp_path)).success
+    coco = _json.loads((tmp_path / "annotations.json").read_text())
+    [image] = COCOImporter().parse(coco).images
+    [obj] = image.objects
+    assert obj["attributes"] == {"occlusion": "heavy", "parked": True}

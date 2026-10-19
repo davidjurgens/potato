@@ -196,7 +196,14 @@ def flatten(metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
     for key, value in metrics.items():
         if key in _SWEEP_KEYS or key in _JSON_ALIASES:
             continue
-        if isinstance(value, dict):
+        if key == "attributes" and isinstance(value, dict) and value and all(
+                isinstance(v, dict) for v in value.values()):
+            # Per-object attribute agreement is one group per attribute, a
+            # level deeper than the other groups, so each is expanded here as
+            # `attributes.<name>`.
+            for name, group in value.items():
+                rows.extend(_group_rows(f"attributes.{name}", group))
+        elif isinstance(value, dict):
             rows.extend(_group_rows(key, value))
         elif isinstance(value, list):
             continue

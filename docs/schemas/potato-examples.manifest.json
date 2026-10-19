@@ -10,14 +10,14 @@
     "crowdsourcing": 6,
     "custom-layouts": 6,
     "embodied": 1,
-    "image": 15,
+    "image": 16,
     "labeling-engine": 3,
     "span": 11,
     "spatial": 2,
     "testing": 2,
     "video": 8
   },
-  "count": 218,
+  "count": 219,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -4305,6 +4305,26 @@
       "path": "examples/image/interactive-segmentation/config.yaml",
       "run": "potato start examples/image/interactive-segmentation/config.yaml -p 8000",
       "task_name": "Interactive segmentation"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/object-attributes-example.json"
+      ],
+      "description": "",
+      "dir": "examples/image/object-attributes",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "object-attributes",
+      "path": "examples/image/object-attributes/config.yaml",
+      "run": "potato start examples/image/object-attributes/config.yaml -p 8000",
+      "task_name": "Object attributes"
     },
     {
       "annotation_types": [

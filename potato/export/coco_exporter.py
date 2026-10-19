@@ -176,6 +176,9 @@ class COCOExporter(BaseExporter):
                             "keypoints": flat,
                             "num_keypoints": sum(1 for v in vis if v > 0),
                             "segmentation": [],
+                            **({"attributes": dict(obj["attributes"])}
+                               if isinstance(obj.get("attributes"), dict) and obj["attributes"]
+                               else {}),
                         })
                         annotation_id_counter += 1
                         continue
@@ -214,6 +217,10 @@ class COCOExporter(BaseExporter):
                     # honest, and a default would make the second look like the
                     # first.
                     carry_provenance(coco_ann, canon)
+                    # Per-object attributes (occlusion, truncation, ...), under
+                    # the key CVAT and the COCO-attributes extensions use.
+                    if isinstance(obj.get("attributes"), dict) and obj["attributes"]:
+                        coco_ann["attributes"] = dict(obj["attributes"])
                     annotation_id_counter += 1
 
                     if obj_type == "bbox":

@@ -4199,6 +4199,16 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if invalid_tools:
             raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
 
+        if scheme.get('attributes') is not None:
+            from potato.server_utils.schemas.object_attributes import (
+                AttributeConfigError, normalize_attributes)
+            label_names = [l if isinstance(l, str) else (l or {}).get('name')
+                           for l in scheme.get('labels') or []]
+            try:
+                normalize_attributes(scheme['attributes'], [str(n) for n in label_names], path)
+            except AttributeConfigError as e:
+                raise ConfigValidationError(str(e)) from e
+
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for image_annotation type")
         if not isinstance(scheme['labels'], list):

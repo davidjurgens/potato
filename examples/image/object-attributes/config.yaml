@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Per-object attributes
+#
+# Annotators draw a box around each vehicle or person, then fill in that
+# object's attributes in the panel under the image: how occluded it is,
+# whether it is cut off by the image edge, and, for vehicles only, whether it
+# is parked. With two annotators per image, /admin/iaa reports agreement on
+# each attribute over the boxes both people drew.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/image/object-attributes/config.yaml -p 8000
+
+task_dir: .
+port: 8000
+annotation_task_name: Object attributes
+output_annotation_dir: annotation_output/object-attributes/
+
+data_files:
+  - data/object-attributes-example.json
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+max_annotations_per_item: 2
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    description: "Draw a box around each vehicle and person, then set its attributes below the image."
+    source_field: image_url
+    tools: [bbox, polygon]
+    labels:
+      - name: vehicle
+        color: "#2563eb"
+      - name: person
+        color: "#dc2626"
+    attributes:
+      - name: occlusion
+        type: select
+        options: [none, partial, heavy]
+        required: true
+        default: none
+        description: How much of the object is hidden behind something else
+      - name: truncated
+        type: bool
+        default: false
+        description: Cut off by the edge of the image
+      - name: truncated_share
+        type: number
+        min: 0
+        max: 1
+        show_if: {attribute: truncated, equals: true}
+        description: Roughly what fraction is outside the image (0 to 1)
+      - name: parked
+        type: bool
+        labels: [vehicle]
+      - name: activity
+        type: multi
+        options: [walking, standing, cycling, carrying]
+        labels: [person]

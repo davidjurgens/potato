@@ -75,6 +75,25 @@ class TestCOCOExporter:
             assert len(coco["categories"]) == 2
             assert coco["categories"][0]["name"] == "cat"
 
+    def test_export_writes_per_object_attributes(self):
+        """Occlusion and the like go out under `attributes`, as CVAT writes them."""
+        annotations = [{
+            "instance_id": "img1", "user_id": "user1",
+            "image_annotations": {"img": [
+                {"type": "bbox", "label": "cat", "x": 1, "y": 2, "width": 3, "height": 4,
+                 "attributes": {"occlusion": "partial", "truncated": True}},
+                {"type": "bbox", "label": "dog", "x": 5, "y": 6, "width": 7, "height": 8},
+            ]},
+        }]
+        items = {"img1": {"image": "cat.jpg", "image_width": 640, "image_height": 480}}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assert self.exporter.export(self._make_context(annotations, items), tmpdir).success
+            with open(os.path.join(tmpdir, "annotations.json")) as f:
+                coco = json.load(f)
+        first, second = coco["annotations"]
+        assert first["attributes"] == {"occlusion": "partial", "truncated": True}
+        assert "attributes" not in second
+
     def test_export_polygon(self):
         annotations = [{
             "instance_id": "img1",

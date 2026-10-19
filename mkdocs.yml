@@ -57,6 +57,7 @@ nav:
             - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
+            - Per-Object Attributes: annotation-types/multimedia/object_attributes.md
             - Interactive Segmentation: annotation-types/multimedia/segmentation.md
             - Text Prompting: annotation-types/multimedia/text_prompting.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md

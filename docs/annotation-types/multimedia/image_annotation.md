@@ -16,6 +16,7 @@ Image annotation lets annotators mark regions with bounding boxes, polygons, fre
 - **Eraser**: Remove mask regions
 - **Zoom & Pan**: Navigate large images with ease
 - **Label Assignment**: Assign category labels to each annotation
+- **Per-Object Attributes**: Typed fields per shape (occlusion, truncation, ...), with agreement over each. See [Per-Object Attributes](object_attributes.md)
 - **Keyboard Shortcuts**: Fast annotation with customizable hotkeys
 
 ## Configuration

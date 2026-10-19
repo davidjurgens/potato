@@ -198,14 +198,21 @@ class COCOImporter(BaseAnnotationImporter):
                         "polygon per ring; holes become separate shapes"
                     )
                     multi_ring_warned = True
+                keypoint_objects = (self._convert_keypoints(
+                    ann, label, color, width, height,
+                    keypoint_names.get(ann.get("category_id")) or [],
+                    tools,
+                ) if want_keypoints and ann.get("keypoints") else [])
+                # Per-object attributes, which Potato's COCO export writes
+                # under `attributes` (as CVAT and the COCO-attributes
+                # extensions do). Without this they did not survive a round
+                # trip.
+                attributes = ann.get("attributes")
+                if isinstance(attributes, dict) and attributes:
+                    for obj in list(made) + list(keypoint_objects):
+                        obj["attributes"] = dict(attributes)
                 objects.extend(made)
-
-                if want_keypoints and ann.get("keypoints"):
-                    objects.extend(self._convert_keypoints(
-                        ann, label, color, width, height,
-                        keypoint_names.get(ann.get("category_id")) or [],
-                        tools,
-                    ))
+                objects.extend(keypoint_objects)
 
             # Emit the merged crowd masks, one per label.
             for label, rle in crowd_masks.items():

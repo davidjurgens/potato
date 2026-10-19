@@ -184,12 +184,12 @@
     "version": "1"
   },
   "image-annotation.css": {
-    "sha256": "aa59948824ad9f28",
-    "version": "16"
+    "sha256": "e69608119547b8bc",
+    "version": "18"
   },
   "image-annotation.js": {
-    "sha256": "1a51d930b2715cbb",
-    "version": "44"
+    "sha256": "5d33824c566f082e",
+    "version": "51"
   },
   "instance-display.js": {
     "sha256": "1f97e150e3d901c4",

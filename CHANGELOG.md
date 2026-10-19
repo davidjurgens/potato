@@ -6,6 +6,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Per-object attributes, with agreement over them.** An `image_annotation`
+  scheme can declare `attributes`: typed fields (`select`, `multi`, `text`,
+  `number`, `bool`) that the annotator sets for each shape in a panel under the
+  image, with per-label scoping, defaults, `show_if` conditions and `required`
+  (Next is refused, and the banner says how many shapes still need one).
+  `/admin/iaa` reports Krippendorff's alpha per attribute over the objects two
+  annotators drew in the same place (nominal for select and bool, interval for
+  number, MASI for multi) with raw percent agreement beside it. COCO export
+  writes them under `attributes` and the COCO importer reads them back; the
+  CVAT, KITTI, MOT and Darwin exporters already wrote them. See *Per-Object
+  Attributes* and `examples/image/object-attributes/`.
 - **Label Studio and Argilla projects import whole.** `potato import` reads a
   Label Studio JSON export (with its labeling config XML via `--ls-config`)
   and an Argilla 2.x dataset (a `to_disk` folder, a `to_hub` snapshot, or

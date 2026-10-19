@@ -151,6 +151,10 @@ class ImageAnnotationManager {
         // Set while server-stored annotations are being restored, so hydration
         // is not reported as the annotator having drawn anything.
         this._hydrating = false;
+        // Per-object attributes (occlusion, truncation, ...), edited in a panel
+        // under the canvas for whichever shape is selected. Normalized and
+        // validated server-side by schemas/object_attributes.py.
+        this.attributeDefs = Array.isArray(config && config.attributes) ? config.attributes : [];
 
         // Initialize canvas
         this._initCanvas();
@@ -516,10 +520,23 @@ class ImageAnnotationManager {
         // Selection events
         this.canvas.on('selection:created', () => {
             this._updateDeleteButtonState();
+            this._renderAttributePanel();
+        });
+
+        this.canvas.on('selection:updated', () => {
+            this._renderAttributePanel();
+        });
+
+        // A finished drawing becomes active after the save that announced it,
+        // and setActiveObject() fires no selection event, so check again once
+        // the drawing handlers have run.
+        this.canvas.on('mouse:up', () => {
+            setTimeout(() => this._syncAttributePanel(), 0);
         });
 
         this.canvas.on('selection:cleared', () => {
             this._updateDeleteButtonState();
+            this._renderAttributePanel();
         });
     }
 
@@ -701,6 +718,260 @@ class ImageAnnotationManager {
     /**
      * Update delete button enabled state.
      */
+    // ------------------------------------------------------------------
+    // Per-object attributes
+    // ------------------------------------------------------------------
+
+    /** The attribute definitions that apply to a shape with this label. */
+    _attributeDefsFor(label) {
+        return (this.attributeDefs || []).filter(
+            d => !Array.isArray(d.labels) || d.labels.includes(label));
+    }
+
+    /** Whether a definition's show_if condition holds for these values. */
+    _attributeVisible(def, values) {
+        if (!def.show_if) return true;
+        const actual = (values || {})[def.show_if.attribute];
+        const wanted = def.show_if.equals;
+        if (Array.isArray(actual)) return actual.includes(wanted);
+        return actual === wanted;
+    }
+
+    _attributeMissing(def, values) {
+        const v = (values || {})[def.name];
+        if (v === undefined || v === null || v === '') return true;
+        return Array.isArray(v) && v.length === 0;
+    }
+
+    /**
+     * Give a shape someone has just drawn the declared defaults.
+     *
+     * Only shapes a person drew: a model's or an imported shape keeps exactly
+     * the attributes it arrived with, so a default can never be mistaken for
+     * the model's answer or the source file's.
+     */
+    _applyAttributeDefaults() {
+        if (!this.attributeDefs || !this.attributeDefs.length || !this.canvas) return;
+        this.canvas.getObjects().forEach(obj => {
+            const data = obj.annotationData;
+            // Once per shape, while it has no attributes at all. Re-applying on
+            // every update put a default straight back into a field the
+            // annotator had just cleared, so a required attribute with a
+            // default could never be left blank and the panel showed one value
+            // while another was stored.
+            if (!data || data.source !== 'human' || data.attributes !== undefined) return;
+            const defaults = {};
+            this._attributeDefsFor(data.label).forEach(def => {
+                if (def.default !== undefined) {
+                    defaults[def.name] = Array.isArray(def.default)
+                        ? def.default.slice() : def.default;
+                }
+            });
+            data.attributes = defaults;
+        });
+    }
+
+    /** Shapes still missing a required, visible attribute. */
+    _shapesMissingAttributes() {
+        if (!this.attributeDefs || !this.canvas) return [];
+        return this.canvas.getObjects().filter(obj => {
+            const data = obj.annotationData;
+            if (!data) return false;
+            const values = data.attributes || {};
+            return this._attributeDefsFor(data.label).some(def =>
+                def.required && this._attributeVisible(def, values)
+                && this._attributeMissing(def, values));
+        });
+    }
+
+    /**
+     * Tell the form whether every shape has its required attributes.
+     *
+     * The hidden `validation="required"` input the generator adds only puts
+     * this form into validateRequiredFields(); it always holds "ok". What
+     * decides is the form's data-incomplete-reason, read through
+     * compositeShortfall(), which also puts the reason ("2 objects still need
+     * required attributes") in the banner. Emptying the input instead failed
+     * the form before that check ran, and the banner said only "required".
+     */
+    _updateAttributeRequirement() {
+        // A scheme without attributes is left exactly as it was: no reason
+        // cleared from its form, no extra validation pass.
+        if (!this.attributeDefs || !this.attributeDefs.length) return;
+        const container = document.querySelector(
+            `.image-annotation-container[data-schema="${this.config && this.config.schemaName}"]`);
+        if (!container) return;
+        const input = container.querySelector('.attribute-requirement');
+        const status = container.querySelector('.attribute-panel-status');
+        const missing = this._shapesMissingAttributes().length;
+        const form = container.closest('.annotation-form');
+        const reason = missing
+            ? `${missing} object${missing === 1 ? '' : 's'} still need${missing === 1 ? 's' : ''} required attributes`
+            : '';
+        if (input) input.value = 'ok';
+        if (form) {
+            if (missing) form.setAttribute('data-incomplete-reason', reason);
+            else form.removeAttribute('data-incomplete-reason');
+        }
+        if (status) status.textContent = reason;
+        // Refresh the banner once the annotator has tried to move on, so it
+        // clears as soon as the last attribute is filled in rather than at the
+        // next press of Next. It shows nothing before a first attempt.
+        if (typeof validateRequiredFields === 'function') {
+            try { validateRequiredFields(); } catch (e) { /* never block drawing */ }
+        }
+    }
+
+    /**
+     * Re-render the panel if the active shape is not the one it shows.
+     *
+     * Only on a change: rebuilding on every edit would take focus away from
+     * the control being edited.
+     */
+    _syncAttributePanel() {
+        if (!this.attributeDefs || !this.attributeDefs.length) return;
+        if (!this.canvas || !this.canvas.getActiveObject) return;
+        const active = this.canvas.getActiveObject() || null;
+        const label = active && active.annotationData ? active.annotationData.label : null;
+        // The label is compared as well as the object: a shape being drawn is
+        // already active but has no annotationData until the drawing ends, so
+        // the panel first renders it as "nothing to show" and would otherwise
+        // never look again.
+        if (active !== (this._attributePanelTarget || null)
+                || label !== (this._attributePanelLabel === undefined ? null : this._attributePanelLabel)) {
+            this._renderAttributePanel();
+        }
+    }
+
+    /** Fill the panel with controls for the selected shape's attributes. */
+    _renderAttributePanel() {
+        const container = document.querySelector(
+            `.image-annotation-container[data-schema="${this.config && this.config.schemaName}"]`);
+        const panel = container && container.querySelector('.object-attribute-panel');
+        if (!panel) return;
+        const fields = panel.querySelector('.attribute-fields');
+        const hint = panel.querySelector('.attribute-panel-hint');
+        fields.innerHTML = '';
+
+        const active = this.canvas && this.canvas.getActiveObject();
+        this._attributePanelTarget = active || null;
+        const data = active && active.annotationData;
+        this._attributePanelLabel = data ? data.label : null;
+        const defs = data ? this._attributeDefsFor(data.label) : [];
+        if (!data || !defs.length) {
+            panel.classList.remove('has-selection');
+            hint.textContent = data
+                ? `No attributes for "${data.label}".`
+                : 'Select a shape to set its attributes.';
+            return;
+        }
+        panel.classList.add('has-selection');
+        hint.textContent = `Attributes for the selected "${data.label}"`;
+        data.attributes = data.attributes || {};
+
+        defs.forEach(def => {
+            const row = document.createElement('div');
+            row.className = 'attribute-field';
+            row.dataset.attribute = def.name;
+            if (!this._attributeVisible(def, data.attributes)) row.hidden = true;
+            const id = `attr-${this.config.schemaName}-${def.name}`.replace(/[^A-Za-z0-9_-]/g, '_');
+            const caption = def.name + (def.required ? ' *' : '');
+            const value = data.attributes[def.name];
+
+            const commit = (newValue) => {
+                if (newValue === undefined) delete data.attributes[def.name];
+                else data.attributes[def.name] = newValue;
+                // A model's shape whose attributes a person changed is no
+                // longer the model's answer, same as moving it.
+                if (data.source && data.source !== 'human') data.edited = true;
+                this._saveState();
+                this._updateAnnotationData();
+                // Visibility of dependent fields may have changed.
+                fields.querySelectorAll('.attribute-field').forEach(other => {
+                    const otherDef = defs.find(d => d.name === other.dataset.attribute);
+                    other.hidden = !this._attributeVisible(otherDef, data.attributes);
+                });
+            };
+
+            if (def.type === 'multi') {
+                const group = document.createElement('fieldset');
+                group.className = 'attribute-multi';
+                const legend = document.createElement('legend');
+                legend.textContent = caption;
+                group.appendChild(legend);
+                const chosen = Array.isArray(value) ? value : [];
+                def.options.forEach(option => {
+                    const label = document.createElement('label');
+                    const box = document.createElement('input');
+                    box.type = 'checkbox';
+                    box.value = option;
+                    box.checked = chosen.includes(option);
+                    box.addEventListener('change', () => {
+                        const picked = [...group.querySelectorAll('input:checked')].map(b => b.value);
+                        commit(picked.length ? picked : undefined);
+                    });
+                    label.appendChild(box);
+                    label.appendChild(document.createTextNode(' ' + option));
+                    group.appendChild(label);
+                });
+                row.appendChild(group);
+            } else {
+                const label = document.createElement('label');
+                label.setAttribute('for', id);
+                label.textContent = caption;
+                row.appendChild(label);
+                let control;
+                if (def.type === 'select') {
+                    control = document.createElement('select');
+                    const blank = document.createElement('option');
+                    blank.value = '';
+                    blank.textContent = '—';
+                    control.appendChild(blank);
+                    def.options.forEach(option => {
+                        const opt = document.createElement('option');
+                        opt.value = option;
+                        opt.textContent = option;
+                        control.appendChild(opt);
+                    });
+                    control.value = value === undefined ? '' : value;
+                    control.addEventListener('change', () =>
+                        commit(control.value === '' ? undefined : control.value));
+                } else if (def.type === 'bool') {
+                    control = document.createElement('input');
+                    control.type = 'checkbox';
+                    control.checked = value === true;
+                    control.addEventListener('change', () => commit(control.checked));
+                } else if (def.type === 'number') {
+                    control = document.createElement('input');
+                    control.type = 'number';
+                    if (def.min !== undefined) control.min = def.min;
+                    if (def.max !== undefined) control.max = def.max;
+                    control.value = value === undefined ? '' : value;
+                    control.addEventListener('change', () => {
+                        const n = parseFloat(control.value);
+                        commit(Number.isFinite(n) ? n : undefined);
+                    });
+                } else {
+                    control = document.createElement('input');
+                    control.type = 'text';
+                    control.value = value === undefined ? '' : value;
+                    control.addEventListener('change', () =>
+                        commit(control.value === '' ? undefined : control.value));
+                }
+                control.id = id;
+                control.className = 'attribute-control';
+                row.appendChild(control);
+            }
+            if (def.description) {
+                const help = document.createElement('small');
+                help.className = 'attribute-help';
+                help.textContent = def.description;
+                row.appendChild(help);
+            }
+            fields.appendChild(row);
+        });
+    }
+
     _updateDeleteButtonState() {
         const container = document.querySelector(`.image-annotation-container[data-schema="${this.config.schemaName}"]`);
         if (container) {
@@ -3563,6 +3834,8 @@ class ImageAnnotationManager {
 
         this._saveState();
         this._updateAnnotationData();
+        // A new label can bring different attributes with it.
+        this._renderAttributePanel();
         return true;
     }
 
@@ -4111,6 +4384,13 @@ class ImageAnnotationManager {
      * Update the hidden input with current annotation data.
      */
     _updateAnnotationData() {
+        if (!this._hydrating) this._applyAttributeDefaults();
+        this._updateAttributeRequirement();
+        // A shape made active by code (a finished drawing, an undo) fires no
+        // selection event, so the panel follows the active object from here
+        // too. Only when it changed: rebuilding on every edit would take focus
+        // away from the control being edited.
+        this._syncAttributePanel();
         const input = document.getElementById(this.inputId);
         if (input) {
             input.value = this._serializeAnnotations();

@@ -275,6 +275,13 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
     # Process labels with colors
     labels = _process_labels(annotation_scheme["labels"])
 
+    # Per-object attributes (occlusion, truncation, ...). Validated here as
+    # well as at config load, because the preview CLI renders without loading.
+    from .object_attributes import normalize_attributes
+    attributes = normalize_attributes(
+        annotation_scheme.get("attributes"), [label["name"] for label in labels],
+        f"annotation_schemes[{schema_name}]")
+
     # Get configuration options
     zoom_enabled = annotation_scheme.get("zoom_enabled", True)
     pan_enabled = annotation_scheme.get("pan_enabled", True)
@@ -344,6 +351,7 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         "zoomEnabled": zoom_enabled,
         "panEnabled": pan_enabled,
         "minAnnotations": min_annotations,
+        "attributes": attributes,
         "maxAnnotations": max_annotations,
         "freeformBrushSize": freeform_brush_size,
         "freeformSimplify": freeform_simplify,
@@ -425,6 +433,32 @@ def _process_labels(labels_config):
                 "color": DEFAULT_COLORS[i % len(DEFAULT_COLORS)],
             })
     return processed
+
+
+def _attribute_panel_html(escaped_name, attributes):
+    """The panel that edits the selected shape's attributes, filled in by JS.
+
+    Empty when the scheme declares none. When any attribute is required, a
+    hidden `validation="required"` input joins the form so that
+    validateRequiredFields() checks it; the panel then sets the form's
+    data-incomplete-reason while a shape is missing a required value.
+    """
+    if not attributes:
+        return ""
+    requirement = ""
+    if any(a.get("required") for a in attributes):
+        requirement = (f'<input type="hidden" class="attribute-requirement" '
+                       f'id="attribute-requirement-{escaped_name}" '
+                       f'validation="required" value="ok">')
+    return f"""
+                <section class="object-attribute-panel" id="attributes-{escaped_name}"
+                         aria-labelledby="attributes-title-{escaped_name}">
+                    <h4 class="attribute-panel-title" id="attributes-title-{escaped_name}">Object attributes</h4>
+                    <p class="attribute-panel-hint">Select a shape to set its attributes.</p>
+                    <div class="attribute-fields"></div>
+                    <p class="attribute-panel-status" aria-live="polite"></p>
+                    {requirement}
+                </section>"""
 
 
 def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_enabled=False, ai_support=None):
@@ -574,6 +608,7 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                     <canvas id="mask-canvas-{escaped_name}" class="mask-canvas" aria-hidden="true" style="display: none;"></canvas>
                 </div>
 
+{_attribute_panel_html(escaped_name, js_config.get("attributes") or [])}
                 <!-- Hidden input for storing annotation data -->
                 <input type="hidden"
                        name="{escaped_name}"

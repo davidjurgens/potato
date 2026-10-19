@@ -67,7 +67,7 @@
     {% if frontend_assets.image_annotation | default(false)
           or frontend_assets.spatial_annotation | default(false)
           or frontend_assets.episode_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=16">
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=18">
     {% endif %}
 
     <!-- Point cloud viewer styles -->
@@ -793,7 +793,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=44"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=51"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.

@@ -1059,6 +1059,21 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("geometry agreement failed: %s", exc)
 
+    # Agreement over each declared per-object attribute (occlusion, ...),
+    # computed over the same matched objects.
+    if not temporal and n_items and scheme.get("attributes"):
+        try:
+            from potato.server_utils.iaa.attribute_agreement import attribute_agreement
+            from potato.server_utils.schemas.object_attributes import normalize_attributes
+
+            labels = [l if isinstance(l, str) else (l or {}).get("name")
+                      for l in scheme.get("labels") or []]
+            definitions = normalize_attributes(
+                scheme["attributes"], [str(n) for n in labels], scheme.get("name", ""))
+            result["attributes"] = attribute_agreement(rows, definitions, match_threshold)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("attribute agreement failed: %s", exc)
+
     return result
 
 

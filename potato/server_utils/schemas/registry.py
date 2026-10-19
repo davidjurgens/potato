@@ -491,7 +491,7 @@ def _register_builtin_schemas():
             name="image_annotation",
             generator=generate_image_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over", "viewer", "tiles", "segmentation", "instance_masks", "text_prompt", "skeletons", "mask_mode"],
+            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over", "viewer", "tiles", "segmentation", "instance_masks", "text_prompt", "skeletons", "mask_mode", "attributes"],
             supports_keybindings=True,
             description="Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
         ),

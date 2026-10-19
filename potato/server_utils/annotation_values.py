@@ -351,12 +351,25 @@ def geometry_objects(scheme: Any, stored: Any,
             for obj in raw:
                 canonical = normalize_annotation_object(obj, img_w, img_h)
                 if canonical:
-                    out.append(canonical)
+                    out.append(_with_attributes(canonical, obj))
             return out
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Could not normalize geometry, using stored form: %s", exc)
 
-    return [_as_canonical(obj) for obj in raw]
+    return [_with_attributes(_as_canonical(obj), obj) for obj in raw]
+
+
+def _with_attributes(canonical: dict, obj: Any) -> dict:
+    """Keep a shape's per-object attributes on its canonical form.
+
+    The distance functions ignore the key; agreement over attributes reads it.
+    Without it, every shape reaching the IAA report had lost its attributes on
+    the way, and attribute agreement counted no values on real data.
+    """
+    attributes = obj.get("attributes") if isinstance(obj, dict) else None
+    if isinstance(attributes, dict) and attributes:
+        canonical["attributes"] = dict(attributes)
+    return canonical
 
 
 def _as_canonical(obj: dict) -> dict:
