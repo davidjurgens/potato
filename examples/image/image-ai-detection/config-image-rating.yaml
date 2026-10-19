@@ -52,7 +52,6 @@ annotation_schemes:
   - annotation_type: likert
     name: image_quality
     description: "Rate the overall quality of this image"
-    title: "Image Quality"
     size: 5
     min_label: "Very Poor"
     max_label: "Excellent"
@@ -66,7 +65,6 @@ annotation_schemes:
   - annotation_type: radio
     name: primary_subject
     description: "What is the main subject of this image?"
-    title: "Primary Subject"
     labels:
       - name: "Person/People"
         key_value: "p"
@@ -89,7 +87,6 @@ annotation_schemes:
   - annotation_type: likert
     name: mood_rating
     description: "How positive or negative is the mood of this image?"
-    title: "Image Mood"
     size: 5
     min_label: "Very Negative"
     max_label: "Very Positive"
@@ -102,7 +99,6 @@ annotation_schemes:
   - annotation_type: multiselect
     name: content_tags
     description: "Select all content types present in this image"
-    title: "Content Tags"
     labels:
       - name: "Outdoor"
         key_value: "1"
@@ -129,7 +125,6 @@ annotation_schemes:
   - annotation_type: text
     name: image_description
     description: "Briefly describe what you see in this image"
-    title: "Image Description"
     ai_support:
       enabled: true
       features:

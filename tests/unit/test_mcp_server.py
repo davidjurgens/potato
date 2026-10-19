@@ -151,6 +151,38 @@ class TestValidateTool:
         assert "radioo" in joined or "annotation_type" in joined
         assert "radio" in joined, "the error should name the valid alternatives"
 
+    def test_deprecation_notes_reach_the_agent(self):
+        """
+        The CLI prints "NOTE: icl_labeling still works, but ..." to stderr, once
+        per process. An agent working only over MCP never saw it, so it went on
+        writing blocks planned for removal.
+        """
+        base = (
+            "annotation_task_name: T\n"
+            "task_dir: .\n"
+            "output_annotation_dir: ./out\n"
+            "data_files: [data/x.json]\n"
+            "item_properties:\n"
+            "  id_key: id\n"
+            "  text_key: text\n"
+            "annotation_schemes:\n"
+            "  - annotation_type: radio\n"
+            "    name: q\n"
+            "    description: d\n"
+            "    labels: [a, b]\n"
+        )
+        # Twice, because the stderr note is printed once per process; the
+        # report must carry it every time.
+        for _ in range(2):
+            result = local.validate_config(
+                yaml_text=base + "icl_labeling:\n  enabled: true\n")
+            notes = " ".join(result["notes"])
+            assert "icl_labeling" in notes and "labeling_engine" in notes
+            assert not any("icl_labeling" in w for w in result["other_warnings"]), (
+                "a note is advice; it must not count as a --strict warning")
+
+        assert local.validate_config(yaml_text=base)["notes"] == []
+
     def test_neither_argument_is_an_error(self):
         assert "error" in local.validate_config()
 

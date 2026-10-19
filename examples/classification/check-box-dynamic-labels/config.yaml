@@ -18,7 +18,6 @@ annotation_schemes:
 - annotation_type: multiselect
   name: appropriateness
   description: Which of the following reply is appropriate?
-  dynamic_labels: true
   labels:
   - name: '{{instance_obj.labels[0]}}'
   - name: '{{instance_obj.labels[1]}}'

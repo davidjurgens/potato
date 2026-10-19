@@ -31,6 +31,5 @@ annotation_schemes:
   - Strongly Agree
   label_requirement:
     required: true
-  sequential_key_binding: true
   option_randomization: true
 site_dir: default

@@ -103,3 +103,44 @@ class TestItFiresThroughTheRealEntryPoint:
 
     def test_the_corrected_key_passes(self):
         validate_instance_display_config(self._config({"speaker_key": "agent"}))
+
+
+class TestOptionValuesMatchTheirDefaults:
+    """
+    A declared option with a value of the wrong type is warned about at load.
+
+    Renderers read options straight from the merged dict, so
+    `screenshot_max_height: tall` on a web_agent_trace only failed at render
+    time, and the page fell back to plain text. Reported by the potato-skill
+    agent. Warnings, not errors: `validate --strict` fails on them, but a
+    renderer that accepts more than its default suggests still boots.
+    """
+
+    LOGGER = "potato.server_utils.config_module"
+
+    def warnings(self, caplog, field_type, options):
+        import logging
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=self.LOGGER):
+            _validate_display_options(field_type, options, PATH)
+        return [r.getMessage() for r in caplog.records if "expects" in r.getMessage()]
+
+    def test_a_word_where_a_number_belongs(self, caplog):
+        [msg] = self.warnings(caplog, "web_agent_trace", {"screenshot_max_height": "tall"})
+        assert "screenshot_max_height" in msg and "a number" in msg
+
+    def test_a_string_where_a_boolean_belongs(self, caplog):
+        [msg] = self.warnings(caplog, "agent_trace", {"show_step_numbers": "yes"})
+        assert "true or false" in msg
+
+    def test_a_boolean_is_not_a_number(self, caplog):
+        assert self.warnings(caplog, "web_agent_trace", {"screenshot_max_height": True})
+
+    def test_right_types_pass(self, caplog):
+        assert self.warnings(caplog, "web_agent_trace", {
+            "screenshot_max_height": 400, "playback_step_delay": 1}) == []
+        assert self.warnings(caplog, "agent_trace", {"show_step_numbers": False}) == []
+
+    def test_options_with_a_string_or_none_default_are_not_typed(self, caplog):
+        # code.max_width defaults to None and accepts "80%" as well as 800.
+        assert self.warnings(caplog, "code", {"max_width": "80%"}) == []

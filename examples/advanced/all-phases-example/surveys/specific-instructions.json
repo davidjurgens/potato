@@ -1,5 +1,4 @@
 {
-    "id":"1",
     "name": "read_instructions",
     "description":"I have read the above very-specific instructions.",
     "annotation_type": "radio",

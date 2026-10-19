@@ -71,8 +71,8 @@ annotation_schemes:
     description: "Rate your confidence (0 = completely uncertain, 100 = fully certain)."
     target_schema: toxicity
     scale_type: slider
-    slider_min: 0
-    slider_max: 100
+    min_value: 0
+    max_value: 100
     label_requirement:
       required: true
 ```

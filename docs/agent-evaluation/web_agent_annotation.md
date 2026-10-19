@@ -99,20 +99,11 @@ When the viewer is focused (click on it):
 
 ### Per-Step Annotations
 
-Add `per_step: true` to an annotation scheme to create per-step annotations that appear inline with each step:
-
-```yaml
-annotation_schemes:
-  - annotation_type: radio
-    name: step_correctness
-    per_step: true
-    labels:
-      - name: correct
-      - name: incorrect
-      - name: unnecessary
-```
-
-Per-step annotations are stored as `{scheme_name}_step_{index}` (e.g., `step_correctness_step_0`).
+Each annotation scheme on a web-agent trace answers for the whole trace.
+Potato does not yet attach a separate answer to each step of the trace, and a
+`per_step` key on a scheme is ignored (`potato validate` reports it). To label
+steps one by one, use the `process_reward` schema, which reads a list of steps
+from the item; see [Process Supervision](process_supervision.md).
 
 ### Converting Traces
 

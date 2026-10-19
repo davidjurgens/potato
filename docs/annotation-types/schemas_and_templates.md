@@ -168,8 +168,6 @@ Allows annotators to select multiple options from a predefined list.
 
 **Optional Fields:**
 - `sequential_key_binding` (boolean): Enable keyboard shortcuts (1, 2, 3...)
-- `single_select` (boolean): Force single selection only (default: false)
-- `horizontal` (boolean): Display options horizontally
 - `has_free_response` (boolean): Add optional text input field
 - `video_as_label` (boolean): Use video files as labels
 - `label_requirement` (object): Set completion requirements
@@ -182,7 +180,6 @@ annotation_schemes:
     description: "Select all emotions expressed in this text"
     labels: ["happy", "sad", "angry", "surprised", "neutral"]
     sequential_key_binding: true
-    horizontal: true
 ```
 
 **Video Labels Example:**
@@ -246,12 +243,12 @@ over text at a consistent weight. Write the color you want at full strength.
 Provides a continuous range for numerical ratings.
 
 **Required Fields:**
-- `min` (number): Minimum value
-- `max` (number): Maximum value
+- `min_value` (number): Minimum value
+- `max_value` (number): Maximum value
+- `starting_value` (number): Where the handle starts, between the two
 
 **Optional Fields:**
 - `step` (number): Increment size (default: 1)
-- `default` (number): Default position
 
 **Example:**
 ```yaml
@@ -259,10 +256,10 @@ annotation_schemes:
   - annotation_type: "slider"
     name: "confidence_score"
     description: "How confident are you in your assessment?"
-    min: 0
-    max: 100
+    min_value: 0
+    max_value: 100
+    starting_value: 50
     step: 5
-    default: 50
 ```
 
 ### 6. Text Input (`text`)

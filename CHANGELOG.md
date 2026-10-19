@@ -4,6 +4,49 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Validation
+
+- **`potato validate` now checks the keys on each annotation scheme against
+  its type.** A key the type does not read, such as `totally_made_up: 3` on a
+  radio, `default_low` on a range_slider or `lables` for `labels`, used to load
+  silently and pass `--strict`. It is now reported as an unrecognized key, with
+  a suggestion when one is close, and `--strict` fails on it. Schemes in phase
+  page files (`phases.<name>.file`, JSON, JSONL or YAML) are checked as well as
+  inline ones. The check found 14 such keys in the shipped example configs, 20
+  unread `id` keys in their phase files, and 22 in docs snippets, all removed or
+  corrected:
+  - The slider snippets in the schema gallery and configuration guide used
+    `min`, `max` and `default`. A slider requires `min_value`, `max_value` and
+    `starting_value`, so the snippets failed validation as written.
+  - `docs/agent-evaluation/web_agent_annotation.md` described `per_step: true`
+    as giving a scheme one answer per trace step. Nothing implements it; the
+    page now says so and points to `process_reward`.
+  - `hierarchical_multiselect` documented `expand_depth`, which nothing reads.
+    The tree always starts collapsed.
+  - Also removed: `horizontal` and `single_select` on multiselect, `colors` on
+    span (use a `color` on each label), `slider_min`/`slider_max` on
+    confidence (`min_value`/`max_value`), and `title`, `display_config`,
+    `dynamic_labels` and `sequential_key_binding` on types that do not read
+    them.
+- Four keys the code reads were missing from the registry and are now
+  declared: `ai_support` and `keybinding_strategy` on every scheme type,
+  `propagation` on video_annotation, and `option_randomization` on multirate.
+- A display option whose value is not the type its default is, such as
+  `screenshot_max_height: tall` on a web_agent_trace, is now a validation
+  warning. It used to fail only at render time, when the page fell back to
+  plain text.
+- An enabled `labeling_engine` with `contracts: []` is now a warning. It
+  validated clean and then accepted no machine label.
+- The validation report has a `notes` list carrying the deprecation notes for
+  `pre_annotation`, `icl_labeling` and `judge_calibration`. The CLI printed
+  them only to stderr, once per process, so the MCP `validate_config` tool
+  never returned them. Notes never fail `--strict`.
+- New `validation.acknowledge`: a list of warning texts a study expects, so
+  `--strict` stops failing on them. A warning containing an entry is listed as
+  acknowledged and not counted. Entries shorter than 12 characters are
+  refused, and an entry that matches no warning is reported. The running
+  server ignores the block and still logs the warnings.
+
 ### Fixes
 
 - **A deploy button backed up every deployment to the author's storage.**

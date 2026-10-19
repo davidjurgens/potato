@@ -71,7 +71,7 @@ annotation_schemes:
   - annotation_type: text
     name: feedback
     description: "Detailed feedback for the code author"
-    text_box_single_line: false
+    multiline: true
 
 # User configuration
 user_config:

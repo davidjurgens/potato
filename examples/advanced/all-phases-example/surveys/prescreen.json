@@ -1,5 +1,4 @@
 {
-    "id":"1",
     "name": "internet_familiarity",
     "description":"How familiar are you with the internet?",
     "annotation_type": "likert",

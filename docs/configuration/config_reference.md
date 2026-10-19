@@ -244,6 +244,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `debug_phase` |  | string |  | Jump straight to a workflow phase, for UI debugging |  |
 | `server_debug` |  | boolean | `False` | Backend debug logging. Note that only the phase pages (consent, instructions, surveys) read this key; the annotation page asks the logging module, which is driven by debug_log/verbose/debug |  |
 | `ui_debug` |  | boolean | `False` | Print browser-side debug logging to the console |  |
+| `validation` |  | object |  | Settings read by `potato validate`, not by the running server | `acknowledge` |
 | `verbose` |  | boolean | `False` | Raise the log level. --verbose writes this key |  |
 | `very_verbose` |  | boolean | `False` | Raise the log level further; equivalent to debug for logging purposes, without debug's effect on authentication. --veryVerbose writes this key |  |
 
@@ -328,7 +329,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `likert` | `min_label`, `max_label`, `size` | `label_requirement`, `labels`, `displaying_score`, `bad_text_label`, `sequential_key_binding` | Likert scale rating | `examples/classification/likert/config.yaml` |
 | `multi_document_event` | `slots` | `allow_annotator_create`, `template_name` | Cross-document event annotation: template slots filled with evidence from many documents | `examples/advanced/multi-document-events/config.yaml` |
 | `multimodal_reasoning` | (none beyond name/description) | `steps_key`, `type_key`, `verdict_options` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating | `examples/agent-traces/multimodal-reasoning/config.yaml` |
-| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement`, `randomize_order` | Rate multiple items on a scale | `examples/classification/multirate/config.yaml` |
+| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement`, `randomize_order`, `option_randomization` | Rate multiple items on a scale | `examples/classification/multirate/config.yaml` |
 | `multiselect` | `labels` | `display_config`, `label_requirement`, `sequential_key_binding`, `video_as_label`, `has_free_response`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `codebook`, `randomize_order` | Multiple-choice checkbox selection | `examples/classification/check-box/config.yaml` |
 | `number` | (none beyond name/description) | `min`, `max`, `step`, `label_requirement`, `min_value`, `max_value`, `custom_css`, `tooltip`, `tooltip_file` | Numeric input field | `examples/advanced/all-annotation-types/config.yaml` |
 | `pairwise` | (none beyond name/description) | `mode`, `items_key`, `items`, `show_labels`, `labels`, `allow_tie`, `tie_label`, `sequential_key_binding`, `scale`, `label_requirement`, `dimensions`, `justification`, `randomize_order` | Pairwise comparison of two items (binary selection or scale rating) | `examples/classification/pairwise-scale/config.yaml` |
@@ -361,7 +362,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `triage` | (none beyond name/description) | `accept_label`, `reject_label`, `skip_label`, `auto_advance`, `show_progress`, `accept_key`, `reject_key`, `skip_key` | Binary accept/reject triage for rapid data curation | `examples/advanced/triage/config.yaml` |
 | `vas` | (none beyond name/description) | `left_label`, `right_label`, `min_value`, `max_value`, `show_value`, `precision` | Continuous visual analog scale for fine-grained magnitude estimation | `examples/classification/vas/config.yaml` |
 | `video` | `video_path` | `autoplay`, `loop`, `muted`, `controls`, `custom_css`, `fallback_text`, `additional_sources` | Video player display | `examples/video/video-player/config.yaml` |
-| `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
+| `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field`, `propagation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
 | `voice_interaction` | (none beyond name/description) | `turns_key`, `audio_key`, `speaker_key`, `user_speakers`, `overlap_labels`, `rating_scale`, `text_key` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | `examples/agent-traces/voice-interaction/config.yaml` |
 
 ## Label Structure

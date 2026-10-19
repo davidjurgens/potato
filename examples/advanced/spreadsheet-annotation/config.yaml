@@ -55,7 +55,7 @@ annotation_schemes:
   - annotation_type: text
     name: notes
     description: "Additional notes about data quality"
-    text_box_single_line: false
+    multiline: true
 
 # User configuration
 user_config:

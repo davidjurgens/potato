@@ -104,6 +104,4 @@
       - "name": "negative"
         "description": "Expresses negative sentiment, frustration, dissatisfaction"
         "key_value": "3"
-    "display_config":
-      "label_display": "name_and_description"
 

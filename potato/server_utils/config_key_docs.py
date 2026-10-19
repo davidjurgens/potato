@@ -3022,6 +3022,20 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", default="", category=AGENT_EVAL,
         see_also=("item_properties.text_key",),
     ),
+    "validation": _D(
+        "Settings read by `potato validate`, not by the running server",
+        type="object", category=DEBUG,
+    ),
+    "validation.acknowledge": _D(
+        "Warnings this study expects, so `validate --strict` stops failing on "
+        "them. Each entry is a piece of a warning's text, at least 12 "
+        "characters long; a warning containing it is listed as acknowledged "
+        "and not counted. An entry that matches no warning is itself reported, "
+        "so an acknowledgement that has gone stale does not hide the next "
+        "problem. The server still logs these warnings at boot",
+        type="array", default=[], category=DEBUG,
+        example=["assignment_strategy: engine serves only the engine's requests"],
+    ),
     "arena": _D(
         "Multi-model arena: send one prompt to several providers and collect "
         "side-by-side preferences",

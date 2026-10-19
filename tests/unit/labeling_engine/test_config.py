@@ -316,3 +316,29 @@ def test_the_note_for_an_older_key_is_shown_once(capsys, monkeypatch):
     config_module.validate_labeling_engine_config(cfg)
     err = capsys.readouterr().err
     assert err.count("NOTE: icl_labeling") == 1 and "migrate-config" in err
+
+
+class TestNoContracts:
+    """An enabled engine with `contracts: []` validates and accepts nothing.
+
+    Reported by the potato-skill agent: the config passed `validate --strict`
+    and the engine then never accepted a machine label.
+    """
+
+    def _warnings(self, caplog, cfg):
+        import logging
+        from potato.server_utils.config_module import validate_labeling_engine_config
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="potato.server_utils.config_module"):
+            validate_labeling_engine_config(cfg)
+        return [r.getMessage() for r in caplog.records if "no contracts" in r.getMessage()]
+
+    def test_enabled_with_no_contracts_warns(self, caplog):
+        [msg] = self._warnings(caplog, _cfg(contracts=[]))
+        assert "accept no machine label" in msg
+
+    def test_with_a_contract_it_does_not(self, caplog):
+        assert self._warnings(caplog, _cfg()) == []
+
+    def test_disabled_with_no_contracts_does_not(self, caplog):
+        assert self._warnings(caplog, _cfg(enabled=False, contracts=[])) == []

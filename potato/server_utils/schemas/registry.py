@@ -42,6 +42,9 @@ UNIVERSAL_REQUIRED_FIELDS = frozenset({"annotation_type", "name", "description"}
 #:   turn_level, turn_binding,
 #:   turn_label                   -> server_utils/turn_annotations.py
 #:   session_level                -> sessions/service.py
+#:   ai_support                   -> ai/ai_cache.py (visual hints on any scheme),
+#:                                   config_module keyword_highlight check
+#:   keybinding_strategy          -> schemas/keybinding_allocator.py
 #:
 #: ``turn_*`` and ``session_level`` are only *supported* on a subset of types
 #: (config_module raises for the rest); they are listed here because any scheme
@@ -57,6 +60,8 @@ UNIVERSAL_OPTIONAL_FIELDS = frozenset({
     "turn_binding",
     "turn_label",
     "session_level",
+    "ai_support",
+    "keybinding_strategy",
 })
 
 #: Keys the *server* writes onto a scheme dict before handing it to a generator.
@@ -413,7 +418,7 @@ def _register_builtin_schemas():
             name="multirate",
             generator=generate_multirate_layout,
             required_fields=["name", "description", "options", "labels"],
-            optional_fields=["label_requirement", "options_from_data", "display_config", "arrangement", "randomize_order"],
+            optional_fields=["label_requirement", "options_from_data", "display_config", "arrangement", "randomize_order", "option_randomization"],
             supports_keybindings=False,
             description="Rate multiple items on a scale"
         ),
@@ -549,7 +554,7 @@ def _register_builtin_schemas():
             # generator raises without it -- so declaring it optional meant
             # `validate --strict` passed a config that could not render.
             required_fields=["name", "description", "labels"],
-            optional_fields=["mode", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options", "ai_support", "source_field"],
+            optional_fields=["mode", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options", "ai_support", "source_field", "propagation"],
             supports_keybindings=True,
             description="Video annotation with temporal segments, frame classification, keyframes, and object tracking"
         ),

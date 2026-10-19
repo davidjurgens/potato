@@ -52,6 +52,13 @@ class ValidationReport:
     errors: List[str] = field(default_factory=list)
     unknown_keys: List[str] = field(default_factory=list)
     other_warnings: List[str] = field(default_factory=list)
+    #: Deprecation notes (pre_annotation, icl_labeling, judge_calibration ...).
+    #: Advice, not warnings: they never fail --strict. The CLI also prints
+    #: them to stderr, but only once per process and only to a terminal, so an
+    #: agent reading this report over MCP never saw them.
+    notes: List[str] = field(default_factory=list)
+    #: Warnings matched by `validation.acknowledge`. Shown, never fatal.
+    acknowledged: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +67,8 @@ class ValidationReport:
             "errors": self.errors,
             "unknown_keys": self.unknown_keys,
             "other_warnings": self.other_warnings,
+            "notes": self.notes,
+            "acknowledged": self.acknowledged,
         }
 
 
@@ -167,6 +176,12 @@ def validate_config_file(config_file: str) -> ValidationReport:
 
     report.unknown_keys = collector.unknown_keys
     report.other_warnings = collector.other_warnings
+    try:
+        from potato.labeling_engine.config.translate import deprecation_warnings
+        if isinstance(config_data, dict):
+            report.notes = deprecation_warnings(config_data)
+    except Exception as e:  # noqa: BLE001 - advice must not fail the run
+        report.notes = [f"Could not check for deprecated keys ({type(e).__name__}): {e}"]
     # Optional files the server merely shrugs off. Not fatal here either --
     # but named, so `--strict` can refuse them and a human can see them.
     try:
@@ -175,7 +190,63 @@ def validate_config_file(config_file: str) -> ValidationReport:
     except Exception as e:  # noqa: BLE001 - a warning pass must not fail the run
         report.other_warnings.append(
             f"Could not check optional file paths ({type(e).__name__}): {e}")
+    _apply_acknowledgements(report, config_data)
     return report
+
+
+#: Shorter entries could match nearly any warning ("scheme", "engine") and
+#: silence problems nobody meant to accept.
+MIN_ACKNOWLEDGEMENT_LENGTH = 12
+
+
+def _apply_acknowledgements(report: ValidationReport, config_data) -> None:
+    """Move warnings named in `validation.acknowledge` out of the fatal lists.
+
+    Some warnings are expected for a given study: under
+    `assignment_strategy: engine` a free-text scheme is always reported,
+    because the engine cannot label it. `--strict` fails on every warning, so
+    an agent could not tell "expected here" from "fix this". Matching is by
+    substring of the warning text. An entry that is too short, or that
+    matches nothing, is reported as a warning of its own.
+    """
+    block = config_data.get("validation") if isinstance(config_data, dict) else None
+    entries = block.get("acknowledge") if isinstance(block, dict) else None
+    if not entries:
+        return
+    if not isinstance(entries, list):
+        report.other_warnings.append(
+            "validation.acknowledge must be a list of warning texts; it was ignored.")
+        return
+
+    usable = []
+    for entry in entries:
+        text = str(entry).strip()
+        if len(text) < MIN_ACKNOWLEDGEMENT_LENGTH:
+            report.other_warnings.append(
+                f"validation.acknowledge entry '{text}' is shorter than "
+                f"{MIN_ACKNOWLEDGEMENT_LENGTH} characters, so it could match "
+                "warnings you did not mean to accept; it was ignored. Quote more "
+                "of the warning.")
+        else:
+            usable.append(text)
+
+    matched = set()
+    for name in ("unknown_keys", "other_warnings"):
+        kept = []
+        for warning in getattr(report, name):
+            hit = next((e for e in usable if e in warning), None)
+            if hit is None:
+                kept.append(warning)
+            else:
+                matched.add(hit)
+                report.acknowledged.append(warning)
+        setattr(report, name, kept)
+
+    for entry in usable:
+        if entry not in matched:
+            report.other_warnings.append(
+                f"validation.acknowledge entry '{entry}' matches no warning. "
+                "Remove it, or it will hide a different problem later.")
 
 
 def _format_human(report: ValidationReport, strict: bool = False) -> str:
@@ -195,6 +266,11 @@ def _format_human(report: ValidationReport, strict: bool = False) -> str:
         lines.append("")
         lines.append("OTHER WARNINGS:")
         for w in report.other_warnings:
+            lines.append(f"  - {w}")
+    if report.acknowledged:
+        lines.append("")
+        lines.append("ACKNOWLEDGED (validation.acknowledge; not counted):")
+        for w in report.acknowledged:
             lines.append(f"  - {w}")
     lines.append("")
     if report.ok and not report.unknown_keys and not report.other_warnings:

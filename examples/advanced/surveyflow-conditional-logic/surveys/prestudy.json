@@ -1,6 +1,5 @@
 [
     {
-        "id": "prior_experience",
         "name": "prior_experience",
         "annotation_type": "radio",
         "description": "Have you previously worked on a text-annotation task?",
@@ -8,7 +7,6 @@
         "label_requirement": {"required": true}
     },
     {
-        "id": "experience_details",
         "name": "experience_details",
         "annotation_type": "text",
         "description": "Please briefly describe your previous annotation experience.",
@@ -22,7 +20,6 @@
         }
     },
     {
-        "id": "referral_source",
         "name": "referral_source",
         "annotation_type": "radio",
         "description": "How did you hear about this study?",
@@ -30,7 +27,6 @@
         "label_requirement": {"required": true}
     },
     {
-        "id": "referral_other",
         "name": "referral_other",
         "annotation_type": "text",
         "description": "Please specify how you heard about the study.",

@@ -2,8 +2,6 @@ admin_api_key: test-admin-api-key
 annotation_schemes:
 - annotation_type: radio
   description: Did the agent complete the task?
-  display_config:
-    style: vertical
   labels:
   - name: Fully completed
     tooltip: The agent successfully completed the task

@@ -449,6 +449,8 @@ KNOWN_CONFIG_KEYS = {
     "curation": {"enabled", "model_name", "embed_on_ingest", "text_key"},
     # Multi-model arena: fan a prompt out to N providers side by side.
     "arena": {"enabled", "models"},
+    # Read only by `potato validate`, never by the server.
+    "validation": {"acknowledge"},
     # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
     "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
@@ -1669,6 +1671,15 @@ def validate_labeling_engine_config(config_data: Dict[str, Any]) -> None:
         engine_cfg = parse_engine_config(config_data)
     except EngineConfigError as e:
         raise ConfigValidationError(str(e)) from e
+    if engine_cfg.enabled and not engine_cfg.contracts:
+        # Valid, and it accepts nothing: a machine label is only accepted
+        # under a contract, so with none the engine labels nothing and the
+        # config said nothing about it (potato-skill).
+        logger.warning(
+            "labeling_engine is enabled with no contracts, so it will accept no "
+            "machine label. Add a contract "
+            "(for example selective_risk or threshold_legacy) for each scheme "
+            "the engine should label, or set labeling_engine.enabled: false.")
     if engine_cfg.enabled:
         # A contract on a scheme type with no family (free text, pairwise)
         # can never be scored: its calibration requests opened and never
@@ -2570,6 +2581,112 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
+    validate_scheme_keys(config_data, config_file_dir or project_dir)
+
+
+def _phase_file_schemes(config_data: Dict[str, Any],
+                        base_dir: Optional[str]) -> List[Tuple[str, Dict[str, Any]]]:
+    """Schemes declared in phase page files (`phases.<name>.file`).
+
+    Returns ``(label, scheme)`` pairs. Survey and prestudy questions usually
+    live in these files rather than inline, and they are where hand-written
+    schemes are commonest. Paths resolve the way the server resolves them:
+    against the config's directory, then `task_dir`, then the working
+    directory. A file that cannot be found or parsed is skipped here; the path
+    checks report a missing one.
+    """
+    import glob as _glob
+
+    phases = config_data.get("phases") if isinstance(config_data, dict) else None
+    if isinstance(phases, dict):
+        items = [(n, p) for n, p in phases.items() if n != "order"]
+    elif isinstance(phases, list):
+        items = [(p.get("name", f"#{i}") if isinstance(p, dict) else f"#{i}", p)
+                 for i, p in enumerate(phases)]
+    else:
+        return []
+
+    roots = []
+    if base_dir:
+        roots.append(base_dir)
+        task_dir = config_data.get("task_dir")
+        if isinstance(task_dir, str) and task_dir:
+            roots.append(task_dir if os.path.isabs(task_dir)
+                         else os.path.normpath(os.path.join(base_dir, task_dir)))
+    roots.append(os.getcwd())
+
+    found: List[Tuple[str, Dict[str, Any]]] = []
+    for phase_name, phase in items:
+        rel = phase.get("file") if isinstance(phase, dict) else None
+        if not isinstance(rel, str) or not rel:
+            continue
+        candidates = [rel] if os.path.isabs(rel) else [os.path.join(r, rel) for r in roots]
+        paths: List[str] = []
+        for candidate in candidates:
+            paths = sorted(_glob.glob(candidate))
+            if paths:
+                break
+        for path in paths:
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    if path.endswith(".jsonl"):
+                        loaded = [json.loads(line) for line in fh if line.strip()]
+                    elif path.endswith((".yaml", ".yml")):
+                        loaded = yaml.safe_load(fh)
+                    else:
+                        loaded = json.load(fh)
+            except (OSError, ValueError, yaml.YAMLError):
+                continue
+            for scheme in loaded if isinstance(loaded, list) else [loaded]:
+                if isinstance(scheme, dict):
+                    found.append((f"phases.{phase_name} ({os.path.basename(path)})", scheme))
+    return found
+
+
+def validate_scheme_keys(config_data: Dict[str, Any],
+                         base_dir: Optional[str] = None) -> None:
+    """Warn about keys an annotation scheme's type does not declare.
+
+    `validate_unknown_keys` stops at `annotation_schemes`, because what a scheme
+    may carry depends on its `annotation_type`. Without this, a misspelled or
+    invented key on a scheme (`lables`, `default_low` on a range_slider) loaded
+    silently and did nothing, and `validate --strict` passed it.
+
+    The accepted set is the registry's: the type's required and optional
+    fields, the universal ones, and the keys the server writes itself. Messages
+    use the same "Unrecognized config key" prefix, so `--strict` fails on them.
+    Unregistered types are left to the type check.
+    """
+    from potato.server_utils.schemas.registry import (
+        INTERNAL_SCHEME_FIELDS,
+        schema_registry,
+    )
+
+    located = [("annotation_schemes", s)
+               for s in _collect_all_annotation_schemes(config_data)]
+    located += _phase_file_schemes(config_data, base_dir)
+    for index, (where, scheme) in enumerate(located):
+        if not isinstance(scheme, dict):
+            continue
+        scheme_type = scheme.get("annotation_type")
+        accepted = schema_registry.get_accepted_fields(scheme_type) \
+            if isinstance(scheme_type, str) else None
+        if accepted is None:
+            continue
+        accepted = accepted | INTERNAL_SCHEME_FIELDS
+        label = scheme.get("name") or f"#{index}"
+        for key in sorted(k for k in scheme if k not in accepted):
+            full_key = f"{where}[{label}].{key}"
+            matches = difflib.get_close_matches(str(key), accepted, n=3, cutoff=0.6)
+            if matches:
+                logger.warning(
+                    "Unrecognized config key '%s' (a %s scheme does not read it). "
+                    "Did you mean: %s?",
+                    full_key, scheme_type, ", ".join(f"'{m}'" for m in matches))
+            else:
+                logger.warning(
+                    "Unrecognized config key '%s'. A %s scheme does not read it, "
+                    "so it will be ignored.", full_key, scheme_type)
 
 
 def validate_live_ingestion_assignment_compat(config_data: Dict[str, Any]) -> None:
@@ -8414,6 +8531,44 @@ def _reject_wrongly_shaped_display_options(
                 f"{type(value).__name__}.")
 
 
+def _warn_display_option_types(field_type: str, options: Dict[str, Any], path: str) -> None:
+    """Warn when a display option's value is not the type its default is.
+
+    Renderers read options straight from the merged dict, so a wrong type
+    surfaced only at render time: `screenshot_max_height: tall` on a
+    web_agent_trace broke the renderer, and the page silently fell back to
+    plain text. The display's own default says what it expects. Only defaults
+    that pin a type are checked (bool, number, list, dict); a string or None
+    default may legitimately take several shapes. Warnings, not errors, so a
+    renderer that accepts more than its default suggests still boots, while
+    `validate --strict` reports it.
+    """
+    from potato.server_utils.displays import display_registry
+
+    display = display_registry.get(field_type)
+    defaults = getattr(display, "optional_fields", None) or {}
+    for key, value in options.items():
+        if key not in defaults or value is None:
+            continue
+        default = defaults[key]
+        if isinstance(default, bool):
+            ok, kind = isinstance(value, bool), "true or false"
+        elif isinstance(default, (int, float)):
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+            kind = "a number"
+        elif isinstance(default, list):
+            ok, kind = isinstance(value, list), "a list"
+        elif isinstance(default, dict):
+            ok, kind = isinstance(value, dict), "a mapping"
+        else:
+            continue
+        if not ok:
+            logger.warning(
+                "%s.display_options.%s is %r, but a %s display expects %s "
+                "(default %r). The page may render wrongly or fall back to "
+                "plain text.", path, key, value, field_type, kind, default)
+
+
 def _validate_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
     """
     Validate display options for a specific field type.
@@ -8427,6 +8582,7 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
         ConfigValidationError: If options are invalid
     """
     _reject_unknown_display_options(field_type, options, path)
+    _warn_display_option_types(field_type, options, path)
 
     # Common option validation
     if "max_width" in options:

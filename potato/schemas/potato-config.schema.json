@@ -1084,6 +1084,7 @@
           "items_key": {},
           "justification": {},
           "keybinding_profile": {},
+          "keybinding_strategy": {},
           "label": {},
           "label_requirement": {},
           "labels": {},
@@ -1153,6 +1154,7 @@
           "profiles_field": {},
           "profiles_per_set": {},
           "prompt_field": {},
+          "propagation": {},
           "quality_scale": {},
           "question_field": {},
           "randomize_order": {},
@@ -1990,8 +1992,7 @@
               "Option 1",
               "Option 2",
               "Option 3"
-            ],
-            "sequential_key_binding": true
+            ]
           },
           "source": "examples/classification/multirate/config.yaml"
         },
@@ -6092,6 +6093,23 @@
     },
     "user_roles": {
       "description": "Per-user quota and role overrides",
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "description": "Settings read by `potato validate`, not by the running server",
+      "properties": {
+        "acknowledge": {
+          "default": [],
+          "description": "Warnings this study expects, so `validate --strict` stops failing on them. Each entry is a piece of a warning's text, at least 12 characters long; a warning containing it is listed as acknowledged and not counted. An entry that matches no warning is itself reported, so an acknowledgement that has gone stale does not hide the next problem. The server still logs these warnings at boot",
+          "examples": [
+            [
+              "assignment_strategy: engine serves only the engine's requests"
+            ]
+          ],
+          "type": "array"
+        }
+      },
       "type": "object"
     },
     "verbose": {

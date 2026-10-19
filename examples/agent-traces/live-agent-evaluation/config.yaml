@@ -119,8 +119,6 @@ annotation_schemes:
         tooltip: "The agent made progress but didn't finish"
       - name: "Not completed"
         tooltip: "The agent failed to make meaningful progress"
-    display_config:
-      style: vertical
 
   - annotation_type: radio
     name: efficiency

@@ -82,7 +82,6 @@ annotation_schemes:
   - annotation_type: radio
     name: step_correctness
     description: "Was this step correct and necessary?"
-    per_step: true
     labels:
       - name: correct
         tooltip: "Step was correct and necessary"

@@ -31,7 +31,6 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 | `auto_select_parent` | `false` | Selecting all children auto-selects the parent |
 | `show_search` | `false` | Show a search/filter input above the tree |
 | `max_selections` | `null` | Maximum number of labels that can be selected (null = unlimited) |
-| `expand_depth` | `1` | Number of tree levels expanded by default (0 = all collapsed) |
 | `label_requirement.required` | `false` | Require at least one selection |
 
 Only the boxes an annotator actually ticked are stored. Before v2.8.3 checking
@@ -82,7 +81,6 @@ annotation_schemes:
     auto_select_parent: false
     show_search: true
     max_selections: null
-    expand_depth: 1
     taxonomy:
       Science:
         Physics:
@@ -114,7 +112,6 @@ annotation_schemes:
     auto_select_parent: false
     show_search: true
     max_selections: 5
-    expand_depth: 0
     taxonomy:
       "Chapter I: Infectious Diseases":
         - "A00-A09 Intestinal infectious diseases"
@@ -151,11 +148,11 @@ Labels appear in the order they were selected. Both parent and child labels can 
 
 ## Troubleshooting
 
-**Tree is too deep to navigate:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators search for the node they want.
+**Tree is too deep to navigate:** The tree starts collapsed. Set `show_search: true` so annotators can search for the node they want instead of expanding branches.
 
 **Auto-selection creates unexpected behavior:** When `auto_select_children: true`, deselecting a parent does not automatically deselect its children. Annotators must deselect children manually. Make this behavior explicit in the task instructions.
 
-**Large taxonomies cause slow rendering:** For taxonomies with more than 500 nodes, enable `show_search: true` and `expand_depth: 0` to avoid rendering all nodes at once.
+**Large taxonomies cause slow rendering:** For taxonomies with more than 500 nodes, enable `show_search: true` so annotators find nodes by search rather than by expanding the tree.
 
 ## Related Documentation
 

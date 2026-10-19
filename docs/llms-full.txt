@@ -3510,11 +3510,10 @@ annotation_schemes:
   - annotation_type: slider
     name: confidence
     description: How confident are you in your assessment?
-    min: 0
-    max: 10
+    min_value: 0
+    max_value: 10
+    starting_value: 5
     step: 1
-    min_label: Not Confident
-    max_label: Very Confident
 ```
 
 ### Number Input
@@ -3551,14 +3550,13 @@ annotation_schemes:
   - annotation_type: span
     name: sentiment_spans
     description: Highlight text spans with different sentiments
-    labels:
-      - positive
-      - negative
-      - neutral
-    colors:  # Optional: custom colors for each label
-      positive: "#4CAF50"
-      negative: "#f44336"
-      neutral: "#9E9E9E"
+    labels:  # color is optional on each label
+      - name: positive
+        color: "#4CAF50"
+      - name: negative
+        color: "#f44336"
+      - name: neutral
+        color: "#9E9E9E"
     bad_text_label:  # Optional: checkbox for invalid text
       label_content: No answer
 ```
@@ -4222,11 +4220,10 @@ annotation_schemes:
   - annotation_type: slider
     name: confidence
     description: How confident are you in your assessment?
-    min: 0
-    max: 10
+    min_value: 0
+    max_value: 10
+    starting_value: 5
     step: 1
-    min_label: Not Confident
-    max_label: Very Confident
 
   - annotation_type: select
     name: category
@@ -4555,6 +4552,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `debug_phase` |  | string |  | Jump straight to a workflow phase, for UI debugging |  |
 | `server_debug` |  | boolean | `False` | Backend debug logging. Note that only the phase pages (consent, instructions, surveys) read this key; the annotation page asks the logging module, which is driven by debug_log/verbose/debug |  |
 | `ui_debug` |  | boolean | `False` | Print browser-side debug logging to the console |  |
+| `validation` |  | object |  | Settings read by `potato validate`, not by the running server | `acknowledge` |
 | `verbose` |  | boolean | `False` | Raise the log level. --verbose writes this key |  |
 | `very_verbose` |  | boolean | `False` | Raise the log level further; equivalent to debug for logging purposes, without debug's effect on authentication. --veryVerbose writes this key |  |
 
@@ -4639,7 +4637,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `likert` | `min_label`, `max_label`, `size` | `label_requirement`, `labels`, `displaying_score`, `bad_text_label`, `sequential_key_binding` | Likert scale rating | `examples/classification/likert/config.yaml` |
 | `multi_document_event` | `slots` | `allow_annotator_create`, `template_name` | Cross-document event annotation: template slots filled with evidence from many documents | `examples/advanced/multi-document-events/config.yaml` |
 | `multimodal_reasoning` | (none beyond name/description) | `steps_key`, `type_key`, `verdict_options` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating | `examples/agent-traces/multimodal-reasoning/config.yaml` |
-| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement`, `randomize_order` | Rate multiple items on a scale | `examples/classification/multirate/config.yaml` |
+| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement`, `randomize_order`, `option_randomization` | Rate multiple items on a scale | `examples/classification/multirate/config.yaml` |
 | `multiselect` | `labels` | `display_config`, `label_requirement`, `sequential_key_binding`, `video_as_label`, `has_free_response`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `codebook`, `randomize_order` | Multiple-choice checkbox selection | `examples/classification/check-box/config.yaml` |
 | `number` | (none beyond name/description) | `min`, `max`, `step`, `label_requirement`, `min_value`, `max_value`, `custom_css`, `tooltip`, `tooltip_file` | Numeric input field | `examples/advanced/all-annotation-types/config.yaml` |
 | `pairwise` | (none beyond name/description) | `mode`, `items_key`, `items`, `show_labels`, `labels`, `allow_tie`, `tie_label`, `sequential_key_binding`, `scale`, `label_requirement`, `dimensions`, `justification`, `randomize_order` | Pairwise comparison of two items (binary selection or scale rating) | `examples/classification/pairwise-scale/config.yaml` |
@@ -4672,7 +4670,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `triage` | (none beyond name/description) | `accept_label`, `reject_label`, `skip_label`, `auto_advance`, `show_progress`, `accept_key`, `reject_key`, `skip_key` | Binary accept/reject triage for rapid data curation | `examples/advanced/triage/config.yaml` |
 | `vas` | (none beyond name/description) | `left_label`, `right_label`, `min_value`, `max_value`, `show_value`, `precision` | Continuous visual analog scale for fine-grained magnitude estimation | `examples/classification/vas/config.yaml` |
 | `video` | `video_path` | `autoplay`, `loop`, `muted`, `controls`, `custom_css`, `fallback_text`, `additional_sources` | Video player display | `examples/video/video-player/config.yaml` |
-| `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
+| `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field`, `propagation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
 | `voice_interaction` | (none beyond name/description) | `turns_key`, `audio_key`, `speaker_key`, `user_speakers`, `overlap_labels`, `rating_scale`, `text_key` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | `examples/agent-traces/voice-interaction/config.yaml` |
 
 ## Label Structure
@@ -8075,8 +8073,6 @@ Allows annotators to select multiple options from a predefined list.
 
 **Optional Fields:**
 - `sequential_key_binding` (boolean): Enable keyboard shortcuts (1, 2, 3...)
-- `single_select` (boolean): Force single selection only (default: false)
-- `horizontal` (boolean): Display options horizontally
 - `has_free_response` (boolean): Add optional text input field
 - `video_as_label` (boolean): Use video files as labels
 - `label_requirement` (object): Set completion requirements
@@ -8089,7 +8085,6 @@ annotation_schemes:
     description: "Select all emotions expressed in this text"
     labels: ["happy", "sad", "angry", "surprised", "neutral"]
     sequential_key_binding: true
-    horizontal: true
 ```
 
 **Video Labels Example:**
@@ -8153,12 +8148,12 @@ over text at a consistent weight. Write the color you want at full strength.
 Provides a continuous range for numerical ratings.
 
 **Required Fields:**
-- `min` (number): Minimum value
-- `max` (number): Maximum value
+- `min_value` (number): Minimum value
+- `max_value` (number): Maximum value
+- `starting_value` (number): Where the handle starts, between the two
 
 **Optional Fields:**
 - `step` (number): Increment size (default: 1)
-- `default` (number): Default position
 
 **Example:**
 ```yaml
@@ -8166,10 +8161,10 @@ annotation_schemes:
   - annotation_type: "slider"
     name: "confidence_score"
     description: "How confident are you in your assessment?"
-    min: 0
-    max: 100
+    min_value: 0
+    max_value: 100
+    starting_value: 50
     step: 5
-    default: 50
 ```
 
 ### 6. Text Input (`text`)
@@ -19560,8 +19555,8 @@ annotation_schemes:
     description: "Rate your confidence (0 = completely uncertain, 100 = fully certain)."
     target_schema: toxicity
     scale_type: slider
-    slider_min: 0
-    slider_max: 100
+    min_value: 0
+    max_value: 100
     label_requirement:
       required: true
 ```
@@ -20563,7 +20558,6 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 | `auto_select_parent` | `false` | Selecting all children auto-selects the parent |
 | `show_search` | `false` | Show a search/filter input above the tree |
 | `max_selections` | `null` | Maximum number of labels that can be selected (null = unlimited) |
-| `expand_depth` | `1` | Number of tree levels expanded by default (0 = all collapsed) |
 | `label_requirement.required` | `false` | Require at least one selection |
 
 Only the boxes an annotator actually ticked are stored. Before v2.8.3 checking
@@ -20614,7 +20608,6 @@ annotation_schemes:
     auto_select_parent: false
     show_search: true
     max_selections: null
-    expand_depth: 1
     taxonomy:
       Science:
         Physics:
@@ -20646,7 +20639,6 @@ annotation_schemes:
     auto_select_parent: false
     show_search: true
     max_selections: 5
-    expand_depth: 0
     taxonomy:
       "Chapter I: Infectious Diseases":
         - "A00-A09 Intestinal infectious diseases"
@@ -20683,11 +20675,11 @@ Labels appear in the order they were selected. Both parent and child labels can 
 
 ## Troubleshooting
 
-**Tree is too deep to navigate:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators search for the node they want.
+**Tree is too deep to navigate:** The tree starts collapsed. Set `show_search: true` so annotators can search for the node they want instead of expanding branches.
 
 **Auto-selection creates unexpected behavior:** When `auto_select_children: true`, deselecting a parent does not automatically deselect its children. Annotators must deselect children manually. Make this behavior explicit in the task instructions.
 
-**Large taxonomies cause slow rendering:** For taxonomies with more than 500 nodes, enable `show_search: true` and `expand_depth: 0` to avoid rendering all nodes at once.
+**Large taxonomies cause slow rendering:** For taxonomies with more than 500 nodes, enable `show_search: true` so annotators find nodes by search rather than by expanding the tree.
 
 ## Related Documentation
 
@@ -24828,20 +24820,11 @@ When the viewer is focused (click on it):
 
 ### Per-Step Annotations
 
-Add `per_step: true` to an annotation scheme to create per-step annotations that appear inline with each step:
-
-```yaml
-annotation_schemes:
-  - annotation_type: radio
-    name: step_correctness
-    per_step: true
-    labels:
-      - name: correct
-      - name: incorrect
-      - name: unnecessary
-```
-
-Per-step annotations are stored as `{scheme_name}_step_{index}` (e.g., `step_correctness_step_0`).
+Each annotation scheme on a web-agent trace answers for the whole trace.
+Potato does not yet attach a separate answer to each step of the trace, and a
+`per_step` key on a scheme is ignored (`potato validate` reports it). To label
+steps one by one, use the `process_reward` schema, which reads a list of steps
+from the item; see [Process Supervision](process_supervision.md).
 
 ### Converting Traces
 
@@ -60113,7 +60096,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **167 top-level config keys**, **61 annotation types**, and
+It currently covers **168 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

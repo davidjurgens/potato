@@ -416,11 +416,10 @@ annotation_schemes:
   - annotation_type: slider
     name: confidence
     description: How confident are you in your assessment?
-    min: 0
-    max: 10
+    min_value: 0
+    max_value: 10
+    starting_value: 5
     step: 1
-    min_label: Not Confident
-    max_label: Very Confident
 ```
 
 ### Number Input
@@ -457,14 +456,13 @@ annotation_schemes:
   - annotation_type: span
     name: sentiment_spans
     description: Highlight text spans with different sentiments
-    labels:
-      - positive
-      - negative
-      - neutral
-    colors:  # Optional: custom colors for each label
-      positive: "#4CAF50"
-      negative: "#f44336"
-      neutral: "#9E9E9E"
+    labels:  # color is optional on each label
+      - name: positive
+        color: "#4CAF50"
+      - name: negative
+        color: "#f44336"
+      - name: neutral
+        color: "#9E9E9E"
     bad_text_label:  # Optional: checkbox for invalid text
       label_content: No answer
 ```
@@ -1128,11 +1126,10 @@ annotation_schemes:
   - annotation_type: slider
     name: confidence
     description: How confident are you in your assessment?
-    min: 0
-    max: 10
+    min_value: 0
+    max_value: 10
+    starting_value: 5
     step: 1
-    min_label: Not Confident
-    max_label: Very Confident
 
   - annotation_type: select
     name: category

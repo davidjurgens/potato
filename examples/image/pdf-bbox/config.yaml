@@ -64,7 +64,6 @@ annotation_schemes:
   - annotation_type: text
     name: notes
     description: "Optional notes about this annotation"
-    single_line: true
 
 user_config:
   allow_all_users: true
