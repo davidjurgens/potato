@@ -3600,8 +3600,10 @@ def _annotation_sidebar_flags(cfg) -> dict:
 
 
 def _strip_machine_fields(record, username, instance_id):
+    from potato.assist_holdout import strip_holdout_fields
     from potato.labeling_engine.integration.hooks import strip_machine_fields
-    return strip_machine_fields(record, username, instance_id)
+    return strip_holdout_fields(config, strip_machine_fields(record, username, instance_id),
+                                username, instance_id)
 
 
 def render_page_with_annotations(username: str):
@@ -3665,6 +3667,14 @@ def render_page_with_annotations(username: str):
         elif engine_request is not None and (engine_request.get("shown") or {}).get("value") is not None:
             pre_annotation_data = {**(pre_annotation_data or {}),
                                    engine_request["schema"]: engine_request["shown"]["value"]}
+
+    # The study's no-assistance comparison group (ai_support.holdout): no
+    # pre-annotation, no inline judge, and (below) no AI or chat assets.
+    from potato.assist_holdout import is_held_out as _is_held_out
+    assist_held_out = _is_held_out(config, username, instance_id)
+    if assist_held_out:
+        pre_annotation_data = None
+        judge_prediction = None
 
     # Signal-based triage: why was this item prioritized in the queue?
     triage_info = _get_triage_info(item)
@@ -3919,7 +3929,8 @@ def render_page_with_annotations(username: str):
 
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
-    if engine_request is not None and engine_request.get("visibility") == "blind":
+    if (engine_request is not None and engine_request.get("visibility") == "blind") \
+            or assist_held_out:
         ai_enabled = False
 
     # Check if agent proxy is configured (for conditional loading of agent-chat.js/css).
@@ -3930,7 +3941,8 @@ def render_page_with_annotations(username: str):
 
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
-    if engine_request is not None and engine_request.get("visibility") == "blind":
+    if (engine_request is not None and engine_request.get("visibility") == "blind") \
+            or assist_held_out:
         # The chat assistant can be asked for the answer, so it is off too.
         chat_enabled = False
 

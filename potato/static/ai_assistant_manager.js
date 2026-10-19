@@ -416,6 +416,13 @@ class AIAssistantManager {
     }
 
 
+    /** The scheme name behind a numeric annotation id, for telemetry. */
+    schemaNameFor(annotationId) {
+        const form = Array.from(document.querySelectorAll('.annotation-form[data-annotation-id]'))
+            .find(f => f.getAttribute('data-annotation-id') === String(annotationId));
+        return (form && (form.getAttribute('data-schema-name') || form.id)) || String(annotationId);
+    }
+
     async getAiAssistantDefault(assistantType, annotationId, tooltip) {
         aiDebugLog('[AIAssistant] getAiAssistantDefault called:', { assistantType, annotationId, hasTooltip: !!tooltip });
 
@@ -424,9 +431,13 @@ class AIAssistantManager {
             return;
         }
 
-        // Track AI request
+        // Track AI request. The tracker wants the scheme's NAME: passing the
+        // numeric annotation id stored schema_name as "0", "1", ..., so the
+        // save path, which stamps final_annotation by name, never matched an
+        // event and nothing could say what the annotator did after a hint.
+        const schemaName = this.schemaNameFor(annotationId);
         if (window.interactionTracker) {
-            window.interactionTracker.trackAIRequest(annotationId);
+            window.interactionTracker.trackAIRequest(schemaName);
         }
 
         try {
@@ -438,7 +449,7 @@ class AIAssistantManager {
             // Track AI response
             if (window.interactionTracker) {
                 const suggestions = this.extractSuggestionsFromData(data);
-                window.interactionTracker.trackAIResponse(annotationId, suggestions);
+                window.interactionTracker.trackAIResponse(schemaName, suggestions);
             }
 
             this.renderAssistant(tooltip, assistantType, data, annotationId);

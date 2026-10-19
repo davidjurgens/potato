@@ -3,7 +3,7 @@
     "advanced": 57,
     "agent-testing": 3,
     "agent-traces": 56,
-    "ai-assisted": 6,
+    "ai-assisted": 7,
     "audio": 8,
     "classification": 31,
     "conversation": 4,
@@ -17,7 +17,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 220,
+  "count": 221,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -2729,6 +2729,29 @@
       "path": "examples/agent-traces/world-model-rollouts/config.yaml",
       "run": "potato start examples/agent-traces/world-model-rollouts/config.yaml -p 8000",
       "task_name": "World-model rollout evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [
+        "ai_support",
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/reviews.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/ai-assisted/assist-holdout",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "assist-holdout",
+      "path": "examples/ai-assisted/assist-holdout/config.yaml",
+      "run": "potato start examples/ai-assisted/assist-holdout/config.yaml -p 8000",
+      "task_name": "Review sentiment with a model's suggestion"
     },
     {
       "annotation_types": [

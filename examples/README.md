@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 220 examples, generated from the configs themselves.
+All 221 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -350,10 +350,11 @@ The `Types` column lists the annotation types each one uses.
 | [`web-agent-review/`](agent-traces/web-agent-review/) | Web Agent Trace Review | `likert`, `multiselect`, `radio`, `text` |
 | [`world-model-rollouts/`](agent-traces/world-model-rollouts/) | World-model rollout evaluation | `rollout_evaluation`, `text` |
 
-### ai-assisted/ (6)
+### ai-assisted/ (7)
 
 | Example | Task | Types |
 |---------|------|-------|
+| [`assist-holdout/`](ai-assisted/assist-holdout/) | Review sentiment with a model's suggestion | `radio` |
 | [`grounding-eval/`](ai-assisted/grounding-eval/) | Grounding evaluation | `grounding_eval`, `image_annotation` |
 | [`judge-calibration/`](ai-assisted/judge-calibration/) | Judge Calibration Demo | `radio` |
 | [`keyword-highlights/`](ai-assisted/keyword-highlights/) | Sentiment Analysis with Keyword Highlights | `radio`, `span` |

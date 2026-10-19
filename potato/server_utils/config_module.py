@@ -140,6 +140,8 @@ KNOWN_CONFIG_KEYS = {
     "ai_support": {
         "enabled": None, "endpoint_type": None, "ai_config_file": None,
         "option_highlighting": None, "features": None, "cache_config": None,
+        # The study's no-assistance comparison group (assist_holdout.py).
+        "holdout": {"fraction", "salt"},
         # Which item field holds the picture. The AI path reads exactly one
         # field -- `item_properties.text_key` -- and sniffs it to decide
         # whether the item is an image, so a multimodal item could send its

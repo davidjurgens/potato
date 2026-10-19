@@ -6,6 +6,15 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Measure whether AI assistance changes the answers.**
+  `ai_support.holdout: {fraction, salt}` withholds every assistance surface
+  (pre-annotations, hints, option highlights, visual AI, critique, chat, the
+  inline judge, PRM pre-labels) from a random, stable share of (annotator, item)
+  pairs, using the same checks as the labeling engine's blind items. A new
+  **AI influence** admin tab (`/admin/api/ai_influence`) compares the groups per
+  scheme: agreement with the model's answer, gold accuracy and alpha within
+  each group, with a bootstrap interval on the difference. See *Measuring AI
+  Influence* and `examples/ai-assisted/assist-holdout/`.
 - **Grid labeling.** `grid_view: {enabled, scheme, page_size}` serves
   `/annotate/grid`, a page of tiles for one radio or multiselect scheme: select
   tiles by click, Shift-click, Ctrl/Cmd-click or arrow keys, apply a label by
@@ -90,6 +99,10 @@ All notable changes to the Potato annotation platform are documented in this fil
   server ignores the block and still logs the warnings.
 
 ### Fixes
+
+- AI-assistant usage telemetry recorded the scheme as its position ("0",
+  "1", ...) instead of its name, so the save path never matched an event to
+  the annotator's final answer. It now records the name.
 
 - **A deploy button backed up every deployment to the author's storage.**
   `potato deploy button --hf-backup-repo` wrote the author's dataset into

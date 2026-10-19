@@ -62,7 +62,7 @@ over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 478 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 479 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -4606,7 +4606,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd`, `prices` |
-| `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
+| `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `holdout`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
 | `labeling_engine` |  | object |  | Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet | `budgets`, `cascade`, `contracts`, `crowd`, `distill`, `enabled`, `features`, `humans`, `redaction`, `runtime`, `schemas`, `sources` |
@@ -34730,6 +34730,102 @@ python potato/flask_server.py start examples/advanced/option-highlight/config.ya
 
 ---
 
+<!-- source: docs/ai-intelligence/assist_effect.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/assist_effect/
+
+# Measuring AI Influence
+
+An answer given after seeing a model's suggestion is pulled toward it. That is
+fine when the suggestion is right and costly when it is wrong, and from the
+answers alone a study cannot tell how much of its agreement with the model, or
+between annotators, came from the suggestion. `ai_support.holdout` sets aside a
+random share of annotators' items that get no AI assistance at all, and the
+admin dashboard compares the two groups.
+
+## Configuration
+
+```yaml
+ai_support:
+  holdout:
+    fraction: 0.2      # share of (annotator, item) pairs shown no assistance
+    salt: my-study     # changes which pairs; keep it fixed for the study
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fraction` | `0` (off) | Share of (annotator, item) pairs held out, from 0 to 1 |
+| `salt` | `""` | Changes the draw. Changing it, or `fraction`, mid-study reshuffles the groups |
+
+The draw is per annotator and item, not per item, so most items end up with
+some assisted and some held-out annotators. It is a salted hash, so a pair is in
+the same group on every visit and after a restart. The comparison is by group,
+not by whether an annotator chose to open a hint, which would mix up the effect
+of the suggestion with the kind of annotator who asks for one.
+
+`holdout` works whether or not `ai_support.enabled` is on. A study whose only
+assistance is pre-annotations (see the example) uses it the same way.
+
+## Assistance withheld from held-out pairs
+
+| Assistance | Held out |
+|---|---|
+| Pre-annotations (`pre_annotation`) | Not applied, and the prediction field is removed from the item data the page receives |
+| Hints, keyword and rationale help | The routes refuse with 403 |
+| Option highlights | Refused |
+| Visual AI toolbar | Not loaded |
+| Annotation critique | Refused |
+| Chat sidebar | Not loaded, and the chat route refuses |
+| Inline judge suggestion | Not shown |
+| PRM pre-label | Refused |
+
+These are the same checks the labeling engine uses for its blind calibration
+items, so an item blind for the engine is also unassisted. Two things are not
+withheld:
+- The rule-based keyword highlighting that an administrator configures, which
+  is not a model.
+- Interactive segmentation in the browser, which the annotator drives
+  themselves.
+
+## The AI influence tab
+
+When a hold-out is configured, the admin dashboard has an **AI influence** tab.
+For each radio, multiselect, likert and select scheme it compares the assisted
+group with the held-out group on:
+
+- **Match the model:** how often the answer equals the model's own answer for
+  the item, read from its pre-annotation field. Anchoring shows up here as a
+  higher rate with assistance.
+- **Match gold:** accuracy on items with a gold label. If assistance raises
+  model agreement without raising gold accuracy, annotators are copying rather
+  than being helped.
+- **Alpha within group:** agreement between annotators. It can rise because
+  everyone copies the same suggestion, which says nothing about reliability.
+
+The difference in model agreement comes with a 95% bootstrap interval over
+items. Until each group has 10 answers on items with a model answer, the tab
+says how many it has instead of printing a difference. The same report is
+available as JSON from `/admin/api/ai_influence`.
+
+## Example
+
+```bash
+python potato/flask_server.py start examples/ai-assisted/assist-holdout/config.yaml -p 8000
+```
+
+Ten reviews, each with a model prediction shown as a pre-selected answer. The
+model calls every review positive or negative, including the ones with mixed
+sentiment, so anchoring shows as assisted annotators choosing "mixed" less
+often. 30% of each annotator's reviews show no prediction.
+
+## Related
+
+- [AI Support](ai_support.md)
+- [Option Highlighting](option_highlighting.md)
+- [Labeling engine](../labeling-engine/configuration.md)
+
+
+---
+
 <!-- source: docs/ai-intelligence/active_learning_guide.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/active_learning_guide/
 
@@ -60600,7 +60696,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **478 paths / 515 operations**, generated by
+An index of Potato's HTTP surface: **479 paths / 516 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:
@@ -60645,7 +60741,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **220 example projects** in the repository, across 16
+A derived index of the **221 example projects** in the repository, across 16
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.

@@ -83,6 +83,9 @@
           <button type="button" role="tab" class="admin-tab" data-tab="instances" aria-controls="instances" aria-selected="false">{{ ui_lang.admin_tab_instances|default('Instances') }}</button>
           <button type="button" role="tab" class="admin-tab" data-tab="questions" aria-controls="questions" aria-selected="false">{{ ui_lang.admin_tab_questions|default('Questions') }}</button>
           <button type="button" role="tab" class="admin-tab" data-tab="behavioral" aria-controls="behavioral" aria-selected="false">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</button>
+          {% if ai_influence_enabled %}
+          <button type="button" role="tab" class="admin-tab" data-tab="ai-influence" aria-controls="ai-influence" aria-selected="false">AI influence</button>
+          {% endif %}
           <button type="button" role="tab" class="admin-tab" data-tab="devices" aria-controls="devices" aria-selected="false">{{ ui_lang.admin_tab_devices|default('Devices') }}</button>
           <button type="button" role="tab" class="admin-tab" data-tab="crowdsourcing" aria-controls="crowdsourcing" aria-selected="false">{{ ui_lang.admin_tab_crowdsourcing|default('Crowdsourcing') }}</button>
           {% if bws_enabled %}
@@ -485,6 +488,23 @@
         </div>
         {% endif %}
 
+        {% if ai_influence_enabled %}
+        <div class="admin-tab-content" id="ai-influence">
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <h3 style="margin-top: 0;">Did AI assistance change the answers?</h3>
+            <p style="color: var(--muted-foreground);">
+              A random share of each annotator's items (<code>ai_support.holdout</code>)
+              showed no AI assistance. Each scheme compares those answers with the
+              assisted ones: how often they match the model's own answer, how often
+              they match gold where there is one, and how much annotators agree
+              within each group. Higher model agreement with assistance, without
+              higher gold accuracy, is the signature of anchoring.
+            </p>
+          </div>
+          <div id="aiInfluenceBody"><p style="color: var(--muted-foreground);">Loading...</p></div>
+        </div>
+        {% endif %}
+
         <!-- Configuration Tab -->
         {% if mace_enabled %}
         <div class="admin-tab-content" id="mace">
@@ -710,6 +730,9 @@
             break;
           case "behavioral":
             loadBehavioral();
+            break;
+          case "ai-influence":
+            loadAiInfluence();
             break;
           case "devices":
             loadDevices();
@@ -1750,6 +1773,50 @@
       }
 
       // Behavioral Analytics functions
+      async function loadAiInfluence() {
+        const body = document.getElementById("aiInfluenceBody");
+        if (!body) return;
+        const pct = v => (v === null || v === undefined) ? "n/a" : (100 * v).toFixed(1) + "%";
+        const num = v => (v === null || v === undefined) ? "n/a" : v.toFixed(3);
+        try {
+          const data = await makeApiRequest("/admin/api/ai_influence");
+          if (data.note) {
+            body.innerHTML = `<p>${escapeHtml(data.note)}</p>`;
+            return;
+          }
+          const schemas = Object.entries(data.schemas || {});
+          if (!schemas.length) {
+            body.innerHTML = "<p>No radio, multiselect, likert or select scheme to compare.</p>";
+            return;
+          }
+          body.innerHTML = schemas.map(([name, s]) => {
+            const row = (label, g) => `<tr><th scope="row">${label}</th>
+              <td>${g.n_pairs}</td><td>${pct(g.model_agreement)} <small>(${g.n_with_model_answer})</small></td>
+              <td>${pct(g.gold_accuracy)} <small>(${g.n_with_gold})</small></td>
+              <td>${g.alpha_note ? `<span title="${escapeHtml(g.alpha_note)}">n/a</span> <small>${escapeHtml(g.alpha_note)}</small>` : num(g.alpha)}</td></tr>`;
+            let summary = "";
+            if (s.model_agreement_difference !== undefined) {
+              const ci = s.difference_ci95
+                ? ` (95% interval ${(100 * s.difference_ci95[0]).toFixed(1)} to ${(100 * s.difference_ci95[1]).toFixed(1)} points)`
+                : "";
+              summary = `<p>Assisted answers matched the model ${(100 * s.model_agreement_difference).toFixed(1)}
+                points ${s.model_agreement_difference >= 0 ? "more" : "less"} often than held-out ones${ci}.</p>`;
+            } else if (s.note) {
+              summary = `<p style="color: var(--muted-foreground);">${escapeHtml(s.note)}</p>`;
+            }
+            return `<div class="dashboard-card" style="margin-bottom: 1rem;">
+              <h4 style="margin-top: 0;">${escapeHtml(name)}</h4>
+              <div class="admin-table-container"><table class="admin-table">
+                <thead><tr><th scope="col">Group</th><th scope="col">Answers</th><th scope="col">Match the model</th>
+                  <th scope="col">Match gold</th><th scope="col">Alpha within group</th></tr></thead>
+                <tbody>${row("Assisted", s.assisted)}${row("Held out", s.held_out)}</tbody>
+              </table></div>${summary}</div>`;
+          }).join("");
+        } catch (error) {
+          body.innerHTML = `<p>Could not load the comparison: ${escapeHtml(String(error))}</p>`;
+        }
+      }
+
       async function loadBehavioral() {
         try {
           const data = await makeApiRequest("/admin/api/behavioral_analytics");

@@ -434,6 +434,29 @@
         ]
       }
     },
+    "/admin/api/ai_influence": {
+      "get": {
+        "operationId": "get_admin_api_ai_influence",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Whether AI assistance changed the answers: the assisted group against the",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
     "/admin/api/alt-test": {
       "get": {
         "operationId": "get_admin_api_alt_test",

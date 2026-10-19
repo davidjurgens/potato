@@ -147,6 +147,7 @@ nav:
         - Chat Support: ai-intelligence/chat_support.md
         - AI Integration Internals: ai-intelligence/ai_integration_internals.md
         - Option Highlighting: ai-intelligence/option_highlighting.md
+        - Measuring AI Influence: ai-intelligence/assist_effect.md
         - Active Learning Guide: ai-intelligence/active_learning_guide.md
         - Vision Active Learning: ai-intelligence/vision_active_learning.md
         - Active Learning Strategies: ai-intelligence/active_learning_strategies.md

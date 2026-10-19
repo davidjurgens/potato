@@ -2364,6 +2364,24 @@ class AdminDashboard:
             return payload.get(field_name, default)
         return getattr(payload, field_name, default)
 
+    def get_ai_influence_data(self) -> Dict[str, Any]:
+        """Assisted against held-out answers (assist_effect.py) for the admin tab."""
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+        from potato.assist_effect import assist_effect
+
+        usm = get_user_state_manager()
+        states = {uid: usm.get_user_state(uid) for uid in usm.get_user_ids()}
+        ism = get_item_state_manager()
+        items = {}
+        for iid, item in ism.iter_items():
+            data = item.get_data() if hasattr(item, "get_data") else None
+            if isinstance(data, dict):
+                items[iid] = data
+        qc = get_quality_control_manager()
+        gold = dict(getattr(qc, "gold_labels", {}) or {}) if qc is not None else {}
+        return assist_effect(config, states, items, gold)
+
     def get_behavioral_analytics_data(self) -> Dict[str, Any]:
         """
         Get comprehensive behavioral analytics data for all annotators.

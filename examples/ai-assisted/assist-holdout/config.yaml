@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Measuring whether AI assistance changes the answers
+#
+# Every review comes with a model's sentiment prediction, shown as a
+# pre-selected answer. For 30% of each annotator's reviews, chosen at random
+# but the same on every visit, the prediction is withheld. With several
+# annotators, the admin dashboard's "AI influence" tab compares the two
+# groups: how often answers match the model with and without seeing it.
+#
+# The same hold-out also withholds hints, option highlights, the visual AI
+# toolbar, critique and chat when those are configured.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/ai-assisted/assist-holdout/config.yaml -p 8000
+
+task_dir: .
+port: 8000
+annotation_task_name: Review sentiment with a model's suggestion
+output_annotation_dir: annotation_output/assist-holdout/
+
+data_files:
+  - data/reviews.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+pre_annotation:
+  enabled: true
+  field: predictions
+  allow_modification: true
+
+ai_support:
+  enabled: false
+  holdout:
+    fraction: 0.3
+    salt: reviews-2026
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: Is this review positive, negative or mixed?
+    labels: [positive, negative, mixed]
+    sequential_key_binding: true

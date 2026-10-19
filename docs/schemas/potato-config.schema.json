@@ -261,6 +261,10 @@
           "type": "string"
         },
         "features": {},
+        "holdout": {
+          "description": "A randomized no-assistance comparison group: a share of (annotator, item) pairs see no AI assistance at all, so /admin can report whether the assistance changed the answers",
+          "type": "object"
+        },
         "image_key": {
           "description": "Item field holding the image, when the item also carries text. Without it a vision endpoint only ever sees `item_properties.text_key`",
           "type": "string"

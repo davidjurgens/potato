@@ -2531,6 +2531,14 @@ def _engine_blind_refusal(username, instance_id):
     measured accuracy, so the server refuses to produce one, whatever the
     page shows.
     """
+    # The study's own no-assistance comparison group (ai_support.holdout)
+    # is refused the same way: an assisted answer in that group would be the
+    # very contamination the group exists to measure.
+    from potato.assist_holdout import is_held_out
+    if is_held_out(config, username, instance_id):
+        return jsonify({
+            "html": "", "error": "This item is in the study's no-assistance comparison "
+                                 "group, so no AI suggestion is shown."}), 403
     from potato.labeling_engine.integration.hooks import is_blind
     if is_blind(username, instance_id):
         return jsonify({
@@ -4729,6 +4737,24 @@ def admin_api_annotation_process():
     return jsonify(result)
 
 
+def _ai_holdout_fraction() -> float:
+    from potato.assist_holdout import holdout_settings
+    return holdout_settings(config)[0]
+
+
+@app.route("/admin/api/ai_influence", methods=["GET"])
+def admin_api_ai_influence():
+    """
+    Whether AI assistance changed the answers: the assisted group against the
+    study's no-assistance comparison group (ai_support.holdout), per scheme.
+    Admin-only endpoint requiring API key. See potato/assist_effect.py.
+    """
+    result = admin_dashboard.get_ai_influence_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 @app.route("/admin/api/behavioral_analytics", methods=["GET"])
 def admin_api_behavioral_analytics():
     """
@@ -6013,9 +6039,10 @@ def get_current_instance():
         # Include raw data for schemas that need access to media URLs
         from potato.server_utils import text_to_image
         from potato.labeling_engine.integration.hooks import strip_machine_fields
-        raw_data = strip_machine_fields(
+        from potato.assist_holdout import strip_holdout_fields
+        raw_data = strip_holdout_fields(config, strip_machine_fields(
             text_to_image.record_for_annotator(config, current_instance.get_data()),
-            username, instance_id)
+            username, instance_id), username, instance_id)
 
         return jsonify({
             "instance_id": instance_id,
@@ -6064,9 +6091,10 @@ def get_instance_data():
         # Get the raw data from the instance
         from potato.server_utils import text_to_image
         from potato.labeling_engine.integration.hooks import strip_machine_fields
-        raw_data = strip_machine_fields(
+        from potato.assist_holdout import strip_holdout_fields
+        raw_data = strip_holdout_fields(config, strip_machine_fields(
             text_to_image.record_for_annotator(config, current_instance.get_data()),
-            username, current_instance.get_id())
+            username, current_instance.get_id()), username, current_instance.get_id())
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)
@@ -7727,6 +7755,7 @@ def admin():
         # falls through to the debug and RBAC checks, which use the session.
         "admin_api_key": (get_admin_api_key() or "") if _caller_presented_admin_key() else "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
+        "ai_influence_enabled": _ai_holdout_fraction() > 0,
         "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
         "datasets_enabled": config.get("datasets", {}).get("enabled", False),
@@ -10665,6 +10694,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
     app.add_url_rule("/admin/api/expertise", "admin_api_expertise", admin_api_expertise, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
+    app.add_url_rule("/admin/api/ai_influence", "admin_api_ai_influence", admin_api_ai_influence, methods=["GET"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])

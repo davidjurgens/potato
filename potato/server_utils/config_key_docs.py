@@ -597,6 +597,20 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "says so and no assistant appears",
         type="boolean", default=False, category=AI,
     ),
+    "ai_support.holdout": _D(
+        "A randomized no-assistance comparison group: a share of (annotator, "
+        "item) pairs see no AI assistance at all, so /admin can report whether "
+        "the assistance changed the answers",
+        type="object", category=AI,
+    ),
+    "ai_support.holdout.fraction": _D(
+        "Share of (annotator, item) pairs that get no AI assistance, from 0 to 1",
+        type="number", default=0, category=AI,
+    ),
+    "ai_support.holdout.salt": _D(
+        "Changes which pairs are held out. Keep it fixed for the life of a study",
+        type="string", default="", category=AI,
+    ),
     "ai_support.endpoint_type": _D(
         "Which backend to talk to, required when ai_support is enabled: "
         "openai, openai_vision, anthropic, anthropic_vision, gemini, "
