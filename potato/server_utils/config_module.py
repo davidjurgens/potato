@@ -90,7 +90,7 @@ KNOWN_CONFIG_KEYS = {
     "authentication": {
         "method", "providers", "user_identity_field", "database_url",
         "user_config_path", "auto_register", "allow_local_login",
-        "allowed_domain", "allowed_domains", "allowed_org",
+        "allowed_domain", "allowed_domains", "allowed_org", "saml",
     },
     "login": {"type", "url_argument"},
     # Read at top level by routes.py and every crowd provider, never under
@@ -4982,6 +4982,69 @@ def validate_server_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError("server.debug must be a boolean")
 
 
+_SAML_KEYS = {
+    "display_name", "idp_metadata_url", "idp_metadata_file", "idp_entity_id",
+    "idp", "sp_base_url", "sp_entity_id", "sp_cert_file", "sp_key_file",
+    "name_id_format", "user_identity_attribute", "required_attribute",
+    "claim_attributes", "want_assertions_encrypted",
+}
+
+
+def _validate_saml_config(auth_config: Dict[str, Any]) -> None:
+    """authentication.method: saml -- the library, and where the IdP is."""
+    import importlib.util
+    if importlib.util.find_spec("onelogin") is None:
+        raise ConfigValidationError(
+            "authentication.method is 'saml', which requires python3-saml. Install it "
+            "with: pip install 'potato-annotation[saml]' (it needs libxmlsec1 on the "
+            "system: brew install libxmlsec1, or apt-get install libxmlsec1-dev)")
+    saml = auth_config.get("saml")
+    if not isinstance(saml, dict):
+        raise ConfigValidationError(
+            "authentication.method is 'saml', which needs an authentication.saml "
+            "section naming the identity provider")
+    unknown = set(saml) - _SAML_KEYS
+    if unknown:
+        raise ConfigValidationError(
+            f"authentication.saml has unknown keys: {', '.join(sorted(unknown))}")
+    sources = [k for k in ("idp_metadata_url", "idp_metadata_file", "idp") if saml.get(k)]
+    if len(sources) != 1:
+        raise ConfigValidationError(
+            "authentication.saml needs exactly one of idp_metadata_url, "
+            "idp_metadata_file or idp {entity_id, sso_url, x509cert}")
+    if saml.get("idp"):
+        idp = saml["idp"]
+        missing = [k for k in ("entity_id", "sso_url", "x509cert")
+                   if not (isinstance(idp, dict) and idp.get(k))]
+        if missing:
+            raise ConfigValidationError(
+                f"authentication.saml.idp is missing: {', '.join(missing)}")
+    url = saml.get("idp_metadata_url")
+    if url and not str(url).startswith("https://"):
+        raise ConfigValidationError(
+            "authentication.saml.idp_metadata_url must be https: the metadata carries "
+            "the certificate every response is checked against")
+    if bool(saml.get("sp_cert_file")) != bool(saml.get("sp_key_file")):
+        raise ConfigValidationError(
+            "authentication.saml: sp_cert_file and sp_key_file go together")
+    if saml.get("want_assertions_encrypted") and not saml.get("sp_key_file"):
+        raise ConfigValidationError(
+            "authentication.saml.want_assertions_encrypted needs sp_cert_file and "
+            "sp_key_file: the IdP encrypts to that certificate")
+    if not saml.get("user_identity_attribute"):
+        logger.warning(
+            "authentication.saml.user_identity_attribute is not set, so the NameID "
+            "identifies each user. Many IdPs (Shibboleth by default) send a transient "
+            "NameID that changes on every sign-in, and Potato refuses those; set it "
+            "to a stable attribute such as eduPersonPrincipalName "
+            "(urn:oid:1.3.6.1.4.1.5923.1.1.1.6).")
+    rule = saml.get("required_attribute")
+    if rule is not None and not (isinstance(rule, dict) and rule.get("name")
+                                 and isinstance(rule.get("values"), list) and rule["values"]):
+        raise ConfigValidationError(
+            "authentication.saml.required_attribute needs a name and a list of values")
+
+
 def validate_authentication_config(config_data: Dict[str, Any]) -> None:
     """
     Validate authentication configuration section.
@@ -5017,12 +5080,15 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
         auth_config["method"] = auth_config.pop("type")
 
     method = auth_config.get("method", "in_memory")
-    valid_methods = ["in_memory", "database", "clerk", "oauth"]
+    valid_methods = ["in_memory", "database", "clerk", "oauth", "saml"]
     if method not in valid_methods:
         raise ConfigValidationError(
             f"authentication.method must be one of: {', '.join(valid_methods)}. "
             f"Got: '{method}'"
         )
+
+    if method == "saml":
+        _validate_saml_config(auth_config)
 
     # OAuth-specific validation
     if method == "oauth":

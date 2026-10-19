@@ -3102,7 +3102,7 @@
         },
         "method": {
           "default": "in_memory",
-          "description": "Which backend holds accounts: in_memory (the default), database, oauth or clerk",
+          "description": "Which backend holds accounts: in_memory (the default), database, oauth, saml or clerk",
           "examples": [
             "database"
           ],
@@ -3110,6 +3110,10 @@
         },
         "providers": {
           "description": "OAuth provider settings, keyed by provider name",
+          "type": "object"
+        },
+        "saml": {
+          "description": "SAML 2.0 sign-in through an institution's identity provider (method: saml). Keys: display_name; one of idp_metadata_url (https), idp_metadata_file or idp {entity_id, sso_url, x509cert}; sp_base_url, sp_entity_id, sp_cert_file + sp_key_file, name_id_format; user_identity_attribute (default: the NameID, refused when transient); required_attribute {name, values}; claim_attributes; want_assertions_encrypted",
           "type": "object"
         },
         "user_config_path": {

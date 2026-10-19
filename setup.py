@@ -89,6 +89,10 @@ _AZURE_DEPS = ["azure-storage-blob>=12.19"]
 # through openslide (potato/media/slides.py). openslide-bin ships the C library
 # as a wheel, so no system package is needed. tifffile builds the example slide.
 _WSI_DEPS = ["openslide-python>=1.4", "openslide-bin>=4.0", "tifffile>=2023.1"]
+# SAML sign-in. python3-saml builds the `xmlsec` binding against the system's
+# libxmlsec1 (brew install libxmlsec1 / apt-get install libxmlsec1-dev), so it
+# stays out of `all`.
+_SAML_DEPS = ["python3-saml>=1.16"]
 # The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
 # in "all": FiftyOne brings its own MongoDB and a large dependency tree.
 _FIFTYONE_DEPS = [
@@ -220,6 +224,7 @@ setup(
         "gcs": _GCS_DEPS,
         "azure": _AZURE_DEPS,
         "wsi": _WSI_DEPS,
+        "saml": _SAML_DEPS,
         "db": _DB_DEPS,
         "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,

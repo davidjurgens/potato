@@ -6,6 +6,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **SAML sign-in.** `authentication.method: saml` signs annotators in at
+  their institution's identity provider (Shibboleth, ADFS, Okta, Entra),
+  configured from the IdP's metadata, with `/saml/metadata` for the IdP
+  administrator. Potato accepts a response only if it (or its assertion) is
+  signed by the IdP, answers the request this browser started, is meant for
+  this service provider, is inside its validity window and has not been used
+  before. An attribute can name the user and another can restrict who signs
+  in; a transient NameID is refused as an identity. Needs HTTPS unless the
+  IdP is on the same site.
+  Install with `pip install "potato-annotation[saml]"` (needs libxmlsec1);
+  the Docker image adds it with `--build-arg POTATO_EXTRAS=saml`.
 - **Dark mode on annotator pages.** Sign-in, phase, annotation and
   completion pages follow the browser's light or dark setting, with a header
   button annotators can use to switch, remembered per browser.

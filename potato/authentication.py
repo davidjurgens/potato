@@ -561,6 +561,11 @@ class UserAuthenticator:
             if not auth_config:
                 raise ValueError("OAuth authentication requires an 'authentication' config section with 'providers'")
             return OAuthBackend(auth_config)
+        elif auth_method == "saml":
+            from potato.auth_backends.saml_backend import SAMLBackend
+            if not auth_config or not auth_config.get("saml"):
+                raise ValueError("SAML authentication requires an 'authentication.saml' section")
+            return SAMLBackend(auth_config)
         else:
             logger.error(f"Unknown authentication method: {auth_method}")
             raise ValueError(f"Unknown authentication method: {auth_method}")
@@ -761,7 +766,7 @@ class UserAuthenticator:
                 return f"Missing {key} in user info"
 
         extra = {k: v for k, v in single_user.items() if k not in ["username", "password"]}
-        if self.auth_method == "oauth" and not single_user.get("password"):
+        if self.auth_method in ("oauth", "saml") and not single_user.get("password"):
             # A passwordless roster row on an SSO task names someone who signs
             # in through the provider, not a local account.
             extra.setdefault("oauth_provider", None)
@@ -939,8 +944,13 @@ class UserAuthenticator:
             return self.auth_backend
         return None
 
+    def get_saml_backend(self):
+        if self.auth_method == "saml":
+            return self.auth_backend
+        return None
+
     def get_login_providers(self) -> list:
-        oauth_backend = self.get_oauth_backend()
-        if oauth_backend:
-            return oauth_backend.get_login_providers()
+        sso_backend = self.get_oauth_backend() or self.get_saml_backend()
+        if sso_backend:
+            return sso_backend.get_login_providers()
         return []

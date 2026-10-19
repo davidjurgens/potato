@@ -1121,16 +1121,20 @@ def oauth_callback(provider):
                              require_password=config.get("require_password", True),
                              oauth_providers=authenticator.get_login_providers()), 403
 
-    # Create Flask session
+    return _finish_sso_sign_in(user_id, sso_claims, provider)
+
+
+def _finish_sso_sign_in(user_id, sso_claims, provider):
+    """Start the Potato session for an identity a provider vouched for."""
     session.clear()
     session['username'] = user_id
     session['sso_claims'] = sso_claims
     session.permanent = True
-    logger.info("OAuth login successful: provider=%s, user=%s", provider, user_id)
+    logger.info("SSO login successful: provider=%s, user=%s", provider, user_id)
 
     # Initialize user state if needed
     if not get_user_state_manager().has_user(user_id):
-        logger.debug("Initializing state for new OAuth user: %s", user_id)
+        logger.debug("Initializing state for new SSO user: %s", user_id)
         usm = get_user_state_manager()
         usm.add_user(user_id)
 
@@ -1144,6 +1148,124 @@ def oauth_callback(provider):
             usm.advance_phase(user_id)
 
     return redirect(url_for("home"))
+
+
+# --- SAML SSO Routes ---
+
+#: Cookie holding the signed AuthnRequest id between /saml/login and /saml/acs.
+SAML_REQUEST_COOKIE = "potato_saml_request"
+SAML_REQUEST_MAX_AGE = 600
+
+
+def _saml_cookie(secure):
+    """(name, path) of the request cookie.
+
+    Over https it is a __Host- cookie on path /: the browser then refuses a
+    copy set by a sibling subdomain or with a Domain attribute, which would
+    otherwise let a shared parent domain plant the attacker's own valid token
+    and re-open login CSRF. Plain http (development) keeps a path-scoped name.
+    """
+    if secure:
+        return "__Host-" + SAML_REQUEST_COOKIE, "/"
+    return SAML_REQUEST_COOKIE, (request.script_root or "") + "/saml/"
+
+
+def _saml_refusal(message, status=403):
+    return render_template("home.html",
+                           login_error=message,
+                           title=config.get("annotation_task_name", "Annotation Platform"),
+                           require_password=config.get("require_password", True),
+                           **_sso_login_context()), status
+
+
+def _saml_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt="potato-saml-request")
+
+
+@app.route("/saml/login")
+def saml_login():
+    """Send the browser to the IdP with a new AuthnRequest.
+
+    The request id travels in its own cookie, not the session: the IdP
+    returns the browser with a cross-site POST, and the session cookie is
+    SameSite=Lax, which a browser does not send on one.
+    """
+    from potato.auth_backends.saml_backend import request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None:
+        return redirect(url_for("home"))
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    try:
+        target, request_id = backend.login_redirect(data, base)
+    except Exception as exc:
+        logger.error("SAML sign-in could not start: %s", exc)
+        return _saml_refusal("Sign-in through your institution is unavailable right now.", 503)
+    response = redirect(target)
+    secure = data["https"] == "on"
+    name, path = _saml_cookie(secure)
+    response.set_cookie(name, _saml_serializer().dumps(request_id),
+                        max_age=SAML_REQUEST_MAX_AGE, httponly=True, secure=secure,
+                        samesite="None" if secure else "Lax", path=path)
+    return response
+
+
+@app.route("/saml/acs", methods=["POST"])
+def saml_acs():
+    """The IdP's response: verify it, then start the Potato session."""
+    from itsdangerous import BadSignature
+    from potato.auth_backends.saml_backend import SAMLError, request_data_from_flask
+    authenticator = UserAuthenticator.get_instance()
+    backend = authenticator.get_saml_backend()
+    if backend is None:
+        return redirect(url_for("home"))
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    cookie_name, cookie_path = _saml_cookie(data["https"] == "on")
+    request_id = None
+    token = request.cookies.get(cookie_name)
+    if token:
+        try:
+            request_id = _saml_serializer().loads(token, max_age=SAML_REQUEST_MAX_AGE)
+        except BadSignature:
+            request_id = None
+    try:
+        user_id, attributes = backend.process_response(data, base, request_id)
+    except SAMLError as exc:
+        return _saml_refusal(str(exc))
+    except Exception as exc:
+        logger.error("SAML response could not be processed: %s", exc)
+        return _saml_refusal("Your institution's sign-in could not be verified.")
+
+    if not backend.auto_register and not authenticator.is_valid_username(user_id) \
+            and not authenticator.is_authorized_user(user_id):
+        logger.warning("SAML user %s not pre-authorized (auto_register=false)", user_id)
+        return _saml_refusal("Your account is not authorized for this task.")
+
+    is_new = not authenticator.is_valid_username(user_id)
+    result = authenticator.add_user(user_id, None, saml_attributes=attributes)
+    if is_new and result != "Success":
+        logger.warning("Refused SAML sign-in for %r: %s", user_id, result)
+        return _saml_refusal("Your account could not be created on this task.")
+
+    response = _finish_sso_sign_in(user_id, backend.sso_claims(attributes), "saml")
+    response.delete_cookie(cookie_name, path=cookie_path, secure=data["https"] == "on")
+    return response
+
+
+@app.route("/saml/metadata")
+def saml_metadata():
+    """This service provider's metadata, for the IdP administrator."""
+    from potato.auth_backends.saml_backend import request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None:
+        return ("SAML is not configured for this task.", 404)
+    _data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    try:
+        xml = backend.metadata(base)
+    except Exception as exc:
+        logger.error("SAML metadata could not be built: %s", exc)
+        return ("SAML metadata could not be built; see the server log.", 500)
+    return Response(xml, mimetype="application/samlmetadata+xml")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -11010,6 +11132,9 @@ def configure_routes(flask_app, app_config):
     # OAuth SSO routes
     app.add_url_rule("/auth/login/<provider>", "oauth_login", oauth_login, methods=["GET"])
     app.add_url_rule("/auth/callback/<provider>", "oauth_callback", oauth_callback, methods=["GET"])
+    app.add_url_rule("/saml/login", "saml_login", saml_login, methods=["GET"])
+    app.add_url_rule("/saml/acs", "saml_acs", saml_acs, methods=["POST"])
+    app.add_url_rule("/saml/metadata", "saml_metadata", saml_metadata, methods=["GET"])
 
     # Chat support API routes
     app.add_url_rule("/api/chat/send", "chat_send", chat_send, methods=["POST"])

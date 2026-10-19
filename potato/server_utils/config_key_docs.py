@@ -284,7 +284,7 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "authentication.method": _D(
         "Which backend holds accounts: in_memory (the default), database, "
-        "oauth or clerk",
+        "oauth, saml or clerk",
         type="string", default="in_memory", category=AUTH, example="database",
         see_also=("authentication.user_config_path", "authentication.database_url"),
     ),
@@ -311,6 +311,16 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "authentication.auto_register": _D(
         "Create an account the first time an SSO identity signs in",
         type="boolean", category=AUTH,
+    ),
+    "authentication.saml": _D(
+        "SAML 2.0 sign-in through an institution's identity provider (method: "
+        "saml). Keys: display_name; one of idp_metadata_url (https), "
+        "idp_metadata_file or idp {entity_id, sso_url, x509cert}; sp_base_url, "
+        "sp_entity_id, sp_cert_file + sp_key_file, name_id_format; "
+        "user_identity_attribute (default: the NameID, refused when "
+        "transient); required_attribute {name, values}; claim_attributes; "
+        "want_assertions_encrypted",
+        type="object", category=AUTH, see_also=("authentication.method",),
     ),
     "authentication.providers": _D(
         "OAuth provider settings, keyed by provider name",

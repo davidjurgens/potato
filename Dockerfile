@@ -8,6 +8,7 @@
 #
 #   docker build -t potato .
 #   docker build --build-arg POTATO_EXTRAS=all -t potato:all .
+#   docker build --build-arg POTATO_EXTRAS=saml -t potato:saml .
 #   docker run -p 8000:7860 -v "$PWD/myproject:/app" potato
 #
 # The image ships Potato and nothing else. The project — config.yaml, data/,
@@ -26,6 +27,15 @@ RUN apt-get update && \
 # auth extras (see setup.py); it deliberately excludes `vision`, which pulls
 # multi-gigabyte torch wheels.
 ARG POTATO_EXTRAS=""
+
+# The `saml` extra builds the xmlsec binding against libxmlsec1, so its
+# headers are needed here and the library at runtime. It is not part of
+# `all`; ask for it by name: --build-arg POTATO_EXTRAS=saml (or all,saml).
+RUN case ",${POTATO_EXTRAS}," in *,saml,*) \
+        apt-get update && \
+        apt-get install -y --no-install-recommends libxmlsec1-dev pkg-config && \
+        rm -rf /var/lib/apt/lists/* ;; \
+    esac
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -57,8 +67,12 @@ FROM python:3.11-slim AS runtime
 # sqlite3 is not optional: `potato deploy pull` snapshots the project database
 # with `.backup` before copying it, because project.sqlite runs in WAL mode with
 # a live writer and copying the file alone yields a corrupt or stale database.
+ARG POTATO_EXTRAS=""
 RUN apt-get update && \
     apt-get install -y --no-install-recommends sqlite3 curl && \
+    case ",${POTATO_EXTRAS}," in *,saml,*) \
+        apt-get install -y --no-install-recommends libxmlsec1 libxmlsec1-openssl ;; \
+    esac && \
     rm -rf /var/lib/apt/lists/*
 
 # uid 1000 because HuggingFace Spaces requires it and nothing else objects.

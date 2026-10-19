@@ -73,7 +73,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `admin_api_key` |  | string |  | Shared key for the admin API, sent as the X-API-Key header. Generated and persisted to {task_dir}/admin_api_key.txt when unset |  |
-| `authentication` |  | object |  | Identity provider settings for SSO and database-backed accounts | `allow_local_login`, `allowed_domain`, `allowed_domains`, `allowed_org`, `auto_register`, `database_url`, `method`, `providers`, `user_config_path`, `user_identity_field` |
+| `authentication` |  | object |  | Identity provider settings for SSO and database-backed accounts | `allow_local_login`, `allowed_domain`, `allowed_domains`, `allowed_org`, `auto_register`, `database_url`, `method`, `providers`, `saml`, `user_config_path`, `user_identity_field` |
 | `login` |  | object |  | Login mode. type: password, url_direct, or none | `type`, `url_argument` |
 | `rbac` |  | object |  | Role assignments and SSO role mapping | `enabled`, `roles`, `sso_role_mapping`, `user_role_assignments` |
 | `require_no_password` |  | boolean |  | Accept a username with no password |  |

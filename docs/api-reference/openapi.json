@@ -10629,6 +10629,58 @@
         ]
       }
     },
+    "/saml/acs": {
+      "post": {
+        "operationId": "post_saml_acs",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
+          }
+        },
+        "summary": "The IdP's response: verify it, then start the Potato session.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
+        ]
+      }
+    },
+    "/saml/login": {
+      "get": {
+        "operationId": "get_saml_login",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Send the browser to the IdP with a new AuthnRequest.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/saml/metadata": {
+      "get": {
+        "operationId": "get_saml_metadata",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "This service provider's metadata, for the IdP administrator.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/screenshots/{filepath}": {
       "get": {
         "operationId": "get_serve_trace_screenshot",
