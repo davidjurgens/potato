@@ -61,8 +61,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 486 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 62 annotation types and 24 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 492 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -75,6 +75,7 @@ over prose when writing a config or calling the API.
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
 - [Deep Zoom & Tiling](annotation-types/multimedia/deep_zoom.md) - Annotate images too large to send to a browser as one file, with masks painted at the source's full resolution and no GPU texture limit
+- [3D Medical Volumes](annotation-types/multimedia/volume_annotation.md) - DICOM series and NIfTI in three linked views: brush masks with interpolation, NIfTI and DICOM SEG export
 - [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
 - [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
 - [Depth Maps](annotation-types/spatial/depth_maps.md) - 16-bit PNG, NPY, PFM and EXR depth with a near/far window and a readout in metres
@@ -747,7 +748,7 @@ detectors or segmenters, and it does not serve models. See
 
 ## What annotation types does Potato support?
 
-61 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
+62 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
 best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).
@@ -925,7 +926,7 @@ Most of the tools below are very good at what they were built for, and several b
 | Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 33 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 35 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -949,10 +950,10 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Model-based mask propagation | Yes (SAM 2, server-side) | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
 | Deep zoom / tiled gigapixel images | Yes (DZI + IIIF) | Partial | - | - | Yes | Yes | - |
 | 3D point clouds & cuboids | Yes | Yes | - | - | - | Yes | Yes |
-| Point-cloud sequences / episodes | - | Yes | - | - | - | Yes | Yes |
+| Point-cloud sequences / episodes | Yes | Yes | - | - | - | Yes | Yes |
 | Sensor fusion (2D↔3D projection) | Yes | Partial | - | - | - | Yes | Yes |
 | Depth maps with windowing | Yes | - | - | - | Partial | - | - |
-| DICOM / NIfTI / WSI | - | - | - | - | Yes | Yes | - |
+| DICOM / NIfTI / WSI | Yes | - | - | - | Yes | Yes | - |
 | Model training in the same product | Partial (text and image classifiers) | Partial | - | Yes | Yes | Yes | - |
 | CV format import | 15 formats | Extensive | Partial | Extensive | Partial | Extensive | Partial |
 | **Chance-corrected agreement over geometry** | **Yes** | - | - | - | - | - | - |
@@ -977,7 +978,7 @@ Most annotation platforms report agreement as raw IoU, exact match, or percent a
 
 ### Breadth of Annotation Types
 
-Potato has 61 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
+Potato has 62 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
 
 ### AI and LLM Integration
 
@@ -1011,7 +1012,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 33 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 35 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -1109,7 +1110,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 33 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -1125,7 +1126,7 @@ Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, key
 
 Potato builds a tile pyramid served as both DZI and IIIF Image API 3.0. Brush masks work on tiled images at the source's full resolution, because the mask buffer indexes image pixels instead of a GPU texture, so there is no texture-size ceiling to hit. 16-bit scientific TIFF gets a percentile window so faint structure is visible.
 
-For digital pathology specifically, **QuPath** (desktop, open source, the field standard) and **Cytomine** (web, open source, multi-user and blind annotation) are purpose-built, and Potato does not yet read SVS, DICOM, or NIfTI. Use Potato here when your images are large but not clinical-format, or when you need Potato's agreement and workflow layers on top.
+For digital pathology specifically, **QuPath** (desktop, open source, the field standard) and **Cytomine** (web, open source, multi-user and blind annotation) are purpose-built. Potato reads whole-slide images (SVS, NDPI and other openslide formats) and 3D DICOM and NIfTI volumes, with NIfTI and DICOM SEG export; use it when you need its agreement and workflow layers on top of that.
 
 ### 3D, Point Clouds, and Sensor Fusion
 
@@ -1328,9 +1329,9 @@ AWS-integrated annotation with built-in active learning and workforce management
 
 | Feature Category | Potato |
 |-----------------|:---:|
-| Annotation schemas | 61 |
+| Annotation schemas | 62 |
 | Display types | 24 |
-| Export formats | 33 |
+| Export formats | 35 |
 | Import formats (15 CV, 5 text, 2 whole-project) | 22 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |
@@ -1348,10 +1349,7 @@ Each count is read from the registry that defines it, and `tests/unit/test_doc_c
 So an evaluation does not have to discover these late:
 
 - **No detector or segmenter training, and no model serving.** Potato trains scikit-learn classifiers on a study's own labels (over bag-of-words, sentence embeddings or CLIP image embeddings), orders items, pre-labels with existing models, and critiques annotations with a VLM. It does not train detectors or segmenters, or serve the models it trains; Roboflow, V7, Supervisely, and Labelbox do both.
-- **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
-- **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
-- **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
-- **No managed workforce, SAML/SCIM, or compliance certifications.** Potato is software you run; RBAC and OAuth are supported, enterprise governance is not.
+- **No managed workforce, SCIM, or compliance certifications.** Potato is software you run; RBAC, OAuth and SAML sign-in are supported, enterprise governance is not.
 
 ## Getting Started
 
@@ -1423,7 +1421,7 @@ See [Configuration Reference](../configuration/configuration.md) for all options
 
 ## Choosing an Annotation Type
 
-Potato has 61 annotation types. Start with the decision guide:
+Potato has 62 annotation types. Start with the decision guide:
 
 - **[Choosing the Right Annotation Type](../annotation-types/choosing_annotation_types.md)** - Interactive decision tree
 - **[Schema Gallery](../annotation-types/schemas_and_templates.md)** - Visual gallery of all types with examples
@@ -4700,6 +4698,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `audio_annotation` |  | object |  | Server-side waveform service backing audio_annotation schemes. Only read when the task actually has one | `client_fallback_max_duration`, `waveform_cache_dir`, `waveform_cache_max_size`, `waveform_look_ahead` |
+| `serve_raw_medical_files` |  | boolean | `False` | Let /media/ hand out DICOM and NIfTI files as-is. Off by default: their headers carry patient information that volume_annotation's display_tags filter withholds |  |
 
 ## External Integrations
 
@@ -4852,6 +4851,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `video` | `video_path` | `autoplay`, `loop`, `muted`, `controls`, `custom_css`, `fallback_text`, `additional_sources` | Video player display | `examples/video/video-player/config.yaml` |
 | `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field`, `propagation`, `attributes` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
 | `voice_interaction` | (none beyond name/description) | `turns_key`, `audio_key`, `speaker_key`, `user_speakers`, `overlap_labels`, `rating_scale`, `text_key` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | `examples/agent-traces/voice-interaction/config.yaml` |
+| `volume_annotation` | `labels` | `tools`, `views`, `source_field`, `prefill_rtstruct_field`, `display_tags`, `allow_identifying_tags`, `default_window`, `window_presets`, `brush_size` | 3D medical volumes (DICOM series, NIfTI): three linked slice views, window/level, brush masks with interpolation, boxes and polygons; NIfTI and DICOM SEG export | `examples/image/ct-volume/config.yaml` |
 
 ## Label Structure
 
@@ -8332,6 +8332,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `span` | Text span annotation/highlighting with optional entity linking to knowledge bases | [below](#4-text-span-selection-span) | `examples/span/span-labeling/` |
 | `span_link` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | [below](#26-span-linking-span_link) | `examples/span/span-linking/` |
 | `spatial_annotation` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | [point cloud](spatial/point_cloud.md) | `examples/spatial/kitti-cuboids/` |
+| `volume_annotation` | 3D medical volumes (DICOM, NIfTI): three linked slice views, brush masks with interpolation, boxes and polygons | [volumes](multimedia/volume_annotation.md) | `examples/image/ct-volume/` |
 | `speech_transcript` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction | [transcript formats](multimedia/transcript_formats.md) | `examples/agent-traces/speech-transcript/` |
 | `table_grid` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/table-grid/` |
 | `temporal_grounding` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/temporal-grounding/` |
@@ -9562,7 +9563,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/choosing_
 
 # Choosing the Right Annotation Type
 
-Potato has 61 annotation schema types, spanning NLP research, LLM evaluation, survey methodology, and crowdsourcing. Picking the right one is the subject of this page.
+Potato has 62 annotation schema types, spanning NLP research, LLM evaluation, survey methodology, and crowdsourcing. Picking the right one is the subject of this page.
 
 ## Decision Flowchart
 
@@ -17914,12 +17915,12 @@ display emitted the raw field value, so `shelf_a.png` reached the browser as a
 page-relative path and 404ed. The workaround was to write `media/shelf_a.png`,
 which spells the media directory's name twice. Both spellings work.
 
-## Not yet supported
+## Medical and whole-slide formats
 
-DICOM, NIfTI and whole-slide (SVS) formats are **not** handled. The 16-bit
-windowing here is the on-ramp for them, but medical imaging brings regulatory
-and workflow requirements that deserve their own design rather than being
-bolted on.
+These are handled by their own viewers rather than by this ingest path:
+whole-slide images (SVS, NDPI and other openslide formats) open in
+[deep zoom](deep_zoom.md#whole-slide-images), and DICOM series and NIfTI
+volumes in [volume annotation](volume_annotation.md).
 
 ## Related
 
@@ -18150,6 +18151,199 @@ application.
 - [Media ingest](media_ingest.md) — TIFF, HEIC and RAW conversion
 - [Scaling & large datasets](../../deployment/scaling.md)
 - [Air-gapped deployment](../../deployment/air_gap.md)
+
+
+---
+
+<!-- source: docs/annotation-types/multimedia/volume_annotation.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/volume_annotation/
+
+# 3D Medical Volumes (DICOM & NIfTI)
+
+Segmenting CT and MR volumes: a DICOM series or a NIfTI file is shown in three
+linked views (axial, coronal, sagittal), and annotators paint label masks,
+draw boxes and polygons on slices, and fill the slices between painted ones by
+interpolation. Masks export as a NIfTI label volume or a DICOM SEG, and an
+RTSTRUCT on the item can provide the starting masks.
+
+```yaml
+annotation_schemes:
+  - annotation_type: volume_annotation
+    name: ct_segmentation
+    description: Outline the lesion and the bone ring
+    source_field: volume          # item field naming the volume
+    labels:
+      - {name: Lesion, color: "#e6553a", key_value: "1"}
+      - {name: Bone, color: "#3a8ee6", key_value: "2"}
+    default_window: Soft tissue
+    display_tags: [Modality, BodyPartExamined, SliceThickness]
+```
+
+```json
+{"id": "case_001", "volume": "case_001_ct"}
+{"id": "case_002", "volume": "case_002.nii.gz"}
+```
+
+`volume` is relative to `media_directory`: a directory holding one DICOM
+series, or a `.nii` / `.nii.gz` file. It needs the `volumes` extra:
+
+```bash
+pip install 'potato-annotation[volumes]'     # pydicom, nibabel, highdicom
+```
+
+Runnable example, with a generated CT phantom as both a DICOM series and
+NIfTI plus an RTSTRUCT:
+[`examples/image/ct-volume/`](https://github.com/davidjurgens/potato/tree/master/examples/image/ct-volume)
+(run `generate_volume.py` in it first).
+
+---
+
+## Configuration
+
+| Key | Default | Description |
+|---|---|---|
+| `labels` | required | Names, or `{name, color, key_value}` |
+| `source_field` | `volume` | Item field holding the volume path |
+| `tools` | all | Any of `navigate`, `brush`, `eraser`, `box`, `polygon` (`navigate` is always added) |
+| `views` | all three | Any of `axial`, `coronal`, `sagittal` |
+| `default_window` | first preset | Name of the window preset to start in |
+| `window_presets` | none | Extra presets, `{name, center, width}`, listed first. A NIfTI file has no modality header, so CT or MR presets for NIfTI data come from here |
+| `brush_size` | `2` | Starting brush radius, in voxels of the finest axis |
+| `prefill_rtstruct_field` | none | Item field naming an RTSTRUCT whose ROIs become the starting masks |
+| `display_tags` | none | DICOM header keywords shown under the views |
+| `allow_identifying_tags` | none | Identifying keywords from `display_tags` that may be shown (see below) |
+
+### Patient information in DICOM headers
+
+DICOM headers usually carry the patient's name, ID, birth date and
+institution. Annotators see only the keywords listed in `display_tags`, and a
+keyword the DICOM de-identification basic profile (PS3.15) removes, such as
+`PatientName`, `PatientID`, `PatientBirthDate`, `InstitutionName`,
+`AccessionNumber`, dates, UIDs, and the study and series descriptions, is
+shown only if it is also listed in `allow_identifying_tags`. The server
+enforces this per schema, so a request cannot ask for other tags.
+
+The raw files are not served: `/media/` refuses DICOM files (recognised by
+content, with or without a `.dcm` suffix) and NIfTI files, signed in or not,
+so the header cannot be downloaded around the filter. Set
+`serve_raw_medical_files: true` at the top level of the config to allow
+downloads. The slice images and the volume description need a signed-in
+user.
+
+Three things the filter cannot cover:
+
+- **File and directory names** reach the browser, in the item data and in
+  error messages. PACS exports often name directories after the patient's
+  name or record number, so use pseudonymous names (`case_001/`).
+- **Pixels.** A series marked `BurnedInAnnotation` YES (common for
+  ultrasound and secondary captures) may have patient details written into
+  the image, and is refused when loaded. Pixels in a series without that
+  flag are not inspected.
+- **The files on disk** stay as uploaded. De-identify them before upload
+  when the people running the server must not have identifying data either.
+
+A DICOM SEG export copies the patient and study modules from the source
+images, as DICOM requires; a NIfTI export carries none.
+
+## Using it
+
+- **Slices.** Scroll over a view, use the slider under it, or <kbd>&uarr;</kbd>
+  / <kbd>&darr;</kbd> (and Page Up / Page Down) on the focused view. The
+  yellow crosshair shows where the other two views cut this one.
+- **Navigate** (<kbd>n</kbd>): click a point to move the other views to it.
+- **Brush** (<kbd>b</kbd>) and **Eraser** (<kbd>e</kbd>) paint and erase the
+  selected label. A stroke on the coronal or sagittal view writes into every
+  axial slice it crosses.
+- **Box** (<kbd>x</kbd>) and **Polygon** (<kbd>p</kbd>): drag a box; click
+  polygon points, then double-click or <kbd>Enter</kbd> to close
+  (<kbd>Esc</kbd> cancels). They are listed under the views, where a click
+  jumps to the slice and **Remove** deletes one.
+- **Labels**: click one, or press its `key_value`.
+- **Window**: pick a preset, or right-drag on an image (left and right
+  change the width, up and down the centre).
+- **Interpolate** (<kbd>i</kbd>): fills the slices between painted axial
+  slices of the selected label. Paint the first and last slice and one or
+  more in between where the shape changes; the filled slices are ordinary
+  mask and can be painted over. **Undo** (<kbd>Ctrl</kbd>+<kbd>Z</kbd>)
+  removes them.
+
+Views are drawn in radiological convention: the patient's right is on the
+viewer's left. Every volume is put in one orientation (RAS) when read, so
+the views are anatomical whatever order the scanner wrote the slices in. For
+an oblique acquisition the three views are the planes of the nearest
+orthogonal grid, not true axial, coronal and sagittal planes.
+
+## Inputs
+
+- **DICOM**: a directory holding one classic series (one file per slice).
+  Slices are ordered by position along the slice normal. Refused, with the
+  reason: a directory with two series; missing or duplicated slices; slices
+  with different orientations (a localizer left in the series); a gantry
+  tilt over 0.5°, which `dcm2niix` resamples away; and `BurnedInAnnotation`
+  YES. Multi-frame (enhanced) DICOM is not supported: convert it to a
+  classic series or to NIfTI (for example with `dcm2niix`).
+- **NIfTI**: `.nii` and `.nii.gz`, 3D (a 4D file with one volume is read as
+  3D).
+- **RTSTRUCT**: closed planar contours on axial slices of the series. ROIs
+  are matched to labels by name (case-insensitive); unmatched ROIs are
+  listed in the status line. Contours on planes that do not fall on a slice
+  are skipped with a warning in the server log. The prefilled masks are
+  shown at once and saved with the annotator's first save, so opening an
+  item does not count as answering it.
+
+## What is stored
+
+One JSON value per item:
+
+```json
+{"volume": "case_001_ct", "shape": [512, 512, 120], "labels": ["Lesion", "Bone"],
+ "masks": {"Lesion": {"57": [261800, 14, 498, ...], "58": [...]}},
+ "shapes": [{"label": "Lesion", "axis": "axial", "index": 57, "type": "box",
+             "points": [[201.5, 310.0, 57], [240.0, 280.25, 57]]}]}
+```
+
+Coordinates are voxel indices `(i, j, k)` in the volume's canonical RAS
+orientation. Each mask slice is an axial slice `k`, flattened row by row (row
+`j`, column `i`) and run-length encoded as alternating counts of 0s and 1s,
+starting with 0s.
+
+## Export
+
+```bash
+python -m potato.export -c config.yaml -f volume_nifti -o out/
+python -m potato.export -c config.yaml -f dicom_seg -o out/
+```
+
+- `volume_nifti`: per annotator, `<item>__<schema>.nii.gz`, a uint8 label
+  volume in the source file's voxel order and affine (0 is background, 1 the
+  first label), `labels__<schema>.json` mapping values to names, and
+  `<item>__<schema>__shapes.json` with the boxes and polygons. Works for both
+  input kinds.
+- `dicom_seg`: per annotator, `<item>__<schema>.dcm`, a binary DICOM
+  Segmentation with one segment per label that has voxels, referencing the
+  source series. DICOM sources only.
+
+## Agreement
+
+The agreement report scores `volume_annotation` by 3D Dice per label between
+each pair of annotators of an item: 2|A∩B| / (|A| + |B|). A pair where
+neither painted a label is left out for that label rather than counted as
+agreeing. Boxes and polygons are not scored.
+
+## Limits
+
+- The server renders each slice on request; very large volumes (thousands of
+  slices of 1024×1024) load slowly the first time. The three most recently
+  used volumes are kept in memory.
+- Masks are binary per label; overlapping labels in a NIfTI export resolve
+  to the later label in the scheme's list.
+- No 4D (time series) volumes, no fused PET/CT, no oblique reformats.
+
+## Related
+
+- [Deep Zoom & Tiling](deep_zoom.md), including whole-slide images
+- [Image Annotation](image_annotation.md)
+- [Export Formats](../../data-export/export_formats.md)
 
 
 ---
@@ -50658,6 +50852,28 @@ calibration. See [3D labels](format_matrix.md#kitti-3d-labels).
 python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/
 ```
 
+### NIfTI label volumes (volume_nifti)
+
+For `volume_annotation`: per annotator and item, a uint8 label volume
+(`<item>__<schema>.nii.gz`) in the source file's voxel order and affine, a
+`labels__<schema>.json` value-to-name table, and the boxes and polygons as
+JSON. Works for DICOM and NIfTI sources. See
+[3D Medical Volumes](../annotation-types/multimedia/volume_annotation.md#export).
+
+```bash
+python -m potato.export --config config.yaml --format volume_nifti --output ./labels/
+```
+
+### DICOM Segmentation (dicom_seg)
+
+For `volume_annotation` on DICOM series: one binary DICOM SEG per annotator
+and item, with a segment per label that has voxels, referencing the source
+series. It copies the source's patient and study modules, as DICOM requires.
+
+```bash
+python -m potato.export --config config.yaml --format dicom_seg --output ./seg/
+```
+
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
@@ -51120,6 +51336,8 @@ format supports is what survives.
 | `darwin` | ✅ | ✅ | ⚠️ ¹² | ✅ as keypoints | Also ellipses and lines; stable content-derived ids |
 | `kitti` | ✅ | ❌ | ❌ | ❌ | Corners; 3D fields written as the devkit's unset sentinels |
 | `kitti_3d` | ✅ 3D cuboids | ❌ | ❌ | ❌ | Point clouds: `label_2` per cloud, KITTI tracking `label_02` per sequence; needs each item's calibration — see [3D labels](#kitti-3d-labels) |
+| `volume_nifti` | — | — | ✅ 3D label volume | — | `volume_annotation`: uint8 label volume in the source's geometry, plus boxes and polygons as JSON — see [3D medical volumes](../annotation-types/multimedia/volume_annotation.md#export) |
+| `dicom_seg` | — | — | ✅ 3D, one segment per label | — | `volume_annotation` on DICOM series: binary DICOM SEG referencing the source series |
 | `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
@@ -62145,7 +62363,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **170 top-level config keys**, **61 annotation types**, and
+It currently covers **171 top-level config keys**, **62 annotation types**, and
 **24 display types**.
 
 ### Editor validation
@@ -62195,7 +62413,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **486 paths / 524 operations**, generated by
+An index of Potato's HTTP surface: **492 paths / 530 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:
@@ -62240,7 +62458,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **224 example projects** in the repository, across 17
+A derived index of the **225 example projects** in the repository, across 17
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.

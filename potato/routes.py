@@ -455,6 +455,16 @@ def serve_media(filepath):
     if not os.path.isfile(requested):
         abort(404)
 
+    # DICOM and NIfTI headers carry patient information that the volume
+    # routes filter (display_tags); handing out the raw file would bypass
+    # that. An administrator who wants downloads opts in.
+    if not config.get("serve_raw_medical_files"):
+        from potato.media.volumes import is_raw_medical_file
+        if is_raw_medical_file(requested):
+            logger.warning("Refused raw medical file %s (serve_raw_medical_files "
+                           "is off)", filepath)
+            abort(403)
+
     response = send_from_directory(media_dir, filepath)
     # Range support exists and worked -- a range request gets 206 with a
     # correct Content-Range -- and was never advertised on the 200. Chrome's

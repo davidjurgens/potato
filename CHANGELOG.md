@@ -6,6 +6,18 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **3D medical volumes.** `volume_annotation` opens a DICOM series or a
+  NIfTI file in three linked views (axial, coronal, sagittal) with window
+  presets and window drag. Annotators paint label masks, draw boxes and
+  polygons on slices, and interpolate masks between painted slices. An
+  RTSTRUCT on the item can provide the starting masks. Exports:
+  `volume_nifti` (label volumes in the source geometry) and `dicom_seg`.
+  Agreement is 3D Dice per label. DICOM header tags reach annotators only
+  when listed in `display_tags`, and identifying ones only when also listed
+  in `allow_identifying_tags`; `/media/` refuses raw DICOM and NIfTI files
+  unless `serve_raw_medical_files` is on, and series with burned-in
+  annotations are refused. Install with
+  `pip install "potato-annotation[volumes]"`. Example: `examples/image/ct-volume/`.
 - **SAML sign-in.** `authentication.method: saml` signs annotators in at
   their institution's identity provider (Shibboleth, ADFS, Okta, Entra),
   configured from the IdP's metadata, with `/saml/metadata` for the IdP
@@ -260,6 +272,9 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **Docs said Potato could not read whole-slide images,** and that it had no
+  per-object attributes, point-cloud sequences or SAML; all four shipped in
+  this release. The comparison and media-ingest pages are corrected.
 - **An armed image label's name was dark grey on the purple chip.** A rule
   forcing page text onto every span in a form put it at 2.3:1. The image
   toolbar's armed label and tool now use the chip's white.

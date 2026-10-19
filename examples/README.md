@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 224 examples, generated from the configs themselves.
+All 225 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -448,12 +448,13 @@ The `Types` column lists the annotation types each one uses.
 |---------|------|-------|
 | [`lerobot-episode/`](embodied/lerobot-episode/) | Robot episode review | `episode_annotation`, `text` |
 
-### image/ (17)
+### image/ (18)
 
 | Example | Task | Types |
 |---------|------|-------|
 | [`annotation-critique/`](image/annotation-critique/) | Annotation review (VLM as judge) | `image_annotation` |
 | [`coco-import/`](image/coco-import/) | object_detection (imported) | `image_annotation` |
+| [`ct-volume/`](image/ct-volume/) | CT volume segmentation | `radio`, `volume_annotation` |
 | [`deep-zoom/`](image/deep-zoom/) | Deep-zoom survey annotation | `image_annotation` |
 | [`document-bbox/`](image/document-bbox/) | Document Region Annotation | `radio` |
 | [`format-migration/`](image/format-migration/) | Format migration | `image_annotation` |

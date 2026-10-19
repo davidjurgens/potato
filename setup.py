@@ -93,6 +93,9 @@ _WSI_DEPS = ["openslide-python>=1.4", "openslide-bin>=4.0", "tifffile>=2023.1"]
 # libxmlsec1 (brew install libxmlsec1 / apt-get install libxmlsec1-dev), so it
 # stays out of `all`.
 _SAML_DEPS = ["python3-saml>=1.16"]
+# DICOM series and NIfTI volumes (volume_annotation): reading, NIfTI label
+# export, and DICOM SEG export.
+_VOLUME_DEPS = ["pydicom>=2.4", "nibabel>=5.0", "highdicom>=0.22"]
 # The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
 # in "all": FiftyOne brings its own MongoDB and a large dependency tree.
 _FIFTYONE_DEPS = [
@@ -225,6 +228,7 @@ setup(
         "azure": _AZURE_DEPS,
         "wsi": _WSI_DEPS,
         "saml": _SAML_DEPS,
+        "volumes": _VOLUME_DEPS,
         "db": _DB_DEPS,
         "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,

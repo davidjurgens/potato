@@ -724,6 +724,23 @@
                 "labels"
               ]
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "volume_annotation"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
           }
         ],
         "properties": {
@@ -743,6 +760,7 @@
           "allow_discontinuous": {},
           "allow_empty_groups": {},
           "allow_html": {},
+          "allow_identifying_tags": {},
           "allow_multiple": {},
           "allow_neutral": {},
           "allow_note": {},
@@ -998,6 +1016,10 @@
               {
                 "const": "voice_interaction",
                 "description": "Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification"
+              },
+              {
+                "const": "volume_annotation",
+                "description": "3D medical volumes (DICOM series, NIfTI): three linked slice views, window/level, brush masks with interpolation, boxes and polygons; NIfTI and DICOM SEG export"
               }
             ]
           },
@@ -1036,6 +1058,7 @@
           "default_box_height": {},
           "default_cols": {},
           "default_rows": {},
+          "default_window": {},
           "description": {
             "description": "Prompt shown to the annotator.",
             "type": "string"
@@ -1043,6 +1066,7 @@
           "dimensions": {},
           "display_config": {},
           "display_logic": {},
+          "display_tags": {},
           "displaying_score": {},
           "duration": {},
           "dynamic_options": {},
@@ -1155,6 +1179,7 @@
           "point_size": {},
           "precision": {},
           "predictions_field": {},
+          "prefill_rtstruct_field": {},
           "profiles_field": {},
           "profiles_per_set": {},
           "prompt_field": {},
@@ -1262,9 +1287,11 @@
           "video_key": {},
           "video_path": {},
           "viewer": {},
+          "views": {},
           "violation_types": {},
           "visual_display": {},
           "waveform": {},
+          "window_presets": {},
           "worst_description": {},
           "zoom_enabled": {}
         },
@@ -2860,6 +2887,51 @@
             ]
           },
           "source": "examples/agent-traces/voice-interaction/config.yaml"
+        },
+        "volume_annotation": {
+          "scheme": {
+            "allow_identifying_tags": [
+              "SeriesDescription"
+            ],
+            "annotation_type": "volume_annotation",
+            "default_window": "Soft tissue",
+            "description": "Outline the lesion and the bone ring",
+            "display_tags": [
+              "Modality",
+              "BodyPartExamined",
+              "SliceThickness",
+              "SeriesDescription",
+              "PatientName"
+            ],
+            "labels": [
+              {
+                "color": "#e6553a",
+                "key_value": "1",
+                "name": "Lesion"
+              },
+              {
+                "color": "#3a8ee6",
+                "key_value": "2",
+                "name": "Bone"
+              }
+            ],
+            "name": "ct_segmentation",
+            "prefill_rtstruct_field": "rtstruct",
+            "source_field": "volume",
+            "window_presets": [
+              {
+                "center": 40,
+                "name": "Soft tissue",
+                "width": 400
+              },
+              {
+                "center": 400,
+                "name": "Bone",
+                "width": 1800
+              }
+            ]
+          },
+          "source": "examples/image/ct-volume/config.yaml"
         }
       }
     },
@@ -5157,6 +5229,11 @@
     "secret_key": {
       "description": "Flask session signing key. Set this for any deployment that must keep sessions valid across restarts",
       "type": "string"
+    },
+    "serve_raw_medical_files": {
+      "default": false,
+      "description": "Let /media/ hand out DICOM and NIfTI files as-is. Off by default: their headers carry patient information that volume_annotation's display_tags filter withholds",
+      "type": "boolean"
     },
     "server": {
       "additionalProperties": true,

@@ -123,6 +123,7 @@ def _register_builtin_exporters():
     from .davis_exporter import DAVISExporter
     from .kitti_exporter import KITTIExporter
     from .kitti3d_exporter import KITTI3DExporter
+    from .volume_exporter import DicomSegExporter, VolumeNiftiExporter
     from .labelme_exporter import LabelMeExporter
     from .mot_exporter import MOTExporter
     from .conll_2003_exporter import CoNLL2003Exporter
@@ -160,6 +161,8 @@ def _register_builtin_exporters():
         DarwinExporter(),
         KITTIExporter(),
         KITTI3DExporter(),
+        VolumeNiftiExporter(),
+        DicomSegExporter(),
         MOTExporter(),
         CityscapesExporter(),
         DAVISExporter(),

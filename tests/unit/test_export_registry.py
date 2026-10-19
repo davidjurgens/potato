@@ -139,6 +139,8 @@ class TestBuiltinExportersRegistered:
             # move off the source tool but never hand work back to a colleague
             # still on it.
             "cvat", "labelme", "darwin", "kitti", "kitti_3d", "mot", "cityscapes", "davis",
+            # Medical volumes: NIfTI label volumes and DICOM SEG
+            "volume_nifti", "dicom_seg",
             # Trajectory correction → SFT/DPO
             "trajectory_correction",
             # Tabular exporters
@@ -243,6 +245,8 @@ class TestTheFormatListIsPinned:
         # vision and tracking
         "coco", "yolo", "pascal_voc", "mask_png", "cvat", "labelme",
         "darwin", "cityscapes", "kitti", "kitti_3d", "mot", "davis",
+        # medical volumes
+        "volume_nifti", "dicom_seg",
         # agent evaluation and behaviour
         "agent_eval", "coding_eval", "episode_jsonl",
         "trajectory_correction", "annotation_telemetry", "keystrokes",

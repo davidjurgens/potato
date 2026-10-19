@@ -35,6 +35,7 @@ class SchemaKind(str, Enum):
     CAPTION = "caption"      # free text about a region: agreement over meaning
     GROUNDING = "grounding"  # referring expression -> region: detection + where
     SPATIAL = "spatial"      # 3D objects in sensor space, matched by 3D IoU
+    VOLUME = "volume"        # 3D label masks on a medical volume: Dice per label
     SEGMENTS = "segments"    # time segments under non-audio/video types
     TRACE = "trace"          # one label per step of an agent trace
     TEXT = "text"            # free-form text, no automatic IAA
@@ -106,6 +107,7 @@ _KIND_BY_TYPE = {
     # store {"segments": [...]} like audio/video, but under type names the
     # TEMPORAL reader does not recognize, so that path found nothing.
     "spatial_annotation": SchemaKind.SPATIAL,
+    "volume_annotation": SchemaKind.VOLUME,
     "temporal_grounding": SchemaKind.SEGMENTS,
     "tiered_annotation": SchemaKind.SEGMENTS,
     "process_reward": SchemaKind.TRACE,
@@ -185,6 +187,7 @@ def metrics_for_schema(scheme: Dict[str, Any],
         ],
         SchemaKind.RANKING: ["kendall_tau", "spearman_footrule"],
         SchemaKind.SPATIAL: ["mean_agreement", "mean_object_count_diff"],
+        SchemaKind.VOLUME: ["mean_dice", "dice_by_label.<label>"],
         SchemaKind.SEGMENTS: ["mean_agreement", "mean_object_count_diff"],
         SchemaKind.TRACE: ["alpha_nominal", "cohen_kappa", "percent_agreement"],
         SchemaKind.SPAN: [
@@ -1449,6 +1452,10 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
             # cannot drift from what the client wrote.
             rows = _gather_raw(overlap_items, user_states, name)
             metrics = rollout_iaa.rollout_report(rows, scheme)
+        elif kind == SchemaKind.VOLUME:
+            from potato.server_utils.iaa.volume_agreement import volume_report
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = volume_report(rows, scheme)
         elif kind in (SchemaKind.SPATIAL, SchemaKind.SEGMENTS, SchemaKind.TRACE):
             from potato.server_utils.iaa import structured
             rows = _gather_raw(overlap_items, user_states, name)

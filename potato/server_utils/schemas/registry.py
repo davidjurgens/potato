@@ -352,6 +352,7 @@ def _register_builtin_schemas():
     from .grounding_eval import generate_grounding_eval_layout
     from .region_caption import generate_region_caption_layout
     from .spatial_annotation import generate_spatial_annotation_layout
+    from .volume_annotation import generate_volume_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
     from .pairwise import generate_pairwise_layout
@@ -502,6 +503,16 @@ def _register_builtin_schemas():
             optional_fields=["source_field", "calibration_field", "color_mode", "point_size", "max_points", "lod", "point_budget", "min_screen_size", "max_loaded_nodes", "mpr", "slab_thickness", "default_box_height", "fit_box_height", "min_annotations", "max_annotations", "attributes"],
             supports_keybindings=True,
             description="3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
+        ),
+        SchemaDefinition(
+            name="volume_annotation",
+            generator=generate_volume_annotation_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["tools", "views", "source_field", "prefill_rtstruct_field",
+                             "display_tags", "allow_identifying_tags", "default_window",
+                             "window_presets", "brush_size"],
+            supports_keybindings=True,
+            description="3D medical volumes (DICOM series, NIfTI): three linked slice views, window/level, brush masks with interpolation, boxes and polygons; NIfTI and DICOM SEG export"
         ),
         SchemaDefinition(
             name="episode_annotation",

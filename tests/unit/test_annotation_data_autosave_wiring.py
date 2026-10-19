@@ -45,6 +45,7 @@ OWNERS = {
     "grounding_eval.py": "grounding-eval.js",
     "region_caption.py": "region-caption.js",
     "rollout_evaluation.py": "rollout-eval.js",
+    "volume_annotation.py": "volume-annotation.js",
 }
 
 CHANGE_DISPATCH = re.compile(

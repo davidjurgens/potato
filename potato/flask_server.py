@@ -364,6 +364,8 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     # 3D point cloud annotation. Gated separately from image_annotation
     # because three.js is a 670 KB download that a 2D project must not pay for.
     "spatial_annotation": ("pointcloud-annotation-container",),
+    # 3D medical volumes (DICOM, NIfTI).
+    "volume_annotation": ("volume-annotation-container",),
     # Depth maps. A display type rather than a schema, so the marker comes from
     # the display's own wrapper.
     "depth_map": ("depth-display",),

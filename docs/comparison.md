@@ -45,7 +45,7 @@ Most of the tools below are very good at what they were built for, and several b
 | Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 33 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 35 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -69,10 +69,10 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Model-based mask propagation | Yes (SAM 2, server-side) | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
 | Deep zoom / tiled gigapixel images | Yes (DZI + IIIF) | Partial | - | - | Yes | Yes | - |
 | 3D point clouds & cuboids | Yes | Yes | - | - | - | Yes | Yes |
-| Point-cloud sequences / episodes | - | Yes | - | - | - | Yes | Yes |
+| Point-cloud sequences / episodes | Yes | Yes | - | - | - | Yes | Yes |
 | Sensor fusion (2D↔3D projection) | Yes | Partial | - | - | - | Yes | Yes |
 | Depth maps with windowing | Yes | - | - | - | Partial | - | - |
-| DICOM / NIfTI / WSI | - | - | - | - | Yes | Yes | - |
+| DICOM / NIfTI / WSI | Yes | - | - | - | Yes | Yes | - |
 | Model training in the same product | Partial (text and image classifiers) | Partial | - | Yes | Yes | Yes | - |
 | CV format import | 15 formats | Extensive | Partial | Extensive | Partial | Extensive | Partial |
 | **Chance-corrected agreement over geometry** | **Yes** | - | - | - | - | - | - |
@@ -97,7 +97,7 @@ Most annotation platforms report agreement as raw IoU, exact match, or percent a
 
 ### Breadth of Annotation Types
 
-Potato has 61 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
+Potato has 62 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
 
 ### AI and LLM Integration
 
@@ -131,7 +131,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 33 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 35 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -229,7 +229,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 33 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -245,7 +245,7 @@ Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, key
 
 Potato builds a tile pyramid served as both DZI and IIIF Image API 3.0. Brush masks work on tiled images at the source's full resolution, because the mask buffer indexes image pixels instead of a GPU texture, so there is no texture-size ceiling to hit. 16-bit scientific TIFF gets a percentile window so faint structure is visible.
 
-For digital pathology specifically, **QuPath** (desktop, open source, the field standard) and **Cytomine** (web, open source, multi-user and blind annotation) are purpose-built, and Potato does not yet read SVS, DICOM, or NIfTI. Use Potato here when your images are large but not clinical-format, or when you need Potato's agreement and workflow layers on top.
+For digital pathology specifically, **QuPath** (desktop, open source, the field standard) and **Cytomine** (web, open source, multi-user and blind annotation) are purpose-built. Potato reads whole-slide images (SVS, NDPI and other openslide formats) and 3D DICOM and NIfTI volumes, with NIfTI and DICOM SEG export; use it when you need its agreement and workflow layers on top of that.
 
 ### 3D, Point Clouds, and Sensor Fusion
 
@@ -448,9 +448,9 @@ AWS-integrated annotation with built-in active learning and workforce management
 
 | Feature Category | Potato |
 |-----------------|:---:|
-| Annotation schemas | 61 |
+| Annotation schemas | 62 |
 | Display types | 24 |
-| Export formats | 33 |
+| Export formats | 35 |
 | Import formats (15 CV, 5 text, 2 whole-project) | 22 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |
@@ -468,10 +468,7 @@ Each count is read from the registry that defines it, and `tests/unit/test_doc_c
 So an evaluation does not have to discover these late:
 
 - **No detector or segmenter training, and no model serving.** Potato trains scikit-learn classifiers on a study's own labels (over bag-of-words, sentence embeddings or CLIP image embeddings), orders items, pre-labels with existing models, and critiques annotations with a VLM. It does not train detectors or segmenters, or serve the models it trains; Roboflow, V7, Supervisely, and Labelbox do both.
-- **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
-- **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
-- **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
-- **No managed workforce, SAML/SCIM, or compliance certifications.** Potato is software you run; RBAC and OAuth are supported, enterprise governance is not.
+- **No managed workforce, SCIM, or compliance certifications.** Potato is software you run; RBAC, OAuth and SAML sign-in are supported, enterprise governance is not.
 
 ## Getting Started
 

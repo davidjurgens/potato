@@ -602,6 +602,162 @@ def _point_cloud_lod(source: Path, request):
         return jsonify({"error": str(exc)}), 404
 
 
+def _volume_schema(name):
+    """The volume_annotation scheme called ``name``, or None."""
+    for scheme in _config().get("annotation_schemes") or []:
+        if isinstance(scheme, dict) and scheme.get("name") == name \
+                and scheme.get("annotation_type") == "volume_annotation":
+            return scheme
+    return None
+
+
+def _open_volume(filepath):
+    """(volume, None) or (None, error response) for a media-relative path."""
+    from flask import jsonify
+
+    from potato.media.volumes import VolumeError, load_volume
+
+    _media_dir, resolved = _resolve_media_path(_config(), filepath)
+    if resolved is None:
+        return None, (jsonify({"error": "forbidden"}), 403)
+    if not os.path.exists(resolved):
+        return None, (jsonify({"error": f"{Path(filepath).name} not found"}), 404)
+    try:
+        return load_volume(resolved), None
+    except VolumeError as exc:
+        return None, (jsonify({"error": str(exc)}), 415)
+
+
+def volume(filepath: str):
+    """
+    ``GET /media/volume/<path>`` -- a NIfTI file or a DICOM series directory.
+
+    - ``?info=1``: shape, voxel spacing, window presets, and the header tags
+      the named schema (``?schema=``) shows. Tags are only ever those the
+      schema's ``display_tags`` list, with identifying ones filtered unless
+      ``allow_identifying_tags`` names them, so a request cannot ask for more.
+    - ``?axis=axial|coronal|sagittal&index=N&wc=&ww=``: one slice as an 8-bit
+      PNG after the window, in radiological orientation.
+    """
+    from flask import Response, jsonify, request, session
+
+    from potato.media.volumes import AXES, VolumeError, describe, render_png, windows
+
+    # Slices are patient images and the description carries header tags:
+    # signed-in users only, like the volume tools.
+    if not session.get("username"):
+        return jsonify({"error": "sign in first"}), 401
+    vol, error = _open_volume(filepath)
+    if error:
+        return error
+    if request.args.get("info") in ("1", "true", "yes"):
+        scheme = _volume_schema(request.args.get("schema", "")) or {}
+        return jsonify(describe(vol, scheme.get("display_tags") or (),
+                                scheme.get("allow_identifying_tags") or ()))
+    axis = request.args.get("axis", "axial")
+    if axis not in AXES:
+        return jsonify({"error": f"axis must be one of {', '.join(AXES)}"}), 400
+    try:
+        index = int(request.args.get("index", "0"))
+    except ValueError:
+        return jsonify({"error": "index must be an integer"}), 400
+    default = windows(vol)[0]
+    center = _float_arg(request.args, "wc")
+    width = _float_arg(request.args, "ww")
+    try:
+        png = render_png(vol, axis, index,
+                         default["center"] if center is None else center,
+                         default["width"] if width is None or width <= 0 else width)
+    except VolumeError as exc:
+        return jsonify({"error": str(exc)}), 400
+    response = Response(png, mimetype="image/png")
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
+
+
+#: Upper bounds on what /media/volume-tools/interpolate will decode.
+MAX_VOLUME_EDGE = 2048
+MAX_INTERPOLATE_SLICES = 4096
+
+
+def volume_interpolate():
+    """
+    ``POST /media/volume-tools/interpolate`` -- fill the slices between
+    painted slices of one label (shape-based interpolation).
+
+    Body: ``{"shape": [nI, nJ, nK], "slices": {"k": rle, ...}}``. Answers
+    ``{"filled": {"k": rle}, "gaps": [...]}``: the new slices, and the
+    painted pairs whose outlines did not overlap, with the slices left empty
+    between them. Signed-in users only: it is computation on request.
+    """
+    from flask import jsonify, request, session
+
+    from potato.media.volume_masks import (interpolate_slices, interpolation_gaps,
+                                           rle_decode, rle_encode)
+
+    if not session.get("username"):
+        return jsonify({"error": "sign in first"}), 401
+    body = request.get_json(silent=True) or {}
+    try:
+        ni, nj, nk = (int(n) for n in body.get("shape") or ())
+        slices = body.get("slices") or {}
+        if not (0 < ni <= MAX_VOLUME_EDGE and 0 < nj <= MAX_VOLUME_EDGE
+                and 0 < nk <= MAX_VOLUME_EDGE) or len(slices) > MAX_INTERPOLATE_SLICES:
+            raise ValueError("volume too large")
+        decoded = {int(k): rle_decode(counts, (nj, ni)) for k, counts in slices.items()
+                   if 0 <= int(k) < nk}
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"bad request: {exc}"}), 400
+    filled = interpolate_slices(decoded)
+    return jsonify({"filled": {str(k): rle_encode(mask) for k, mask in filled.items()
+                               if mask.any()},
+                    "gaps": interpolation_gaps(decoded, filled)})
+
+
+def volume_prefill():
+    """
+    ``GET /media/volume-tools/prefill?volume=&rtstruct=&schema=`` -- an
+    RTSTRUCT's ROIs as starting masks, matched to the schema's labels by
+    name (case-insensitive). ROIs with no matching label are listed in
+    ``unmatched`` and not returned.
+    """
+    from flask import jsonify, request, session
+
+    from potato.media.volume_masks import masks_from_volume, rtstruct_masks
+
+    if not session.get("username"):
+        return jsonify({"error": "sign in first"}), 401
+    scheme = _volume_schema(request.args.get("schema", ""))
+    if scheme is None:
+        return jsonify({"error": "unknown volume_annotation schema"}), 404
+    vol, error = _open_volume(request.args.get("volume", ""))
+    if error:
+        return error
+    _media_dir, rt_path = _resolve_media_path(_config(), request.args.get("rtstruct", ""))
+    if rt_path is None:
+        return jsonify({"error": "forbidden"}), 403
+    if not os.path.isfile(rt_path):
+        return jsonify({"error": "RTSTRUCT not found"}), 404
+    labels = {}
+    for item in scheme.get("labels") or []:
+        name = item if isinstance(item, str) else (item or {}).get("name")
+        if name:
+            labels[str(name).lower()] = str(name)
+    try:
+        rois = rtstruct_masks(rt_path, vol)
+    except Exception as exc:
+        logger.warning("RTSTRUCT %s could not be read: %s", rt_path, exc)
+        return jsonify({"error": "the RTSTRUCT could not be read"}), 415
+    masks, unmatched = {}, []
+    for roi_name, mask in rois.items():
+        label = labels.get(roi_name.lower())
+        if label is None:
+            unmatched.append(roi_name)
+        elif mask.any():
+            masks[label] = masks_from_volume(mask)
+    return jsonify({"masks": masks, "unmatched": unmatched})
+
+
 def register_media_routes(app, config: dict) -> None:
     """
     Wire the proxy routes.
@@ -624,6 +780,13 @@ def register_media_routes(app, config: dict) -> None:
     # potato/media/pointcloud.py for why the browser is not handed the original).
     app.add_url_rule("/media/pointcloud/<path:filepath>", "media_point_cloud",
                      point_cloud, methods=["GET"])
+    # 3D medical volumes (NIfTI, DICOM series) for volume_annotation.
+    app.add_url_rule("/media/volume/<path:filepath>", "media_volume",
+                     volume, methods=["GET"])
+    app.add_url_rule("/media/volume-tools/interpolate", "media_volume_interpolate",
+                     volume_interpolate, methods=["POST"])
+    app.add_url_rule("/media/volume-tools/prefill", "media_volume_prefill",
+                     volume_prefill, methods=["GET"])
     # Depth maps: colourised, described, raw, or unprojected. See depth_map.
     app.add_url_rule("/media/depth/<path:filepath>", "media_depth",
                      depth_map, methods=["GET"])

@@ -609,6 +609,28 @@ calibration. See [3D labels](format_matrix.md#kitti-3d-labels).
 python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/
 ```
 
+### NIfTI label volumes (volume_nifti)
+
+For `volume_annotation`: per annotator and item, a uint8 label volume
+(`<item>__<schema>.nii.gz`) in the source file's voxel order and affine, a
+`labels__<schema>.json` value-to-name table, and the boxes and polygons as
+JSON. Works for DICOM and NIfTI sources. See
+[3D Medical Volumes](../annotation-types/multimedia/volume_annotation.md#export).
+
+```bash
+python -m potato.export --config config.yaml --format volume_nifti --output ./labels/
+```
+
+### DICOM Segmentation (dicom_seg)
+
+For `volume_annotation` on DICOM series: one binary DICOM SEG per annotator
+and item, with a segment per label that has voxels, referencing the source
+series. It copies the source's patient and study modules, as DICOM requires.
+
+```bash
+python -m potato.export --config config.yaml --format dicom_seg --output ./seg/
+```
+
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.

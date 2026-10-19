@@ -214,6 +214,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `audio_annotation` |  | object |  | Server-side waveform service backing audio_annotation schemes. Only read when the task actually has one | `client_fallback_max_duration`, `waveform_cache_dir`, `waveform_cache_max_size`, `waveform_look_ahead` |
+| `serve_raw_medical_files` |  | boolean | `False` | Let /media/ hand out DICOM and NIfTI files as-is. Off by default: their headers carry patient information that volume_annotation's display_tags filter withholds |  |
 
 ## External Integrations
 
@@ -366,6 +367,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `video` | `video_path` | `autoplay`, `loop`, `muted`, `controls`, `custom_css`, `fallback_text`, `additional_sources` | Video player display | `examples/video/video-player/config.yaml` |
 | `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field`, `propagation`, `attributes` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
 | `voice_interaction` | (none beyond name/description) | `turns_key`, `audio_key`, `speaker_key`, `user_speakers`, `overlap_labels`, `rating_scale`, `text_key` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | `examples/agent-traces/voice-interaction/config.yaml` |
+| `volume_annotation` | `labels` | `tools`, `views`, `source_field`, `prefill_rtstruct_field`, `display_tags`, `allow_identifying_tags`, `default_window`, `window_presets`, `brush_size` | 3D medical volumes (DICOM series, NIfTI): three linked slice views, window/level, brush masks with interpolation, boxes and polygons; NIfTI and DICOM SEG export | `examples/image/ct-volume/config.yaml` |
 
 ## Label Structure
 

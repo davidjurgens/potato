@@ -84,6 +84,8 @@ format supports is what survives.
 | `darwin` | ✅ | ✅ | ⚠️ ¹² | ✅ as keypoints | Also ellipses and lines; stable content-derived ids |
 | `kitti` | ✅ | ❌ | ❌ | ❌ | Corners; 3D fields written as the devkit's unset sentinels |
 | `kitti_3d` | ✅ 3D cuboids | ❌ | ❌ | ❌ | Point clouds: `label_2` per cloud, KITTI tracking `label_02` per sequence; needs each item's calibration — see [3D labels](#kitti-3d-labels) |
+| `volume_nifti` | — | — | ✅ 3D label volume | — | `volume_annotation`: uint8 label volume in the source's geometry, plus boxes and polygons as JSON — see [3D medical volumes](../annotation-types/multimedia/volume_annotation.md#export) |
+| `dicom_seg` | — | — | ✅ 3D, one segment per label | — | `volume_annotation` on DICOM series: binary DICOM SEG referencing the source series |
 | `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |

@@ -9589,6 +9589,77 @@
         ]
       }
     },
+    "/media/volume-tools/interpolate": {
+      "post": {
+        "operationId": "post_media_volume_interpolate",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "``POST /media/volume-tools/interpolate`` -- fill the slices between",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/media/volume-tools/prefill": {
+      "get": {
+        "operationId": "get_media_volume_prefill",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "``GET /media/volume-tools/prefill?volume=&rtstruct=&schema=`` -- an",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/media/volume/{filepath}": {
+      "get": {
+        "operationId": "get_media_volume",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "``GET /media/volume/<path>`` -- a NIfTI file or a DICOM series directory.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/media/{filepath}": {
       "get": {
         "operationId": "get_serve_media",

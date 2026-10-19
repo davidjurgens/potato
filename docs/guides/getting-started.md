@@ -45,7 +45,7 @@ See [Configuration Reference](../configuration/configuration.md) for all options
 
 ## Choosing an Annotation Type
 
-Potato has 61 annotation types. Start with the decision guide:
+Potato has 62 annotation types. Start with the decision guide:
 
 - **[Choosing the Right Annotation Type](../annotation-types/choosing_annotation_types.md)** - Interactive decision tree
 - **[Schema Gallery](../annotation-types/schemas_and_templates.md)** - Visual gallery of all types with examples

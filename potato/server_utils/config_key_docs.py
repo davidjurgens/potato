@@ -234,6 +234,13 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "data_cache.max_size_mb": _D(
         "Cache size ceiling in megabytes", type="integer", category=DATA,
     ),
+    "serve_raw_medical_files": _D(
+        "Let /media/ hand out DICOM and NIfTI files as-is. Off by default: "
+        "their headers carry patient information that volume_annotation's "
+        "display_tags filter withholds",
+        type="boolean", default=False, category=MEDIA,
+        see_also=("media_directory",),
+    ),
     "media_directory": _D(
         "Directory served at /media/, so data files can reference local images, "
         "audio and video by relative path instead of an external URL",

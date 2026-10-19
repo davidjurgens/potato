@@ -349,6 +349,7 @@ KNOWN_CONFIG_KEYS = {
         "client_fallback_max_duration",
     },
     "media_directory": None,
+    "serve_raw_medical_files": None,
 
     # === External integrations ===
     # Crowd-provider selection + per-provider sub-blocks (validated by the

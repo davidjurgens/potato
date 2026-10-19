@@ -192,12 +192,12 @@ display emitted the raw field value, so `shelf_a.png` reached the browser as a
 page-relative path and 404ed. The workaround was to write `media/shelf_a.png`,
 which spells the media directory's name twice. Both spellings work.
 
-## Not yet supported
+## Medical and whole-slide formats
 
-DICOM, NIfTI and whole-slide (SVS) formats are **not** handled. The 16-bit
-windowing here is the on-ramp for them, but medical imaging brings regulatory
-and workflow requirements that deserve their own design rather than being
-bolted on.
+These are handled by their own viewers rather than by this ingest path:
+whole-slide images (SVS, NDPI and other openslide formats) open in
+[deep zoom](deep_zoom.md#whole-slide-images), and DICOM series and NIfTI
+volumes in [volume annotation](volume_annotation.md).
 
 ## Related
 

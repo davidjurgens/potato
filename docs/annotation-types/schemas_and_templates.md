@@ -95,6 +95,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `span` | Text span annotation/highlighting with optional entity linking to knowledge bases | [below](#4-text-span-selection-span) | `examples/span/span-labeling/` |
 | `span_link` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | [below](#26-span-linking-span_link) | `examples/span/span-linking/` |
 | `spatial_annotation` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | [point cloud](spatial/point_cloud.md) | `examples/spatial/kitti-cuboids/` |
+| `volume_annotation` | 3D medical volumes (DICOM, NIfTI): three linked slice views, brush masks with interpolation, boxes and polygons | [volumes](multimedia/volume_annotation.md) | `examples/image/ct-volume/` |
 | `speech_transcript` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction | [transcript formats](multimedia/transcript_formats.md) | `examples/agent-traces/speech-transcript/` |
 | `table_grid` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/table-grid/` |
 | `temporal_grounding` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/temporal-grounding/` |

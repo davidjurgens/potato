@@ -443,6 +443,14 @@
     "sha256": "f388e903a142dc96",
     "version": "11"
   },
+  "volume-annotation.css": {
+    "sha256": "ad56ba440cdc2213",
+    "version": "1"
+  },
+  "volume-annotation.js": {
+    "sha256": "c6aa5356d86281ed",
+    "version": "1"
+  },
   "web-agent-overlays.js": {
     "sha256": "ba2cd17c89c458af",
     "version": "1"

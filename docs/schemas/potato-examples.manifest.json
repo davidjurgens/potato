@@ -10,7 +10,7 @@
     "crowdsourcing": 6,
     "custom-layouts": 6,
     "embodied": 1,
-    "image": 17,
+    "image": 18,
     "labeling-engine": 3,
     "plugins": 1,
     "span": 11,
@@ -18,7 +18,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 224,
+  "count": 225,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -4154,6 +4154,27 @@
       "path": "examples/image/coco-import/config.yaml",
       "run": "potato start examples/image/coco-import/config.yaml -p 8000",
       "task_name": "object_detection (imported)"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "volume_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/volumes.json"
+      ],
+      "description": "",
+      "dir": "examples/image/ct-volume",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "ct-volume",
+      "path": "examples/image/ct-volume/config.yaml",
+      "run": "potato start examples/image/ct-volume/config.yaml -p 8000",
+      "task_name": "CT volume segmentation"
     },
     {
       "annotation_types": [
