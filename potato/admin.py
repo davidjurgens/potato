@@ -132,6 +132,22 @@ def _unwrap_admin_result(result):
     return result
 
 
+def _memo_issue_counts(config) -> Dict[str, Any]:
+    """Open and resolved issue counts, or nothing when memos are off."""
+    try:
+        from potato.memos.api import memos_enabled
+        if not memos_enabled(config):
+            return {}
+        from potato.memos import store
+        issues = store.list_issues(config.get("task_dir", "."),
+                                   config.get("annotation_task_name") or "default")
+    except Exception as exc:  # noqa: BLE001 - the overview must still load
+        logging.getLogger(__name__).warning("Could not count memo issues: %s", exc)
+        return {}
+    return {"open_issues": sum(1 for m in issues if m.get("status") == "open"),
+            "resolved_issues": sum(1 for m in issues if m.get("status") == "resolved")}
+
+
 class AdminDashboard:
     """
     Main class for admin dashboard functionality.
@@ -245,7 +261,8 @@ class AdminDashboard:
                     "total_assignments": total_assignments,
                     "total_working_time": formatted_time,
                     "total_working_seconds": total_seconds_int,
-                    "average_annotations_per_item": round(total_annotations / total_items, 1) if total_items > 0 else 0
+                    "average_annotations_per_item": round(total_annotations / total_items, 1) if total_items > 0 else 0,
+                    **_memo_issue_counts(config),
                 },
                 "config": {
                     "annotation_task_name": config.get("annotation_task_name", "Unknown"),

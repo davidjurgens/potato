@@ -1,7 +1,9 @@
 # Memos
 
-Memos are free-text notes an annotator can attach to an instance, or to a
-text selection within an instance. They are a **universal** feature —
+Memos are free-text notes an annotator can attach to an instance, to a text
+selection within an instance, or to a shape drawn on an image. Anyone who can
+read a note can reply to it, and a note can be raised as an issue that stays
+open until someone resolves it. They are a **universal** feature —
 available in standard annotation, [solo mode](../solo-mode/solo_mode.md), and QDA mode
 — useful for flagging ambiguous cases, recording rationale, and building
 an audit trail.
@@ -9,8 +11,12 @@ an audit trail.
 ## Overview
 
 - Each memo belongs to its author and is attached to one instance.
-- A memo can be **instance-level** or anchored to a **text selection**
-  (character offsets), shown with a `quote` badge.
+- A memo can be **instance-level**, anchored to a **text selection**
+  (character offsets, shown with a `quote` badge), or anchored to a **drawn
+  shape** (shown with the shape's label, for example `car box`).
+- Notes form **threads**: replies sit under the note they answer.
+- A note can be an **issue**, open or resolved, optionally assigned to
+  someone.
 - Memos persist immediately and survive navigating away and back.
 - Memos are stored in the universal project database
   (`<task_dir>/project.sqlite`), not in the annotation JSON files.
@@ -42,6 +48,37 @@ toggle is shown — the standard annotation page is unchanged.
   visibility (oversight/QC).
 - Only the **author** may edit a memo's body or visibility.
 - The **author or an admin/adjudicator** may delete a memo (moderation).
+  Deleting a thread's first note deletes its replies.
+- A reply takes its thread's visibility, and follows it if the first note's
+  visibility changes: anyone who can read the first note can read and reply
+  to the whole thread.
+
+## Threads and issues
+
+| Action | Who may do it |
+|---|---|
+| Reply | Anyone who can read the thread |
+| Resolve or reopen an issue | The issue's author, its assignee, or an adjudicator |
+| Assign an issue | The issue's author or an adjudicator |
+
+Assigning an issue lets the assignee read and reply to its thread, even when
+it is private, so they can work on it; clearing the assignment takes that
+back. For a memo you cannot read, every action answers 404, the same as for
+a memo that does not exist.
+
+An issue records who resolved it and when. The admin dashboard's overview
+shows how many issues are open and how many are resolved, and
+`GET /admin/api/memo_issues?status=open` lists them, private ones included.
+
+### Issues on an image region
+
+Select a shape on an image annotation canvas, then open the Notes panel: the
+composer offers **Attach to the selected shape**. Clicking the shape's badge
+on the note selects that shape on the canvas again.
+
+Shapes have no stored id, so the note records the shape as it was drawn (its
+scheme, type, label and normalised coordinates) and finds it again by
+position. If the shape has since been moved or deleted, the panel says so.
 
 > **Bias caution.** Setting memos to `shared` lets annotators read each
 > other's notes during labeling, which can anchor judgments and inflate
@@ -53,9 +90,24 @@ toggle is shown — the standard annotation page is unchanged.
 
 1. Click the **Notes** toggle on the right edge of the annotation page.
 2. Type a note. Optionally select text in the instance first and tick
-   "Attach to selected text" to anchor the memo to that span.
-3. Choose a visibility and click **Add note**.
-4. Your own memos show **Edit** / **Delete** actions.
+   "Attach to selected text", or select a shape on the image and tick
+   "Attach to the selected shape".
+3. Tick **Raise as an issue to resolve** to make it an issue, and optionally
+   name who should resolve it.
+4. Choose a visibility and click **Add note**.
+5. Each note shows the actions you may take: **Reply** on every thread,
+   **Resolve** / **Reopen** and **Assign** on issues where you are allowed,
+   and **Edit** / **Delete** on your own notes.
+
+## API
+
+| Request | Does |
+|---|---|
+| `GET /api/memos?instance_id=…` | Notes and replies on an instance, each with `can_edit`, `can_delete`, `can_resolve` and `can_assign` for you |
+| `POST /api/memos` | A note: `instance_id`, `body`, `visibility`, `anchor`, and `issue: true` with an optional `assignee` |
+| `POST /api/memos/<id>/reply` | A reply: `body` |
+| `PATCH /api/memos/<id>` | Any of `body`, `visibility`, `status` (`open` or `resolved`), `assignee` (empty to clear) |
+| `GET /api/memos/issues?status=open&assignee=me` | Issues across the project that you can see |
 
 ## Exporting memos
 
@@ -68,8 +120,10 @@ python -m potato.export --config config.yaml \
   --option include_memos=true
 ```
 
-Memo rows appear with `schema = "(memo)"`, `code = <visibility>`,
-`text = <memo body>`, and offsets from the memo anchor when span-anchored.
+Memo rows appear with `schema` set to `(memo)`, `(memo reply)`, or
+`(issue: open)` / `(issue: resolved)`, `code = <visibility>` (a reply
+reports its thread's), `text = <memo body>`, and offsets from the memo anchor
+when span-anchored.
 
 ## Example
 

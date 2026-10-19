@@ -4815,6 +4815,29 @@ def admin_api_create_snapshot():
     return jsonify({"unchanged": False, "snapshot": _snapshot_row(manifest)}), 201
 
 
+@app.route("/admin/api/memo_issues", methods=["GET"])
+def admin_api_memo_issues():
+    """
+    Issues raised from the Notes panel, across the project, newest first.
+    ``?status=open|resolved`` filters. Admins see every issue, private ones
+    included, as adjudicators do. Admin-only endpoint requiring API key.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.memos import MemoError, list_issues
+    from potato.memos.api import memos_enabled
+    if not memos_enabled(config):
+        return jsonify({"enabled": False, "issues": []})
+    try:
+        issues = list_issues(config.get("task_dir", "."),
+                             project=config.get("annotation_task_name") or "default",
+                             requester="__admin__", is_privileged=True,
+                             status=request.args.get("status") or None)
+    except MemoError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"enabled": True, "issues": issues})
+
+
 @app.route("/admin/api/trace_writeback", methods=["GET"])
 def admin_api_trace_writeback():
     """
@@ -10774,6 +10797,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/snapshots", "admin_api_snapshots", admin_api_snapshots, methods=["GET"])
     app.add_url_rule("/admin/api/snapshots", "admin_api_create_snapshot", admin_api_create_snapshot, methods=["POST"])
     app.add_url_rule("/admin/api/trace_writeback", "admin_api_trace_writeback", admin_api_trace_writeback, methods=["GET"])
+    app.add_url_rule("/admin/api/memo_issues", "admin_api_memo_issues", admin_api_memo_issues, methods=["GET"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])

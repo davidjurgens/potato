@@ -282,3 +282,79 @@
     }
     .memo-panel:not([hidden]) { animation: none; }
 }
+
+/* ---- Threads and issues ------------------------------------------------ */
+
+.memo-thread {
+    margin-top: var(--memo-space-3);
+    padding-left: var(--memo-space-3);
+    border-left: 2px solid var(--memo-line);
+    display: flex;
+    flex-direction: column;
+    gap: var(--memo-space-3);
+}
+.memo-reply .memo-body { font-size: 0.875rem; }
+.memo-item.is-open-issue { border-left: 3px solid #c2410c; }
+.memo-item.is-resolved { opacity: 0.85; }
+.memo-badge.status-open     { background: #fdecdf; color: #9a3412; border-color: #f6c9a8; }
+.memo-badge.status-resolved { background: #e2f1e7; color: #246b3c; border-color: #bcdec8; }
+.memo-assignee { font-style: italic; }
+.memo-meta { flex-wrap: wrap; }
+.memo-shape-link { cursor: pointer; font: inherit; font-size: 0.7rem; }
+.memo-shape-link:hover { border-color: #2f4ea0; }
+.memo-actions button:focus-visible,
+.memo-shape-link:focus-visible,
+.memo-inline-form button:focus-visible {
+    outline: 2px solid var(--memo-accent);
+    outline-offset: 1px;
+}
+.memo-inline-form {
+    margin-top: var(--memo-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--memo-space-2);
+    font-size: 0.8125rem;
+    color: var(--memo-ink-soft);
+}
+.memo-inline-form textarea,
+.memo-inline-form input[type="text"],
+.memo-assignee-field input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--memo-line);
+    border-radius: var(--memo-radius);
+    padding: var(--memo-space-2) var(--memo-space-3);
+    font: inherit;
+    color: var(--memo-ink);
+    background: var(--memo-surface);
+}
+.memo-inline-form textarea { min-height: 3.5em; resize: vertical; }
+.memo-inline-row { display: flex; gap: var(--memo-space-2); }
+.memo-inline-row button:not(.memo-primary) {
+    border: 1px solid var(--memo-line);
+    background: var(--memo-surface);
+    color: var(--memo-ink);
+    border-radius: var(--memo-radius);
+    padding: var(--memo-space-1, 4px) var(--memo-space-3);
+    cursor: pointer;
+}
+.memo-issue-toggle, .memo-assignee-field {
+    display: flex;
+    gap: var(--memo-space-2);
+    align-items: center;
+    font-size: 0.8125rem;
+    color: var(--memo-ink-soft);
+}
+.memo-assignee-field { flex-direction: column; align-items: stretch; }
+.memo-status {
+    margin: 0 var(--memo-space-4);
+    padding: var(--memo-space-2) var(--memo-space-3);
+    border-radius: var(--memo-radius);
+    background: #fbeeee;
+    color: #8f2a2a;
+    font-size: 0.8125rem;
+}
+.memo-sr {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+}

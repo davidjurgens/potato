@@ -108,8 +108,15 @@ class TestUpdate:
         assert upd["updated_at"] >= m["updated_at"]
 
     def test_peer_cannot_edit(self, td):
-        m = _mk(td, created_by="alice")
+        # A shared memo the peer can read: refused, with the reason.
+        m = _mk(td, created_by="alice", visibility="shared")
         with pytest.raises(MemoPermissionError):
+            update_memo(td, m["id"], requester="bob", body="hax")
+
+    def test_a_memo_the_peer_cannot_read_is_not_found(self, td):
+        # A private one: not-found, so the refusal does not confirm it exists.
+        m = _mk(td, created_by="alice")
+        with pytest.raises(MemoNotFound):
             update_memo(td, m["id"], requester="bob", body="hax")
 
     def test_admin_cannot_edit_others(self, td):
@@ -138,6 +145,9 @@ class TestDelete:
                             requester="alice") == []
 
     def test_peer_cannot_delete(self, td):
-        m = _mk(td, created_by="alice")
+        m = _mk(td, created_by="alice", visibility="shared")
         with pytest.raises(MemoPermissionError):
             delete_memo(td, m["id"], requester="bob")
+        private = _mk(td, created_by="alice")
+        with pytest.raises(MemoNotFound):
+            delete_memo(td, private["id"], requester="bob")

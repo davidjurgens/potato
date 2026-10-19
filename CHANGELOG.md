@@ -6,6 +6,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Memo threads and issues, including issues on image regions.** Notes in
+  the Notes panel can be answered: replies sit under the note, take its
+  visibility, and follow it if it changes. A note can be raised as an issue,
+  open or resolved, with an optional assignee; the author, the assignee or an
+  adjudicator resolves it, and the issue records who did and when. With a
+  shape selected on an image, a note can be attached to that shape, and its
+  badge selects the shape again. The admin overview counts open and resolved
+  issues (`/admin/api/memo_issues` lists them); `/api/memos` gains
+  `POST /<id>/reply`, `status` and `assignee` on `PATCH`, and
+  `GET /issues?status=&assignee=me`. Existing project databases gain the
+  thread table on first use. See *Memos*.
 - **Trace score write-back to Langfuse and LangSmith.** With
   `trace_ingestion.writeback`, a trace ingested from Langfuse or LangSmith gets
   its merged answer back once `min_annotators` people have judged it (or after

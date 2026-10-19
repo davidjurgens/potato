@@ -22,7 +22,11 @@ from . import (
     MemoPermissionError,
     create_memo,
     delete_memo,
+    list_issues,
     list_visible,
+    reply_to,
+    set_assignee,
+    set_status,
     update_memo,
 )
 
@@ -155,17 +159,53 @@ def post_memo(task_dir, project, username, priv):
         task_dir, project=project, instance_id=instance_id,
         body=data.get("body", ""), created_by=username,
         anchor=data.get("anchor"), visibility=visibility,
+        issue=bool(data.get("issue")), assignee=data.get("assignee"),
     )}))
+
+
+@memos_bp.route("/issues", methods=["GET"])
+@memos_required
+def get_issues(task_dir, project, username, priv):
+    """Issues across the project: ``?status=open|resolved``, ``?assignee=me``."""
+    assignee = request.args.get("assignee") or None
+    if assignee == "me":
+        assignee = username
+    return _handle(lambda: jsonify({"issues": list_issues(
+        task_dir, project=project, requester=username, is_privileged=priv,
+        status=request.args.get("status") or None, assignee=assignee,
+    )}))
+
+
+@memos_bp.route("/<memo_id>/reply", methods=["POST"])
+@memos_required
+def post_reply(task_dir, project, username, priv, memo_id):
+    data = request.get_json(silent=True) or {}
+    return _handle(lambda: (jsonify({"memo": reply_to(
+        task_dir, memo_id, requester=username, is_privileged=priv,
+        body=data.get("body", ""),
+    )}), 201))
 
 
 @memos_bp.route("/<memo_id>", methods=["PATCH"])
 @memos_required
 def patch_memo(task_dir, project, username, priv, memo_id):
     data = request.get_json(silent=True) or {}
-    return _handle(lambda: jsonify({"memo": update_memo(
-        task_dir, memo_id, requester=username, is_privileged=priv,
-        body=data.get("body"), visibility=data.get("visibility"),
-    )}))
+
+    def _do():
+        memo = None
+        if "body" in data or "visibility" in data:
+            memo = update_memo(task_dir, memo_id, requester=username, is_privileged=priv,
+                               body=data.get("body"), visibility=data.get("visibility"))
+        if "status" in data:
+            memo = set_status(task_dir, memo_id, requester=username, is_privileged=priv,
+                              status=data.get("status"))
+        if "assignee" in data:
+            memo = set_assignee(task_dir, memo_id, requester=username, is_privileged=priv,
+                                assignee=data.get("assignee"))
+        if memo is None:
+            memo = update_memo(task_dir, memo_id, requester=username, is_privileged=priv)
+        return jsonify({"memo": memo})
+    return _handle(_do)
 
 
 @memos_bp.route("/<memo_id>", methods=["DELETE"])

@@ -92,8 +92,8 @@
     "version": "1"
   },
   "css/memos.css": {
-    "sha256": "f2a07b5f862b7aee",
-    "version": "2"
+    "sha256": "941913bcbb5be2ff",
+    "version": "3"
   },
   "css/search.css": {
     "sha256": "8dfdb84e238d4ee2",
@@ -236,8 +236,8 @@
     "version": "1"
   },
   "memos.js": {
-    "sha256": "36884b943980ef05",
-    "version": "4"
+    "sha256": "4d3bdbbf46353c71",
+    "version": "5"
   },
   "multi-agent-discussion.css": {
     "sha256": "276ac528ca3f2b51",

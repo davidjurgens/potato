@@ -195,7 +195,7 @@
     {% endif %}
 
     <!-- Universal Memos sidebar styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=3">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=14">
 
@@ -1066,6 +1066,7 @@
             <button type="button" id="memo-panel-close" aria-label="Close notes">&times;</button>
         </div>
         <div id="memo-list" class="memo-list"></div>
+        <div id="memo-status" class="memo-status" role="status" aria-live="polite" hidden></div>
         <div class="memo-composer">
             <textarea id="memo-new-body" placeholder="Add a note about this instance&hellip;"></textarea>
             <div id="memo-anchor-wrap" class="memo-anchor-hint" hidden>
@@ -1073,6 +1074,20 @@
                     <input type="checkbox" id="memo-anchor-check">
                     Attach to selected text: &ldquo;<span id="memo-anchor-quote"></span>&rdquo;
                 </label>
+            </div>
+            <div id="memo-shape-wrap" class="memo-anchor-hint" hidden>
+                <label>
+                    <input type="checkbox" id="memo-shape-check">
+                    Attach to the selected shape: <span id="memo-shape-name"></span>
+                </label>
+            </div>
+            <label class="memo-issue-toggle">
+                <input type="checkbox" id="memo-new-issue">
+                Raise as an issue to resolve
+            </label>
+            <div id="memo-new-assignee-wrap" class="memo-assignee-field" hidden>
+                <label for="memo-new-assignee">Assign to (optional)</label>
+                <input type="text" id="memo-new-assignee" placeholder="username">
             </div>
             <div class="memo-composer-row">
                 <label>Visibility
@@ -1085,7 +1100,7 @@
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='memos.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=5"></script>
     {% endif %}
 
     <!-- Annotator search-and-claim sidebar. Rendered only when

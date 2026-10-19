@@ -1899,6 +1899,29 @@
         ]
       }
     },
+    "/admin/api/memo_issues": {
+      "get": {
+        "operationId": "get_admin_api_memo_issues",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Issues raised from the Notes panel, across the project, newest first.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/api/overview": {
       "get": {
         "operationId": "get_admin_api_overview",
@@ -6565,6 +6588,20 @@
         ]
       }
     },
+    "/api/memos/issues": {
+      "get": {
+        "operationId": "get_memos_get_issues",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Issues across the project: ``?status=open|resolved``, ``?assignee=me``.",
+        "tags": [
+          "memos"
+        ]
+      }
+    },
     "/api/memos/{memo_id}": {
       "delete": {
         "operationId": "delete_memos_remove_memo",
@@ -6589,6 +6626,29 @@
       },
       "patch": {
         "operationId": "patch_memos_patch_memo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memo_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "tags": [
+          "memos"
+        ]
+      }
+    },
+    "/api/memos/{memo_id}/reply": {
+      "post": {
+        "operationId": "post_memos_post_reply",
         "parameters": [
           {
             "in": "path",

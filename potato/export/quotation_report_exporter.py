@@ -72,11 +72,21 @@ class QuotationReportExporter(BaseExporter):
                 logger.warning(f"Skipping memos for {instance_id}: {e}")
                 continue
             source_doc = (item or {}).get(default_text_key, "") or instance_id
+            # A reply follows its thread's visibility, including a later
+            # change to it, so it is reported with the root's.
+            roots = {m["id"]: m for m in memos if not m.get("parent_id")}
             for m in memos:
                 anchor = m.get("anchor") or {}
+                root = roots.get(m.get("parent_id")) if m.get("parent_id") else m
+                if m.get("parent_id"):
+                    schema = "(memo reply)"
+                elif m.get("status"):
+                    schema = f"(issue: {m['status']})"
+                else:
+                    schema = "(memo)"
                 out.append({
-                    "schema": "(memo)",
-                    "code": m.get("visibility", ""),
+                    "schema": schema,
+                    "code": (root or m).get("visibility", ""),
                     "text": m.get("body", ""),
                     "start": anchor.get("start", ""),
                     "end": anchor.get("end", ""),

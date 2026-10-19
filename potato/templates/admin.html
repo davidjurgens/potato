@@ -844,6 +844,11 @@
             o.total_working_seconds !== undefined ? formatDuration(o.total_working_seconds) : o.total_working_time,
             "summed over annotators"),
         ];
+        if (o.open_issues !== undefined) {
+          parts.push(summaryItem("Open issues", o.open_issues,
+            `${o.resolved_issues} resolved · raised from the Notes panel`,
+            o.open_issues > 0 ? "is-warning" : ""));
+        }
         if (o.over_collected_items > 0) {
           parts.push(summaryItem("Over-collected", o.over_collected_items,
             "items with more annotations than the per-item cap", "is-warning"));

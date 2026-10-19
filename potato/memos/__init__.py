@@ -18,11 +18,19 @@ from .service import (
     MemoPermissionError,
     create_memo,
     delete_memo,
+    list_issues,
     list_visible,
+    reply_to,
+    set_assignee,
+    set_status,
     update_memo,
 )
 
 __all__ = [
+    "list_issues",
+    "reply_to",
+    "set_assignee",
+    "set_status",
     "MemoError",
     "MemoNotFound",
     "MemoPermissionError",
