@@ -173,6 +173,61 @@ def spatial_canonical(obj: dict):
     return normalize_spatial_object(obj)
 
 
+def spatial_tracks_with_attributes(stored: Any) -> List[dict]:
+    """The objects of a stored point-cloud value, one per track on a sequence.
+
+    A single cloud's objects come back as they are. On a sequence (objects
+    with `frame` and `track_id`) each track is one object, since a track's
+    attributes are one value across its keyframes.
+    """
+    from potato.export import spatial_sequences as ss
+    from potato.server_utils.iaa.structured import _is_sequence
+
+    objects = spatial_objects_with_attributes(stored)
+    if not _is_sequence(objects):
+        return objects
+    first: Dict[str, dict] = {}
+    for obj in objects:
+        if obj.get("track_id") not in (None, ""):
+            first.setdefault(str(obj["track_id"]), obj)
+    return [{"type": "track3d", "track_id": tid, "label": first[tid].get("label"),
+             "attributes": first[tid].get("attributes") or {}, "keyframes": keyframes}
+            for tid, keyframes in ss.tracks(objects).items()]
+
+
+def spatial_track_canonical(obj: dict):
+    if obj.get("type") == "track3d":
+        frames = [f for f, _ in obj["keyframes"]]
+        return {"type": "track3d", "keyframes": obj["keyframes"],
+                "start": min(frames), "end": max(frames)}
+    return spatial_canonical(obj)
+
+
+def spatial_track_similarity(a: dict, b: dict) -> float:
+    """Temporal IoU of two 3D tracks times their mean 3D similarity.
+
+    The 3D counterpart of `track_similarity`: compared at every keyframe
+    either track has, interpolating the other, over the frames both span.
+    """
+    from potato.export.spatial_sequences import object_at
+    from potato.server_utils.iaa import geometry
+
+    if a.get("type") != "track3d" or b.get("type") != "track3d":
+        if a.get("type") == "track3d" or b.get("type") == "track3d":
+            return 0.0
+        return geometry.similarity(a, b)
+    overlap = min(a["end"], b["end"]) - max(a["start"], b["start"]) + 1
+    if overlap <= 0:
+        return 0.0
+    temporal = overlap / (max(a["end"], b["end"]) - min(a["start"], b["start"]) + 1)
+    sims = []
+    for frame in sorted({f for f, _ in a["keyframes"]} | {f for f, _ in b["keyframes"]}):
+        oa, ob = object_at(a["keyframes"], frame), object_at(b["keyframes"], frame)
+        if oa and ob:
+            sims.append(geometry.similarity(oa, ob))
+    return temporal * sum(sims) / len(sims) if sims else 0.0
+
+
 def track_objects(stored: Any) -> List[dict]:
     """The tracks in a stored ``video_annotation`` value, one dict each."""
     import json

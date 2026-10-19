@@ -206,6 +206,23 @@ def _generate_internal(annotation_scheme):
                 <p class="pc-status" id="pc-status-{escaped_name}"></p>
             </div>
 
+            <!-- Shown by pc-viewer.js when the item's cloud field holds a list
+                 of frames (a sequence). Boxes are stored at keyframes; the
+                 frames between show them interpolated. -->
+            <div class="pc-frames" role="group" aria-label="Sequence frames" hidden>
+                <button type="button" class="tool-btn" data-frame-step="-1"
+                        title="Previous frame ([)">&#8249; Prev</button>
+                <input type="range" class="pc-frame-slider" min="0" max="0" value="0"
+                       aria-label="Frame">
+                <button type="button" class="tool-btn" data-frame-step="1"
+                        title="Next frame (])">Next &#8250;</button>
+                <span class="pc-frame-label" aria-live="polite">Frame 1 of 1</span>
+                <button type="button" class="tool-btn" data-frame-action="copy-forward"
+                        title="Copy the selected object to the next frame (f)">Copy to next frame</button>
+                <button type="button" class="tool-btn" data-frame-action="delete-track"
+                        title="Delete every keyframe of the selected object's track">Delete track</button>
+            </div>
+
             <!-- Everything a screen reader needs to hear: errors, warnings,
                  and the result of any keyboard edit. The canvases are pixels,
                  so an edit that only redraws them is otherwise silent. -->

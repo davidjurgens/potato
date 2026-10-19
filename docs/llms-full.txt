@@ -925,7 +925,7 @@ Most of the tools below are very good at what they were built for, and several b
 | Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 32 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 33 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -1011,7 +1011,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 32 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI, MOT, DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 33 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -1109,7 +1109,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 32 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 33 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -1330,7 +1330,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 |-----------------|:---:|
 | Annotation schemas | 61 |
 | Display types | 24 |
-| Export formats | 32 |
+| Export formats | 33 |
 | Import formats (15 CV, 5 text, 2 whole-project) | 22 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |
@@ -15083,7 +15083,9 @@ With two or more annotators per image, `/admin/iaa` adds one group per
 attribute to the scheme's report. The units are the objects both annotators drew
 in the same place, and the values are what each set. Objects are matched by
 shape overlap on an image (as for the scheme's detection and classification
-agreement), by 3D box overlap on a point cloud, and on a video by how much
+agreement), by 3D box overlap on a point cloud (on a point-cloud
+[sequence](../spatial/point_cloud.md#sequences), whole tracks are matched, the
+same way as on a video), and on a video by how much
 two tracks overlap in time multiplied by how much their boxes overlap on the
 frames where both have one. Two tracks count as one object at 0.5 or
 more; when the box overlap holds steady along the track, that product equals
@@ -16552,11 +16554,36 @@ tracker's keyboard shortcuts act on the whole page, so a second tracker would
 receive every track you create; the config is refused at startup. Put a second
 tracking task in its own phase, or use one scheme with several labels.
 
-**Getting tracks out.** No exporter converts tracks to a tracking format yet:
-`mot` and `cvat` read `image_annotation` schemes only and refuse a config that
-has none. Tracks reach the `jsonl`, `csv` and `parquet` exports, and each
-annotator's `user_state.json`, as the scheme's answer: a JSON string under
-`_data` with the structure shown above. In `jsonl` that is
+**Getting tracks out.** The `mot` export writes each video as a
+MOTChallenge sequence named after its item: a `gt/gt.txt` row on every frame
+from a track's first keyframe to its last (frames numbered from 1), with the
+boxes between keyframes interpolated, and a `seqinfo.ini`. MOT boxes are in
+pixels, so the export needs the video's size: pass
+`--option width=1920 --option height=1080`, give the items `width` and
+`height` fields, or install ffprobe so the export can read it from a local
+file. A video whose size is unknown is skipped and named in a warning. A track
+with `constant` interpolation holds each box until the next keyframe; `cubic`
+tracks are written with linear interpolation, with a warning.
+
+Rows are numbered in the video file's own frames. The annotation page counts
+frames at the scheme's `video_fps` (30 when unset), which may not be the file's
+rate, so each row is placed from the keyframe's stored `time` at the file's rate,
+and that rate is written to `seqinfo.ini`. The rate comes from
+`--option fps=25`, an `fps` field on the item, or ffprobe. Without any of those
+the scheme's `video_fps` is used, and if that is unset too the export warns that
+it assumed 30 fps. The `cvat`
+export reads `image_annotation` schemes only and does not write video tracks.
+
+```bash
+python -m potato.export --config config.yaml --format mot --output ./mot \
+    --option width=1280 --option height=720
+```
+
+MOT has no attribute columns except `visibility` and the `ignore` flag (`conf`
+0), which are read from attributes of those names. All attributes reach the
+`jsonl`, `csv` and `parquet` exports, and each annotator's `user_state.json`,
+as part of the scheme's answer: a JSON string under `_data` with the structure
+shown above. In `jsonl` that is
 `labels.<scheme>._data`; in `csv` and `parquet` it is the column
 `<scheme>._data`. Parse the string and read `tracks.<id>.attributes` and
 `tracks.<id>.keyframes.<frame>.bboxNorm`:
@@ -18423,7 +18450,8 @@ annotation_schemes:
     max_points: 400000
 ```
 
-Runnable example: `examples/spatial/kitti-cuboids/`.
+Runnable examples: `examples/spatial/kitti-cuboids/` (single scans) and
+`examples/spatial/lidar-sequence/` (a sequence, see [Sequences](#sequences)).
 
 ## Formats
 
@@ -18569,6 +18597,69 @@ did not see, and fitting to nothing would be fabricating a measurement.
 
 Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
 the world frame, so the key always turns it the same way on screen.
+
+## Sequences
+
+An item whose cloud field holds a **list** of clouds is a sequence, one cloud
+per frame, and objects are tracked through it:
+
+```json
+{"id": "drive_0001",
+ "point_cloud": ["frames/drive_0001/000000.bin", "frames/drive_0001/000001.bin"],
+ "calibration": {"file": "calib/drive_0001.txt"}}
+```
+
+`{"frames": [...]}` works too. Nothing changes in the scheme's config. The
+viewer shows a frame bar under the cloud, and the camera stays where you put it
+as you change frames.
+
+| Action | Result |
+|---|---|
+| `[` / `]`, the bar's buttons, or the slider | Previous / next frame |
+| `f` or **Copy to next frame** | Copy the selected object to the next frame as a keyframe, and go there |
+| `Delete` | Remove the selected object's keyframe on this frame |
+| **Delete track** | Remove the selected object from every frame |
+
+Each object you draw starts a **track**. Boxes are stored only at
+**keyframes**, the frames where you drew or changed them. On the frames
+between two keyframes the box is interpolated (position and size linearly,
+rotation along the shortest arc) and drawn with dashed edges; points are drawn
+hollow. Moving, resizing or rotating an interpolated box makes it a keyframe on
+that frame. Before a track's first keyframe and after its last, the object is
+absent, so carry it forward with `f` while it is in view.
+
+An interpolated box has nothing stored on its frame, so `Delete` on it explains
+that rather than removing anything: delete one of its keyframes, or the whole
+track. Deleting a keyframe between two others leaves the box interpolated there.
+
+The class and [attributes](../multimedia/object_attributes.md) belong to the
+track: changing them on any frame changes them on every keyframe, without
+adding one. Polylines and painted points are not interpolated; they appear only
+on the frames they were drawn on.
+
+Each saved object carries `frame` (from 0) and `track_id`:
+
+```json
+[{"type": "cuboid_3d", "label": "car", "frame": 0, "track_id": "t1",
+  "attributes": {"occluded": "none"},
+  "coordinates": {"center": [9.95, -1.02, -0.95], "size": [4.8, 2.5, 1.6],
+                  "rotation": [0, 0, 0, 1]}},
+ {"type": "cuboid_3d", "label": "car", "frame": 3, "track_id": "t1", ...}]
+```
+
+Agreement on a sequence is scored frame by frame, using the interpolated
+boxes, so two annotators' boxes on different frames are never compared. The
+report's `n_frames` counts the (item, frame) pairs that anyone annotated.
+Attribute agreement matches whole tracks, by how much they overlap in time
+multiplied by their mean 3D overlap.
+
+The labeling engine compares a model's sequence answer with a person's the same
+way, frame by frame.
+
+The `kitti_3d` export writes a sequence as KITTI tracking labels, with a line
+on every frame of each track and each box's 2D projection in the camera image;
+see
+[3D labels](../../data-export/format_matrix.md#kitti-3d-labels).
 
 ## The slab views
 
@@ -50331,6 +50422,17 @@ Export annotations as tab-separated values. Same structure as CSV but with tab d
 python -m potato.export --config config.yaml --format tsv --output ./export/
 ```
 
+### KITTI 3D (kitti_3d)
+
+3D boxes from `spatial_annotation` schemes, in KITTI's camera frame: one
+`label_2/<cloud>.txt` per point cloud, and for a point-cloud sequence one
+`label_02/<item>.txt` in KITTI's tracking format. Each item needs its
+calibration. See [3D labels](format_matrix.md#kitti-3d-labels).
+
+```bash
+python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/
+```
+
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
@@ -50792,7 +50894,8 @@ format supports is what survives.
 | `labelme` | ✅ | ✅ | ❌ | ⚠️ ⁷ | Also polylines; circular ellipses survive, others become polygons |
 | `darwin` | ✅ | ✅ | ⚠️ ¹² | ✅ as keypoints | Also ellipses and lines; stable content-derived ids |
 | `kitti` | ✅ | ❌ | ❌ | ❌ | Corners; 3D fields written as the devkit's unset sentinels |
-| `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives |
+| `kitti_3d` | ✅ 3D cuboids | ❌ | ❌ | ❌ | Point clouds: `label_2` per cloud, KITTI tracking `label_02` per sequence; needs each item's calibration — see [3D labels](#kitti-3d-labels) |
+| `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
 | `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
@@ -50832,7 +50935,8 @@ rather than as CV geometry.
 | CVAT → Potato → CVAT | ✅ for boxes, polygons, polylines and ellipses, with label colours and shape attributes intact |
 | V7 Darwin → Potato → Darwin | ✅ for boxes, polygons, ellipses, lines and keypoints; holes and raster masks are reported |
 | KITTI → Potato → KITTI | ✅ for 2D boxes; `truncated` / `occluded` / `alpha` and the 3D fields ride through untouched |
-| KITTI 3D → Potato → KITTI 3D | ✅ exact, with the calibration — see [3D labels](#kitti-3d-labels) |
+| Potato → KITTI 3D | ✅ with the calibration; pitch and roll are dropped — see [3D labels](#kitti-3d-labels) |
+| KITTI 3D → Potato | ⚠️ library only: `kitti3d.kitti_to_cuboid` converts a label exactly, but no `potato import` format reads 3D label files yet |
 | MOT → Potato → MOT | ✅ for boxes, track ids, ignore regions and visibility |
 | Cityscapes → Potato → Cityscapes | ✅ for polygons, crowd `group` labels and painter's order |
 | DAVIS → Potato → DAVIS | ✅ for per-instance masks and stable object ids |
@@ -50891,6 +50995,41 @@ image to normalize against. `potato/export/spatial_utils.py` defines it; the
 KITTI conversion lives in `potato/export/kitti3d.py` and needs the sequence's
 `calib` file.
 
+The `kitti_3d` export format writes it. A single point cloud becomes
+`label_2/<cloud name>.txt` in KITTI's object format. A
+[sequence](../annotation-types/spatial/point_cloud.md#sequences) becomes
+`label_02/<item id>.txt` in KITTI's tracking format, `frame track_id` and then
+the same fifteen fields, with a line on every frame from a track's first
+keyframe to its last and the boxes between keyframes interpolated. Track ids
+are numbered from 0 in order of first appearance. The item's calibration
+(the scheme's `calibration_field`) supplies the camera frame; an item without
+one is skipped and named in a warning. Points and polylines are not written,
+since KITTI has no such object.
+
+The 2D box columns are the cuboid projected into the calibration's first camera
+(P2 for a KITTI calibration file) and clipped to its image. KITTI evaluation
+needs them: it grades each object's difficulty by its 2D box height and ignores
+objects under 25 px, so a zero box drops the object from 3D evaluation too. A
+KITTI calibration file does not record the image size, so give it with
+`--option image_width=1242 --option image_height=375`, or name the camera's
+image in the calibration; without a size the boxes are written unclipped, with a
+warning. An object behind the camera or outside the image gets a zero box and is
+counted in a warning.
+
+An `occluded` attribute fills that column (`none`/`partly`/`largely` map to
+KITTI's 0/1/2). Truncation starts from the share of the projected box outside
+the image: a fraction in the object format, and 0, 1 (partly) or 2 (fully) in
+the tracking format. A `truncated` attribute can only raise it, since KITTI
+grades difficulty by truncation and a box the image edge cuts in half is not
+Easy whatever the label says. The attribute may be true/false, a number from 0
+to 1, or `none`/`partly`/`fully`; `partly` with nothing cut off is written as
+0.5 in the object format. Any other value is ignored and named in a warning.
+
+```bash
+python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/ \
+    --option image_width=1242 --option image_height=375
+```
+
 Four things in the format are easy to get wrong, and all four bite silently:
 
 | | KITTI | Read naively |
@@ -50910,7 +51049,8 @@ is mounted relative to its lidar — a box that is level in the camera frame is
 genuinely tilted in the lidar frame, and storing only a yaw would throw that
 away. Potato → KITTI discards pitch and roll, because the format has nowhere to
 put them; the exporter reports how much rotation each box lost rather than
-writing a flat box and saying nothing.
+writing a flat box and saying nothing: the export warns with the number of
+boxes tilted by more than 1°.
 
 ## Importing
 
@@ -61819,7 +61959,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **222 example projects** in the repository, across 17
+A derived index of the **223 example projects** in the repository, across 17
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.

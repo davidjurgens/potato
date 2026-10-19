@@ -33,6 +33,7 @@ import math
 import random
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -217,7 +218,9 @@ def main():
     for name, objects in SCENES.items():
         # Seeded per scene: regenerating must not produce a diff on files
         # whose contents nobody changed.
-        rng = random.Random(hash(name) % (2 ** 31))
+        # crc32, not hash(): str hashes are randomized per process, so hash()
+        # gave every run a different scene.
+        rng = random.Random(zlib.crc32(name.encode()))
         points = sample_cloud(objects, rng)
         write_kitti_bin(clouds / f"{name}.bin", points)
         render_camera(objects, camera).save(images / f"{name}.png")

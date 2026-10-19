@@ -47,6 +47,10 @@ def spatial_objects(stored: Any) -> List[dict]:
     for obj in _parse_blob(stored):
         n = normalize_spatial_object(obj)
         if n:
+            # Kept so a sequence's objects stay on their frames: see
+            # spatial_distance.
+            if isinstance(obj, dict) and isinstance(obj.get("frame"), int):
+                n = dict(n, frame=obj["frame"])
             out.append(n)
     return out
 
@@ -97,9 +101,42 @@ def segment_list(stored: Any) -> List[dict]:
     return out
 
 
+def _by_frame(objects: List[dict]) -> Dict[int, List[dict]]:
+    """A sequence's canonical objects on every frame, interpolated per track."""
+    from potato.export.spatial_sequences import object_at
+
+    tracks: Dict[str, List[Any]] = {}
+    for obj in objects:
+        if obj.get("track_id") not in (None, "") and isinstance(obj.get("frame"), int):
+            tracks.setdefault(str(obj["track_id"]), []).append((obj["frame"], obj))
+    out: Dict[int, List[dict]] = {}
+    for keyframes in tracks.values():
+        keyframes.sort(key=lambda pair: pair[0])
+        for frame in range(keyframes[0][0], keyframes[-1][0] + 1):
+            here = object_at(keyframes, frame)
+            if here is not None:
+                out.setdefault(frame, []).append(here)
+    return out
+
+
 def spatial_distance(a: List[dict], b: List[dict]) -> float:
+    """1 - matched 3D overlap between two annotators' objects.
+
+    On a sequence (objects with `frame` and `track_id`) this is the mean of
+    the per-frame distances, with boxes interpolated between keyframes, over
+    the frames either annotator has an object on. Comparing all frames at
+    once would match a box on frame 0 with one on frame 9.
+    """
     from potato.server_utils.annotation_values import _matched_set_distance
-    return float(_matched_set_distance(a or [], b or [], SPATIAL_MATCH))
+    a, b = a or [], b or []
+    if _is_sequence(a) or _is_sequence(b):
+        frames_a, frames_b = _by_frame(a), _by_frame(b)
+        frames = sorted(set(frames_a) | set(frames_b))
+        if not frames:
+            return 0.0
+        return sum(float(_matched_set_distance(frames_a.get(f, []), frames_b.get(f, []),
+                                               SPATIAL_MATCH)) for f in frames) / len(frames)
+    return float(_matched_set_distance(a, b, SPATIAL_MATCH))
 
 
 def segment_distance(a: List[dict], b: List[dict]) -> float:
@@ -134,8 +171,46 @@ def _set_report(rows: Dict[str, Dict[str, Any]], parse: Callable[[Any], List[dic
             "n_pairs": len(agreements)}
 
 
+def _is_sequence(objects: List[Any]) -> bool:
+    return any(isinstance(o, dict) and o.get("track_id") not in (None, "") and "frame" in o
+               for o in objects)
+
+
 def spatial_report(rows: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    return _set_report(rows, spatial_objects, spatial_distance)
+    """Mean pairwise agreement over 3D objects.
+
+    A sequence item (objects with `frame` and `track_id`) is scored frame by
+    frame, with the boxes between keyframes interpolated, so a box on frame 0
+    is never matched with one on frame 9. Each (item, frame) that anyone
+    annotated is a unit; `n_frames` counts them.
+    """
+    from potato.export.spatial_sequences import dense_frames
+    from potato.server_utils.annotation_values import _parse_blob
+
+    expanded: Dict[str, Dict[str, Any]] = {}
+    sequence_items = set()
+    for iid, per_user in rows.items():
+        raw = {uid: [o for o in _parse_blob(v) if isinstance(o, dict)]
+               for uid, v in per_user.items()}
+        if not any(_is_sequence(objs) for objs in raw.values()):
+            expanded[iid] = {uid: spatial_objects(v) for uid, v in per_user.items()}
+            continue
+        sequence_items.add(iid)
+        last = max((int(o["frame"]) for objs in raw.values() for o in objs
+                    if isinstance(o.get("frame"), int)), default=-1)
+        dense = {uid: dense_frames(objs, last + 1) for uid, objs in raw.items()}
+        for frame in range(last + 1):
+            per_frame = {uid: frames[frame] for uid, frames in dense.items()}
+            if any(per_frame.values()):
+                expanded[f"{iid}@{frame}"] = per_frame
+    report = _set_report(expanded, lambda value: value if isinstance(value, list)
+                         else spatial_objects(value), spatial_distance)
+    if sequence_items:
+        units = [key for key in expanded if key.split("@")[0] in sequence_items]
+        report["n_frames"] = len(units)
+        report["n_items"] = len({key.split("@")[0] for key in expanded
+                                 if len(expanded[key]) >= 2})
+    return report
 
 
 def segment_report(rows: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:

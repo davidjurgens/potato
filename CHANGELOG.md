@@ -6,6 +6,23 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Point-cloud sequences.** An item whose cloud field lists one cloud per
+  frame is annotated as a sequence: a frame bar under the viewer, objects
+  tracked across frames by keyframe, boxes interpolated between keyframes
+  (drawn dashed), `f` to copy the selected object to the next frame, and
+  class and attributes kept per track. Agreement is scored frame by frame,
+  and attribute agreement matches whole tracks. Example:
+  `examples/spatial/lidar-sequence/`.
+- **`kitti_3d` export.** Point-cloud boxes as KITTI 3D labels in the camera
+  frame: `label_2` for single clouds and KITTI tracking `label_02` for
+  sequences, from each item's calibration, with each box's 2D projection in
+  the camera image (which KITTI evaluation needs) and `truncated`/`occluded`
+  attributes in their columns. The converter in `kitti3d.py` existed but no
+  export format used it.
+- **Video tracks in the `mot` export.** Each video becomes a MOTChallenge
+  sequence, with interpolated boxes scaled to the video's pixel size (from
+  `--option width/height`, the item, or ffprobe) and rows numbered in the
+  file's own frames, whatever rate the page counted frames at.
 - **Attributes on video tracks and point-cloud objects.** `attributes` now
   works on `video_annotation` schemes in tracking or combined mode (one value
   per track) and on `spatial_annotation` schemes (each box or point), with
@@ -202,6 +219,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **`python -m potato.export` resolved project files against the shell's
+  directory.** Exporters received the config's relative `task_dir`, so media,
+  calibrations and the telemetry store were looked up relative to wherever
+  the command ran. The export CLI now passes the resolved project directory.
+- **The KITTI example's scenes changed on every regeneration.** Its generator
+  seeded from `hash()`, which Python randomizes per process; it now uses a
+  stable checksum.
 - **Video object tracks were never saved.** In tracking mode the tracker kept
   its tracks to itself: the page overrode a save function nothing called and
   restored from one that does not exist, so tracks drawn in `tracking` or

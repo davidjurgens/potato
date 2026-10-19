@@ -83,7 +83,8 @@ format supports is what survives.
 | `labelme` | ✅ | ✅ | ❌ | ⚠️ ⁷ | Also polylines; circular ellipses survive, others become polygons |
 | `darwin` | ✅ | ✅ | ⚠️ ¹² | ✅ as keypoints | Also ellipses and lines; stable content-derived ids |
 | `kitti` | ✅ | ❌ | ❌ | ❌ | Corners; 3D fields written as the devkit's unset sentinels |
-| `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives |
+| `kitti_3d` | ✅ 3D cuboids | ❌ | ❌ | ❌ | Point clouds: `label_2` per cloud, KITTI tracking `label_02` per sequence; needs each item's calibration — see [3D labels](#kitti-3d-labels) |
+| `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
 | `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
@@ -123,7 +124,8 @@ rather than as CV geometry.
 | CVAT → Potato → CVAT | ✅ for boxes, polygons, polylines and ellipses, with label colours and shape attributes intact |
 | V7 Darwin → Potato → Darwin | ✅ for boxes, polygons, ellipses, lines and keypoints; holes and raster masks are reported |
 | KITTI → Potato → KITTI | ✅ for 2D boxes; `truncated` / `occluded` / `alpha` and the 3D fields ride through untouched |
-| KITTI 3D → Potato → KITTI 3D | ✅ exact, with the calibration — see [3D labels](#kitti-3d-labels) |
+| Potato → KITTI 3D | ✅ with the calibration; pitch and roll are dropped — see [3D labels](#kitti-3d-labels) |
+| KITTI 3D → Potato | ⚠️ library only: `kitti3d.kitti_to_cuboid` converts a label exactly, but no `potato import` format reads 3D label files yet |
 | MOT → Potato → MOT | ✅ for boxes, track ids, ignore regions and visibility |
 | Cityscapes → Potato → Cityscapes | ✅ for polygons, crowd `group` labels and painter's order |
 | DAVIS → Potato → DAVIS | ✅ for per-instance masks and stable object ids |
@@ -182,6 +184,41 @@ image to normalize against. `potato/export/spatial_utils.py` defines it; the
 KITTI conversion lives in `potato/export/kitti3d.py` and needs the sequence's
 `calib` file.
 
+The `kitti_3d` export format writes it. A single point cloud becomes
+`label_2/<cloud name>.txt` in KITTI's object format. A
+[sequence](../annotation-types/spatial/point_cloud.md#sequences) becomes
+`label_02/<item id>.txt` in KITTI's tracking format, `frame track_id` and then
+the same fifteen fields, with a line on every frame from a track's first
+keyframe to its last and the boxes between keyframes interpolated. Track ids
+are numbered from 0 in order of first appearance. The item's calibration
+(the scheme's `calibration_field`) supplies the camera frame; an item without
+one is skipped and named in a warning. Points and polylines are not written,
+since KITTI has no such object.
+
+The 2D box columns are the cuboid projected into the calibration's first camera
+(P2 for a KITTI calibration file) and clipped to its image. KITTI evaluation
+needs them: it grades each object's difficulty by its 2D box height and ignores
+objects under 25 px, so a zero box drops the object from 3D evaluation too. A
+KITTI calibration file does not record the image size, so give it with
+`--option image_width=1242 --option image_height=375`, or name the camera's
+image in the calibration; without a size the boxes are written unclipped, with a
+warning. An object behind the camera or outside the image gets a zero box and is
+counted in a warning.
+
+An `occluded` attribute fills that column (`none`/`partly`/`largely` map to
+KITTI's 0/1/2). Truncation starts from the share of the projected box outside
+the image: a fraction in the object format, and 0, 1 (partly) or 2 (fully) in
+the tracking format. A `truncated` attribute can only raise it, since KITTI
+grades difficulty by truncation and a box the image edge cuts in half is not
+Easy whatever the label says. The attribute may be true/false, a number from 0
+to 1, or `none`/`partly`/`fully`; `partly` with nothing cut off is written as
+0.5 in the object format. Any other value is ignored and named in a warning.
+
+```bash
+python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/ \
+    --option image_width=1242 --option image_height=375
+```
+
 Four things in the format are easy to get wrong, and all four bite silently:
 
 | | KITTI | Read naively |
@@ -201,7 +238,8 @@ is mounted relative to its lidar — a box that is level in the camera frame is
 genuinely tilted in the lidar frame, and storing only a yaw would throw that
 away. Potato → KITTI discards pitch and roll, because the format has nowhere to
 put them; the exporter reports how much rotation each box lost rather than
-writing a flat box and saying nothing.
+writing a flat box and saying nothing: the export warns with the number of
+boxes tilted by more than 1°.
 
 ## Importing
 

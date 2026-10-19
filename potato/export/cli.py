@@ -495,6 +495,11 @@ def build_export_context(config_path: str) -> ExportContext:
     # Determine output directory
     task_dir = config.get("task_dir", ".")
     base_dir = os.path.normpath(os.path.join(config_dir, task_dir))
+    # Exporters resolve project files (media, calibrations, the telemetry
+    # store) against task_dir. Left relative, it resolved against the
+    # caller's working directory, so exporting from anywhere but the project
+    # directory read the wrong files or none.
+    config["task_dir"] = base_dir
     output_annotation_dir = config.get(
         "output_annotation_dir",
         os.path.join(base_dir, "annotation_output")

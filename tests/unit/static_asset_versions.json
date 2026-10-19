@@ -299,13 +299,17 @@
     "sha256": "11e79ec8beef3418",
     "version": "1"
   },
+  "pointcloud/pc-sequence.js": {
+    "sha256": "c80763b8b622136c",
+    "version": "2"
+  },
   "pointcloud/pc-viewer.css": {
-    "sha256": "dfef3a4d86b1da61",
-    "version": "5"
+    "sha256": "c06b5feeed1c02a7",
+    "version": "7"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "4be8d0bb49deee32",
-    "version": "8"
+    "sha256": "5a01da384c29c68b",
+    "version": "12"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",

@@ -80,7 +80,7 @@
 
     <!-- Point cloud viewer styles -->
     {% if frontend_assets.spatial_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=7">
     {% endif %}
 
     <!-- Depth map display styles -->
@@ -875,7 +875,8 @@
     <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=8"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-sequence.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=12"></script>
     {% endif %}
 
     <!-- Depth maps. A display type, so it is gated on the display's wrapper

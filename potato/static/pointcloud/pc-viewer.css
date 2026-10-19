@@ -88,6 +88,40 @@
     min-height: 1.2em;
 }
 
+/* Sequence frame bar. Hidden on single-cloud items. */
+.pointcloud-annotation-container .pc-frames:not([hidden]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.pointcloud-annotation-container .pc-frame-slider {
+    flex: 1 1 160px;
+    min-width: 120px;
+    accent-color: var(--primary, #6e56cf);
+}
+
+.pointcloud-annotation-container .pc-frame-slider:focus-visible {
+    outline: 3px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+/* The shared .tool-btn has no disabled look, and these are disabled whenever
+   nothing is selected or the frame is the first or last. */
+.pointcloud-annotation-container .pc-frames .tool-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.pointcloud-annotation-container .pc-frame-label {
+    font-size: var(--text-sm, 0.875rem);
+    font-variant-numeric: tabular-nums;
+    color: #495057;
+    min-width: 8em;
+}
+
 .pointcloud-annotation-container .pc-status[data-kind="warn"] {
     /* 4.6:1 on white. */
     color: #8a5a00;

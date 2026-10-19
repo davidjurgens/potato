@@ -103,7 +103,9 @@ With two or more annotators per image, `/admin/iaa` adds one group per
 attribute to the scheme's report. The units are the objects both annotators drew
 in the same place, and the values are what each set. Objects are matched by
 shape overlap on an image (as for the scheme's detection and classification
-agreement), by 3D box overlap on a point cloud, and on a video by how much
+agreement), by 3D box overlap on a point cloud (on a point-cloud
+[sequence](../spatial/point_cloud.md#sequences), whole tracks are matched, the
+same way as on a video), and on a video by how much
 two tracks overlap in time multiplied by how much their boxes overlap on the
 frames where both have one. Two tracks count as one object at 0.5 or
 more; when the box overlap holds steady along the track, that product equals

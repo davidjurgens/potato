@@ -1088,10 +1088,11 @@ def _object_attribute_report(scheme, raw_rows):
         scheme["attributes"], [str(n) for n in labels], scheme.get("name", ""))
     if scheme.get("annotation_type") == "spatial_annotation":
         from potato.server_utils.iaa.structured import SPATIAL_MATCH
-        rows = {iid: {uid: aa.spatial_objects_with_attributes(v) for uid, v in per_user.items()}
+        rows = {iid: {uid: aa.spatial_tracks_with_attributes(v) for uid, v in per_user.items()}
                 for iid, per_user in raw_rows.items()}
         return aa.attribute_agreement(rows, definitions, SPATIAL_MATCH,
-                                      to_canonical=aa.spatial_canonical)
+                                      to_canonical=aa.spatial_track_canonical,
+                                      similarity=aa.spatial_track_similarity)
     rows = {iid: {uid: aa.track_objects(v) for uid, v in per_user.items()}
             for iid, per_user in raw_rows.items()}
     report = aa.attribute_agreement(rows, definitions, 0.5, to_canonical=aa.track_canonical,

@@ -122,6 +122,7 @@ def _register_builtin_exporters():
     from .darwin_exporter import DarwinExporter
     from .davis_exporter import DAVISExporter
     from .kitti_exporter import KITTIExporter
+    from .kitti3d_exporter import KITTI3DExporter
     from .labelme_exporter import LabelMeExporter
     from .mot_exporter import MOTExporter
     from .conll_2003_exporter import CoNLL2003Exporter
@@ -158,6 +159,7 @@ def _register_builtin_exporters():
         # never hand work back to a colleague still on it.
         DarwinExporter(),
         KITTIExporter(),
+        KITTI3DExporter(),
         MOTExporter(),
         CityscapesExporter(),
         DAVISExporter(),

@@ -46,6 +46,8 @@
         || (typeof require !== 'undefined' ? require('./pc-octree.js') : null);
     const mpr = (root && root.PointCloudMPR)
         || (typeof require !== 'undefined' ? require('./pc-mpr.js') : null);
+    const sequence = (root && root.PointCloudSequence)
+        || (typeof require !== 'undefined' ? require('./pc-sequence.js') : null);
 
     /** Edges of a cuboid, as index pairs into `cuboid_corners` order. */
     const BOX_EDGES = [
@@ -114,6 +116,14 @@
             this._mprObserver = null;
 
             this.annotations = [];      // client-contract objects, local frame
+            // Sequences (pc-sequence.js). `frames` is the item's list of cloud
+            // paths, null for a single cloud. `annotations` is then the view of
+            // frame `frameIndex`; `sequenceStore` holds every keyframe, in the
+            // file's coordinates because each frame's cloud has its own origin.
+            this.frames = null;
+            this.frameIndex = 0;
+            this.sequenceStore = [];
+            this._loadToken = 0;
             // Subtracted from the cloud by the server; null for a cloud near
             // zero. Set when the cloud or octree manifest arrives.
             this.origin = null;
@@ -151,6 +161,10 @@
             // The panel the generator renders when the scheme declares attributes.
             this.attributePanel = this.container
                 && this.container.querySelector('.object-attribute-panel');
+            const record = this._instanceRecord();
+            this.frames = sequence && record
+                ? sequence.framesOf(record[this.config.sourceField || 'point_cloud'])
+                : null;
 
             if (typeof THREE === 'undefined') {
                 this._status('3D viewer unavailable: three.js did not load. '
@@ -162,6 +176,7 @@
             this._buildScene();
             this._bindToolbar();
             this._bindKeys();
+            if (this.frames) this._bindFrames();
             this._restoreFromInput();
             this._buildMprPanels();
             this._loadCloud();
@@ -266,6 +281,10 @@
          */
         _cloudPath() {
             const field = this.config.sourceField || 'point_cloud';
+            if (this.frames) {
+                const path = this.frames[this.frameIndex];
+                return looksLikeCloud(path) ? path.trim() : null;
+            }
 
             const record = this._instanceRecord();
             const fromRecord = record && record[field];
@@ -376,6 +395,9 @@
 
             if (this._lodEnabled()) return this._loadOctree(url);
 
+            // A sequence can switch frames faster than a cloud arrives; only
+            // the latest request may replace the points.
+            const token = ++this._loadToken;
             this._status('Loading point cloud…');
             let response;
             try {
@@ -404,10 +426,11 @@
                 this._status(`Point cloud is unreadable: ${err.message}`, 'error');
                 return;
             }
+            if (token !== this._loadToken) return;
             this.parsed = parsed;
             this._setOrigin(wire.originOf(parsed.header));
             this._buildPoints(parsed);
-            this._status(wire.describeCloud(parsed.header));
+            this._status(this._frameStatus(wire.describeCloud(parsed.header)));
         }
 
         /**
@@ -491,6 +514,14 @@
             this.scene.add(this.cloud);
 
             this.groundZ = groundLevel(parsed.positions);
+            // A sequence keeps the camera where the annotator put it: moving
+            // it on every frame would make following an object impossible.
+            if (this.frames && this._framed) {
+                this._render();
+                this._drawMpr();
+                return;
+            }
+            this._framed = true;
 
             const frame = wire.framing(parsed.header, parsed);
             this._orbit.target.set(frame.center[0], frame.center[1],
@@ -524,6 +555,7 @@
 
         async _loadOctree(baseUrl) {
             this._disposeLod();
+            const token = ++this._loadToken;
             this._status('Loading point cloud…');
 
             const manifestUrl = withParam(baseUrl, 'lod', '1');
@@ -546,6 +578,7 @@
                 return;
             }
 
+            if (token !== this._loadToken) return;
             this.lodIndex = new octree.OctreeIndex(manifest);
             this._lodBaseUrl = baseUrl;
             this._setOrigin(wire.originOf(manifest));
@@ -557,7 +590,10 @@
             // Frame from the manifest's bounds, before a single point has
             // arrived. Framing after the root loads would show the scene from
             // the default camera for one paint, which reads as a jump.
-            this._frameOn(wire.framing({ bounds: this.lodIndex.bounds }, null));
+            if (!(this.frames && this._framed)) {
+                this._frameOn(wire.framing({ bounds: this.lodIndex.bounds }, null));
+                this._framed = true;
+            }
 
             await this._fetchNode('r');
             const rootParsed = this.lodParsed.get('r');
@@ -584,6 +620,8 @@
         async _fetchNode(key) {
             if (this.lodNodes.has(key) || this._lodPending.has(key)) return;
             this._lodPending.add(key);
+            // A node of the previous frame must not land in this one.
+            const base = this._lodBaseUrl;
             try {
                 const response = await fetch(
                     withParam(withParam(this._lodBaseUrl, 'lod', '1'),
@@ -591,6 +629,7 @@
                     { credentials: 'same-origin' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const parsed = wire.parseWire(await response.arrayBuffer());
+                if (base !== this._lodBaseUrl) return;
                 if (key === 'r') this._setColorRange(parsed);
                 this.lodParsed.set(key, parsed);
                 const points = this._pointsObject(parsed);
@@ -613,7 +652,7 @@
                     `Part of the cloud could not be loaded (${err.message}); `
                     + `the view may be missing detail in places.`, 'warn');
             } finally {
-                this._lodPending.delete(key);
+                if (base === this._lodBaseUrl) this._lodPending.delete(key);
             }
         }
 
@@ -869,6 +908,7 @@
                                  attributes: this._newAttributes(this.currentLabel) });
             this.selectedIndex = this.annotations.length - 1;
             this._renderAttributePanel();
+            if (this.frames) this._updateFrameBar();
             this._status(`Box added: ${describeBox(coords, this.origin)}. `
                          + 'Press q/e to rotate it, Delete to remove it.');
         }
@@ -883,6 +923,7 @@
                                  attributes: this._newAttributes(this.currentLabel) });
             this.selectedIndex = this.annotations.length - 1;
             this._renderAttributePanel();
+            if (this.frames) this._updateFrameBar();
         }
 
         /** Select the annotation nearest a click, in screen space. */
@@ -978,7 +1019,11 @@
 
         _updateAttributeRequirement() {
             if (!this.attributeDefs || !this.attributeDefs.length || !window.ObjectAttributes) return;
-            const missing = this.annotations.filter(obj => window.ObjectAttributes.incomplete(
+            // A sequence asks once per track, across every frame.
+            const objects = this.frames
+                ? Object.values(sequence.tracksOf(this.sequenceStore)).map((list) => list[0])
+                : this.annotations;
+            const missing = objects.filter(obj => window.ObjectAttributes.incomplete(
                 this.attributeDefs, obj.label, obj.attributes || {})).length;
             window.ObjectAttributes.updateRequirement(this.attributePanel, this.container,
                                                       missing, 'object');
@@ -986,6 +1031,7 @@
 
         _highlightSelection() {
             this._renderAttributePanel();
+            if (this.frames) this._updateFrameBar();
             this.meshes.forEach((mesh, i) => {
                 if (!mesh || !mesh.material) return;
                 // Line width is capped at 1 on most platforms, so thickness
@@ -1015,7 +1061,8 @@
         deleteSelected() {
             if (this.selectedIndex < 0) return false;
             const removed = this.deleteAnnotation(this.selectedIndex);
-            this.selectedIndex = -1;
+            // A refused delete (an interpolated object) keeps the selection.
+            if (removed) this.selectedIndex = -1;
             return removed;
         }
 
@@ -1653,6 +1700,19 @@
                 }
                 if (e.ctrlKey || e.metaKey || e.altKey) return;
 
+                if (this.frames) {
+                    if (e.key === '[' || e.key === ']') {
+                        e.preventDefault();
+                        this.goToFrame(this.frameIndex + (e.key === ']' ? 1 : -1));
+                        return;
+                    }
+                    if ((e.key === 'f' || e.key === 'F') && this.selectedIndex >= 0) {
+                        e.preventDefault();
+                        this.copyForward();
+                        return;
+                    }
+                }
+
                 // Cycling the selection. Until this existed, selectedIndex was
                 // set only by drawing a box or by clicking one, so a keyboard
                 // user could never reach an annotation they had not just made
@@ -1785,9 +1845,29 @@
 
         deleteAnnotation(index) {
             if (index < 0 || index >= this.annotations.length) return false;
-            this.annotations.splice(index, 1);
+            if (this.annotations[index].interpolated) {
+                // Nothing is stored on this frame to delete: the object is
+                // drawn between two keyframes and would come straight back.
+                this._status('This object is interpolated on this frame. Go to one of '
+                             + 'its keyframes to delete that keyframe, or use Delete '
+                             + 'track to remove it from every frame.', 'warn');
+                return false;
+            }
+            const removed = this.annotations.splice(index, 1)[0];
             const mesh = this.meshes.splice(index, 1)[0];
             if (mesh) this.scene.remove(mesh);
+            if (this.frames && removed.track_id !== undefined) {
+                // A keyframe between two others leaves the track still
+                // passing through this frame: show it interpolated, in the
+                // same slot, rather than as if the object had gone.
+                this._mergeFrame();
+                const keyframes = sequence.tracksOf(this.sequenceStore)[removed.track_id];
+                const back = keyframes && sequence.objectAt(keyframes, this.frameIndex);
+                if (back) {
+                    this.annotations.splice(index, 0, wire.toLocal([back], this.origin)[0]);
+                    this._rebuildMeshes();
+                }
+            }
             this._saveState();
             this._updateAnnotationData();
             this._render();
@@ -1831,6 +1911,7 @@
             // field is cleared explicitly. The image manager shipped three
             // separate cross-instance corruption bugs from state that a
             // canvas-scoped clear could not reach.
+            this.sequenceStore = [];
             this.meshes.forEach((m) => { if (m) this.scene.remove(m); });
             this.meshes = [];
             this.annotations = [];
@@ -1856,6 +1937,10 @@
         }
 
         _serializeAnnotations() {
+            if (this.frames) {
+                this._mergeFrame();
+                return JSON.stringify(this.sequenceStore);
+            }
             return JSON.stringify(wire.toStored(this.annotations, this.origin));
         }
 
@@ -1880,6 +1965,9 @@
         }
 
         _updateAnnotationData() {
+            // A sequence's store first, so the requirement count and the
+            // camera panels see this edit.
+            if (this.frames) this._mergeFrame();
             // Every mutation funnels through here, so this is the one place the
             // camera panels have to be refreshed from -- rather than a redraw
             // call bolted onto each of add/delete/relabel/undo/redo, which is
@@ -1888,6 +1976,7 @@
             this._drawOverlays();
             this._renderAttributePanel();
             this._updateAttributeRequirement();
+            if (this.frames) this._updateFrameBar();
 
             const input = document.getElementById(this.inputId);
             if (!input) return;
@@ -1907,6 +1996,11 @@
                 return;
             }
             if (!Array.isArray(parsed)) return;
+            if (this.frames) {
+                this.sequenceStore = parsed.filter((obj) => obj && typeof obj === 'object');
+                this._buildFrameView();
+                return;
+            }
             this.annotations = wire.toLocal(parsed, this.origin);
             this._rebuildMeshes();
         }
@@ -1937,6 +2031,17 @@
             // segment_3d has no mesh of its own: it recolours points in the
             // cloud, which is handled by the cloud's own colour attribute.
 
+            if (mesh && obj.interpolated) {
+                // Between keyframes: drawn dashed (boxes) or hollow (points)
+                // so the annotator can tell it from a keyframe they placed.
+                if (mesh.isLineSegments) {
+                    mesh.material = new THREE.LineDashedMaterial({
+                        color, dashSize: 0.25, gapSize: 0.18 });
+                    mesh.computeLineDistances();
+                } else if (mesh.material) {
+                    mesh.material.wireframe = true;
+                }
+            }
             if (mesh) this.scene.add(mesh);
             this.meshes.push(mesh);
         }
@@ -1998,6 +2103,135 @@
             this.annotations = JSON.parse(this.history[this.historyIndex]);
             this._rebuildMeshes();
             this._updateAnnotationData();
+            return true;
+        }
+
+        // -------------------------------------------------------------
+        // Sequences
+        // -------------------------------------------------------------
+
+        _frameStatus(message) {
+            if (!this.frames) return message;
+            return `Frame ${this.frameIndex + 1} of ${this.frames.length}. ${message}`;
+        }
+
+        _bindFrames() {
+            const bar = this.container && this.container.querySelector('.pc-frames');
+            if (!bar) return;
+            bar.hidden = false;
+            this._frameBar = bar;
+            const slider = bar.querySelector('.pc-frame-slider');
+            slider.max = String(this.frames.length - 1);
+            slider.addEventListener('input', () => this.goToFrame(parseInt(slider.value, 10)));
+            bar.querySelectorAll('[data-frame-step]').forEach((btn) => {
+                btn.addEventListener('click', () => this.goToFrame(
+                    this.frameIndex + parseInt(btn.dataset.frameStep, 10)));
+            });
+            const copy = bar.querySelector('[data-frame-action="copy-forward"]');
+            if (copy) copy.addEventListener('click', () => this.copyForward());
+            const del = bar.querySelector('[data-frame-action="delete-track"]');
+            if (del) del.addEventListener('click', () => this.deleteSelectedTrack());
+            this._updateFrameBar();
+        }
+
+        _updateFrameBar() {
+            const bar = this._frameBar;
+            if (!bar) return;
+            const n = this.frames.length;
+            const slider = bar.querySelector('.pc-frame-slider');
+            slider.value = String(this.frameIndex);
+            slider.setAttribute('aria-valuetext', `Frame ${this.frameIndex + 1} of ${n}`);
+            const tracks = sequence.tracksOf(this.sequenceStore);
+            const keyed = Object.values(tracks).filter(
+                (list) => list.some((k) => k.frame === this.frameIndex)).length;
+            bar.querySelector('.pc-frame-label').textContent =
+                `Frame ${this.frameIndex + 1} of ${n}`
+                + (keyed ? ` (${keyed} keyframe${keyed === 1 ? '' : 's'})` : '');
+            bar.querySelector('[data-frame-step="-1"]').disabled = this.frameIndex <= 0;
+            bar.querySelector('[data-frame-step="1"]').disabled = this.frameIndex >= n - 1;
+            const selected = this.annotations[this.selectedIndex];
+            bar.querySelector('[data-frame-action="copy-forward"]').disabled =
+                !selected || this.frameIndex >= n - 1;
+            bar.querySelector('[data-frame-action="delete-track"]').disabled = !selected;
+        }
+
+        /** Write the current frame's view into the store. */
+        _mergeFrame() {
+            if (!this.frames) return;
+            // Copies, so the merge's changes are copied back explicitly
+            // whether or not toStored had an origin to apply.
+            const view = JSON.parse(JSON.stringify(
+                wire.toStored(this.annotations, this.origin)));
+            this.sequenceStore = sequence.mergeView(this.sequenceStore, this.frameIndex, view);
+            view.forEach((obj, i) => {
+                const local = this.annotations[i];
+                local.track_id = obj.track_id;
+                local.frame = obj.frame;
+                if (local.interpolated && !obj.interpolated) {
+                    // Edited, so now a keyframe: draw it solid.
+                    delete local.interpolated;
+                    delete local._from;
+                    if (this.meshes.length === this.annotations.length) this._rebuildMesh(i);
+                }
+            });
+        }
+
+        /** Rebuild `annotations` as the current frame's view of the store. */
+        _buildFrameView(selectTrack) {
+            this.annotations = wire.toLocal(
+                sequence.viewAt(this.sequenceStore, this.frameIndex), this.origin);
+            this.selectedIndex = selectTrack === undefined ? -1
+                : this.annotations.findIndex((obj) => obj.track_id === selectTrack);
+            this.history = [];
+            this.historyIndex = -1;
+            this._drag = null;
+            this._slabDrag = null;
+            this._attributePanelKey = undefined;
+            this._rebuildMeshes();
+            this._highlightSelection();
+            this._drawOverlays();
+            this._updateAttributeRequirement();
+            this._updateFrameBar();
+        }
+
+        goToFrame(index, selectTrack) {
+            if (!this.frames) return false;
+            const next = Math.max(0, Math.min(this.frames.length - 1, index));
+            if (next === this.frameIndex && selectTrack === undefined) return false;
+            this._mergeFrame();
+            this.frameIndex = next;
+            this._buildFrameView(selectTrack);
+            this._loadCloud();
+            this._announce(`Frame ${next + 1} of ${this.frames.length}`);
+            return true;
+        }
+
+        /** Copy the selected object to the next frame as a keyframe, and go there. */
+        copyForward() {
+            const obj = this.annotations[this.selectedIndex];
+            if (!this.frames || !obj) return false;
+            if (this.frameIndex >= this.frames.length - 1) {
+                this._status('This is the last frame.', 'warn');
+                return false;
+            }
+            this._mergeFrame();
+            const stored = wire.toStored([obj], this.origin)[0];
+            this.sequenceStore = sequence.copyForward(this.sequenceStore, stored, this.frameIndex);
+            this.goToFrame(this.frameIndex + 1, obj.track_id);
+            this._updateAnnotationData();
+            this._status(this._frameStatus(`Copied ${obj.label} here as a keyframe. `
+                                           + 'Move it to where the object is now.'));
+            return true;
+        }
+
+        deleteSelectedTrack() {
+            const obj = this.annotations[this.selectedIndex];
+            if (!this.frames || !obj) return false;
+            this._mergeFrame();
+            this.sequenceStore = sequence.deleteTrack(this.sequenceStore, obj.track_id);
+            this._buildFrameView();
+            this._updateAnnotationData();
+            this._status(this._frameStatus(`Deleted the ${obj.label} track from every frame.`));
             return true;
         }
 

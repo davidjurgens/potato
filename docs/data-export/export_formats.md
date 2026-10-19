@@ -598,6 +598,17 @@ Export annotations as tab-separated values. Same structure as CSV but with tab d
 python -m potato.export --config config.yaml --format tsv --output ./export/
 ```
 
+### KITTI 3D (kitti_3d)
+
+3D boxes from `spatial_annotation` schemes, in KITTI's camera frame: one
+`label_2/<cloud>.txt` per point cloud, and for a point-cloud sequence one
+`label_02/<item>.txt` in KITTI's tracking format. Each item needs its
+calibration. See [3D labels](format_matrix.md#kitti-3d-labels).
+
+```bash
+python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/
+```
+
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.

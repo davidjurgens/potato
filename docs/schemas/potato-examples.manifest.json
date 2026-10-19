@@ -14,11 +14,11 @@
     "labeling-engine": 3,
     "plugins": 1,
     "span": 11,
-    "spatial": 2,
+    "spatial": 3,
     "testing": 2,
     "video": 8
   },
-  "count": 222,
+  "count": 223,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -4821,6 +4821,26 @@
       "path": "examples/spatial/kitti-cuboids/config.yaml",
       "run": "potato start examples/spatial/kitti-cuboids/config.yaml -p 8000",
       "task_name": "Lidar 3D boxes"
+    },
+    {
+      "annotation_types": [
+        "spatial_annotation"
+      ],
+      "category": "spatial",
+      "config_keys": [],
+      "data_files": [
+        "data/sequences.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/spatial/lidar-sequence",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "lidar-sequence",
+      "path": "examples/spatial/lidar-sequence/config.yaml",
+      "run": "potato start examples/spatial/lidar-sequence/config.yaml -p 8000",
+      "task_name": "Lidar sequence tracking"
     },
     {
       "annotation_types": [

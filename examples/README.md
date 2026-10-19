@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 222 examples, generated from the configs themselves.
+All 223 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -499,12 +499,13 @@ The `Types` column lists the annotation types each one uses.
 | [`span-linking/`](span/span-linking/) | Span Linking Example | `span`, `span_link` |
 | [`span-required-labeling/`](span/span-required-labeling/) | Simple Highlighting Example | `span` |
 
-### spatial/ (2)
+### spatial/ (3)
 
 | Example | Task | Types |
 |---------|------|-------|
 | [`depth-eval/`](spatial/depth-eval/) | Depth prediction review | `multiselect`, `radio`, `text` |
 | [`kitti-cuboids/`](spatial/kitti-cuboids/) | Lidar 3D boxes | `spatial_annotation`, `text` |
+| [`lidar-sequence/`](spatial/lidar-sequence/) | Lidar sequence tracking | `spatial_annotation` |
 
 ### testing/ (2)
 

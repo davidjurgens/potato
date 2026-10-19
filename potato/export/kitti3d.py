@@ -288,17 +288,22 @@ def format_kitti_3d_line(label: str, fields: Dict[str, Any], *,
     A full fifteen-field KITTI label line from :func:`cuboid_to_kitti` output.
 
     ``bbox`` is the 2D box in ``[x1, y1, x2, y2]`` pixels — the projection of
-    the cuboid into the camera, which :mod:`potato.media.calibration` computes.
-    Without it the 2D columns are written as the devkit's own zeros, which the
-    benchmark ignores for 3D evaluation but which no 2D consumer should read as
-    a detection.
+    the cuboid into the camera (:func:`projected_box`). It is not optional in
+    practice: the KITTI evaluation (the devkit, and the Python ports in
+    OpenPCDet and mmdet3d) gives each object a difficulty from its 2D box
+    height and ignores any object shorter than 25 px, so a line with the zero
+    box written here when ``bbox`` is missing is ignored by 3D evaluation too.
+
+    ``truncated`` is written as given: a float (0 to 1) for the object
+    format, an integer (0, 1, 2) for the tracking format.
     """
     box = list(bbox) if bbox else [0.0, 0.0, 0.0, 0.0]
     h, w, length = fields["dimensions"]
     x, y, z = fields["location"]
     return " ".join([
         label,
-        f"{truncated:.2f}",
+        str(truncated) if isinstance(truncated, int) and not isinstance(truncated, bool)
+        else f"{float(truncated):.2f}",
         str(int(occluded)),
         f"{fields['alpha']:.2f}",
         f"{box[0]:.2f}", f"{box[1]:.2f}", f"{box[2]:.2f}", f"{box[3]:.2f}",
@@ -306,3 +311,29 @@ def format_kitti_3d_line(label: str, fields: Dict[str, Any], *,
         f"{x:.2f}", f"{y:.2f}", f"{z:.2f}",
         f"{fields['rotation_y']:.2f}",
     ])
+
+
+def projected_box(obj: Dict[str, Any], camera, width: Optional[int] = None,
+                  height: Optional[int] = None) -> Tuple[Optional[List[float]], float]:
+    """
+    A cuboid's 2D box in ``camera``, clipped to the image, and how much was cut.
+
+    Returns ``([x1, y1, x2, y2], truncation)``, where truncation is the share
+    of the projected box's area outside the image (0 when the size is not
+    known, since nothing was clipped). ``(None, 1.0)`` when no part of the box
+    is in front of the camera or inside the image.
+    """
+    from potato.media.calibration import clip_bbox_to_image, project_cuboid
+
+    raw = project_cuboid(camera, obj["center"], obj["size"],
+                         obj.get("rotation") or (0, 0, 0, 1))["bbox"]
+    if not raw:
+        return None, 1.0
+    clipped = clip_bbox_to_image(raw, width, height)
+    if clipped is None:
+        return None, 1.0
+
+    def area(box):
+        return max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
+    whole = area(raw)
+    return clipped, (1.0 - area(clipped) / whole) if whole > 0 else 0.0

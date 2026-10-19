@@ -317,11 +317,36 @@ tracker's keyboard shortcuts act on the whole page, so a second tracker would
 receive every track you create; the config is refused at startup. Put a second
 tracking task in its own phase, or use one scheme with several labels.
 
-**Getting tracks out.** No exporter converts tracks to a tracking format yet:
-`mot` and `cvat` read `image_annotation` schemes only and refuse a config that
-has none. Tracks reach the `jsonl`, `csv` and `parquet` exports, and each
-annotator's `user_state.json`, as the scheme's answer: a JSON string under
-`_data` with the structure shown above. In `jsonl` that is
+**Getting tracks out.** The `mot` export writes each video as a
+MOTChallenge sequence named after its item: a `gt/gt.txt` row on every frame
+from a track's first keyframe to its last (frames numbered from 1), with the
+boxes between keyframes interpolated, and a `seqinfo.ini`. MOT boxes are in
+pixels, so the export needs the video's size: pass
+`--option width=1920 --option height=1080`, give the items `width` and
+`height` fields, or install ffprobe so the export can read it from a local
+file. A video whose size is unknown is skipped and named in a warning. A track
+with `constant` interpolation holds each box until the next keyframe; `cubic`
+tracks are written with linear interpolation, with a warning.
+
+Rows are numbered in the video file's own frames. The annotation page counts
+frames at the scheme's `video_fps` (30 when unset), which may not be the file's
+rate, so each row is placed from the keyframe's stored `time` at the file's rate,
+and that rate is written to `seqinfo.ini`. The rate comes from
+`--option fps=25`, an `fps` field on the item, or ffprobe. Without any of those
+the scheme's `video_fps` is used, and if that is unset too the export warns that
+it assumed 30 fps. The `cvat`
+export reads `image_annotation` schemes only and does not write video tracks.
+
+```bash
+python -m potato.export --config config.yaml --format mot --output ./mot \
+    --option width=1280 --option height=720
+```
+
+MOT has no attribute columns except `visibility` and the `ignore` flag (`conf`
+0), which are read from attributes of those names. All attributes reach the
+`jsonl`, `csv` and `parquet` exports, and each annotator's `user_state.json`,
+as part of the scheme's answer: a JSON string under `_data` with the structure
+shown above. In `jsonl` that is
 `labels.<scheme>._data`; in `csv` and `parquet` it is the column
 `<scheme>._data`. Parse the string and read `tracks.<id>.attributes` and
 `tracks.<id>.keyframes.<frame>.bboxNorm`:

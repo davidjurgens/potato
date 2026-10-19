@@ -18,7 +18,8 @@ annotation_schemes:
     max_points: 400000
 ```
 
-Runnable example: `examples/spatial/kitti-cuboids/`.
+Runnable examples: `examples/spatial/kitti-cuboids/` (single scans) and
+`examples/spatial/lidar-sequence/` (a sequence, see [Sequences](#sequences)).
 
 ## Formats
 
@@ -164,6 +165,69 @@ did not see, and fitting to nothing would be fabricating a measurement.
 
 Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
 the world frame, so the key always turns it the same way on screen.
+
+## Sequences
+
+An item whose cloud field holds a **list** of clouds is a sequence, one cloud
+per frame, and objects are tracked through it:
+
+```json
+{"id": "drive_0001",
+ "point_cloud": ["frames/drive_0001/000000.bin", "frames/drive_0001/000001.bin"],
+ "calibration": {"file": "calib/drive_0001.txt"}}
+```
+
+`{"frames": [...]}` works too. Nothing changes in the scheme's config. The
+viewer shows a frame bar under the cloud, and the camera stays where you put it
+as you change frames.
+
+| Action | Result |
+|---|---|
+| `[` / `]`, the bar's buttons, or the slider | Previous / next frame |
+| `f` or **Copy to next frame** | Copy the selected object to the next frame as a keyframe, and go there |
+| `Delete` | Remove the selected object's keyframe on this frame |
+| **Delete track** | Remove the selected object from every frame |
+
+Each object you draw starts a **track**. Boxes are stored only at
+**keyframes**, the frames where you drew or changed them. On the frames
+between two keyframes the box is interpolated (position and size linearly,
+rotation along the shortest arc) and drawn with dashed edges; points are drawn
+hollow. Moving, resizing or rotating an interpolated box makes it a keyframe on
+that frame. Before a track's first keyframe and after its last, the object is
+absent, so carry it forward with `f` while it is in view.
+
+An interpolated box has nothing stored on its frame, so `Delete` on it explains
+that rather than removing anything: delete one of its keyframes, or the whole
+track. Deleting a keyframe between two others leaves the box interpolated there.
+
+The class and [attributes](../multimedia/object_attributes.md) belong to the
+track: changing them on any frame changes them on every keyframe, without
+adding one. Polylines and painted points are not interpolated; they appear only
+on the frames they were drawn on.
+
+Each saved object carries `frame` (from 0) and `track_id`:
+
+```json
+[{"type": "cuboid_3d", "label": "car", "frame": 0, "track_id": "t1",
+  "attributes": {"occluded": "none"},
+  "coordinates": {"center": [9.95, -1.02, -0.95], "size": [4.8, 2.5, 1.6],
+                  "rotation": [0, 0, 0, 1]}},
+ {"type": "cuboid_3d", "label": "car", "frame": 3, "track_id": "t1", ...}]
+```
+
+Agreement on a sequence is scored frame by frame, using the interpolated
+boxes, so two annotators' boxes on different frames are never compared. The
+report's `n_frames` counts the (item, frame) pairs that anyone annotated.
+Attribute agreement matches whole tracks, by how much they overlap in time
+multiplied by their mean 3D overlap.
+
+The labeling engine compares a model's sequence answer with a person's the same
+way, frame by frame.
+
+The `kitti_3d` export writes a sequence as KITTI tracking labels, with a line
+on every frame of each track and each box's 2D projection in the camera image;
+see
+[3D labels](../../data-export/format_matrix.md#kitti-3d-labels).
 
 ## The slab views
 
