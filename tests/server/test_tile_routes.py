@@ -23,6 +23,28 @@ PIL = pytest.importorskip("PIL", reason="the tile routes need Pillow")
 SCHEMA = "regions"
 
 
+def _build_slide(media_dir):
+    """The whole-slide example's synthetic SVS, when openslide is installed."""
+    import importlib.util
+    from pathlib import Path
+
+    from potato.media.slides import openslide_available
+    if not openslide_available():
+        return
+    try:
+        import tifffile  # noqa: F401
+    except ImportError:
+        return
+    spec = importlib.util.spec_from_file_location(
+        "generate_slide", "examples/image/whole-slide/generate_slide.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.HERE = Path(media_dir).parent / "slide_build"
+    module.main()
+    os.replace(module.HERE / "media" / "synthetic_tissue.svs",
+               os.path.join(media_dir, "tissue.svs"))
+
+
 def _build_project(test_dir):
     from PIL import Image, ImageDraw
 
@@ -32,6 +54,8 @@ def _build_project(test_dir):
     draw = ImageDraw.Draw(image)
     draw.rectangle([400, 200, 800, 600], fill="blue")
     image.save(os.path.join(media, "slide.png"))
+
+    _build_slide(os.path.join(test_dir, "media"))
 
     items = [{"id": "s1", "note": "Find the regions.",
               "image": "scans/slide.png"}]
@@ -234,3 +258,43 @@ class TestThePageWiresTheViewer:
     def test_the_client_config_says_deepzoom(self, server):
         page = self._annotate(server)
         assert '"viewer": "deepzoom"' in page
+
+
+class TestWholeSlides:
+    """SVS and the like, read from their own pyramid (potato/media/slides.py)."""
+
+    @pytest.fixture(autouse=True)
+    def _needs_openslide(self):
+        from potato.media.slides import openslide_available
+        if not openslide_available():
+            pytest.skip("openslide is not installed (pip install potato-annotation[wsi])")
+
+    def test_the_descriptor_carries_the_slide_scale(self, server):
+        r = requests.get(f"{server.base_url}/media/tiles/tissue.svs.dzi?format=json")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert (body["width"], body["height"]) == (6144, 4096)
+        assert body["slide"]["vendor"] == "aperio"
+        assert body["slide"]["mpp_x"] == pytest.approx(0.25)
+
+    def test_a_full_resolution_tile_is_served(self, server):
+        from io import BytesIO
+        from PIL import Image
+        geometry = requests.get(
+            f"{server.base_url}/media/tiles/tissue.svs.dzi?format=json").json()
+        top = geometry["max_level"]
+        r = requests.get(f"{server.base_url}/media/tiles/tissue.svs_files/{top}/5_4.jpg")
+        assert r.status_code == 200, r.text
+        assert Image.open(BytesIO(r.content)).size == (256, 256)
+
+    def test_the_flat_image_pixel_ceiling_does_not_apply(self, server):
+        # Nothing is decoded whole, so a ceiling meant for building a level
+        # from a flat image would only refuse a slide for no reason.
+        r = requests.get(f"{server.base_url}/media/tiles/tissue.svs_files/13/7_3.jpg"
+                         "?max_pixels=1000")
+        assert r.status_code == 200, r.text
+
+    def test_a_iiif_thumbnail_renders(self, server):
+        r = requests.get(f"{server.base_url}/media/iiif/tissue.svs/full/!240,240/0/default.jpg")
+        assert r.status_code == 200, r.text
+        assert r.headers["Content-Type"] == "image/jpeg"

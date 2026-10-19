@@ -43,6 +43,16 @@ def test_the_last_save_decides():
     assert (bd.ai_usage[0].decision, bd.ai_usage[0].suggestion_accepted) == ("rejected", None)
 
 
+def test_a_clicked_accept_survives_a_different_save():
+    bd = record(["positive"], "sentiment")
+    event = bd.ai_usage[0]
+    event.suggestion_accepted, event.accept_clicked = "positive", True
+    bd.record_decisions({"sentiment": {"negative"}}, now=110)
+    assert (event.decision, event.suggestion_accepted) == ("rejected", "positive")
+    restored = BehavioralData.from_dict(bd.to_dict()).ai_usage[0]
+    assert (restored.accept_clicked, restored.suggestion_accepted) == (True, "positive")
+
+
 def test_unsaved_schemes_and_no_suggestions_stay_undecided():
     bd = record(["A"])
     bd.ai_usage.append(AIUsageEvent(request_timestamp=1, schema_name="other", suggestions_shown=[]))

@@ -168,6 +168,30 @@ class TestAiAcceptRate:
         assert ai["accept_rate"] == 0.5
         assert result["users"][0]["ai_accept_rate"] == 0.5
 
+    def test_a_taken_suggestion_saved_differently_counts_as_a_reject(self):
+        # The click stays on the record; the saved answer decides the count.
+        from potato.admin import AdminDashboard
+        from potato.interaction_tracking import AIUsageEvent, BehavioralData
+        dashboard = AdminDashboard()
+        dashboard.check_admin_access = lambda: True
+        bd = BehavioralData(instance_id="i1")
+        bd.ai_usage = [
+            AIUsageEvent(request_timestamp=1.0, schema_name="s", suggestion_accepted="pos",
+                         accept_clicked=True, decision="rejected", time_to_decision_ms=900),
+            AIUsageEvent(request_timestamp=2.0, schema_name="s", suggestion_accepted="pos",
+                         decision="accepted", time_to_decision_ms=700),
+            AIUsageEvent(request_timestamp=3.0, schema_name="s", decision="partial",
+                         time_to_decision_ms=800),
+        ]
+        state = SimpleNamespace(instance_id_to_behavioral_data={"i1": bd})
+        usm = SimpleNamespace(get_user_state=lambda u: state)
+        with patch("potato.admin.get_user_state_manager", return_value=usm), \
+             patch("potato.admin.get_users", return_value=["u"]), \
+             patch.object(dashboard, "get_writing_process_data", return_value={}), \
+             patch.object(dashboard, "get_drawing_process_data", return_value={}, create=True):
+            ai = dashboard.get_behavioral_analytics_data()["ai_usage"]
+        assert (ai["total_accepts"], ai["total_rejects"], ai["total_pending"]) == (1, 2, 0)
+
 
 class TestActiveTime:
     def _bd(self, offsets, kinds=None):

@@ -2559,10 +2559,17 @@ class AdminDashboard:
                         # An accepted label can be "0" or "", so test for
                         # presence, not truthiness. No accept and no decision
                         # yet is pending, not a reject.
+                        # A saved answer's `decision` outranks the click: a
+                        # suggestion taken and then changed before saving is
+                        # a reject, and `partial` counts with the rejects.
                         accepted = self._behavioral_field(ai, 'suggestion_accepted', None)
-                        decided = (self._behavioral_field(ai, 'time_to_decision_ms', None) is not None
+                        decision = self._behavioral_field(ai, 'decision', None)
+                        decided = (decision is not None
+                                   or self._behavioral_field(ai, 'time_to_decision_ms', None) is not None
                                    or self._behavioral_field(ai, 'final_annotation', None) is not None)
-                        if accepted is not None and accepted is not False:
+                        took = (decision == 'accepted' if decision is not None
+                                else accepted is not None and accepted is not False)
+                        if took:
                             user_ai_accepts += 1
                             user_ai_decided += 1
                             ai_usage_total['accepts'] += 1

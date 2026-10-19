@@ -6,6 +6,12 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Whole-slide images.** `viewer: deepzoom` opens pathology slides (SVS,
+  NDPI, MRXS, SCN and others, plus pyramidal TIFF) through openslide, cutting
+  each tile from the slide's own pyramid, so slides of any size open quickly.
+  The tile descriptor reports microns per pixel and objective power. Install
+  with `pip install "potato-annotation[wsi]"`. Example:
+  `examples/image/whole-slide/`.
 - **Point-cloud sequences.** An item whose cloud field lists one cloud per
   frame is annotated as a sequence: a frame bar under the viewer, objects
   tracked across frames by keyframe, boxes interpolated between keyframes
@@ -219,6 +225,21 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **Deep-zoom images were invisible.** The drawing layer sat over the
+  tiled viewer with an opaque background, so `viewer: deepzoom` loaded
+  every tile and showed an empty grey box. The layer is now transparent in
+  that mode.
+- **Previous from the last item could end the study.** Once every item had
+  an answer (an image item has one as soon as it is visited), pressing
+  Previous to check an earlier item showed the completion page. Going back
+  now starts a review that ends only when Next reaches the end of the list,
+  or when the user moves to another phase, page or IBWS round.
+- **Saving erased the record of an accepted AI suggestion.** Deciding a suggestion from
+  the saved answer overwrote `suggestion_accepted`, so an annotator who
+  clicked accept and then saved a different answer left no record of the
+  click. The click now stays, marked `accept_clicked`, and `decision` holds
+  what the save did with it. The admin dashboard's AI usage counts go by
+  `decision`, so that case counts as a reject.
 - **`python -m potato.export` resolved project files against the shell's
   directory.** Exporters received the config's relative `task_dir`, so media,
   calibrations and the telemetry store were looked up relative to wherever

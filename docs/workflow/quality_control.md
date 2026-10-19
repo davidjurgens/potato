@@ -441,7 +441,8 @@ When a seed is applied, Potato records it in that item's behavioral data as
 against the saved annotation, it shows which answers the annotator left as the
 model wrote them. For AI-assistant suggestions, each AI usage event's
 `final_annotation` is stamped with what was actually saved for that schema,
-alongside `suggestion_accepted`, which records only the click.
+alongside `suggestion_accepted`. After a click on accept, `suggestion_accepted`
+keeps the clicked value and `decision` says what the save did with it.
 
 ### Best Practices
 

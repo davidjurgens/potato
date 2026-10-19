@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 223 examples, generated from the configs themselves.
+All 224 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -448,7 +448,7 @@ The `Types` column lists the annotation types each one uses.
 |---------|------|-------|
 | [`lerobot-episode/`](embodied/lerobot-episode/) | Robot episode review | `episode_annotation`, `text` |
 
-### image/ (16)
+### image/ (17)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -468,6 +468,7 @@ The `Types` column lists the annotation types each one uses.
 | [`pdf-bbox/`](image/pdf-bbox/) | PDF Layout Annotation | `radio`, `text` |
 | [`region-captioning/`](image/region-captioning/) | Region captioning | `image_annotation`, `region_caption` |
 | [`text-prompt-labeling/`](image/text-prompt-labeling/) | Text-prompt labelling | `image_annotation` |
+| [`whole-slide/`](image/whole-slide/) | Whole-slide annotation | `image_annotation` |
 
 ### labeling-engine/ (3)
 

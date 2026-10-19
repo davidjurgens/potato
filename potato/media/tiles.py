@@ -43,9 +43,9 @@ setting, because the alternative — quietly serving a lower level and letting t
 annotator draw on a blurred approximation — produces coordinates that are wrong
 in a way nothing downstream can detect.
 
-Whole-slide formats (SVS, NDPI) carry their own pyramids and should be read
-through `openslide` rather than rebuilt here; that is the deferred medical
-track, and this module says so rather than pretending a 40 GB slide will work.
+Whole-slide formats (SVS, NDPI, MRXS, ...) carry their own pyramids and are
+read through openslide instead, a tile at a time: see `slides.py`. The routes
+choose between the two by `slides.is_slide`.
 """
 
 from __future__ import annotations
@@ -316,8 +316,9 @@ def ensure_level(cache_dir: Path, source: Path, spec: PyramidSpec, level: int,
                 f"Level {level} of {source.name} is {width}x{height} "
                 f"({width * height / 1e6:.0f} MP), above the "
                 f"{max_pixels / 1e6:.0f} MP ceiling for building a tile level. "
-                f"Raise `image_annotation.tiles.max_pixels`, or use a source "
-                f"with its own pyramid (SVS/NDPI via openslide).")
+                f"Raise `image_annotation.tiles.max_pixels`, or save the image as "
+                f"a pyramidal TIFF, which is served from its own levels "
+                f"(potato/media/slides.py).")
 
         Image = _require_pillow()
         try:
@@ -387,7 +388,7 @@ def iiif_region(cache_dir: Path, source: Path, spec: PyramidSpec,
     """
     from io import BytesIO
 
-    from potato.media import images
+    from potato.media import images, slides
 
     Image = _require_pillow()
     left, top, right, bottom = _iiif_region_box(spec, region)
@@ -395,6 +396,11 @@ def iiif_region(cache_dir: Path, source: Path, spec: PyramidSpec,
 
     if out_width <= 0 or out_height <= 0:
         raise TileError(f"A size of '{size}' asks for an empty image.")
+
+    if slides.is_slide(str(source)):
+        crop = slides.slide_region(source, spec, (left, top, right, bottom),
+                                   (out_width, out_height))
+        return _iiif_finish(crop, rotation, quality, fmt)
 
     # The smallest level whose scale still covers the requested output.
     level = spec.max_level
@@ -425,6 +431,13 @@ def iiif_region(cache_dir: Path, source: Path, spec: PyramidSpec,
     crop = image.crop(box)
     if (out_width, out_height) != crop.size:
         crop = crop.resize((out_width, out_height), Image.LANCZOS)
+
+    return _iiif_finish(crop, rotation, quality, fmt)
+
+
+def _iiif_finish(crop, rotation: str, quality: str, fmt: str):
+    """Rotation, quality and encoding, shared by images and slides."""
+    from io import BytesIO
 
     if rotation not in ("0", "", None):
         try:

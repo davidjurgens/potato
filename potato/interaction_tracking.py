@@ -102,6 +102,7 @@ class AIUsageEvent:
         suggestions_shown: List of labels/values the AI suggested
         response_timestamp: When the AI response was received
         suggestion_accepted: The value the user accepted (None if rejected/ignored)
+        accept_clicked: True when suggestion_accepted came from an accept click
         final_annotation: What the user ultimately annotated for this schema
         reconstructed: True when the request half was never seen
         time_to_decision_ms: Milliseconds from response to user action
@@ -124,6 +125,10 @@ class AIUsageEvent:
     #: all produce one. Without it, such a record is indistinguishable from a
     #: complete exchange whose timing happens to be missing.
     reconstructed: bool = False
+    #: True when ``suggestion_accepted`` was set by an accept click. A later
+    #: save then decides ``decision`` but leaves the click in place, so the
+    #: record keeps both what was taken and what was submitted.
+    accept_clicked: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -137,6 +142,7 @@ class AIUsageEvent:
             'time_to_decision_ms': self.time_to_decision_ms,
             'decision': self.decision,
             'reconstructed': self.reconstructed,
+            'accept_clicked': self.accept_clicked,
         }
 
     @classmethod
@@ -152,6 +158,7 @@ class AIUsageEvent:
             time_to_decision_ms=data.get('time_to_decision_ms'),
             decision=data.get('decision'),
             reconstructed=bool(data.get('reconstructed', False)),
+            accept_clicked=bool(data.get('accept_clicked', False)),
         )
 
 
@@ -539,8 +546,11 @@ class BehavioralData:
         set rather than by whichever box was ticked first.
 
         ``suggestion_accepted`` holds the accepted label(s) for an accept and
-        None otherwise; ``time_to_decision_ms`` runs from the suggestion to
-        this save. Returns how many events were decided.
+        None otherwise, unless the annotator clicked accept: that click stays,
+        so taking a suggestion and then saving something else reads
+        ``suggestion_accepted`` = the click, ``decision`` = ``rejected``.
+        ``time_to_decision_ms`` runs from the suggestion to this save.
+        Returns how many events were decided.
         """
         now = time.time() if now is None else now
         decided = 0
@@ -559,9 +569,11 @@ class BehavioralData:
             response = get("response_timestamp")
             updates = {
                 "decision": decision,
-                "suggestion_accepted": ", ".join(sorted(overlap)) if decision == "accepted" else None,
                 "time_to_decision_ms": int((now - response) * 1000) if response else None,
             }
+            if not get("accept_clicked"):
+                updates["suggestion_accepted"] = (", ".join(sorted(overlap))
+                                                  if decision == "accepted" else None)
             for key, value in updates.items():
                 if isinstance(event, dict):
                     event[key] = value

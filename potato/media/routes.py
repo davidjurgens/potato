@@ -208,9 +208,17 @@ def _tile_spec(filepath: str, args):
         "max_pixels": _int("max_pixels", DEFAULT_MAX_PIXELS),
     }
     page = _int("page", 0)
+    from potato.media import slides
     try:
-        spec = describe(resolved, tile_size=settings["tile_size"],
-                        overlap=settings["overlap"], page=page)
+        if slides.is_slide(resolved):
+            # A whole-slide image is read from its own pyramid, a tile at a
+            # time (potato/media/slides.py); the flat-image path would decode
+            # the full-resolution level.
+            spec = slides.describe_slide(resolved, tile_size=settings["tile_size"],
+                                         overlap=settings["overlap"])
+        else:
+            spec = describe(resolved, tile_size=settings["tile_size"],
+                            overlap=settings["overlap"], page=page)
     except TileError as exc:
         # 415, not 500: the request is well formed and the *source* cannot be
         # tiled, and the message names what to do about it.
@@ -227,7 +235,13 @@ def tile_descriptor(filepath: str):
         return error
 
     if (request.args.get("format") or "dzi").lower() == "json":
-        return jsonify(spec.to_json())
+        payload = spec.to_json()
+        from potato.media import slides
+        if slides.is_slide(resolved):
+            # The scale, so a viewer can show it and measurements can be
+            # converted to microns.
+            payload["slide"] = slides.slide_metadata(resolved)
+        return jsonify(payload)
     return Response(spec.dzi(), mimetype="application/xml")
 
 
@@ -248,10 +262,15 @@ def tile_image(filepath: str, level: int, column: int, row: int):
         return error
 
     cache = get_media_cache(_config().get("output_annotation_dir"))
+    from potato.media import slides
     try:
-        path = tile_file(cache.ensure_dir(), Path(resolved), spec, int(level),
-                         int(column), int(row), page=page,
-                         max_pixels=settings["max_pixels"])
+        if slides.is_slide(resolved):
+            path = slides.slide_tile(cache.ensure_dir(), Path(resolved), spec,
+                                     int(level), int(column), int(row))
+        else:
+            path = tile_file(cache.ensure_dir(), Path(resolved), spec, int(level),
+                             int(column), int(row), page=page,
+                             max_pixels=settings["max_pixels"])
     except TileError as exc:
         return jsonify({"error": str(exc)}), 415
 

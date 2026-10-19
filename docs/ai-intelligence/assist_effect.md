@@ -65,7 +65,9 @@ AI usage record as `decision`:
 
 The comparison is on the full set of labels saved, so a multiselect is judged
 as a set, and the last save decides: an annotator who takes a suggestion and
-then changes their mind is recorded by what they saved. `time_to_decision_ms`
+then changes their mind is recorded by what they saved. If they clicked accept,
+`suggestion_accepted` keeps the clicked value and `accept_clicked` is true, so
+the record holds both the click and the saved answer. `time_to_decision_ms`
 runs from the suggestion to that save. A text answer counts as accepted only
 when it is exactly the suggested string. The admin dashboard's AI usage
 counts report `partial` with the rejects.

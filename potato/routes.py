@@ -2130,6 +2130,22 @@ def annotate_grid():
     )
 
 
+def _review_scope(username, user_state):
+    """What a Previous/go_to review on /annotate is tied to: the user, the
+    phase and page, and the IBWS round when there is one."""
+    try:
+        phase, page = user_state.get_current_phase_and_page()
+        phase = getattr(phase, "name", str(phase))
+    except Exception:
+        phase, page = None, None
+    ibws_round = None
+    if config.get("ibws_config"):
+        from potato.ibws_manager import get_ibws_manager
+        mgr = get_ibws_manager()
+        ibws_round = getattr(mgr, "current_round", None) if mgr else None
+    return f"{username}|{phase}|{page}|{ibws_round}"
+
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
@@ -2302,8 +2318,30 @@ def annotate():
     if config.get("ibws_config"):
         _ibws_check_and_advance(user_state)
 
+    # Going back -- Previous, or a jump to an item -- starts a review, and a
+    # review is not a request to finish. Without this, once every item held an
+    # answer (an image item does as soon as it is visited: no shapes is an
+    # answer), pressing Previous to check an earlier item ended the study, on
+    # that request or on the page load after it. The review ends when Next
+    # reaches the end of the list, which finishes the study as before.
+    #
+    # The flag names the phase, page and IBWS round it was set in, so one left
+    # behind by a path that finishes without clearing it (an IBWS round, the
+    # labeling engine's no-work page, a phase change outside /annotate)
+    # expires instead of suppressing the next phase's completion check.
+    review_scope = _review_scope(username, user_state)
+    nav_action = None
+    if request.method == 'POST':
+        if request.is_json and isinstance(request.json, dict):
+            nav_action = request.json.get('action')
+        else:
+            nav_action = request.form.get('action')
+    if nav_action in ("prev_instance", "go_to"):
+        session["potato_reviewing"] = review_scope
+    reviewing = session.get("potato_reviewing") == review_scope
+
     # See if this user has finished annotating all of their assigned instances
-    if not user_state.has_remaining_assignments():
+    if not reviewing and not user_state.has_remaining_assignments():
         # For IBWS, don't advance phase if more rounds are possible
         if config.get("ibws_config"):
             from potato.ibws_manager import get_ibws_manager
@@ -2404,6 +2442,7 @@ def annotate():
                     return _engine_no_work_page(username, user_state)
                 else:
                     logger.debug(f"User {username} completed all assignments at end-of-list")
+                    session.pop("potato_reviewing", None)
                     get_user_state_manager().advance_phase(username)
                     return redirect(url_for("home"))
         acm = get_ai_cache_manager()
@@ -2479,7 +2518,8 @@ def annotate():
 
     # After processing the action, check again if user has completed all assignments
     # This handles the case where the user just finished their last item
-    if not user_state.has_remaining_assignments():
+    # (not while they are reviewing earlier items; see `reviewing` above)
+    if not reviewing and not user_state.has_remaining_assignments():
         if config.get("ibws_config"):
             from potato.ibws_manager import get_ibws_manager
             ibws_mgr = get_ibws_manager()
@@ -8856,9 +8896,11 @@ def track_ai_usage():
                 if event_schema == schema_name and event_response:
                     if hasattr(ai_event, 'suggestion_accepted'):
                         ai_event.suggestion_accepted = accepted_value
+                        ai_event.accept_clicked = event_type == 'accept'
                         ai_event.time_to_decision_ms = int((timestamp - ai_event.response_timestamp) * 1000)
                     else:
                         ai_event['suggestion_accepted'] = accepted_value
+                        ai_event['accept_clicked'] = event_type == 'accept'
                         ai_event['time_to_decision_ms'] = int((timestamp - ai_event['response_timestamp']) * 1000)
                     matched = True
                     break
@@ -8883,6 +8925,7 @@ def track_ai_usage():
                     request_timestamp=timestamp,
                     schema_name=schema_name,
                     suggestion_accepted=accepted_value,
+                    accept_clicked=event_type == 'accept',
                 )
                 event.reconstructed = True
                 bd.ai_usage.append(event)

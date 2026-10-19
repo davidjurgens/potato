@@ -134,6 +134,29 @@ class TestDeepZoomCanvas(BasePlaywrightTest):
 
     # -- the viewer itself ---------------------------------------------------
 
+    def test_the_image_is_actually_on_screen(self, page, deepzoom_server):
+        """
+        Pixels, because every other check here passed while the image was
+        invisible: the drawing canvas sat on top of OpenSeadragon with an
+        opaque background, so the viewer loaded every tile and the annotator
+        saw an empty grey box.
+        """
+        from io import BytesIO
+
+        from PIL import Image
+        self._open(page, deepzoom_server)
+        page.wait_for_timeout(500)
+        wrapper = page.query_selector(".canvas-wrapper")
+        shot = Image.open(BytesIO(wrapper.screenshot())).convert("RGB")
+        colours = {shot.getpixel((x, y)) for x in range(0, shot.width, 8)
+                   for y in range(0, shot.height, 8)}
+
+        def present(rgb):
+            return any(sum(abs(a - b) for a, b in zip(rgb, c)) < 40 for c in colours)
+        for quadrant in ((0xc0, 0x39, 0x2b), (0x27, 0xae, 0x60),
+                         (0x29, 0x80, 0xb9), (0xf3, 0x9c, 0x12)):
+            assert present(quadrant), f"#{bytes(quadrant).hex()} is not on screen"
+
     def test_the_library_and_the_host_are_both_on_the_page(self, page, deepzoom_server):
         self._open(page, deepzoom_server)
         assert page.locator(".deepzoom-host").count() == 1

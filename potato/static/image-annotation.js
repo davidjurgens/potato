@@ -343,7 +343,10 @@ class ImageAnnotationManager {
             height: height,
             selection: true,
             preserveObjectStacking: true,
-            backgroundColor: '#f8f9fa',  // Light gray background
+            // Under deep zoom the image is OpenSeadragon's, drawn underneath
+            // this canvas, so this one must stay transparent: an opaque fill
+            // here covered every tile and left an empty grey box.
+            backgroundColor: this.config.viewer === 'deepzoom' ? null : '#f8f9fa',
         });
 
         // Set initial viewport

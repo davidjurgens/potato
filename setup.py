@@ -85,6 +85,10 @@ _LANGCHAIN_DEPS = [
 _S3_DEPS = ["boto3>=1.26.0"]
 _GCS_DEPS = ["google-cloud-storage>=2.10"]
 _AZURE_DEPS = ["azure-storage-blob>=12.19"]
+# Whole-slide images (SVS, NDPI, MRXS, pyramidal TIFF) for deep zoom, read
+# through openslide (potato/media/slides.py). openslide-bin ships the C library
+# as a wheel, so no system package is needed. tifffile builds the example slide.
+_WSI_DEPS = ["openslide-python>=1.4", "openslide-bin>=4.0", "tifffile>=2023.1"]
 # The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
 # in "all": FiftyOne brings its own MongoDB and a large dependency tree.
 _FIFTYONE_DEPS = [
@@ -215,6 +219,7 @@ setup(
         "s3": _S3_DEPS,
         "gcs": _GCS_DEPS,
         "azure": _AZURE_DEPS,
+        "wsi": _WSI_DEPS,
         "db": _DB_DEPS,
         "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,

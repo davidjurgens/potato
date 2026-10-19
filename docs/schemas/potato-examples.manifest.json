@@ -10,7 +10,7 @@
     "crowdsourcing": 6,
     "custom-layouts": 6,
     "embodied": 1,
-    "image": 16,
+    "image": 17,
     "labeling-engine": 3,
     "plugins": 1,
     "span": 11,
@@ -18,7 +18,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 223,
+  "count": 224,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -4457,6 +4457,26 @@
       "path": "examples/image/text-prompt-labeling/config.yaml",
       "run": "potato start examples/image/text-prompt-labeling/config.yaml -p 8000",
       "task_name": "Text-prompt labelling"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/slides.json"
+      ],
+      "description": "",
+      "dir": "examples/image/whole-slide",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "whole-slide",
+      "path": "examples/image/whole-slide/config.yaml",
+      "run": "potato start examples/image/whole-slide/config.yaml -p 8000",
+      "task_name": "Whole-slide annotation"
     },
     {
       "annotation_types": [

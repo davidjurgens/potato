@@ -145,11 +145,52 @@ selected.
 
 ---
 
+## Whole-slide images
+
+Pathology slides (`.svs`, `.ndpi`, `.mrxs`, `.scn`, `.vms`, `.vmu`, `.bif`,
+`.svslide`) are tens of thousands of pixels on a side and already store their
+own pyramid. They are read through [openslide](https://openslide.org): each
+tile is cut from the slide's nearest stored level when the viewer first asks
+for it, then cached. Nothing is decoded whole, so the pixel ceiling does not
+apply and a 100,000 × 80,000 px scan opens as quickly as a small one. A
+`.tif`/`.tiff` is read the same way when openslide recognises it as a slide or
+as a tiled TIFF with several levels; other TIFFs use the Pillow path above.
+
+Install the optional dependency, which bundles the openslide library:
+
+```bash
+pip install "potato-annotation[wsi]"
+```
+
+Without it, the viewer shows that command in place of the slide.
+
+The schema needs `viewer: deepzoom`; nothing else changes:
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: regions
+    description: "Outline each tissue region"
+    source_field: image
+    viewer: deepzoom
+    tools: [polygon, bbox, landmark]
+    labels: [tissue, "nuclei cluster", artifact]
+```
+
+Coordinates are stored as fractions of the full-resolution slide, like any
+image. The slide's scale is in the descriptor,
+`/media/tiles/<slide>.dzi?format=json`, under `slide`: `mpp_x` and `mpp_y`
+(microns per pixel), `objective_power` and `vendor`. Multiply a box's width
+fraction by the slide width and `mpp_x` to get microns. IIIF requests
+(`/media/iiif/<slide>/...`) are read from the slide the same way.
+
+Runnable example: `examples/image/whole-slide/`, with a generated synthetic
+Aperio slide (`generate_slide.py`; needs `tifffile`).
+
+---
+
 ## Limits
 
-- **Whole-slide formats (SVS, NDPI) are not handled.** They carry their own
-  pyramids and should be read through `openslide` rather than rebuilt. That is
-  the deferred medical-imaging track.
 - **Region-aware fill falls back to `empty` mode.** The `region` fill reads the
   source's pixels to grow across similar colours, and in this mode there is no
   single source image in the page to read.
