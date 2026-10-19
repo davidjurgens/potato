@@ -2334,6 +2334,29 @@
         ]
       }
     },
+    "/admin/api/throughput": {
+      "get": {
+        "operationId": "get_admin_api_throughput",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Throughput per annotator: items per active hour, median active time per",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
     "/admin/api/trace_writeback": {
       "get": {
         "operationId": "get_admin_api_trace_writeback",

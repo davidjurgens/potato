@@ -6,6 +6,12 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Throughput tab in the admin dashboard.** Items per active hour and the
+  median active time per item, for the project, per annotator and per day,
+  from each annotator's own interaction events (idle gaps capped at five
+  minutes; only saved items count). With the review workflow on, each
+  annotator also gets first-pass approval and rework rates.
+  `/admin/api/throughput` serves the same report. See *Admin Dashboard*.
 - **Memo threads and issues, including issues on image regions.** Notes in
   the Notes panel can be answered: replies sit under the note, take its
   visibility, and follow it if it changes. A note can be raised as an issue,

@@ -2381,6 +2381,50 @@ class AdminDashboard:
             return payload.get(field_name, default)
         return getattr(payload, field_name, default)
 
+    def get_throughput_data(self) -> Dict[str, Any]:
+        """Items per active hour, time per item and review outcomes (throughput.py)."""
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+        from potato.annotator_origin import HUMAN, origin_of, parse_machine_annotators
+        from potato.throughput import compute_throughput
+
+        usm = get_user_state_manager()
+        machines = parse_machine_annotators(config)
+        behavior: Dict[str, Dict[str, Any]] = {}
+        saved: Dict[str, Any] = {}
+        for user in usm.get_user_ids():
+            state = usm.get_user_state(user)
+            if state is None or user in machines:
+                continue
+            if origin_of(getattr(state, "origin", None)).get("kind", HUMAN) != HUMAN:
+                continue  # machine raters have no working time to report
+            try:
+                saved[user] = set(state.get_annotated_instance_ids())
+            except Exception:  # noqa: BLE001
+                continue
+            behavior[user] = dict(getattr(state, "instance_id_to_behavioral_data", {}) or {})
+
+        qc_items = set()
+        qc = get_quality_control_manager()
+        if qc is not None:
+            for ids in saved.values():
+                qc_items.update(i for i in ids
+                                if qc.is_attention_check(i) or qc.is_gold_standard(i))
+
+        transitions = None
+        try:
+            from potato import review_workflow
+            if review_workflow.review_enabled(config):
+                db = review_workflow._db(config.get("task_dir", "."))
+                rows = db.execute(
+                    "SELECT instance_id, from_state, to_state, at FROM review_transitions "
+                    "WHERE project = ?", (review_workflow._project(config),)).fetchall()
+                transitions = [{"instance_id": r[0], "from_state": r[1], "to_state": r[2], "at": r[3]}
+                               for r in rows]
+        except Exception as exc:  # noqa: BLE001 - throughput still reports without review
+            self.logger.warning("Could not read review transitions: %s", exc)
+        return compute_throughput(behavior, saved, transitions, qc_items)
+
     def get_ai_influence_data(self) -> Dict[str, Any]:
         """Assisted against held-out answers (assist_effect.py) for the admin tab."""
         if not self.check_admin_access():

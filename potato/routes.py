@@ -4815,6 +4815,19 @@ def admin_api_create_snapshot():
     return jsonify({"unchanged": False, "snapshot": _snapshot_row(manifest)}), 201
 
 
+@app.route("/admin/api/throughput", methods=["GET"])
+def admin_api_throughput():
+    """
+    Throughput per annotator: items per active hour, median active time per
+    item, by day, and first-pass approval / rework when the review workflow is
+    on. Admin-only endpoint requiring API key. See potato/throughput.py.
+    """
+    result = admin_dashboard.get_throughput_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 @app.route("/admin/api/memo_issues", methods=["GET"])
 def admin_api_memo_issues():
     """
@@ -10798,6 +10811,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/snapshots", "admin_api_create_snapshot", admin_api_create_snapshot, methods=["POST"])
     app.add_url_rule("/admin/api/trace_writeback", "admin_api_trace_writeback", admin_api_trace_writeback, methods=["GET"])
     app.add_url_rule("/admin/api/memo_issues", "admin_api_memo_issues", admin_api_memo_issues, methods=["GET"])
+    app.add_url_rule("/admin/api/throughput", "admin_api_throughput", admin_api_throughput, methods=["GET"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])

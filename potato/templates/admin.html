@@ -83,6 +83,7 @@
           <button type="button" role="tab" class="admin-tab" data-tab="instances" aria-controls="instances" aria-selected="false">{{ ui_lang.admin_tab_instances|default('Instances') }}</button>
           <button type="button" role="tab" class="admin-tab" data-tab="questions" aria-controls="questions" aria-selected="false">{{ ui_lang.admin_tab_questions|default('Questions') }}</button>
           <button type="button" role="tab" class="admin-tab" data-tab="behavioral" aria-controls="behavioral" aria-selected="false">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="throughput" aria-controls="throughput" aria-selected="false">Throughput</button>
           {% if ai_influence_enabled %}
           <button type="button" role="tab" class="admin-tab" data-tab="ai-influence" aria-controls="ai-influence" aria-selected="false">AI influence</button>
           {% endif %}
@@ -488,6 +489,21 @@
         </div>
         {% endif %}
 
+        <div class="admin-tab-content" id="throughput">
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <h3 style="margin-top: 0;">How fast is the work going?</h3>
+            <p style="color: var(--muted-foreground);">
+              Active time is measured from each annotator's own interaction
+              events, with gaps longer than five minutes capped so an idle tab
+              does not count as work. Only saved items count. When the review
+              workflow is on, first-pass approval is the share of an
+              annotator's reviewed items that were finished without being sent
+              back, and rework is the share sent back at least once.
+            </p>
+          </div>
+          <div id="throughputBody"><p style="color: var(--muted-foreground);">Loading...</p></div>
+        </div>
+
         {% if ai_influence_enabled %}
         <div class="admin-tab-content" id="ai-influence">
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
@@ -730,6 +746,9 @@
             break;
           case "behavioral":
             loadBehavioral();
+            break;
+          case "throughput":
+            loadThroughput();
             break;
           case "ai-influence":
             loadAiInfluence();
@@ -1775,6 +1794,47 @@
 
       function refreshCrowdsourcing() {
         loadCrowdsourcing();
+      }
+
+      async function loadThroughput() {
+        const body = document.getElementById("throughputBody");
+        if (!body) return;
+        const na = v => (v === null || v === undefined) ? "n/a" : String(v);
+        const pct = v => (v === null || v === undefined) ? "n/a" : (100 * v).toFixed(0) + "%";
+        // Seconds, not the rounded hours: 1.7 s of work rounded to 0.000 h read as 0s.
+        const dur = s => (s > 0 && s < 1) ? "<1s" : formatDuration(s || 0);
+        try {
+          const data = await makeApiRequest("/admin/api/throughput");
+          const p = data.project;
+          const review = data.review_enabled;
+          const summary = `<dl class="admin-summary">${[
+            summaryItem("Items per active hour", na(p.items_per_active_hour), `${p.items_timed} timed items`),
+            summaryItem("Median time per item", p.median_active_seconds === null ? "n/a" : `${p.median_active_seconds}s`, "active time"),
+            summaryItem("Active time", dur(p.active_seconds), `${p.annotators} annotators`),
+            ...(p.qc_items ? [summaryItem("Check items", p.qc_items, "attention and gold, not counted above")] : []),
+          ].join("")}</dl>`;
+          const note = data.note ? `<p style="color: var(--muted-foreground);">${escapeHtml(data.note)}</p>` : "";
+          const head = `<tr><th scope="col">Annotator</th><th scope="col">Items</th><th scope="col">Items / active hour</th>
+            <th scope="col">Median time per item</th><th scope="col">Active time</th>${review
+              ? '<th scope="col">Reviewed</th><th scope="col">First-pass approval</th><th scope="col">Rework</th>' : ""}</tr>`;
+          const rows = data.annotators.map(a => `<tr><th scope="row">${escapeHtml(a.annotator)}</th>
+            <td>${a.items}</td><td>${na(a.items_per_active_hour)}</td>
+            <td>${a.median_active_seconds === null ? "n/a" : a.median_active_seconds + "s"}</td>
+            <td>${dur(a.active_seconds)}</td>${review
+              ? `<td>${a.reviewed_items}</td><td>${pct(a.first_pass_approval)}</td><td>${pct(a.rework_rate)}</td>` : ""}</tr>`).join("");
+          const days = p.by_day.map(d => `<tr><th scope="row">${escapeHtml(d.day)}</th><td>${d.items}</td>
+            <td>${na(d.items_per_active_hour)}</td><td>${d.day === "no events" ? "n/a" : dur(d.active_seconds)}</td></tr>`).join("");
+          body.innerHTML = data.annotators.length ? `
+            <div class="dashboard-card" style="margin-bottom: 1rem;">${summary}${note}</div>
+            <div class="dashboard-card" style="margin-bottom: 1rem;"><h4 style="margin-top: 0;">By annotator</h4>
+              <div class="admin-table-container"><table class="admin-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>
+            <div class="dashboard-card"><h4 style="margin-top: 0;">By day (UTC)</h4>
+              <div class="admin-table-container"><table class="admin-table"><thead><tr><th scope="col">Day</th><th scope="col">Items</th>
+                <th scope="col">Items / active hour</th><th scope="col">Active time</th></tr></thead><tbody>${days}</tbody></table></div></div>`
+            : "<p>No annotator has saved an item yet.</p>";
+        } catch (error) {
+          body.innerHTML = `<p>Could not load throughput: ${escapeHtml(String(error))}</p>`;
+        }
       }
 
       // Behavioral Analytics functions
