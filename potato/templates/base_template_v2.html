@@ -653,6 +653,7 @@
             username: {{ username | tojson }},
             url_prefix: {{ url_prefix | default('') | tojson }},
             review_mode: {{ review_mode | default({}) | tojson }},
+            assist_withheld: {{ 'true' if assist_withheld | default(false) else 'false' }},
             ui_config: {}
         };
 
@@ -800,7 +801,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=51"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=52"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.

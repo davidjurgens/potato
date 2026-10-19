@@ -113,6 +113,11 @@ class AIUsageEvent:
     suggestion_accepted: Optional[str] = None
     final_annotation: Optional[str] = None
     time_to_decision_ms: Optional[int] = None
+    #: What the saved answer did with the suggestion, decided on every save
+    #: of the item (so the last save wins): ``accepted`` when the answer holds
+    #: every suggested label, ``partial`` when it holds some, ``rejected``
+    #: when none. None until the scheme is saved.
+    decision: Optional[str] = None
     #: True when the request half of the exchange was never seen, so this
     #: record was assembled from the decision alone. A reload between request
     #: and accept, an expired session, or a client that only reports decisions
@@ -130,6 +135,7 @@ class AIUsageEvent:
             'suggestion_accepted': self.suggestion_accepted,
             'final_annotation': self.final_annotation,
             'time_to_decision_ms': self.time_to_decision_ms,
+            'decision': self.decision,
             'reconstructed': self.reconstructed,
         }
 
@@ -144,6 +150,7 @@ class AIUsageEvent:
             suggestion_accepted=data.get('suggestion_accepted'),
             final_annotation=data.get('final_annotation'),
             time_to_decision_ms=data.get('time_to_decision_ms'),
+            decision=data.get('decision'),
             reconstructed=bool(data.get('reconstructed', False)),
         )
 
@@ -487,6 +494,50 @@ class BehavioralData:
                 event["final_annotation"] = value
             stamped += 1
         return stamped
+
+    def record_decisions(self, chosen_by_schema: Dict[str, Any],
+                         now: Optional[float] = None) -> int:
+        """Decide, from the saved answer, what each suggestion led to.
+
+        ``chosen_by_schema`` is ``{scheme: set of labels saved}``. For each AI
+        usage event on a saved scheme that showed suggestions, the answer is
+        ``accepted`` when it holds every suggested label, ``partial`` when it
+        holds some, ``rejected`` when none. Run on every save of the item, so
+        an annotator who takes a suggestion and then changes their mind is
+        recorded by what they saved last, and a multiselect is judged as a
+        set rather than by whichever box was ticked first.
+
+        ``suggestion_accepted`` holds the accepted label(s) for an accept and
+        None otherwise; ``time_to_decision_ms`` runs from the suggestion to
+        this save. Returns how many events were decided.
+        """
+        now = time.time() if now is None else now
+        decided = 0
+        for event in self.ai_usage:
+            get = (lambda k, e=event: getattr(e, k, None)) if not isinstance(event, dict) \
+                else (lambda k, e=event: e.get(k))
+            schema, shown = get("schema_name"), get("suggestions_shown") or []
+            if not shown or schema not in chosen_by_schema:
+                continue
+            offered = {str(x) for x in shown}
+            answer = {str(x) for x in chosen_by_schema[schema] or ()}
+            if not answer:
+                continue
+            overlap = offered & answer
+            decision = "accepted" if offered <= answer else ("partial" if overlap else "rejected")
+            response = get("response_timestamp")
+            updates = {
+                "decision": decision,
+                "suggestion_accepted": ", ".join(sorted(overlap)) if decision == "accepted" else None,
+                "time_to_decision_ms": int((now - response) * 1000) if response else None,
+            }
+            for key, value in updates.items():
+                if isinstance(event, dict):
+                    event[key] = value
+                else:
+                    setattr(event, key, value)
+            decided += 1
+        return decided
 
     def add_annotation_change(self, schema_name: str, action: str,
                              label_name: Optional[str] = None,

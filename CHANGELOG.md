@@ -6,6 +6,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **The no-assistance comparison group covers every assistance surface.**
+  `ai_support.holdout` now also withholds administrator keyword highlighting,
+  the in-browser click-to-mask and text-prompt segmentation tools, and SAM 2
+  video tracking, and option-highlight prefetch skips held-out items. Each
+  save now records what the saved answer did with a hint or suggestion
+  (`accepted`, `partial` or `rejected`, and the time to decide) on the AI
+  usage record. See *AI assist effect*.
 - **Issues assigned to you.** The Notes tab counts the open issues assigned to
   the annotator on any item, and the panel lists them with a link to each item
   in their queue. A new webhook event, `memo.issue_assigned`, fires when an

@@ -94,7 +94,14 @@ class ImageAnnotationManager {
     constructor(canvasId, inputId, config) {
         this.canvasId = canvasId;
         this.inputId = inputId;
-        this.config = config;
+        // No model assistance for this annotator on this item (the study's
+        // no-assistance comparison group, or a blind labeling-engine
+        // request): the click-to-mask and text-prompt tools run models in
+        // the browser, so they are switched off here, not on the server.
+        this.assistWithheld = !!(window.config && window.config.assist_withheld);
+        this.config = this.assistWithheld
+            ? Object.assign({}, config, { segmentation: null, textPrompt: null })
+            : config;
 
         this.canvas = null;
         this.image = null;
@@ -476,6 +483,7 @@ class ImageAnnotationManager {
 
         this._initTouchGestures();
         this._initTextPromptControls();
+        if (this.assistWithheld) this._hideAssistControls();
 
         // Double click - complete polygon
         this.canvas.on('mouse:dblclick', (opt) => {
@@ -1366,6 +1374,8 @@ class ImageAnnotationManager {
      * @param {string} tool - Tool name (bbox, polygon, freeform, landmark, brush, eraser, fill)
      */
     setTool(tool) {
+        // The click-to-mask tool is model assistance (see the constructor).
+        if (tool === 'sam' && this.assistWithheld) return;
         // Reported before the assignment so a no-op re-select of the armed tool
         // does not inflate the switch count.
         if (tool !== this.currentTool) {
@@ -4919,6 +4929,14 @@ class ImageAnnotationManager {
      * So the lookup lives here once, scoped by schema because a page can carry
      * several image schemas at once.
      */
+    /** Remove the model-assisted tools from view when assistance is withheld. */
+    _hideAssistControls() {
+        const container = this._schemaContainer();
+        if (!container) return;
+        container.querySelectorAll('.tool-btn[data-tool="sam"], .text-prompt-group')
+            .forEach(el => { el.hidden = true; el.style.display = 'none'; });
+    }
+
     _schemaContainer() {
         return document.querySelector(
             `.image-annotation-container[data-schema="${this.config.schemaName}"]`);

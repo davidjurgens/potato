@@ -4043,6 +4043,11 @@ def render_page_with_annotations(username: str):
         judge_prediction=judge_prediction,
         # Labeling engine request on this item (blind / verify / resolve note)
         engine_request=engine_request,
+        # No model assistance for this annotator on this item: the browser
+        # tools (interactive and text-prompt segmentation) read it from
+        # window.config. Phase pages leave it unset, which reads as false.
+        assist_withheld=bool(assist_held_out or (
+            engine_request is not None and engine_request.get("visibility") == "blind")),
         # Signal-based triage badge (why this item was prioritized)
         triage_info=triage_info,
         # Instance display (new explicit display mode)

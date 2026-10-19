@@ -35089,14 +35089,33 @@ assistance is pre-annotations (see the example) uses it the same way.
 | Chat sidebar | Not loaded, and the chat route refuses |
 | Inline judge suggestion | Not shown |
 | PRM pre-label | Refused |
+| Keyword highlighting set by an administrator | None returned |
+| Interactive (click-to-mask) and text-prompt segmentation on images | The tools are hidden and cannot be selected |
+| SAM 2 object tracking in video | Refused |
 
 These are the same checks the labeling engine uses for its blind calibration
-items, so an item blind for the engine is also unassisted. Two things are not
-withheld:
-- The rule-based keyword highlighting that an administrator configures, which
-  is not a model.
-- Interactive segmentation in the browser, which the annotator drives
-  themselves.
+items, so an item blind for the engine is also unassisted. Administrator
+keywords are withheld although no model makes them, because they point the
+annotator at an answer just as a model's highlights do.
+
+### What the annotator did with a suggestion
+
+Each time an item is saved, Potato compares the saved answer on a scheme with
+the labels a hint or suggestion offered for it, and records the result on the
+AI usage record as `decision`:
+
+| `decision` | When |
+|---|---|
+| `accepted` | The saved answer holds every suggested label. `suggestion_accepted` names them |
+| `partial` | It holds some of them (a multiselect that kept part of the suggestion) |
+| `rejected` | It holds none |
+
+The comparison is on the full set of labels saved, so a multiselect is judged
+as a set, and the last save decides: an annotator who takes a suggestion and
+then changes their mind is recorded by what they saved. `time_to_decision_ms`
+runs from the suggestion to that save. A text answer counts as accepted only
+when it is exactly the suggested string. The admin dashboard's AI usage
+counts report `partial` with the rejects.
 
 ## The AI influence tab
 

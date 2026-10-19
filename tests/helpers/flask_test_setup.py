@@ -153,6 +153,16 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Cohort scheme resolver: built lazily from the config of the first
+    # server that asks, then kept, so a later server in the same process saw
+    # the earlier server's cohorts (test_cohort_schemes_routes after any
+    # other server test).
+    try:
+        from potato.server_utils.cohort_schemes import clear_cohort_scheme_resolver
+        clear_cohort_scheme_resolver()
+    except ImportError:
+        pass
+
     # User authenticator singleton
     try:
         import potato.authentication as auth_module
@@ -457,6 +467,13 @@ class FlaskTestServer:
                     clear_config()
                     reset_span_counter()
                     try:
+                        # Built from whichever config asked first; a unit
+                        # test or an earlier server leaves its cohorts behind.
+                        from potato.server_utils.cohort_schemes import clear_cohort_scheme_resolver
+                        clear_cohort_scheme_resolver()
+                    except ImportError:
+                        pass
+                    try:
                         from potato.adjudication import clear_adjudication_manager
                         clear_adjudication_manager()
                     except ImportError:
@@ -587,6 +604,11 @@ class FlaskTestServer:
                 # Clear any existing managers (for testing)
                 clear_user_state_manager()
                 clear_item_state_manager()
+                try:
+                    from potato.server_utils.cohort_schemes import clear_cohort_scheme_resolver
+                    clear_cohort_scheme_resolver()
+                except ImportError:
+                    pass
                 # Clear ICL labeler if it exists
                 try:
                     from potato.ai.icl_labeler import clear_icl_labeler

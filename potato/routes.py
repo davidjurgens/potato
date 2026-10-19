@@ -136,6 +136,12 @@ def _qc_answer_payload(annotations: dict):
     return all_annotations, final_by_schema
 
 
+def _chosen_labels(annotations: dict, types: Optional[dict] = None) -> dict:
+    """See potato.server_utils.annotation_keys.chosen_labels."""
+    from potato.server_utils.annotation_keys import chosen_labels
+    return chosen_labels(annotations, types)
+
+
 def _inject_quality_control_item_if_needed(username, user_state):
     """Delegates to `server_utils.quality_control_injection`.
 
@@ -2822,9 +2828,12 @@ def trigger_option_highlight_prefetch():
         prefetch_count = request.json.get("count")
 
     index = user_state.get_current_instance_index()
+    # No model calls for items this annotator will see unassisted.
+    from potato.assist_holdout import assist_withheld
     ais.start_option_highlight_prefetch(
         index, prefetch_count,
-        instance_ids=user_state.instance_id_ordering)
+        instance_ids=user_state.instance_id_ordering,
+        skip=lambda instance_id: assist_withheld(config, username, instance_id))
 
     return jsonify({"status": "prefetch_started",
                     "from_instance": user_state.get_current_instance_id()})
@@ -5937,6 +5946,14 @@ def propagate_video_track():
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
+    # SAM 2 tracking is model assistance: refused for the study's
+    # no-assistance comparison group, as every other assist route is.
+    _user = get_user_state(session['username'])
+    blind = _engine_blind_refusal(session['username'],
+                                  _user.get_current_instance_id() if _user else None)
+    if blind is not None:
+        return blind
+
     data = request.get_json(silent=True) or {}
     points = data.get("points")
     if not isinstance(points, list) or not points:
@@ -7055,6 +7072,11 @@ def update_instance():
             _bd = user_state.instance_id_to_behavioral_data.get(instance_id)
             if _bd is not None and hasattr(_bd, "record_final_annotations"):
                 _bd.record_final_annotations(final_by_schema)
+                # ...and what the saved answer did with each suggestion.
+                _bd.record_decisions(_chosen_labels(
+                    request.json.get("annotations", {}),
+                    {sc.get("name"): sc.get("annotation_type")
+                     for sc in config.get("annotation_schemes") or [] if isinstance(sc, dict)}))
 
         # Consent, survey and other phase pages are not items: grading them
         # as attention checks or gold, counting them toward check frequency,
@@ -8284,6 +8306,15 @@ def get_keyword_highlights(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session.get('username')
+
+    # Admin keywords point the annotator at an answer, so they are assistance:
+    # withheld, before any cache, from the study's no-assistance comparison
+    # group (ai_support.holdout) and from items the labeling engine has this
+    # person labeling blind. An empty list, not a refusal: the page simply
+    # shows no highlights.
+    from potato.assist_holdout import assist_withheld
+    if assist_withheld(config, username, decoded_instance_id):
+        return jsonify({"keywords": [], "instance_id": instance_id, "withheld": True})
 
     # Get user state for caching
     user_state = get_user_state(username) if username else None

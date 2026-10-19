@@ -111,3 +111,71 @@ def test_the_influence_report_answers(held_out_server):
     body = r.json()
     assert body["holdout_fraction"] == 1.0
     assert "sentiment" in body["schemas"]
+
+
+def _page_flag(page):
+    import re
+    found = re.search(r"assist_withheld: (true|false)", page)
+    return found.group(1) if found else None
+
+
+def test_the_browser_tools_and_keyword_hints_are_withheld_too(held_out_server):
+    """The surfaces B4 left out: admin keyword highlights, SAM 2 tracking,
+    and the in-browser segmentation tools (switched off by a page flag)."""
+    s = _login(held_out_server, "held3")
+    page = s.get(f"{held_out_server.base_url}/annotate").text
+    assert _page_flag(page) == "true"
+    current = s.get(f"{held_out_server.base_url}/api/current_instance").json()["instance_id"]
+
+    keywords = s.get(f"{held_out_server.base_url}/api/keyword_highlights/{current}")
+    assert keywords.status_code == 200
+    assert keywords.json()["keywords"] == [] and keywords.json()["withheld"] is True
+
+    tracked = s.post(f"{held_out_server.base_url}/api/track/propagate",
+                     json={"points": [[10, 10, 1]], "video": "clip.mp4", "start_frame": 0})
+    assert tracked.status_code == 403
+    assert "no-assistance comparison group" in tracked.json()["error"]
+
+
+def test_an_assisted_pair_keeps_the_browser_tools():
+    server, test_dir = _server("assist_holdout_tools", 0.0)
+    try:
+        s = _login(server, "assisted2")
+        assert _page_flag(s.get(f"{server.base_url}/annotate").text) == "false"
+        current = s.get(f"{server.base_url}/api/current_instance").json()["instance_id"]
+        body = s.get(f"{server.base_url}/api/keyword_highlights/{current}").json()
+        assert "withheld" not in body
+    finally:
+        server.stop()
+        cleanup_test_directory(test_dir)
+
+
+def test_a_saved_answer_decides_what_the_suggestion_led_to():
+    """Accept or reject is decided at save, from the saved answer: changing
+    one's mind after taking a suggestion records the later answer."""
+    server, test_dir = _server("assist_decisions", 0.0)
+    try:
+        s = _login(server, "decider")
+        base = server.base_url
+        s.get(f"{base}/annotate")
+        item = s.get(f"{base}/api/current_instance").json()["instance_id"]
+        for event in ({"event_type": "request"},
+                      {"event_type": "response", "suggestions": ["positive"]}):
+            assert s.post(f"{base}/api/track_ai_usage",
+                          json={"instance_id": item, "schema_name": "sentiment", **event}).ok
+
+        def save(label):
+            r = s.post(f"{base}/updateinstance", json={
+                "instance_id": item, "annotations": {f"sentiment:::{label}": label},
+                "cleared_schemas": [], "span_annotations": []})
+            assert r.status_code == 200, r.text
+            return s.get(f"{base}/api/behavioral_data/{item}").json()["ai_usage"][-1]
+
+        took = save("positive")
+        assert (took["decision"], took["suggestion_accepted"]) == ("accepted", "positive")
+        assert took["time_to_decision_ms"] is not None
+        changed = save("negative")
+        assert (changed["decision"], changed["suggestion_accepted"]) == ("rejected", None)
+    finally:
+        server.stop()
+        cleanup_test_directory(test_dir)

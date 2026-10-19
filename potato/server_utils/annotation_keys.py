@@ -101,10 +101,16 @@ def _configured_schema_names() -> List[str]:
     names = set()
     lists = [config.get("annotation_schemes") or [], config.get("_surveyflow_schemes") or []]
     try:  # per-cohort scheme lists may declare inline schemes of their own
-        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
-        resolver = get_cohort_scheme_resolver()
-        lists += list(getattr(resolver, "_cohort_schemes", {}).values())
-        lists += list(getattr(resolver, "_scheme_sets", {}).values())
+        # Read the resolver only if the server has built it. Building it here
+        # froze it with whatever config was loaded at the time -- in a test
+        # process, none -- and every later lookup of a user's schemes came
+        # back empty, which made /api/ai_assistant answer "nothing" before
+        # its hold-out check ran.
+        from potato.server_utils import cohort_schemes
+        resolver = cohort_schemes._COHORT_RESOLVER
+        if resolver is not None:
+            lists += list(getattr(resolver, "_cohort_schemes", {}).values())
+            lists += list(getattr(resolver, "_scheme_sets", {}).values())
     except Exception:
         pass
     for schemes in lists:
@@ -186,3 +192,26 @@ def canonical_wire_answer(payload: Dict[str, Any],
         elif schema not in canonical:
             canonical[schema] = None
     return {k: v for k, v in canonical.items() if v is not None}
+
+
+def chosen_labels(annotations: dict, types: Optional[dict] = None) -> dict:
+    """``{scheme: set of answers saved}`` from a `/updateinstance` payload.
+
+    Every selected label, where final_by_schema keeps one per scheme, so a
+    multiselect answer can be compared with a suggestion as a set. ``types``
+    maps scheme name to annotation_type: for a scalar type (text, number,
+    slider, ...) the value is the answer even when it looks like a selection
+    marker, so a slider at 1 is "1", not the label name.
+    """
+    types = types or {}
+    chosen = {}
+    for key, value in (annotations or {}).items():
+        parsed = split_annotation_key(key)
+        # `in` would match a numeric 0 against False and drop it.
+        if parsed is None or value is None or value is False or value in ("", "false"):
+            continue
+        schema_name, label_name = parsed
+        scalar = types.get(schema_name) in SCALAR_ANSWER_TYPES
+        chosen.setdefault(schema_name, set()).add(
+            label_name if (not scalar and is_selection_marker(value)) else str(value))
+    return chosen

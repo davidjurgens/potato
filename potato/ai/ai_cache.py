@@ -1500,7 +1500,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         return result
 
     def start_option_highlight_prefetch(self, page_id: int, prefetch_amount: int = None,
-                                        instance_ids=None):
+                                        instance_ids=None, skip=None):
         """Prefetch option highlights for upcoming items.
 
         Args:
@@ -1508,6 +1508,8 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             prefetch_amount: Number of items to prefetch (uses config default if None)
             instance_ids: The annotator's ordering. Defaults to corpus order,
                 which is the same list only under `fixed_order`.
+            skip: Optional ``skip(instance_id) -> bool``: items this annotator
+                will get no assistance on, so no model call is made for them.
         """
         if not self.option_highlighting_enabled or not self.disk_cache_enabled:
             return
@@ -1528,6 +1530,8 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
             keys = []
             for i in range(max(0, start_idx), end_idx):
+                if skip is not None and skip(ordering[i]):
+                    continue
                 for annotation_id, scheme in enumerate(config["annotation_schemes"]):
                     if self.is_option_highlighting_enabled_for_scheme(annotation_id):
                         key = (ordering[i], annotation_id, "option_highlight")
