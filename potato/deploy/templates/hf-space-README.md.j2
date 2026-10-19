@@ -6,6 +6,14 @@ colorTo: yellow
 sdk: docker
 app_port: 7860
 pinned: false
+{%- if hf_oauth %}
+hf_oauth: true
+{%- if hf_oauth_org %}
+hf_oauth_scopes:
+  - read-memberships
+hf_oauth_authorized_org: {{ hf_oauth_org }}
+{%- endif %}
+{%- endif %}
 tags:
   - annotation
   - potato
@@ -29,6 +37,12 @@ dataset — not this Space — is where the data actually lives.
 > Deploy with a HuggingFace token to mirror annotations into a Dataset repo.
 {% endif %}
 
+{% if hf_oauth %}
+Annotators sign in with their Hugging Face account{% if hf_oauth_org %}; only
+members of `{{ hf_oauth_org }}` can sign in{% endif %}. On this page the sign-in
+opens in a new tab, and annotating continues in that tab.
+
+{% endif %}
 ## Running it yourself
 
 ```bash

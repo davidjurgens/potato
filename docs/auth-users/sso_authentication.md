@@ -234,26 +234,66 @@ Users must be members of the specified organization to log in. Potato checks org
 
 ### HuggingFace OAuth
 
-Allow users to log in with their HuggingFace account.
+Annotators sign in with their Hugging Face account.
 
-#### Prerequisites
+#### In a Hugging Face Space
 
-- A HuggingFace account
-- Create an OAuth application at [huggingface.co/settings/applications](https://huggingface.co/settings/applications)
-
-#### Configuration
+`potato deploy up config.yaml --provider huggingface --hf-oauth` sets this up
+(see [Deploying to a HuggingFace Space](../deployment/deploy-huggingface.md#signing-in-with-hugging-face)).
+By hand, add `hf_oauth: true` to the Space README's metadata. Hugging Face then
+creates the OAuth app and gives the Space its client id, secret and scopes, so
+the provider entry can be empty:
 
 ```yaml
 authentication:
   method: oauth
-  oauth:
-    provider: huggingface
-    client_id: "your-client-id"
-    client_secret: "your-client-secret"
-    identity_field: "preferred_username"
+  user_identity_field: sub
+  providers:
+    huggingface: {}
 ```
 
-The HuggingFace provider uses the `openid profile email` scopes by default and connects to HuggingFace's OIDC discovery endpoint automatically.
+Potato builds the callback URL from the Space's public host name
+(`SPACE_HOST`). On the Space's page on huggingface.co the app runs inside a
+frame, where browsers can drop the sign-in's cookies, so the sign-in button
+opens a new tab and annotating continues there.
+
+#### Anywhere else
+
+Create an OAuth application at
+[huggingface.co/settings/applications](https://huggingface.co/settings/applications)
+with the redirect URL `https://<your host>/auth/callback/huggingface`, then:
+
+```yaml
+authentication:
+  method: oauth
+  user_identity_field: sub
+  providers:
+    huggingface:
+      client_id: ${HF_OAUTH_CLIENT_ID}
+      client_secret: ${HF_OAUTH_CLIENT_SECRET}
+```
+
+Potato asks for the `openid profile` scopes. `user_identity_field: sub` keys
+each annotator on their Hugging Face account id, which stays the same when they
+rename themselves. A username can change, and a released one can be registered
+by someone else, who would then sign in as the old annotator and see their work.
+A profile has no email address unless the `email` scope is granted, and one
+without an email falls back to `sub` anyway.
+
+#### Optional: Restrict to a Hugging Face organization
+
+```yaml
+    huggingface:
+      allowed_org: my-lab
+```
+
+Potato then also asks for `read-memberships` and refuses anyone whose
+memberships do not include the organization. `allowed_org` is the
+organization's handle (the name in its URL) or its id; its display name is not
+accepted, because an organization's owners can set that to anything. In a Space, the scope must also be
+listed in the README (`hf_oauth_scopes: [read-memberships]`), and
+`hf_oauth_authorized_org: my-lab` makes Hugging Face refuse non-members before
+they reach Potato; `--hf-oauth-org my-lab` writes both.
 
 ---
 
@@ -368,6 +408,15 @@ authentication:
 | `client_id` | string | Yes | From GitHub Developer Settings |
 | `client_secret` | string | Yes | From GitHub Developer Settings |
 | `allowed_org` | string | No | Restrict to GitHub organization members |
+
+#### HuggingFace Provider
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `client_id` | string | Outside a Space | From huggingface.co/settings/applications; a Space supplies `OAUTH_CLIENT_ID` |
+| `client_secret` | string | Outside a Space | As above; a Space supplies `OAUTH_CLIENT_SECRET` |
+| `scopes` | list | No | Default: the Space's `OAUTH_SCOPES`, else `["openid", "profile"]` |
+| `allowed_org` | string | No | Restrict to members of a Hugging Face organization (adds `read-memberships`) |
 
 #### Generic OIDC Provider
 

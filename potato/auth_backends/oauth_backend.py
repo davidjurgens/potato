@@ -1,7 +1,8 @@
 """
 OAuth 2.0 / OpenID Connect Authentication Backend
 
-Supports Google, GitHub, and generic OIDC providers for single sign-on.
+Supports Google, GitHub, Hugging Face and generic OIDC providers for single
+sign-on.
 Uses Authlib for OAuth flow management, token exchange, and OIDC discovery.
 """
 
@@ -37,7 +38,9 @@ PROVIDER_CONFIGS = {
     "huggingface": {
         "display_name": "HuggingFace",
         "server_metadata_url": "https://huggingface.co/.well-known/openid-configuration",
-        "client_kwargs": {"scope": "openid profile email"},
+        # `email` and `read-memberships` are granted only when asked for, and a
+        # Space grants only the scopes its README lists; see _huggingface_kwargs.
+        "client_kwargs": {"scope": "openid profile"},
         "icon_class": "fas fa-robot",
         "button_class": "oauth-btn-huggingface",
     },
@@ -115,7 +118,9 @@ class OAuthBackend(AuthBackend):
             }
 
             # For well-known providers, use built-in config
-            if name == "google":
+            if name == "huggingface":
+                reg_kwargs.update(self._huggingface_kwargs(pconfig))
+            elif name == "google":
                 reg_kwargs["server_metadata_url"] = well_known["server_metadata_url"]
                 reg_kwargs["client_kwargs"] = well_known["client_kwargs"]
             elif name == "github":
@@ -140,6 +145,41 @@ class OAuthBackend(AuthBackend):
 
             self._oauth.register(name, **reg_kwargs)
             logger.info("Registered OAuth provider: %s", name)
+
+    @classmethod
+    def _huggingface_kwargs(cls, pconfig: Dict[str, Any]) -> Dict[str, Any]:
+        """Registration for Sign in with Hugging Face.
+
+        The provider was listed but never registered with its OpenID metadata,
+        so the sign-in redirect failed. Inside a Space with ``hf_oauth: true``
+        in its README, Hugging Face creates the OAuth app and passes it in
+        ``OAUTH_CLIENT_ID``, ``OAUTH_CLIENT_SECRET``, ``OAUTH_SCOPES`` and
+        ``OPENID_PROVIDER_URL``; those fill whatever the config leaves out.
+        Outside a Space the config supplies the client id and secret of an app
+        created at huggingface.co/settings/applications.
+        """
+        kwargs: Dict[str, Any] = {}
+        if not cls._resolve_env(pconfig.get("client_id", "")):
+            kwargs["client_id"] = os.environ.get("OAUTH_CLIENT_ID", "")
+        if not cls._resolve_env(pconfig.get("client_secret", "")):
+            kwargs["client_secret"] = os.environ.get("OAUTH_CLIENT_SECRET", "")
+        discovery = pconfig.get("discovery_url")
+        if not discovery:
+            base = os.environ.get("OPENID_PROVIDER_URL") or "https://huggingface.co"
+            discovery = base.rstrip("/") + "/.well-known/openid-configuration"
+        kwargs["server_metadata_url"] = discovery
+        scopes = pconfig.get("scopes")
+        if isinstance(scopes, str):
+            scopes = scopes.split()
+        if not scopes:
+            scopes = (os.environ.get("OAUTH_SCOPES") or "openid profile").split()
+        scopes = list(scopes)
+        # An organization check reads the user's memberships, which need
+        # their own scope.
+        if pconfig.get("allowed_org") and "read-memberships" not in scopes:
+            scopes.append("read-memberships")
+        kwargs["client_kwargs"] = {"scope": " ".join(scopes)}
+        return kwargs
 
     def get_oauth_client(self, provider_name: str):
         """Get the Authlib OAuth client for a provider.
@@ -305,6 +345,40 @@ class OAuthBackend(AuthBackend):
         """Return every SSO identity and local account."""
         return list(self.users.keys()) + [
             u for u in self._local.users if u not in self.users]
+
+    @staticmethod
+    def huggingface_org_check(profile: Dict[str, Any], allowed_org: str) -> tuple:
+        """Whether a Hugging Face profile belongs to ``allowed_org``.
+
+        Returns ``(allowed, reason, orgs)``. ``allowed_org`` is matched
+        against each organization's handle (``preferred_username``) or its
+        id (``sub``, which survives a rename), never its display ``name``:
+        an organization's owners write that freely, so any account could
+        found an org displayed as "acme-lab". The memberships arrive only
+        with the ``read-memberships`` scope; a profile without them is
+        refused, because "no list" cannot be told apart from "not a member".
+        """
+        listed = profile.get("orgs")
+        if listed is None:
+            listed = profile.get("organizations")
+        if not isinstance(listed, list):
+            return False, ("This task is limited to members of the "
+                           f"'{allowed_org}' Hugging Face organization, and the "
+                           "sign-in did not include your memberships (the "
+                           "read-memberships scope)."), []
+        orgs, ids = [], set()
+        for org in listed:
+            if not isinstance(org, dict):
+                continue
+            if org.get("preferred_username"):
+                orgs.append(str(org["preferred_username"]).lower())
+            if org.get("sub"):
+                ids.add(str(org["sub"]))
+        wanted = allowed_org.strip()
+        if wanted.lower() in orgs or wanted in ids:
+            return True, "", orgs
+        return False, (f"Access restricted to members of the '{allowed_org}' "
+                       "Hugging Face organization."), orgs
 
     def get_allowed_org(self, provider_name: str) -> Optional[str]:
         """Get the allowed_org restriction for a provider, if any."""

@@ -92,6 +92,14 @@
 }
 
 /* Divider between SSO and local login */
+/* Shown when the page is framed and sign-in opens in a new tab. */
+.oauth-new-tab-note {
+    margin: -0.25rem 0 0;
+    color: #475467;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
 .oauth-divider {
     display: flex;
     align-items: center;

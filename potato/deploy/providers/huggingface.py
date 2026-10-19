@@ -87,7 +87,9 @@ def space_files(spec: DeploySpec, *, backup_repo: Optional[str] = None,
             config_rel=config_rel,
             backup_repo=backup_repo,
             backup_minutes=spec.extra.get("backup_minutes",
-                                          DEFAULT_BACKUP_MINUTES)),
+                                          DEFAULT_BACKUP_MINUTES),
+            hf_oauth=bool(spec.extra.get("hf_oauth")),
+            hf_oauth_org=spec.extra.get("hf_oauth_org")),
     }
 
 
@@ -171,6 +173,13 @@ class HuggingFaceProvider(Provider):
                 f"Annotations are mirrored to {backup} every "
                 f"{spec.extra.get('backup_minutes', DEFAULT_BACKUP_MINUTES)} "
                 "minutes. Nothing else keeps them.")
+        if spec.extra.get("hf_oauth"):
+            org = spec.extra.get("hf_oauth_org")
+            result.warnings.append(
+                "Annotators sign in with their Hugging Face account"
+                + (f"; only members of {org} are let in." if org else ".")
+                + " On the Space page the sign-in opens in a new tab, and "
+                "annotating continues there.")
         if not bundle:
             result.warnings.append("No bundle was built; this plan cannot run.")
         return result
@@ -322,12 +331,14 @@ class HuggingFaceProvider(Provider):
         with tempfile.TemporaryDirectory(prefix="potato-space-") as staging:
             shutil.copytree(bundle.bundle_dir, staging, dirs_exist_ok=True)
 
+            config_path = os.path.join(staging, spec.extra.get("config_rel",
+                                                               "config.yaml"))
             if backup:
                 _inject_backup_config(
-                    os.path.join(staging, spec.extra.get("config_rel",
-                                                         "config.yaml")),
-                    backup,
+                    config_path, backup,
                     spec.extra.get("backup_minutes", DEFAULT_BACKUP_MINUTES))
+            if spec.extra.get("hf_oauth"):
+                _inject_hf_oauth_config(config_path, spec.extra.get("hf_oauth_org"))
 
             for filename, content in space_files(
                     spec, backup_repo=backup,
@@ -510,8 +521,11 @@ def _inject_backup_config(config_path: str, repo_id: str, minutes: int) -> None:
     block = config.get("backup") if isinstance(config.get("backup"), dict) else {}
     sinks = [s for s in (block.get("sinks") or [])
              if isinstance(s, dict) and s.get("type") not in ("huggingface", "hf")]
+    # `responses` also writes each annotator's answers as JSONL with a
+    # dataset card, so `datasets.load_dataset(repo_id)` reads them.
     sinks.insert(0, {"type": "huggingface", "repo_id": repo_id,
-                     "repo_type": "dataset", "private": True})
+                     "repo_type": "dataset", "private": True,
+                     "responses": True})
     config["backup"] = {
         "enabled": True,
         "schedule_minutes": block.get("schedule_minutes", minutes),
@@ -519,6 +533,41 @@ def _inject_backup_config(config_path: str, repo_id: str, minutes: int) -> None:
         "sinks": sinks,
     }
     config.pop("huggingface_backup", None)
+    with open(config_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
+
+
+def _inject_hf_oauth_config(config_path: str, org: Optional[str]) -> None:
+    """Make Sign in with Hugging Face the bundled config's login.
+
+    The OAuth client comes from the Space (``hf_oauth: true`` in its README),
+    so the provider entry needs no id or secret. Annotators are keyed by their
+    Hugging Face account id (``sub``), which stays the same when they rename
+    themselves; a username can change, and a released one can be taken by
+    someone else, who would then inherit the old annotator's work. A config
+    that already uses another sign-in method is refused rather than replaced.
+    """
+    import yaml
+
+    with open(config_path, "r", encoding="utf-8") as handle:
+        config = yaml.safe_load(handle) or {}
+    auth = config.get("authentication") if isinstance(config.get("authentication"), dict) else {}
+    method = auth.get("method", "in_memory")
+    if method not in ("in_memory", "oauth"):
+        raise ProviderError(
+            f"--hf-oauth would replace this config's `authentication.method: {method}`. "
+            "Remove that block, or add a huggingface provider under "
+            "authentication.providers yourself.")
+    providers = dict(auth.get("providers") or {}) if method == "oauth" else {}
+    entry = dict(providers.get("huggingface") or {})
+    if org:
+        entry["allowed_org"] = org
+    providers["huggingface"] = entry
+    if method != "oauth":
+        auth = {"user_identity_field": "sub"}
+    auth["method"] = "oauth"
+    auth["providers"] = providers
+    config["authentication"] = auth
     with open(config_path, "w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
 

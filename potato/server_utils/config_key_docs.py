@@ -1004,6 +1004,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "1200px and wider)",
         type="string", default="Unlabeled", category=UI,
     ),
+    "ui_language.sign_in_opens_new_tab": _D(
+        "Note under the single sign-on buttons when the login page is shown "
+        "inside another site's frame, where sign-in opens in a new tab",
+        type="string", default="Sign-in opens in a new tab.", category=UI,
+    ),
     "ui_language.image_to_annotate": _D(
         "Heading above an item whose text field embeds an image",
         type="string", default="Image to Annotate:", category=UI,

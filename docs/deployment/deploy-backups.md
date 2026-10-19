@@ -115,12 +115,21 @@ backup:
   sinks:
     - type: huggingface
       repo_id: lab/pilot-annotations
+      responses: true      # also write _responses/*.responses.jsonl and a card
     - type: s3
       bucket: my-bucket
       prefix: potato/pilot
       region: us-east-1
       endpoint_url: https://s3.example.edu      # optional
 ```
+
+`responses: true` on a HuggingFace sink also writes each annotator's answers
+to `_responses/<annotator>.responses.jsonl` and a dataset card (`README.md`) whose
+`configs` entry lets `datasets.load_dataset("lab/pilot-annotations")` read
+them. Potato rewrites the card, so leave it off for a repo whose README you
+maintain. `potato deploy` turns it on for the backups it creates, which are
+private. On a sink with `private: false` the files are public, and the server
+logs a warning at start that annotators' ids and answers are published.
 
 Credentials come from the environment (`HF_TOKEN`, `POTATO_S3_ACCESS_KEY_ID`,
 `POTATO_S3_SECRET_ACCESS_KEY`) or from the sink entry itself, where `${VAR}`

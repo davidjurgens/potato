@@ -956,8 +956,21 @@ def oauth_login(provider):
                              require_password=config.get("require_password", True),
                              oauth_providers=authenticator.get_login_providers()), 404
 
-    callback_url = url_for("oauth_callback", provider=provider, _external=True)
-    return client.authorize_redirect(callback_url)
+    return client.authorize_redirect(_oauth_callback_url(provider))
+
+
+def _oauth_callback_url(provider):
+    """The redirect URI sent to the provider.
+
+    In a Hugging Face Space the app sits behind a proxy that ends TLS, so the
+    URL Flask builds is ``http://`` on an internal host, which no provider
+    accepts. Spaces set ``SPACE_HOST`` to the public host name, and the
+    callback is built on it.
+    """
+    space_host = os.environ.get("SPACE_HOST", "").strip()
+    if space_host:
+        return f"https://{space_host}" + url_for("oauth_callback", provider=provider)
+    return url_for("oauth_callback", provider=provider, _external=True)
 
 
 @app.route("/auth/callback/<provider>")
@@ -1038,6 +1051,17 @@ def oauth_callback(provider):
 
     # Check GitHub org restriction (requires API call)
     allowed_org = oauth_backend.get_allowed_org(provider)
+    if allowed_org and provider == "huggingface":
+        org_ok, reason, user_orgs = oauth_backend.huggingface_org_check(profile, allowed_org)
+        sso_claims.extend(f"org:{o}" for o in user_orgs)
+        if not org_ok:
+            logger.warning("Hugging Face org check failed: %s not in %s",
+                           profile.get("preferred_username"), allowed_org)
+            return render_template("home.html",
+                                   login_error=reason,
+                                   title=config.get("annotation_task_name", "Annotation Platform"),
+                                   require_password=config.get("require_password", True),
+                                   oauth_providers=authenticator.get_login_providers()), 403
     if allowed_org and provider == "github":
         try:
             orgs_resp = client.get("user/orgs", token=token)

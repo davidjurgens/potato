@@ -39,6 +39,21 @@ a throwaway, and the plan says that anything collected will be lost. See
 potato deploy pull myproject/config.yaml
 ```
 
+The backup Dataset also holds each annotator's answers in a form the
+`datasets` library reads: `_responses/<annotator>.responses.jsonl`, one row
+per item and annotation scheme, and a dataset card that points `load_dataset` at them.
+
+```python
+from datasets import load_dataset
+
+rows = load_dataset("me/myproject-annotations", split="train")
+```
+
+Every row has the columns `instance_id`, `annotator`, `scheme`, `kind`
+(`labels` or `spans`), `labels` (the label names chosen) and `value` (the answer
+as Potato stores it, JSON-encoded). They are rewritten at each backup, so they
+lag the Space by at most `--backup-minutes`.
+
 This downloads the backup Dataset, not the Space. Whatever is on the Space right
 now is at best a partial copy of what the Dataset already has.
 
@@ -50,6 +65,36 @@ gone.
 `potato deploy destroy` deletes the Space and **leaves the Dataset alone**.
 Deleting the host is cheap and reversible; deleting the annotations is neither,
 so it is never implied. Remove the Dataset yourself when you are done with it.
+
+## Signing in with Hugging Face
+
+```bash
+potato deploy up myproject/config.yaml --provider huggingface --hf-oauth
+```
+
+Annotators sign in with their Hugging Face account instead of a Potato
+username. `--hf-oauth` adds `hf_oauth: true` to the Space README, so Hugging
+Face creates the OAuth app and passes its credentials to the Space, and sets the
+bundled config's `authentication` to the `huggingface` provider. Annotators are
+keyed by their Hugging Face account id (`sub`), which survives a rename, so
+exports and the admin pages list that id rather than the username. If the config already uses OAuth, the
+`huggingface` provider is added beside its other providers. A config that uses
+another sign-in method, such as Clerk, is refused rather than replaced.
+
+`--hf-oauth-org my-lab` also limits sign-in to members of `my-lab`: Hugging Face
+refuses everyone else (`hf_oauth_authorized_org`), and Potato checks the
+membership again.
+
+On the Space's page on huggingface.co the app runs inside a frame, where
+browsers can drop the sign-in's cookies. The sign-in button therefore opens a
+new tab at the
+Space's own address (`https://<owner>-<name>.hf.space`), and annotating
+continues in that tab. Send annotators that address directly to skip the step.
+
+A real sign-in can only be tried on a deployed Space; the flow is covered by
+tests against the documented OAuth contract. See
+[SSO & OAuth](../auth-users/sso_authentication.md#huggingface-oauth) for the
+provider's other options.
 
 ## The concurrency cap
 
@@ -90,6 +135,8 @@ a private Space repo is readable by everyone who has access to it.
 | `--private` | Create a private Space |
 | `--demo` | No backup Dataset; annotations are disposable |
 | `--backup-minutes` | How often to mirror annotations (default 5) |
+| `--hf-oauth` | Annotators sign in with their Hugging Face account |
+| `--hf-oauth-org ORG` | With `--hf-oauth`, only members of `ORG` can sign in |
 | `--name` | Space name, defaulting to a slug of the task name |
 
 ## Backing up from any provider

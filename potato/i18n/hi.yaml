@@ -45,6 +45,7 @@ username_placeholder: "अपना उपयोगकर्ता नाम द
 choose_username_placeholder: "एक उपयोगकर्ता नाम चुनें"
 create_password_placeholder: "एक पासवर्ड बनाएँ"
 sign_in_with: "इससे साइन इन करें"
+sign_in_opens_new_tab: "साइन इन एक नए टैब में खुलता है।"
 or_divider: "या"
 powered_by: "द्वारा संचालित"
 cite_us: "हमें उद्धृत करें"

@@ -6096,6 +6096,11 @@
         "register_tab": {},
         "retry_button": {},
         "sign_in_button": {},
+        "sign_in_opens_new_tab": {
+          "default": "Sign-in opens in a new tab.",
+          "description": "Note under the single sign-on buttons when the login page is shown inside another site's frame, where sign-in opens in a new tab",
+          "type": "string"
+        },
         "sign_in_tab": {},
         "sign_in_with": {},
         "submit_button": {},

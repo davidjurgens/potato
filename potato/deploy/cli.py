@@ -143,6 +143,13 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--hf-token", default=None, dest="hf_token",
                     help="HuggingFace token for continuous Dataset backup, on any "
                          "provider. Falls back to HF_TOKEN.")
+    up.add_argument("--hf-oauth", action="store_true", dest="hf_oauth",
+                    help="huggingface: annotators sign in with their Hugging Face "
+                         "account (adds hf_oauth to the Space README)")
+    up.add_argument("--hf-oauth-org", default=None, dest="hf_oauth_org",
+                    metavar="ORG",
+                    help="huggingface: with --hf-oauth, only members of ORG can "
+                         "sign in")
     up.add_argument("--backup-minutes", type=int, default=None,
                     dest="backup_minutes",
                     help="how often to mirror annotations to the backup")
@@ -318,6 +325,14 @@ def cmd_up(args) -> int:
     if getattr(early, "driven_by", None):
         _echo(f"REFUSED: {early.refusal(None, None)}")
         return EXIT_BLOCKED
+    # Sign in with Hugging Face uses the OAuth app a Space creates for itself;
+    # no other host has one to give.
+    if (getattr(args, "hf_oauth", False) or getattr(args, "hf_oauth_org", None)) \
+            and provider_name != "huggingface":
+        _echo("REFUSED: --hf-oauth and --hf-oauth-org apply to --provider huggingface. "
+              "Elsewhere, configure authentication.providers.huggingface with the "
+              "client id and secret of an app from huggingface.co/settings/applications.")
+        return EXIT_BLOCKED
 
     token, source = creds.resolve_token(provider_name, args.token)
     if creds.requires_credential(provider_name) and not token and not args.dry_run:
@@ -402,6 +417,9 @@ def cmd_up(args) -> int:
                "network": args.network,
                "os_image": args.os_image,
                "title": _load_config(args.config_file).get("annotation_task_name"),
+               "hf_oauth": bool(getattr(args, "hf_oauth", False)
+                                or getattr(args, "hf_oauth_org", None)),
+               "hf_oauth_org": getattr(args, "hf_oauth_org", None),
                },
     )
 

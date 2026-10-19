@@ -5050,21 +5050,27 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
                     f"authentication.providers.{name} must be a dictionary"
                 )
 
-            # client_id and client_secret are required
-            if "client_id" not in pconfig:
+            # client_id and client_secret are required. A Hugging Face Space
+            # with `hf_oauth: true` supplies both in its environment.
+            for key, env_name in (("client_id", "OAUTH_CLIENT_ID"),
+                                  ("client_secret", "OAUTH_CLIENT_SECRET")):
+                if key in pconfig:
+                    continue
+                if name == "huggingface" and os.environ.get(env_name):
+                    continue
+                hint = (f" (or run in a Hugging Face Space with hf_oauth: true, "
+                        f"which sets {env_name})") if name == "huggingface" else ""
                 raise ConfigValidationError(
-                    f"authentication.providers.{name}.client_id is required"
-                )
-            if "client_secret" not in pconfig:
-                raise ConfigValidationError(
-                    f"authentication.providers.{name}.client_secret is required"
+                    f"authentication.providers.{name}.{key} is required{hint}"
                 )
 
             # Generic OIDC requires discovery_url
-            if name not in ("google", "github") and "discovery_url" not in pconfig:
+            if name not in ("google", "github", "huggingface") \
+                    and "discovery_url" not in pconfig:
                 raise ConfigValidationError(
                     f"authentication.providers.{name} requires 'discovery_url' "
-                    f"for OIDC providers (only 'google' and 'github' have built-in URLs)"
+                    f"for OIDC providers (only 'google', 'github' and 'huggingface' "
+                    f"have built-in URLs)"
                 )
 
             # Validate optional fields
@@ -5100,7 +5106,6 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
 
         # Warn if secret_key is not set (OAuth needs stable sessions)
         if "secret_key" not in config_data:
-            import os
             if not os.environ.get("POTATO_SECRET_KEY"):
                 logger.warning(
                     "OAuth is configured but no 'secret_key' is set in config "

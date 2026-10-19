@@ -6,6 +6,18 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Sign in with Hugging Face on a Space.** `potato deploy up --provider
+  huggingface --hf-oauth` makes annotators sign in with their Hugging Face
+  account, keyed by their account id, which survives a rename;
+  `--hf-oauth-org ORG` admits only members of that organization (matched by
+  handle or id, never the display name an org's owners can set). In a Space the provider entry can be empty: the client
+  id, secret and scopes come from the Space, and the callback uses its public
+  host. When the login page is framed (the Space's page on huggingface.co),
+  sign-in buttons open a new tab.
+- **Annotators' answers as a Hub dataset.** `responses: true` on a
+  huggingface backup sink also writes `_responses/<annotator>.responses.jsonl`, one row
+  per item and scheme, and a dataset card, so
+  `datasets.load_dataset("<repo>")` reads them. `potato deploy` turns it on.
 - **Whole-slide images.** `viewer: deepzoom` opens pathology slides (SVS,
   NDPI, MRXS, SCN and others, plus pyramidal TIFF) through openslide, cutting
   each tile from the slide's own pyramid, so slides of any size open quickly.
@@ -225,6 +237,10 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **The `huggingface` sign-in provider never worked.** Config validation
+  demanded a `discovery_url` for it, and the backend registered it without
+  its OpenID metadata, so the sign-in redirect failed. Both are fixed, and the
+  SSO guide's Hugging Face example now uses the keys the backend reads.
 - **Deep-zoom images were invisible.** The drawing layer sat over the
   tiled viewer with an opaque background, so `viewer: deepzoom` loaded
   every tile and showed an empty grey box. The layer is now transparent in

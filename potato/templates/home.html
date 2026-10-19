@@ -66,6 +66,7 @@
                 </a>
                 {% endfor %}
             </div>
+            <p class="oauth-new-tab-note" hidden>{{ ui_lang.sign_in_opens_new_tab|default('Sign-in opens in a new tab.') }}</p>
 
             {% if allow_local_login %}
             <div class="oauth-divider">
@@ -149,6 +150,20 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Inside another site's frame (a Hugging Face Space page, an LMS),
+            // browsers can drop the frame's cookies and many providers refuse
+            // to be framed, so single sign-on runs in its own tab.
+            var framed = false;
+            try { framed = window.self !== window.top; } catch (e) { framed = true; }
+            if (framed) {
+                var buttons = document.querySelectorAll('.oauth-login-btn');
+                buttons.forEach(function(link) {
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                });
+                var note = document.querySelector('.oauth-new-tab-note');
+                if (note && buttons.length) { note.hidden = false; }
+            }
             var errorElement = document.querySelector('.potato-alert-error');
             if (errorElement && errorElement.textContent.includes('registration')) {
                 switchTab('register');
