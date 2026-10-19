@@ -733,9 +733,10 @@ class TestLiveIngestionConfig:
             "overlap_seconds": 2, "safety_lag_seconds": 1,
             "backoff_initial_seconds": 2, "backoff_max_seconds": 60,
             "max_consecutive_failures": 5, "stop_after_items": 1000,
-            "replay_on_start": False,
+            "replay_on_start": False, "listing": "after_last_key",
         }
         config = LiveIngestionConfig.from_dict(block)
+        assert config.listing == "after_last_key"
 
         assert set(block) == LiveIngestionConfig.VALID_KEYS
         assert config.cursor_column == "ts"

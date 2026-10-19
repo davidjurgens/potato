@@ -35,6 +35,7 @@ class MemoryStore(ObjectStoreSource):
         super().__init__(SourceConfig(SourceType.S3, "mem", {"bucket": "b", **config}))
         self.objects = dict(objects)
         self.reads = []
+        self.listed = []
 
     def is_available(self):
         return True
@@ -42,8 +43,11 @@ class MemoryStore(ObjectStoreSource):
     def _uri(self, key):
         return f"mem://b/{key}"
 
-    def _list_objects(self, prefix):
-        return [ObjectInfo(k, m, len(c)) for k, (m, c) in self.objects.items() if k.startswith(prefix)]
+    def _list_objects(self, prefix, start_after=None):
+        # Like S3's StartAfter: keys strictly after it, in key order.
+        self.listed.append((prefix, start_after))
+        return [ObjectInfo(k, m, len(c)) for k, (m, c) in sorted(self.objects.items())
+                if k.startswith(prefix) and (start_after is None or k > start_after)]
 
     def _read_object(self, key):
         self.reads.append(key)
@@ -107,6 +111,111 @@ class TestReadSince:
         recent = {"in/new.jsonl": (datetime.now(timezone.utc), jsonl("n1")), **OBJECTS}
         store = MemoryStore(recent, prefix="in/", live_ingestion={**LIVE, "safety_lag_seconds": 60})
         assert "n1" not in ids(store.read_since())
+
+
+KEYED = {
+    "in/2026-10-19T10-00.jsonl": (T0, jsonl("a1", "a2")),
+    "in/2026-10-19T10-05.jsonl": (T0 + timedelta(minutes=5), jsonl("b1")),
+}
+BY_KEY = {**LIVE, "listing": "after_last_key"}
+
+
+class TestListingAfterLastKey:
+    """Each poll lists only keys after the last one read."""
+
+    def test_polls_list_from_the_last_key_and_skip_finished_objects(self):
+        store = MemoryStore(KEYED, prefix="in/", live_ingestion=BY_KEY)
+        rows = list(store.read_since())
+        assert ids(rows) == ["a1", "a2", "b1"]
+        assert store.listed == [("in/", None)]
+        last = rows[-1]
+        # Nothing new: one listing after the last key, and nothing downloaded.
+        store.listed.clear(); store.reads.clear()
+        assert list(store.read_since(cursor=last.cursor_value, tiebreaker=last.tiebreak_value)) == []
+        assert store.listed == [("in/", "in/2026-10-19T10-05.jsonl")]
+        assert store.reads == []
+        # A new object, with a later key, arrives.
+        store.objects["in/2026-10-19T10-09.jsonl"] = (T0 + timedelta(minutes=9), jsonl("c1"))
+        assert ids(store.read_since(cursor=last.cursor_value, tiebreaker=last.tiebreak_value)) == ["c1"]
+
+    def test_a_batch_that_stops_mid_object_resumes_there(self):
+        store = MemoryStore(KEYED, prefix="in/", live_ingestion=BY_KEY)
+        first = list(store.read_since(limit=1))
+        assert ids(first) == ["a1"]
+        rest = list(store.read_since(cursor=first[-1].cursor_value,
+                                     tiebreaker=first[-1].tiebreak_value))
+        assert ids(rest) == ["a2", "b1"]
+
+    def test_an_older_key_written_later_is_not_seen(self):
+        """The documented cost of the mode: keys must only grow."""
+        store = MemoryStore(KEYED, prefix="in/", live_ingestion=BY_KEY)
+        last = list(store.read_since())[-1]
+        store.objects["in/2026-10-19T09-59.jsonl"] = (T0 + timedelta(minutes=20), jsonl("late"))
+        assert list(store.read_since(cursor=last.cursor_value, tiebreaker=last.tiebreak_value)) == []
+
+    def test_the_cursor_is_the_key(self):
+        store = MemoryStore(KEYED, prefix="in/", live_ingestion=BY_KEY)
+        assert [r.cursor_value for r in store.read_since()] == [
+            "in/2026-10-19T10-00.jsonl", "in/2026-10-19T10-00.jsonl", "in/2026-10-19T10-05.jsonl"]
+
+    def test_a_cursor_from_full_listing_still_works(self):
+        """Switching modes: a two-part tie-breaker has no row count, so the
+        object is read again from its next row."""
+        store = MemoryStore(KEYED, prefix="in/", live_ingestion=BY_KEY)
+        old = tiebreak("in/2026-10-19T10-00.jsonl", 0)
+        assert ids(store.read_since(cursor=T0, tiebreaker=old)) == ["a2", "b1"]
+
+    def test_full_listing_reads_a_key_ordered_cursor(self):
+        store = MemoryStore(KEYED, prefix="in/", live_ingestion=LIVE)
+        done = tiebreak("in/2026-10-19T10-00.jsonl", 1, 2)
+        assert ids(store.read_since(cursor=T0, tiebreaker=done)) == ["b1"]
+
+
+class TestKeyOrderedWorker:
+    """Through the real LiveIngestionWorker: prime, restore, poll."""
+
+    def run(self, replay, initial_cursor=None):
+        folder = create_test_directory(f"object_store_keyed_{replay}")
+        try:
+            objects = {f"in/{n:03d}.jsonl": (T0 + timedelta(minutes=n), jsonl(f"r{n}"))
+                       for n in range(5)}
+            block = {**BY_KEY, "replay_on_start": replay}
+            if initial_cursor is not None:
+                block["initial_cursor"] = initial_cursor
+            store = MemoryStore(objects, prefix="in/", live_ingestion=block)
+            pool = []
+
+            def ingest(item):
+                if item["id"] in pool:
+                    return "duplicate"
+                pool.append(item["id"])
+                return "added"
+            worker = LiveIngestionWorker(store, LiveIngestionConfig.from_dict(block),
+                                         LiveCursorStore(folder), ingest)
+            worker.prime()
+            primed = list(pool)
+            store.objects["in/010.jsonl"] = (T0 + timedelta(minutes=10), jsonl("r10"))
+            store.reads.clear()
+            worker.poll_once()
+            return primed, pool, store.reads
+        finally:
+            cleanup_test_directory(folder)
+
+    @pytest.mark.parametrize("replay", [True, False])
+    def test_an_initial_cursor_names_the_key_to_start_after(self, replay):
+        primed, pool, reads = self.run(replay, initial_cursor="in/002.jsonl")
+        if replay:
+            assert primed == ["r0", "r1", "r2", "r3", "r4"]   # replay rebuilds the pool
+        else:
+            assert primed == ["r3", "r4"]
+        assert pool[-1] == "r10"
+        assert reads == ["in/010.jsonl"]                      # the poll fetched only the new key
+
+    @pytest.mark.parametrize("replay", [True, False])
+    def test_without_an_initial_cursor(self, replay):
+        primed, pool, reads = self.run(replay)
+        assert primed == ["r0", "r1", "r2", "r3", "r4"]
+        assert pool[-1] == "r10" and reads == ["in/010.jsonl"]
 
 
 class TestWorker:
@@ -176,6 +285,19 @@ class TestS3:
             assert [i["id"] for i in source.read_items()] == ["a1", "b1"]
             stub.assert_no_pending_responses()
 
+    def test_key_ordered_polling_sends_start_after(self, s3):
+        source, stub, body = s3
+        source._live = source._live.__class__.from_dict({**LIVE, "listing": "after_last_key"})
+        done = tiebreak("in/0001.jsonl", 0, 1)
+        stub.add_response("list_objects_v2", {"Contents": [
+            {"Key": "in/0002.jsonl", "LastModified": T0, "Size": 10}], "IsTruncated": False},
+            {"Bucket": "data", "Prefix": "in/", "StartAfter": "in/0001.jsonl"})
+        stub.add_response("get_object", {"Body": body(jsonl("n2")), "ContentType": "application/json"},
+                          {"Bucket": "data", "Key": "in/0002.jsonl"})
+        with stub:
+            assert ids(source.read_since(cursor=T0, tiebreaker=done)) == ["n2"]
+            stub.assert_no_pending_responses()
+
     def test_a_missing_object_says_which(self, s3):
         source, stub, _body = s3
         source._key, source._prefix = "in/gone.jsonl", ""
@@ -195,6 +317,29 @@ class TestConfigValidation:
                         "connection_string": "UseDevelopmentStorage=true"})
         self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
                         "live_ingestion": {"enabled": True}})
+
+    def test_key_ordered_listing_is_s3_and_gcs_only(self):
+        from potato.server_utils.config_module import ConfigValidationError
+        self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
+                        "live_ingestion": {"enabled": True, "listing": "after_last_key"}})
+        with pytest.raises(ConfigValidationError, match="own prefix"):
+            self._validate({"type": "azure_blob", "container": "c", "prefix": "p/",
+                            "connection_string": "UseDevelopmentStorage=true",
+                            "live_ingestion": {"enabled": True, "listing": "after_last_key"}})
+        with pytest.raises(ConfigValidationError, match="overlap_seconds does not apply"):
+            self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
+                            "live_ingestion": {"enabled": True, "listing": "after_last_key",
+                                               "overlap_seconds": 2}})
+        with pytest.raises(ConfigValidationError, match="full key including the prefix"):
+            self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
+                            "live_ingestion": {"enabled": True, "listing": "after_last_key",
+                                               "initial_cursor": "002.jsonl"}})
+        self._validate({"type": "s3", "bucket": "b", "prefix": "in/",
+                        "live_ingestion": {"enabled": True, "listing": "after_last_key",
+                                           "initial_cursor": "in/002.jsonl"}})
+        with pytest.raises(ConfigValidationError, match="listing must be one of"):
+            self._validate({"type": "gcs", "bucket": "b", "prefix": "in/",
+                            "live_ingestion": {"enabled": True, "listing": "newest"}})
 
     def test_mistakes_are_named(self):
         from potato.server_utils.config_module import ConfigValidationError

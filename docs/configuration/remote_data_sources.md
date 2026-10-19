@@ -371,6 +371,36 @@ new modified time, so its rows are read again. Ids already in the item pool
 are dropped as duplicates, so a changed row is not picked up. Add changes as
 new rows with new ids in a new object.
 
+**Large prefixes.** By default each poll lists every object under the prefix
+and reads only the new ones, so the listing grows with the bucket: S3 returns
+1,000 keys per request. If new objects always get keys that sort after the
+old ones (names that start with a timestamp or a sequence number, as most
+pipelines write them), set `listing: after_last_key`:
+
+```yaml
+    prefix: "incoming/"            # keys like incoming/2026-10-19T10-05-00.jsonl
+    live_ingestion:
+      enabled: true
+      listing: after_last_key
+```
+
+Each poll then lists only the keys after the last one read (S3 `StartAfter`,
+GCS `startOffset`), and an object read to its end is not downloaded again.
+Rows are taken in key order, not by modified time, and objects are treated
+as write-once. Two costs follow: an object written later under a key that
+sorts earlier is never read, and an object rewritten under a key already read
+to its end is not read again. A last object with no rows (an empty file, or a
+CSV with only a header) is listed and fetched again on each poll until a later
+key arrives. `overlap_seconds` re-reads a time window, which has no meaning in
+key order, so it is refused with `after_last_key`. In this mode the cursor is
+a key: `initial_cursor` names the key to start after, written in full with
+the prefix, for example `initial_cursor: "incoming/2026-10-01T00-00-00.jsonl"`. Switching a running
+source between the two modes makes its next poll list the prefix from the
+start once; rows already in the pool are dropped as duplicates. Azure's listing
+cannot start after a key, so `after_last_key` is refused for `azure_blob`;
+give each day or batch its own prefix there instead. A restart with
+`replay_on_start` (the default) still lists the whole prefix once.
+
 ### Partial/Incremental Loading
 
 For large datasets, enable partial loading to load data in chunks:

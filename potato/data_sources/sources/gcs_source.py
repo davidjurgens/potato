@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from potato.data_sources.base import SourceConfig
 from potato.data_sources.sources.object_store import ObjectInfo, ObjectStoreSource
@@ -83,9 +83,13 @@ class GCSSource(ObjectStoreSource):
     def _uri(self, key: str) -> str:
         return f"gs://{self._bucket}/{key}"
 
-    def _list_objects(self, prefix: str) -> List[ObjectInfo]:
+    def _list_objects(self, prefix: str, start_after: Optional[str] = None) -> List[ObjectInfo]:
+        # start_offset is inclusive; the base class drops the key itself.
+        options = {"prefix": prefix or None}
+        if start_after:
+            options["start_offset"] = start_after
         return [ObjectInfo(blob.name, blob.updated, int(blob.size or 0))
-                for blob in self._get_client().list_blobs(self._bucket, prefix=prefix or None)
+                for blob in self._get_client().list_blobs(self._bucket, **options)
                 if not blob.name.endswith("/")]
 
     def _read_object(self, key: str) -> Tuple[bytes, str]:

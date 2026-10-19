@@ -62,7 +62,9 @@ class GCSFake(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(url.query)
         if url.path == "/storage/v1/b/data/o":
             prefix = query.get("prefix", [""])[0]
-            items = [self._meta(n) for n in OBJECTS if n.startswith(prefix)]
+            offset = query.get("startOffset", [""])[0]  # inclusive, per the JSON API
+            items = [self._meta(n) for n in sorted(OBJECTS)
+                     if n.startswith(prefix) and n >= offset]
             return send(self, 200, json.dumps({"kind": "storage#objects", "items": items}).encode(),
                         "application/json")
         for base in ("/storage/v1/b/data/o/", "/download/storage/v1/b/data/o/"):
@@ -157,6 +159,14 @@ class TestGCS:
         rows = list(gcs(prefix="in/", live_ingestion={"enabled": True}).read_since())
         assert [(r.item["id"], r.cursor_value.isoformat()) for r in rows] == [
             ("a1", "2026-10-19T10:00:00+00:00"), ("b1", "2026-10-19T10:00:00+00:00")]
+
+    def test_key_ordered_polling_starts_after_the_last_key(self, gcs):
+        from potato.data_sources.sources.object_store import tiebreak
+        source = gcs(prefix="in/", live_ingestion={"enabled": True, "listing": "after_last_key"})
+        rows = list(source.read_since(tiebreaker=tiebreak("in/a.jsonl", 0, 1)))
+        assert [r.item["id"] for r in rows] == ["b1"]
+        listing = next(r for r in GCSFake.requests if r.startswith("/storage/v1/b/data/o?"))
+        assert "startOffset=in%2Fa.jsonl" in listing
 
     def test_a_missing_object_says_which(self, gcs):
         with pytest.raises(ValueError, match="gs://data/in/gone.jsonl"):

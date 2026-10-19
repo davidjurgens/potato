@@ -6,6 +6,11 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Key-ordered polling for large buckets.** S3 and GCS sources in live
+  prefix mode take `live_ingestion.listing: after_last_key`: each poll lists
+  only the keys after the last one read, where the default lists the whole
+  prefix every time. For buckets whose new objects always sort after the old
+  ones. See *Remote Data Sources*.
 - **The no-assistance comparison group covers every assistance surface.**
   `ai_support.holdout` now also withholds administrator keyword highlighting,
   the in-browser click-to-mask and text-prompt segmentation tools, and SAM 2

@@ -5708,6 +5708,33 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError(
                 f"data_sources[{i}] (type={source_type}) live_ingestion needs 'prefix': "
                 f"new rows arrive as new objects under it")
+        live_dict = live_block if isinstance(live_block, dict) else {}
+        listing = live_dict.get("listing", "full")
+        from potato.data_sources.live_ingestion import LiveIngestionConfig
+        if listing not in LiveIngestionConfig.LISTING_MODES:
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion.listing must be one "
+                f"of {', '.join(LiveIngestionConfig.LISTING_MODES)} (got {listing!r})")
+        if listing == "after_last_key" and float(live_dict.get("overlap_seconds") or 0) > 0:
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion: overlap_seconds "
+                f"does not apply with listing: after_last_key -- rows are taken in key "
+                f"order, not by time, so re-reading a time window would list and "
+                f"download the whole prefix on every poll. Remove overlap_seconds")
+        initial = live_dict.get("initial_cursor")
+        if (listing == "after_last_key" and initial is not None
+                and not str(initial).startswith(source.get("prefix") or "")):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion.initial_cursor "
+                f"{initial!r} is a key, and must be the full key including the prefix "
+                f"{source.get('prefix')!r}; one without it sorts before every key and "
+                f"would read the whole prefix")
+        if listing != "full" and source_type not in ("s3", "gcs"):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion.listing: "
+                f"{listing!r} works with s3 and gcs only"
+                + ("; Azure's listing cannot start after a key, so give each day or "
+                   "batch its own prefix instead" if source_type == "azure_blob" else ""))
 
         # Type-specific validation
         _validate_data_source_by_type(source, source_type, i)

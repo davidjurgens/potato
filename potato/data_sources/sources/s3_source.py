@@ -152,12 +152,14 @@ class S3Source(ObjectStoreSource):
     def _uri(self, key: str) -> str:
         return f"s3://{self._bucket}/{key}"
 
-    def _list_objects(self, prefix: str) -> List[ObjectInfo]:
+    def _list_objects(self, prefix: str, start_after: Optional[str] = None) -> List[ObjectInfo]:
         client = self._get_client()
         objects: List[ObjectInfo] = []
+        params = {"Bucket": self._bucket, "Prefix": prefix}
+        if start_after:
+            params["StartAfter"] = start_after  # S3 lists keys in UTF-8 binary order
         try:
-            for page in client.get_paginator("list_objects_v2").paginate(
-                    Bucket=self._bucket, Prefix=prefix):
+            for page in client.get_paginator("list_objects_v2").paginate(**params):
                 for entry in page.get("Contents", []) or []:
                     if entry["Key"].endswith("/"):
                         continue  # a "folder" placeholder

@@ -126,6 +126,12 @@ class LiveIngestionConfig:
     max_consecutive_failures: int = 0
     stop_after_items: int = 0
     replay_on_start: bool = True
+    #: Object stores only: ``full`` lists the whole prefix on every poll;
+    #: ``after_last_key`` lists only keys after the last one read, for
+    #: buckets whose new objects always sort after the old ones.
+    listing: str = "full"
+
+    LISTING_MODES = ("full", "after_last_key")
 
     #: Single source of truth for the recognized keys. The config validator
     #: imports this rather than keeping its own copy -- this codebase already
@@ -145,6 +151,7 @@ class LiveIngestionConfig:
         "max_consecutive_failures",
         "stop_after_items",
         "replay_on_start",
+        "listing",
     })
 
     @classmethod
@@ -165,6 +172,7 @@ class LiveIngestionConfig:
             max_consecutive_failures=int(block.get("max_consecutive_failures", 0)),
             stop_after_items=int(block.get("stop_after_items", 0)),
             replay_on_start=bool(block.get("replay_on_start", True)),
+            listing=str(block.get("listing", "full") or "full"),
         )
 
     def validate(self) -> List[str]:
@@ -192,6 +200,9 @@ class LiveIngestionConfig:
             errors.append("max_consecutive_failures must be a non-negative integer")
         if self.stop_after_items < 0:
             errors.append("stop_after_items must be a non-negative integer")
+        if self.listing not in self.LISTING_MODES:
+            errors.append(f"listing must be one of {', '.join(self.LISTING_MODES)} "
+                          f"(got {self.listing!r})")
 
         return errors
 

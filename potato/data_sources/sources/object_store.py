@@ -51,18 +51,28 @@ def utc(value: Any) -> datetime:
     return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def tiebreak(key: str, index: int) -> str:
-    return f"{key}{_SEP}{index:08d}"
+def tiebreak(key: str, index: int, total: Optional[int] = None) -> str:
+    """``"<key>\\0<index>"``, plus ``"\\0<rows in the object>"`` in key-ordered listing."""
+    mark = f"{key}{_SEP}{index:08d}"
+    return mark if total is None else f"{mark}{_SEP}{total:08d}"
+
+
+def parse_tiebreak(value: Optional[str]) -> Tuple[Optional[str], int, Optional[int]]:
+    """``(key, row index, rows in the object or None)``."""
+    if not value or _SEP not in str(value):
+        return (str(value) if value else None), -1, None
+    parts = str(value).split(_SEP)
+    try:
+        if len(parts) >= 3:
+            return _SEP.join(parts[:-2]), int(parts[-2]), int(parts[-1])
+        return parts[0], int(parts[1]), None
+    except ValueError:
+        return _SEP.join(parts[:-1]), -1, None
 
 
 def split_tiebreak(value: Optional[str]) -> Tuple[Optional[str], int]:
-    if not value or _SEP not in str(value):
-        return (str(value) if value else None), -1
-    key, _, index = str(value).rpartition(_SEP)
-    try:
-        return key, int(index)
-    except ValueError:
-        return key, -1
+    key, index, _total = parse_tiebreak(value)
+    return key, index
 
 
 class ObjectStoreSource(DataSource):
@@ -84,7 +94,8 @@ class ObjectStoreSource(DataSource):
 
     # -- what subclasses provide ---------------------------------------------
 
-    def _list_objects(self, prefix: str) -> List[ObjectInfo]:
+    def _list_objects(self, prefix: str, start_after: Optional[str] = None) -> List[ObjectInfo]:
+        """Objects under ``prefix``; with ``start_after``, only keys sorting after it."""
         raise NotImplementedError
 
     def _read_object(self, key: str) -> Tuple[bytes, str]:
@@ -137,10 +148,11 @@ class ObjectStoreSource(DataSource):
             raise ValueError(f"Could not parse content from {self._uri(key)}")
         return records
 
-    def _data_objects(self) -> List[ObjectInfo]:
-        objects = [o for o in self._list_objects(self._prefix)
-                   if o.key.lower().endswith(DATA_EXTENSIONS)]
-        return objects
+    def _data_objects(self, start_after: Optional[str] = None) -> List[ObjectInfo]:
+        listed = (self._list_objects(self._prefix, start_after=start_after)
+                  if start_after is not None else self._list_objects(self._prefix))
+        return [o for o in listed if o.key.lower().endswith(DATA_EXTENSIONS)
+                and (start_after is None or o.key > start_after)]
 
     def _fetch_data(self) -> List[Dict[str, Any]]:
         if self._key:
@@ -188,8 +200,17 @@ class ObjectStoreSource(DataSource):
             raise RuntimeError(f"Source {self.source_id} does not have live_ingestion "
                                f"enabled with a prefix")
         batch = int(limit or self._live.batch_size)
-        after = utc(cursor) if cursor is not None else None
-        after_key, after_index = split_tiebreak(tiebreaker)
+        if self._live.listing == "after_last_key":
+            yield from self._read_since_by_key(cursor, tiebreaker, batch)
+            return
+        try:
+            after = utc(cursor) if cursor is not None else None
+        except ValueError:
+            # A key cursor left by after_last_key listing: start from the
+            # beginning once; the id dedupe drops what the pool has.
+            after = None
+            tiebreaker = None
+        after_key, after_index, after_total = parse_tiebreak(tiebreaker)
         horizon = None
         if self._live.safety_lag_seconds > 0:
             from datetime import timedelta
@@ -207,6 +228,9 @@ class ObjectStoreSource(DataSource):
                 if modified == after:
                     if after_key is None or obj.key < after_key:
                         continue
+                    if obj.key == after_key and after_total is not None \
+                            and after_index + 1 >= after_total:
+                        continue  # read to its end (a key-ordered cursor)
             first = after_index + 1 if (after is not None and modified == after
                                         and obj.key == after_key) else 0
             content, content_type = self._read_object(obj.key)
@@ -215,6 +239,54 @@ class ObjectStoreSource(DataSource):
                 item = rows[index]
                 mark = tiebreak(obj.key, index)
                 yield LiveRow(item=item, cursor_value=modified, row_id=mark, tiebreak_value=mark)
+                produced += 1
+                if produced >= batch:
+                    return
+
+    def _read_since_by_key(self, cursor: Optional[Any], tiebreaker: Optional[str],
+                           batch: int) -> Iterator[LiveRow]:
+        """Key-ordered polling: list only the keys after the last one read.
+
+        For buckets whose new objects always sort after the old ones (keys
+        that start with a timestamp or a sequence number). An object written
+        under a key that sorts earlier is never seen. The tie-breaker carries
+        the object's row count, so an object read to its end is not fetched
+        again, and one a batch stopped inside is resumed at its next row.
+
+        The cursor is the object's KEY, not its modified time, so the worker's
+        cursor comparisons follow key order. A cursor with no tie-breaker (an
+        ``initial_cursor``) means "start after this key". A time cursor left by
+        the full listing mode is ignored: the next poll lists the prefix from
+        the start once, and the id dedupe drops what is already in the pool.
+        """
+        after_key, after_index, total = parse_tiebreak(tiebreaker)
+        if after_key is None and isinstance(cursor, str) and cursor:
+            after_key, after_index, total = cursor, 0, 1  # that key counts as read
+        horizon = None
+        if self._live.safety_lag_seconds > 0:
+            from datetime import timedelta
+            horizon = datetime.now(timezone.utc) - timedelta(seconds=self._live.safety_lag_seconds)
+
+        pending: List[Tuple[ObjectInfo, int]] = []
+        if after_key is not None and (total is None or after_index + 1 < total):
+            # A batch stopped inside this object, or an older cursor without a
+            # row count: read it again from the next row.
+            same = [o for o in self._list_objects(after_key) if o.key == after_key]
+            if same:
+                pending.append((same[0], after_index + 1))
+        pending.extend((o, 0) for o in sorted(self._data_objects(start_after=after_key),
+                                              key=lambda o: o.key))
+        produced = 0
+        for obj, first in pending:
+            modified = utc(obj.modified)
+            if horizon is not None and modified > horizon:
+                break  # keys after it may be older, but must not be read past it
+            content, content_type = self._read_object(obj.key)
+            rows = self._parse(obj.key, content, content_type)
+            for index in range(first, len(rows)):
+                mark = tiebreak(obj.key, index, len(rows))
+                yield LiveRow(item=rows[index], cursor_value=obj.key, row_id=tiebreak(obj.key, index),
+                              tiebreak_value=mark)
                 produced += 1
                 if produced >= batch:
                     return

@@ -125,7 +125,9 @@ class AzureBlobSource(ObjectStoreSource):
     def _uri(self, key: str) -> str:
         return f"azure://{self._bucket}/{key}"
 
-    def _list_objects(self, prefix: str) -> List[ObjectInfo]:
+    def _list_objects(self, prefix: str, start_after: Optional[str] = None) -> List[ObjectInfo]:
+        # Azure's listing cannot start after a key; config validation keeps
+        # key-ordered listing off this source, and the base class filters.
         return [ObjectInfo(blob.name, blob.last_modified, int(blob.size or 0))
                 for blob in self._container().list_blobs(name_starts_with=prefix or None)
                 if not blob.name.endswith("/")]
