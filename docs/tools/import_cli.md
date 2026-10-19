@@ -8,8 +8,10 @@ potato import --input instances_val2017.json --output-dir my-project
 python potato/flask_server.py start my-project/config.yaml -p 8000
 ```
 
-Twenty formats are supported: fifteen computer-vision, and five text and
-qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA). See the
+Twenty-two formats are supported: fifteen computer-vision, five text and
+qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA), and two whole-project
+formats (Label Studio and Argilla) that bring questions, annotators and model
+suggestions across together. See the
 [format matrix](../data-export/format_matrix.md) for what survives each
 direction, and
 [Bringing a Project Into Potato](../guides/migrating-into-potato.md) for the
@@ -23,6 +25,13 @@ their own:
 | `--conll-document-unit` | CoNLL | What counts as one item: `auto`, `sentence`, `file` |
 | `--qdpx-end-position` | REFI-QDA | Force `inclusive` or `exclusive` instead of inferring it |
 | `--prodigy-keep-rejected` | Prodigy | Import tasks answered `reject`/`ignore`, which are dropped by default |
+
+Label Studio and Argilla take two more:
+
+| Flag | Format | What it does |
+|---|---|---|
+| `--ls-config XML` | Label Studio | The project's labeling config. Without it the questions are inferred from the answers, and options nobody chose are lost |
+| `--keep-annotators` | Label Studio, Argilla | Write each source annotator's answers as that person's saved work (see below) |
 
 !!! important "Imported annotations are pre-annotations"
 
@@ -90,6 +99,12 @@ potato import --hf-dataset cppe-5 --hf-split train -o proj
 Needs `pip install datasets`. Hub datasets store images inline, so they must be
 written out and served before the canvas can show them — the import says so.
 
+An Argilla dataset pushed with `to_hub` is read the same way, with `-f argilla`:
+
+```bash
+potato import -f argilla --hf-dataset my-org/my-feedback -o proj --keep-annotators
+```
+
 ## The flags that decide whether it works
 
 ### `--image-url-prefix` — almost always needed
@@ -154,6 +169,32 @@ a human opening every item. Off by default for exactly that reason.
 
 The seeded annotator is assigned every item it holds work for, so progress and
 assignment read the project as annotated rather than as untouched.
+
+### `--keep-annotators`
+
+Label Studio and Argilla only. Writes each source annotator's answers as that
+person's saved work under `annotation_output/<name>/`, and adds each of them to
+the roster, so `/admin/iaa` reports agreement as soon as the server starts.
+Unlike `--seed-user` this invents nobody: the answers are real people's.
+
+It also sets `max_annotations_per_item` to the number of people the source study
+meant each item to get: Argilla's `distribution.min_submitted`, or for Label
+Studio, which does not export its overlap setting, the most annotators any task
+has. Items the source study finished therefore count as complete, which is what
+`/admin/iaa` needs to score them, and new annotators are given the rest. Raise
+the value to collect more judgements per item.
+
+The imported people have no Potato passwords, so the generated config sets
+`require_password: false` and the roster rows carry no password. It also closes
+enrolment: `user_config.allow_all_users` is false and `user_config.users` lists
+the imported names, so nobody else can register. Add new annotators to that
+list. Before you deploy the project, set `require_password: true` and add a
+password to each row of `annotation_output/user_config.json`: until you do,
+`potato deploy` refuses a public deployment (finding D022), because anyone who
+knows a name could sign in as that person and change their work.
+
+Without the flag, people's answers are left out and only model suggestions come
+across, as pre-annotations.
 
 ### `--config-only`
 

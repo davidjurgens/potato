@@ -19,6 +19,8 @@ nav:
         - Working with Transcripts: guides/working_with_transcripts.md
         - Hotkey Review Mode: guides/hotkey_review_mode.md
         - Bringing a Project Into Potato: guides/migrating-into-potato.md
+        - Coming from Label Studio: guides/coming-from-label-studio.md
+        - Coming from Argilla: guides/coming-from-argilla.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Configuration Reference: configuration/config_reference.md

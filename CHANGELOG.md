@@ -4,6 +4,28 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Features
+
+- **Label Studio and Argilla projects import whole.** `potato import` reads a
+  Label Studio JSON export (with its labeling config XML via `--ls-config`)
+  and an Argilla 2.x dataset (a `to_disk` folder, a `to_hub` snapshot, or
+  `-f argilla --hf-dataset <repo>`). Questions become annotation schemes, model
+  suggestions become pre-annotations with the model and score kept in a
+  `prediction_sources` column, and with `--keep-annotators` each source
+  annotator's answers become that person's saved work, so agreement between
+  them is reported as soon as the server starts. Label Studio spans are
+  converted from UTF-16 offsets to code points. Unsupported questions (Label
+  Studio Pairwise, Ranker, Taxonomy, BrushLabels, relations; Argilla ranking)
+  are left out and counted. Argilla's `records.json` does not record whether a
+  response was submitted, so a `to_disk` import keeps every response and says
+  so; a `to_hub` import keeps only submitted ones. With `--keep-annotators` the
+  generated project closes enrolment to the imported names and starts
+  passwordless, since the source tools' passwords are not exported. See
+  *Coming from Label Studio* and *Coming from Argilla* in the guides.
+- New deploy preflight finding D022 (error, public deployments): annotator
+  accounts that hold saved work but have no password, on a study that does not
+  require one. Anyone who knows such a name could sign in as that person.
+
 ### Validation
 
 - **`potato validate` now checks the keys on each annotation scheme against

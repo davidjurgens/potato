@@ -1,0 +1,5 @@
+<View>
+  <Image name="image" value="$image"/>
+  <RectangleLabels name="boxes" toName="image"><Label value="Car"/><Label value="Person"/></RectangleLabels>
+  <PolygonLabels name="regions" toName="image"><Label value="Road"/></PolygonLabels>
+</View>

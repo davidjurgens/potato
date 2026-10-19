@@ -1009,7 +1009,7 @@ Load data from 8 source types: local files, URLs, Google Drive, Dropbox, Amazon 
 
 ### Export Format Coverage
 
-Export annotations in 32 formats and import from 20 (15 computer-vision formats and 5 text formats). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI, MOT, DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 32 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI, MOT, DAVIS, Cityscapes, mask PNG, HuggingFace. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -1329,7 +1329,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Annotation schemas | 61 |
 | Display types | 24 |
 | Export formats | 32 |
-| Import formats (15 CV, 5 text) | 20 |
+| Import formats (15 CV, 5 text, 2 whole-project) | 22 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 8 |
 | Assignment strategies | 13 |
@@ -2886,6 +2886,8 @@ them on save.
 
 | Coming from | Format | Notes |
 |---|---|---|
+| **Label Studio** | JSON export + labeling config XML | Questions, every annotator's answers and model predictions. See [Coming from Label Studio](coming-from-label-studio.md) |
+| **Argilla** | `to_disk` folder or `to_hub` dataset | Questions, responses, suggestions and guidelines. See [Coming from Argilla](coming-from-argilla.md) |
 | **brat** | `.ann` + `.txt` | Directory of file pairs. Discontinuous mentions survive; relations do not yet |
 | **doccano** | JSONL | Sequence labelling and document classification |
 | **Prodigy** | `db-out` JSONL | Rejected tasks are dropped by default — see below |
@@ -2905,6 +2907,25 @@ python -m potato.importers --list-formats
 
 The format is detected from the file, so `--input-format` is only needed when
 detection cannot decide.
+
+---
+
+## Whole projects: Label Studio and Argilla
+
+These two bring a whole project across: the questions, the people who answered
+them, and the model suggestions beside each answer.
+
+```bash
+python -m potato.importers -i export.json --ls-config label_config.xml \
+    -o my-project --keep-annotators
+python -m potato.importers -i my_dataset/ -o my-project --keep-annotators   # Argilla to_disk
+```
+
+Model suggestions become pre-annotations, with the model name and score kept in
+the data file. With `--keep-annotators`, each person's answers become that
+person's saved work, so Potato reports agreement between them as soon as it
+starts. Without it, only the suggestions come across. The per-tool pages list
+what maps to what and what is left out.
 
 ---
 
@@ -3076,6 +3097,9 @@ Each of these produces a warning on the import rather than a silence:
   are not imported yet; text sources are.
 - **Uncoded selections in a `.qdpx`.** A highlight with no code attached has
   nothing to import. Counted in the warnings.
+- **Label Studio Pairwise, Ranker, Taxonomy, BrushLabels and relations.** Left
+  out with their answers, and counted.
+- **Argilla ranking questions.** Left out with their answers, and counted.
 
 ---
 
@@ -3085,6 +3109,158 @@ Each of these produces a warning on the import rather than a silence:
 - [Export Formats](../data-export/export_formats.md) — going the other way
 - [Qualitative Data Analysis](../advanced/qda.md) — what Potato does once a QDA
   project is in
+
+
+---
+
+<!-- source: docs/guides/coming-from-label-studio.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/guides/coming-from-label-studio/
+
+# Coming from Label Studio
+
+`potato import` turns a Label Studio project into a runnable Potato project: the
+labeling interface becomes annotation schemes, each annotator's answers become
+that person's saved work, and model predictions become pre-annotations.
+
+## Export from Label Studio
+
+1. **Export → JSON** (not JSON-MIN or CSV). This is the list of tasks with
+   their `annotations` and `predictions`.
+2. **Settings → Labeling Interface → Code**: copy the XML into a file, such as
+   `label_config.xml`.
+
+The XML is optional. Without it the questions are rebuilt from the answers, so
+every label someone used comes across but options nobody chose do not.
+
+## Import
+
+```bash
+python -m potato.importers -i project-export.json --ls-config label_config.xml \
+    -o my-project --keep-annotators
+python potato/flask_server.py start my-project/config.yaml -p 8000
+```
+
+`--keep-annotators` writes each annotator's answers as their saved work, so
+`/admin/iaa` reports agreement between them straight away (the import sets
+`max_annotations_per_item` to the source study's overlap, so finished items count
+as complete). Without it, only the
+predictions come across. The `--keep-annotators` section of the
+[Import CLI](../tools/import_cli.md) explains what the flag does to the project's login settings.
+
+## Label Studio tags and their Potato schemes
+
+| Label Studio | Potato | Notes |
+|---|---|---|
+| `<Choices>` | `radio` | `multiselect` when `choice="multiple"` |
+| `<Labels>` | `span` | Label colours carry over. Offsets are converted from JavaScript's UTF-16 units to code points, so spans after an emoji land where they should |
+| `<RectangleLabels>` | `image_annotation`, bbox tool | Rotation is dropped and counted |
+| `<PolygonLabels>` | `image_annotation`, polygon tool | |
+| `<KeyPointLabels>` | `image_annotation`, landmark tool | |
+| `<TextArea>` | `text` | Multi-line when `rows` is more than 1 |
+| `<Rating>` | `likert` | Size from `maxRating` |
+| `<Number>` | `number` | `min` and `max` carry over |
+| `<Header>` before a control | The scheme's description | |
+| `completed_by` | A Potato username | `ls_user_<id>`, or the email when the export has one. The README maps each back |
+| Predictions | Pre-annotations | The highest-scoring prediction per task. Its `model_version` and `score` are kept in the data file's `prediction_sources` column, and on image objects as `ai_model` and `confidence` |
+
+Image tools that point at the same `<Image>` become one `image_annotation`
+scheme with several tools, which is how Potato draws them.
+
+## Not imported
+
+These have no equivalent in the importer yet. Each is reported in the import's
+output and in the project README, with how many answers were dropped:
+
+- `<Pairwise>`, `<Ranker>`, `<Taxonomy>`, `<BrushLabels>`, relations, and any
+  other control not in the table above
+- Cancelled (skipped) annotations
+- Predictions other than the highest-scoring one on each task
+- A second label on the same span (the first is kept)
+
+## Related
+
+- [Bringing a Project Into Potato](migrating-into-potato.md)
+- [Coming from Argilla](coming-from-argilla.md)
+- [Inter-Annotator Agreement](../workflow/quality_control.md)
+
+
+---
+
+<!-- source: docs/guides/coming-from-argilla.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/guides/coming-from-argilla/
+
+# Coming from Argilla
+
+`potato import -f argilla` turns an Argilla 2.x dataset into a runnable Potato
+project: questions become annotation schemes, responses become each annotator's
+saved work, suggestions become pre-annotations, and the guidelines go into the
+project README.
+
+## Export from Argilla
+
+Either of Argilla's own exports works:
+
+```python
+dataset.to_disk("my_dataset")          # a folder
+dataset.to_hub("my-org/my-feedback")   # a Hugging Face dataset
+```
+
+They differ in one way that matters. A `to_disk` folder records each response's
+value and annotator but not its status, so a discarded or draft response cannot
+be told from a submitted one, and all of them are imported (the import warns).
+A `to_hub` dataset keeps the status, and only submitted responses are imported.
+
+## Import
+
+```bash
+# A to_disk folder
+python -m potato.importers -i my_dataset -o my-project --keep-annotators
+
+# A to_hub dataset, straight from the Hub (needs huggingface_hub and datasets)
+python -m potato.importers -f argilla --hf-dataset my-org/my-feedback \
+    -o my-project --keep-annotators
+
+python potato/flask_server.py start my-project/config.yaml -p 8000
+```
+
+`--keep-annotators` writes each annotator's responses as their saved work, so
+`/admin/iaa` reports agreement between them straight away (the import sets
+`max_annotations_per_item` to the source study's overlap, so finished items count
+as complete). Argilla 2.x reports
+no agreement statistic of its own. Without the flag, only the suggestions come
+across. The `--keep-annotators` section of the [Import CLI](../tools/import_cli.md)
+explains what the flag does to the project's login settings.
+
+## Argilla settings and their Potato equivalents
+
+| Argilla | Potato | Notes |
+|---|---|---|
+| `LabelQuestion` | `radio` | |
+| `MultiLabelQuestion` | `multiselect` | |
+| `RatingQuestion` | `likert` | When the scale is 1 to N. A 0–10 or sparse scale becomes a horizontal `radio`, which keeps every value exactly |
+| `TextQuestion` | `text` | Multi-line |
+| `SpanQuestion` | `span` | On the field the question names |
+| `required: true` | `label_requirement: {required: true}` | |
+| `TextField`, `ImageField` | Shown on the page | With more than one field, all are shown with `instance_display`, and a span question's field is marked as the span target |
+| `ChatField` | Shown as text | One message per line, prefixed with its role |
+| Record metadata | Kept in the data file | |
+| Response `user_id` | A Potato username | `argilla_` plus the first eight characters of the id. The README maps each back |
+| Suggestions | Pre-annotations | The `agent` and `score` are kept in the data file's `prediction_sources` column |
+| Guidelines | The project README | |
+
+## Not imported
+
+Each is reported in the import's output and in the project README:
+
+- `RankingQuestion`, with its responses
+- Discarded and draft responses (from `to_hub` only; see above)
+- Vectors
+
+## Related
+
+- [Bringing a Project Into Potato](migrating-into-potato.md)
+- [Coming from Label Studio](coming-from-label-studio.md)
+- [Inter-Annotator Agreement](../workflow/quality_control.md)
 
 
 ---
@@ -50752,8 +50928,10 @@ potato import --input instances_val2017.json --output-dir my-project
 python potato/flask_server.py start my-project/config.yaml -p 8000
 ```
 
-Twenty formats are supported: fifteen computer-vision, and five text and
-qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA). See the
+Twenty-two formats are supported: fifteen computer-vision, five text and
+qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA), and two whole-project
+formats (Label Studio and Argilla) that bring questions, annotators and model
+suggestions across together. See the
 [format matrix](../data-export/format_matrix.md) for what survives each
 direction, and
 [Bringing a Project Into Potato](../guides/migrating-into-potato.md) for the
@@ -50767,6 +50945,13 @@ their own:
 | `--conll-document-unit` | CoNLL | What counts as one item: `auto`, `sentence`, `file` |
 | `--qdpx-end-position` | REFI-QDA | Force `inclusive` or `exclusive` instead of inferring it |
 | `--prodigy-keep-rejected` | Prodigy | Import tasks answered `reject`/`ignore`, which are dropped by default |
+
+Label Studio and Argilla take two more:
+
+| Flag | Format | What it does |
+|---|---|---|
+| `--ls-config XML` | Label Studio | The project's labeling config. Without it the questions are inferred from the answers, and options nobody chose are lost |
+| `--keep-annotators` | Label Studio, Argilla | Write each source annotator's answers as that person's saved work (see below) |
 
 !!! important "Imported annotations are pre-annotations"
 
@@ -50834,6 +51019,12 @@ potato import --hf-dataset cppe-5 --hf-split train -o proj
 Needs `pip install datasets`. Hub datasets store images inline, so they must be
 written out and served before the canvas can show them — the import says so.
 
+An Argilla dataset pushed with `to_hub` is read the same way, with `-f argilla`:
+
+```bash
+potato import -f argilla --hf-dataset my-org/my-feedback -o proj --keep-annotators
+```
+
 ## The flags that decide whether it works
 
 ### `--image-url-prefix` — almost always needed
@@ -50898,6 +51089,32 @@ a human opening every item. Off by default for exactly that reason.
 
 The seeded annotator is assigned every item it holds work for, so progress and
 assignment read the project as annotated rather than as untouched.
+
+### `--keep-annotators`
+
+Label Studio and Argilla only. Writes each source annotator's answers as that
+person's saved work under `annotation_output/<name>/`, and adds each of them to
+the roster, so `/admin/iaa` reports agreement as soon as the server starts.
+Unlike `--seed-user` this invents nobody: the answers are real people's.
+
+It also sets `max_annotations_per_item` to the number of people the source study
+meant each item to get: Argilla's `distribution.min_submitted`, or for Label
+Studio, which does not export its overlap setting, the most annotators any task
+has. Items the source study finished therefore count as complete, which is what
+`/admin/iaa` needs to score them, and new annotators are given the rest. Raise
+the value to collect more judgements per item.
+
+The imported people have no Potato passwords, so the generated config sets
+`require_password: false` and the roster rows carry no password. It also closes
+enrolment: `user_config.allow_all_users` is false and `user_config.users` lists
+the imported names, so nobody else can register. Add new annotators to that
+list. Before you deploy the project, set `require_password: true` and add a
+password to each row of `annotation_output/user_config.json`: until you do,
+`potato deploy` refuses a public deployment (finding D022), because anyone who
+knows a name could sign in as that person and change their work.
+
+Without the flag, people's answers are left out and only model suggestions come
+across, as pre-annotations.
 
 ### `--config-only`
 

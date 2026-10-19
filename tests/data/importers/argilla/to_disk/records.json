@@ -1,0 +1,104 @@
+[
+ {
+  "id": "r1",
+  "fields": {
+   "prompt": "Who was Ada?",
+   "response": "Ada Lovelace worked with Babbage."
+  },
+  "metadata": {
+   "source": "wiki"
+  },
+  "suggestions": {
+   "helpful": {
+    "value": "yes",
+    "score": 0.7,
+    "agent": "gpt-judge"
+   }
+  },
+  "responses": {
+   "helpful": [
+    {
+     "value": "yes",
+     "user_id": "1f3a9c2e-0000-4000-8000-000000000001"
+    },
+    {
+     "value": "no",
+     "user_id": "7b8d1e4f-0000-4000-8000-000000000002"
+    }
+   ],
+   "issues": [
+    {
+     "value": [
+      "vague"
+     ],
+     "user_id": "7b8d1e4f-0000-4000-8000-000000000002"
+    }
+   ],
+   "score": [
+    {
+     "value": 4,
+     "user_id": "1f3a9c2e-0000-4000-8000-000000000001"
+    },
+    {
+     "value": 2,
+     "user_id": "7b8d1e4f-0000-4000-8000-000000000002"
+    }
+   ],
+   "entities": [
+    {
+     "value": [
+      {
+       "label": "PER",
+       "start": 0,
+       "end": 12
+      },
+      {
+       "label": "PER",
+       "start": 25,
+       "end": 32
+      }
+     ],
+     "user_id": "1f3a9c2e-0000-4000-8000-000000000001"
+    }
+   ],
+   "rank": [
+    {
+     "value": [
+      "a",
+      "b"
+     ],
+     "user_id": "1f3a9c2e-0000-4000-8000-000000000001"
+    }
+   ]
+  },
+  "vectors": {},
+  "status": "completed",
+  "_server_id": "s1"
+ },
+ {
+  "id": "r2",
+  "fields": {
+   "prompt": "Capital of France?",
+   "response": "Lyon."
+  },
+  "metadata": {},
+  "suggestions": {},
+  "responses": {
+   "helpful": [
+    {
+     "value": "no",
+     "user_id": "1f3a9c2e-0000-4000-8000-000000000001"
+    }
+   ],
+   "fix": [
+    {
+     "value": "Paris.",
+     "user_id": "1f3a9c2e-0000-4000-8000-000000000001"
+    }
+   ]
+  },
+  "vectors": {},
+  "status": "pending",
+  "_server_id": "s2"
+ }
+]

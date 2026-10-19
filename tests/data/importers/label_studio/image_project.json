@@ -1,0 +1,87 @@
+[
+ {
+  "id": 201,
+  "data": {
+   "image": "/media/street_1.jpg"
+  },
+  "annotations": [
+   {
+    "id": 6,
+    "completed_by": 7,
+    "was_cancelled": false,
+    "result": [
+     {
+      "id": "r1",
+      "from_name": "boxes",
+      "to_name": "image",
+      "type": "rectanglelabels",
+      "original_width": 400,
+      "original_height": 300,
+      "value": {
+       "x": 10,
+       "y": 20,
+       "width": 30,
+       "height": 40,
+       "rotation": 0,
+       "rectanglelabels": [
+        "Car"
+       ]
+      }
+     },
+     {
+      "id": "p1",
+      "from_name": "regions",
+      "to_name": "image",
+      "type": "polygonlabels",
+      "original_width": 400,
+      "original_height": 300,
+      "value": {
+       "points": [
+        [
+         50,
+         50
+        ],
+        [
+         70,
+         50
+        ],
+        [
+         60,
+         80
+        ]
+       ],
+       "polygonlabels": [
+        "Road"
+       ]
+      }
+     }
+    ]
+   }
+  ],
+  "predictions": [
+   {
+    "model_version": "yolo-v8",
+    "score": 0.8,
+    "result": [
+     {
+      "from_name": "boxes",
+      "to_name": "image",
+      "type": "rectanglelabels",
+      "original_width": 400,
+      "original_height": 300,
+      "value": {
+       "x": 12,
+       "y": 22,
+       "width": 28,
+       "height": 38,
+       "rotation": 0,
+       "rectanglelabels": [
+        "Car"
+       ]
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

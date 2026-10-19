@@ -129,6 +129,18 @@ def parse_args(args=None):
               "by default: a rejection is a human saying the annotations are "
               "wrong, so importing them turns that into positive signal."))
     parser.add_argument(
+        "--ls-config", metavar="XML",
+        help=("Label Studio only: the project's labeling config XML (Settings "
+              "-> Labeling Interface -> Code). Without it the questions are "
+              "inferred from the answers, and options nobody chose are lost."))
+    parser.add_argument(
+        "--keep-annotators", action="store_true",
+        help=("Label Studio and Argilla: write each source annotator's answers "
+              "as that person's saved work, so agreement can be computed at "
+              "once. Unlike --seed-user this fabricates nobody: the answers "
+              "are real people's. Without it they are left out and only model "
+              "suggestions come across, as pre-annotations."))
+    parser.add_argument(
         "--list-formats", action="store_true",
         help="List supported import formats and exit")
     parser.add_argument(
@@ -439,6 +451,70 @@ def _container_format(path: str, explicit: Optional[str]):
     return None
 
 
+def _project_format(parsed) -> Optional[str]:
+    """Which whole-project importer (Label Studio, Argilla), if any, applies."""
+    from . import projects
+    if parsed.input_format:
+        return projects.resolve(parsed.input_format)
+    if parsed.input and not parsed.hf_dataset:
+        return projects.detect(parsed.input)
+    return None
+
+
+def _run_project_import(parsed, fmt: str) -> int:
+    """Import a Label Studio or Argilla project into a runnable Potato project."""
+    import tempfile
+    from pathlib import Path as _Path
+
+    from . import projects
+    from .projects.writer import write_project
+
+    importer = projects.IMPORTERS[fmt]
+    source = parsed.input
+    try:
+        if parsed.hf_dataset:
+            if fmt != "argilla":
+                print(f"error: --hf-dataset works with -f argilla, not {fmt}",
+                      file=sys.stderr)
+                return 2
+            from .projects.argilla import download_hub_dataset
+            source = str(download_hub_dataset(
+                parsed.hf_dataset, _Path(tempfile.mkdtemp(prefix="potato-argilla-"))))
+        if not source:
+            print("error: --input is required", file=sys.stderr)
+            return 2
+        result = importer.parse_path(_Path(source), {"ls_config": parsed.ls_config})
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    written = write_project(result, parsed.output_dir,
+                            source=parsed.hf_dataset or source,
+                            keep_annotators=parsed.keep_annotators,
+                            config_only=parsed.config_only)
+    summary = result.summarize()
+    print(f"Imported {summary['num_items']} item(s), {summary['num_schemes']} "
+          f"question(s), {summary['num_responses']} answer(s) from "
+          f"{summary['num_annotators']} annotator(s), and "
+          f"{summary['num_predictions']} model suggestion(s) from {result.source_format}.")
+    if parsed.keep_annotators and summary["num_annotators"]:
+        print("  The project is passwordless so the imported annotators can log in "
+              "by name. Set require_password: true and add passwords to "
+              "annotation_output/user_config.json before deploying it.")
+    if summary["num_responses"] and not parsed.keep_annotators:
+        print("  People's answers were NOT written; add --keep-annotators to bring "
+              "them across as each annotator's saved work.")
+    for what, count in sorted(result.skipped.items()):
+        print(f"  left out: {count} {what}")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+    for path in written:
+        print(f"  wrote {path}")
+    print(f"\nRun it:\n  python potato/flask_server.py start "
+          f"{os.path.join(parsed.output_dir, 'config.yaml')} -p 8000")
+    return 0
+
+
 def _text_format(parsed) -> Optional[str]:
     """
     Which text-annotation importer, if any, should handle this input.
@@ -570,9 +646,12 @@ def main(args=None) -> int:
     )
 
     if parsed.list_formats:
+        from . import projects
         for heading, infos in (
                 ("Image / video annotation formats", import_registry.list_importers()),
-                ("Text annotation formats", text_import_registry.list_importers())):
+                ("Text annotation formats", text_import_registry.list_importers()),
+                ("Whole projects (questions, annotators and suggestions)",
+                 projects.list_importers())):
             print(f"{heading}:\n")
             for info in infos:
                 exts = ", ".join(info["file_extensions"]) or "-"
@@ -601,6 +680,12 @@ def main(args=None) -> int:
         "qdpx_end_position": parsed.qdpx_end_position,
         "prodigy_keep_rejected": parsed.prodigy_keep_rejected,
     }
+
+    # Whole-project formats first: a Label Studio export is a JSON list, which
+    # looser per-item detectors further down would otherwise try to claim.
+    project_format = _project_format(parsed)
+    if project_format:
+        return _run_project_import(parsed, project_format)
 
     # A Hub dataset has no path at all, so it bypasses the file/directory
     # branching entirely.

@@ -52,8 +52,11 @@ def _counts():
     from potato.data_sources.base import SourceType
     from potato.phase import UserPhase
 
+    from potato.importers.projects import IMPORTERS as project_importers
+
     cv_imports = len(import_registry._importers)
     text_imports = len(text_import_registry._importers)
+    project_imports = len(project_importers)
 
     return {
         "annotation_types": len(schema_registry.get_supported_types()),
@@ -64,7 +67,8 @@ def _counts():
         "export_formats": len(export_registry._exporters),
         "cv_import_formats": cv_imports,
         "text_import_formats": text_imports,
-        "import_formats": cv_imports + text_imports,
+        "project_import_formats": project_imports,
+        "import_formats": cv_imports + text_imports + project_imports,
         "ai_endpoint_types": len(_endpoint_classes()),
         "ai_support_endpoint_types": _ai_support_endpoint_classes(),
         "assignment_strategies": len(AssignmentStrategy),
@@ -231,13 +235,13 @@ CLAIMS = [
      r"Export annotations in (\d+) formats",
      "export_formats"),
     ("docs/comparison.md",
-     r"import from (\d+) \(\d+ computer-vision formats and \d+ text formats\)",
+     r"import from (\d+) \(\d+ computer-vision formats, \d+ text formats",
      "import_formats"),
     ("docs/comparison.md",
-     r"import from \d+ \((\d+) computer-vision formats and \d+ text formats\)",
+     r"import from \d+ \((\d+) computer-vision formats, \d+ text formats",
      "cv_import_formats"),
     ("docs/comparison.md",
-     r"import from \d+ \(\d+ computer-vision formats and (\d+) text formats\)",
+     r"import from \d+ \(\d+ computer-vision formats, (\d+) text formats",
      "text_import_formats"),
     ("docs/comparison.md",
      r"\| CV format import \| (\d+) formats \|",
@@ -270,14 +274,17 @@ CLAIMS = [
      r"^\| Export formats \| (\d+) \|$",
      "export_formats"),
     ("docs/comparison.md",
-     r"^\| Import formats \(\d+ CV, \d+ text\) \| (\d+) \|$",
+     r"^\| Import formats \(\d+ CV, \d+ text, \d+ whole-project\) \| (\d+) \|$",
      "import_formats"),
     ("docs/comparison.md",
-     r"^\| Import formats \((\d+) CV, \d+ text\) \|",
+     r"^\| Import formats \((\d+) CV, \d+ text, \d+ whole-project\) \|",
      "cv_import_formats"),
     ("docs/comparison.md",
-     r"^\| Import formats \(\d+ CV, (\d+) text\) \|",
+     r"^\| Import formats \(\d+ CV, (\d+) text, \d+ whole-project\) \|",
      "text_import_formats"),
+    ("docs/comparison.md",
+     r"^\| Import formats \(\d+ CV, \d+ text, (\d+) whole-project\) \|",
+     "project_import_formats"),
     ("docs/comparison.md",
      r"^\| AI/LLM endpoint types \| (\d+) \|$",
      "ai_endpoint_types"),

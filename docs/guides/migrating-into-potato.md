@@ -20,6 +20,8 @@ them on save.
 
 | Coming from | Format | Notes |
 |---|---|---|
+| **Label Studio** | JSON export + labeling config XML | Questions, every annotator's answers and model predictions. See [Coming from Label Studio](coming-from-label-studio.md) |
+| **Argilla** | `to_disk` folder or `to_hub` dataset | Questions, responses, suggestions and guidelines. See [Coming from Argilla](coming-from-argilla.md) |
 | **brat** | `.ann` + `.txt` | Directory of file pairs. Discontinuous mentions survive; relations do not yet |
 | **doccano** | JSONL | Sequence labelling and document classification |
 | **Prodigy** | `db-out` JSONL | Rejected tasks are dropped by default — see below |
@@ -39,6 +41,25 @@ python -m potato.importers --list-formats
 
 The format is detected from the file, so `--input-format` is only needed when
 detection cannot decide.
+
+---
+
+## Whole projects: Label Studio and Argilla
+
+These two bring a whole project across: the questions, the people who answered
+them, and the model suggestions beside each answer.
+
+```bash
+python -m potato.importers -i export.json --ls-config label_config.xml \
+    -o my-project --keep-annotators
+python -m potato.importers -i my_dataset/ -o my-project --keep-annotators   # Argilla to_disk
+```
+
+Model suggestions become pre-annotations, with the model name and score kept in
+the data file. With `--keep-annotators`, each person's answers become that
+person's saved work, so Potato reports agreement between them as soon as it
+starts. Without it, only the suggestions come across. The per-tool pages list
+what maps to what and what is left out.
 
 ---
 
@@ -210,6 +231,9 @@ Each of these produces a warning on the import rather than a silence:
   are not imported yet; text sources are.
 - **Uncoded selections in a `.qdpx`.** A highlight with no code attached has
   nothing to import. Counted in the warnings.
+- **Label Studio Pairwise, Ranker, Taxonomy, BrushLabels and relations.** Left
+  out with their answers, and counted.
+- **Argilla ranking questions.** Left out with their answers, and counted.
 
 ---
 

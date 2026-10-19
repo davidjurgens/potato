@@ -20,6 +20,7 @@ make an open task a decision rather than an accident.
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 import secrets
@@ -316,6 +317,72 @@ def _check_open_registration(ctx: CheckContext) -> List[Finding]:
         "user_config.users, or use authentication.method: oauth with at least "
         "one entry under authentication.providers.",
         key="user_config.allow_all_users",
+    )]
+
+
+def _passwordless(config: Dict[str, Any]) -> bool:
+    return (config.get("require_no_password") is True
+            or config.get("require_password") is False
+            or (config.get("login") or {}).get("type") in ("url_direct", "prolific"))
+
+
+@check
+def _check_signable_annotators(ctx: CheckContext) -> List[Finding]:
+    """Roster accounts with no password whose names already own annotations.
+
+    `potato import --keep-annotators` writes exactly this: the imported people
+    become accounts, with their work under annotation_output/, and no
+    passwords because the source tool's were not exported. On a public URL
+    anyone can then sign in under one of those names and change that person's
+    work, whether or not registration is open, and the names (`ls_user_7`, an
+    email) are often guessable.
+    """
+    if not ctx.public or not _passwordless(ctx.config):
+        return []
+    auth = ctx.config.get("authentication") or {}
+    if auth.get("method", "in_memory") == "oauth":
+        return []
+
+    base = os.path.dirname(os.path.abspath(ctx.config_path))
+    task_dir = ctx.config.get("task_dir") or "."
+    root = task_dir if os.path.isabs(task_dir) else os.path.join(base, task_dir)
+    output_rel = ctx.config.get("output_annotation_dir") or "annotation_output/"
+    output_dir = os.path.join(root, output_rel)
+    # The authenticator's own default: dirname(output_annotation_dir), so
+    # "annotation_output/" puts it inside that directory.
+    roster = auth.get("user_config_path") or os.path.join(
+        root, os.path.dirname(output_rel), "user_config.json")
+    if not os.path.isabs(roster):
+        roster = os.path.join(root, roster)
+    if not os.path.isfile(roster):
+        return []
+
+    exposed = []
+    try:
+        with open(roster, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                name = row.get("username") if isinstance(row, dict) else None
+                if name and not row.get("password") and os.path.isfile(
+                        os.path.join(output_dir, name, "user_state.json")):
+                    exposed.append(name)
+    except OSError:
+        return []
+    if not exposed:
+        return []
+    shown = ", ".join(sorted(exposed)[:5]) + (" ..." if len(exposed) > 5 else "")
+    return [Finding(
+        "D022", "error",
+        f"{len(exposed)} annotator account(s) with saved work have no password "
+        f"({shown}), and the study does not require one, so anyone who reaches "
+        f"the URL can sign in as them and change their annotations.",
+        "Set require_password: true and add a password to each row of the "
+        "roster file, or use authentication.method: oauth. Projects made with "
+        "`potato import --keep-annotators` start this way.",
+        key="require_password",
     )]
 
 
