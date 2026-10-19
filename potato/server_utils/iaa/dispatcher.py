@@ -1077,6 +1077,35 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
     return result
 
 
+def _object_attribute_report(scheme, raw_rows):
+    """Attribute agreement for a spatial or video scheme from raw stored values."""
+    from potato.server_utils.iaa import attribute_agreement as aa
+    from potato.server_utils.schemas.object_attributes import normalize_attributes
+
+    labels = [l if isinstance(l, str) else (l or {}).get("name")
+              for l in scheme.get("labels") or []]
+    definitions = normalize_attributes(
+        scheme["attributes"], [str(n) for n in labels], scheme.get("name", ""))
+    if scheme.get("annotation_type") == "spatial_annotation":
+        from potato.server_utils.iaa.structured import SPATIAL_MATCH
+        rows = {iid: {uid: aa.spatial_objects_with_attributes(v) for uid, v in per_user.items()}
+                for iid, per_user in raw_rows.items()}
+        return aa.attribute_agreement(rows, definitions, SPATIAL_MATCH,
+                                      to_canonical=aa.spatial_canonical)
+    rows = {iid: {uid: aa.track_objects(v) for uid, v in per_user.items()}
+            for iid, per_user in raw_rows.items()}
+    report = aa.attribute_agreement(rows, definitions, 0.5, to_canonical=aa.track_canonical,
+                                    similarity=aa.track_similarity)
+    # Tracks with no normalized box cannot be matched (track_similarity), so
+    # they are counted where the reader sees the alpha they are missing from.
+    unboxed = sum(1 for per_user in rows.values() for tracks in per_user.values()
+                  for track in tracks if not aa.has_normalized_box(track))
+    if unboxed:
+        for entry in report.values():
+            entry["n_tracks_without_normalized_boxes"] = unboxed
+    return report
+
+
 def _parse_caption_rows(rows):
     """
     ``{item: {annotator: [{"region", "caption"}]}}`` from the stored blobs.
@@ -1452,6 +1481,15 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
                 metrics = _aggregate_ranking(rows)
             else:
                 continue
+        # Per-object attributes on point-cloud objects and video tracks. Image
+        # shapes get theirs inside _aggregate_blobs, over the same matching.
+        if scheme.get("attributes") and scheme.get("annotation_type") in (
+                "spatial_annotation", "video_annotation") and isinstance(metrics, dict):
+            try:
+                metrics["attributes"] = _object_attribute_report(
+                    scheme, _gather_raw(overlap_items, user_states, name))
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("attribute agreement failed for %s: %s", name, exc)
         schema_report[name] = {
             "kind": kind.value,
             "annotation_type": scheme.get("annotation_type"),

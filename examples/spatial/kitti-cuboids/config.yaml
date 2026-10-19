@@ -63,6 +63,16 @@ annotation_schemes:
       - name: pedestrian
         color: "#FFD93D"
         key_value: "3"
+    # Per-object attributes, in the panel under the viewer for the selected
+    # box or point. KITTI records both; /admin/iaa reports agreement on each.
+    attributes:
+      - name: occluded
+        type: select
+        options: [none, partly, largely]
+        default: none
+        required: true
+      - name: truncated
+        type: bool
     # height | intensity | rgb | uniform. Lidar has no colour, so height is the
     # useful default; intensity works too and often separates road markings.
     color_mode: height

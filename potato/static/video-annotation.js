@@ -1385,7 +1385,12 @@ class VideoAnnotationManager {
             })),
             frame_annotations: this.frameAnnotations,
             keyframes: this.keyframes,
-            tracking: this.trackingData
+            tracking: this.trackingData,
+            // Object tracks from TrackingUIManager (tracking-ui.js). Before
+            // the tracker existed (or when it never loads) the tracks that
+            // came with the item are kept, so a save cannot drop them.
+            tracks: this.trackingManager ? this.trackingManager.getTrackingData()
+                                         : (this.loadedTracks || {})
         };
 
         // Always log save operations for debugging
@@ -1530,6 +1535,11 @@ class VideoAnnotationManager {
             if (data.tracking) {
                 this.trackingData = data.tracking;
             }
+            // Object tracks, handed to TrackingUIManager when it starts.
+            if (data.tracks && typeof data.tracks === 'object') {
+                this.loadedTracks = data.tracks;
+                if (this.trackingManager) this.trackingManager.loadTrackingData(data.tracks);
+            }
 
             this._updateAnnotationList();
             videoDebugLog('Loaded existing annotations:', data);
@@ -1545,7 +1555,12 @@ class VideoAnnotationManager {
             segments: this.segments,
             frame_annotations: this.frameAnnotations,
             keyframes: this.keyframes,
-            tracking: this.trackingData
+            tracking: this.trackingData,
+            // Object tracks from TrackingUIManager (tracking-ui.js). Before
+            // the tracker existed (or when it never loads) the tracks that
+            // came with the item are kept, so a save cannot drop them.
+            tracks: this.trackingManager ? this.trackingManager.getTrackingData()
+                                         : (this.loadedTracks || {})
         };
     }
 

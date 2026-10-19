@@ -602,6 +602,12 @@ python -m potato.export --config config.yaml --format tsv --output ./export/
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
 
+Answers stored as a JSON blob stay a JSON string inside the line. Video object
+tracks are one example: they sit at `labels.<scheme>._data`, and the
+[video annotation page](../annotation-types/multimedia/video_annotation.md)
+shows how to read them. CSV and Parquet carry the same string in the column
+`<scheme>._data`.
+
 ```bash
 python -m potato.export --config config.yaml --format jsonl --output ./export/
 ```

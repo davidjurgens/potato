@@ -2427,6 +2427,23 @@
         "spatial_annotation": {
           "scheme": {
             "annotation_type": "spatial_annotation",
+            "attributes": [
+              {
+                "default": "none",
+                "name": "occluded",
+                "options": [
+                  "none",
+                  "partly",
+                  "largely"
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "name": "truncated",
+                "type": "bool"
+              }
+            ],
             "calibration_field": "calibration",
             "color_mode": "height",
             "default_box_height": 1.7,

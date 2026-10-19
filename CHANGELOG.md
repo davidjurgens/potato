@@ -6,6 +6,14 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Attributes on video tracks and point-cloud objects.** `attributes` now
+  works on `video_annotation` schemes in tracking or combined mode (one value
+  per track) and on `spatial_annotation` schemes (each box or point), with
+  the same panel, defaults, `show_if` and required checks as image shapes.
+  `/admin/iaa` reports agreement on each attribute, matching tracks by their
+  overlap in time and space and point-cloud objects by 3D box overlap. Video
+  keyframes now also store their box as fractions of the picture
+  (`bboxNorm`). See *Per-Object Attributes*.
 - **Grid labeling: triage schemes, timing and a link.** The grid takes a
   `triage` scheme, with the scheme's own labels and keys, and its decisions
   show on the normal page. Grid saves now record time: the page measures its
@@ -194,6 +202,15 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **Video object tracks were never saved.** In tracking mode the tracker kept
+  its tracks to itself: the page overrode a save function nothing called and
+  restored from one that does not exist, so tracks drawn in `tracking` or
+  `combined` mode never reached the server and were gone on the next item.
+  Every change to a track is now saved with the scheme's answer and restored
+  when the item is opened again.
+  A page may now hold only one video scheme in tracking or combined mode, and
+  a config with two is refused at startup: the tracker's keyboard shortcuts
+  act on the whole page, so a second tracker would save every track as well.
 - **`live_ingestion` that is not a mapping is refused for every source type.**
   Only database sources checked it; an S3, GCS or Azure source with
   `live_ingestion: true` passed validation.

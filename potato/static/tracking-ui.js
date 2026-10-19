@@ -31,8 +31,23 @@
             this.video = options.video;
             this.manager = options.annotationManager;
             this.config = options.config || {};
+            // The scheme's own container, so panel lookups cannot land in
+            // another scheme's markup.
+            this.root = options.root
+                || (this.canvas && this.canvas.closest && this.canvas.closest('.video-annotation-container'))
+                || document;
 
             this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+            // Called after every change to the tracks, so the annotation
+            // manager can save them. It was missing: tracks lived only here
+            // and nothing ever put them in the saved annotation.
+            this.onChange = options.onChange || null;
+            // Per-track attributes (schemas/object_attributes.py), edited in
+            // the panel the generator renders under the track list.
+            this.attributeDefs = Array.isArray(this.config.attributes) ? this.config.attributes : [];
+            this.attributePanel = options.attributePanel || null;
+            this.form = options.form || null;
+            this._loading = false;
             this.tracks = {};  // objectId -> track data
             this.activeTrackId = null;
             this.nextTrackId = 1;
@@ -67,12 +82,15 @@
                 interpolation: this.defaultInterpolation,
                 keyframes: {},
                 startFrame: null,
-                endFrame: null
+                endFrame: null,
+                attributes: (window.ObjectAttributes && this.attributeDefs && this.attributeDefs.length)
+                    ? window.ObjectAttributes.defaults(this.attributeDefs, label || 'object') : {}
             };
             this.activeTrackId = id;
             this.selectedKeyframe = null;
             this._updateCanvasPointerEvents();
             this._renderTrackPanel();
+            this._changed();
             return id;
         }
 
@@ -114,6 +132,7 @@
 
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -153,6 +172,7 @@
             this.selectedKeyframe = { trackId: this.activeTrackId, frame: frame };
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -313,6 +333,7 @@
             }
             this._propagationStatus(message + '. Scrub through and correct '
                                     + 'anything wrong.');
+            this._changed();
             return payload;
         }
 
@@ -411,7 +432,7 @@
         }
 
         _propagationStatus(message, kind) {
-            var el = document.querySelector('.tracking-propagate-status');
+            var el = this.root.querySelector('.tracking-propagate-status');
             if (!el) return;
             el.textContent = message;
             el.dataset.kind = kind || 'info';
@@ -481,6 +502,7 @@
 
             track.keyframes[frame].bbox = bbox;
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -516,6 +538,7 @@
 
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -541,6 +564,7 @@
             this._updateCanvasPointerEvents();
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -551,6 +575,7 @@
             if (track) {
                 track.interpolation = type;
                 this.renderOverlay();
+                this._changed();
             }
         }
 
@@ -624,10 +649,84 @@
         }
 
         /**
+         * The box as fractions of the video picture (0-1), or null.
+         *
+         * Keyframe boxes are in the overlay canvas's pixels, which depend on
+         * the annotator's window size; two annotators' boxes for the same car
+         * differ by their screens. The normalized copy is what agreement and
+         * any export compare.
+         */
+        _normalizeBbox(bbox) {
+            var content = this.videoContentRect();
+            if (!bbox || !content || !content.width || !content.height) return null;
+            return {
+                x: (bbox.x - content.left) / content.width,
+                y: (bbox.y - content.top) / content.height,
+                width: bbox.width / content.width,
+                height: bbox.height / content.height,
+            };
+        }
+
+        /** Refresh every keyframe's normalized box (the canvas box may have moved). */
+        _normalizeKeyframes() {
+            for (var id in this.tracks) {
+                var keyframes = this.tracks[id].keyframes || {};
+                for (var f in keyframes) {
+                    var kf = keyframes[f];
+                    if (kf && kf.bbox) {
+                        var norm = this._normalizeBbox(kf.bbox);
+                        if (norm) kf.bboxNorm = norm;
+                    }
+                }
+            }
+        }
+
+        /** Tell the annotation manager the tracks changed (not while loading). */
+        _changed() {
+            this._normalizeKeyframes();
+            this._updateAttributeRequirement();
+            if (this._loading || !this.onChange) return;
+            try { this.onChange(this.tracks); } catch (e) { console.error('[Tracking] save failed', e); }
+        }
+
+        /** Tracks still missing a required, visible attribute. */
+        _updateAttributeRequirement() {
+            if (!this.attributeDefs || !this.attributeDefs.length || !window.ObjectAttributes) return;
+            var self = this;
+            var missing = Object.keys(this.tracks).filter(function (id) {
+                var t = self.tracks[id];
+                return window.ObjectAttributes.incomplete(self.attributeDefs, t.label, t.attributes || {});
+            }).length;
+            window.ObjectAttributes.updateRequirement(this.attributePanel, this.form, missing, 'track');
+        }
+
+        /** Show the active track's attributes; only re-rendered on a change of track. */
+        _renderAttributePanel(force) {
+            if (!this.attributeDefs || !this.attributeDefs.length || !this.attributePanel
+                    || !window.ObjectAttributes) return;
+            var track = this.activeTrackId ? this.tracks[this.activeTrackId] : null;
+            var key = track ? track.id + '|' + track.label : null;
+            if (!force && key === this._attributePanelKey) return;
+            this._attributePanelKey = key;
+            var self = this;
+            if (track && !track.attributes) track.attributes = {};
+            window.ObjectAttributes.render({
+                panel: this.attributePanel,
+                defs: this.attributeDefs,
+                label: track ? track.label : null,
+                values: track ? track.attributes : {},
+                idPrefix: 'track-attr-' + (this.config.schemaName || 'video'),
+                noun: 'track',
+                onChange: function () { self._changed(); },
+            });
+        }
+
+        /**
          * Load tracking data from saved state.
          */
         loadTrackingData(data) {
             if (!data) return;
+            this._loading = true;
             this.tracks = data;
             // Update nextTrackId
             for (var id in this.tracks) {
@@ -638,6 +737,8 @@
             }
             this._renderTrackPanel();
             this.renderOverlay();
+            this._loading = false;
+            this._updateAttributeRequirement();
         }
 
         // --- Drawing helpers ---
@@ -920,6 +1021,8 @@
                 var x = coords.x;
                 var y = coords.y;
 
+                // A drag or resize edits a keyframe in place; it is saved here.
+                var edited = self.mode === 'moving' || self.mode === 'resizing';
                 if (self.mode === 'drawing') {
                     var bbox = {
                         x: Math.min(self.drawStart.x, x),
@@ -945,6 +1048,7 @@
 
                 self._renderTrackPanel();
                 self.renderOverlay();
+                if (edited) self._changed();
             });
 
             this.canvas.addEventListener('mouseleave', function() {
@@ -1116,11 +1220,12 @@
 
         _renderTrackPanel() {
             // Find or create track panel
-            var panel = document.querySelector('.tracking-panel');
+            var panel = this.root.querySelector('.tracking-panel');
             if (!panel) return;
 
             var list = panel.querySelector('.tracking-track-list');
             if (!list) return;
+            this._renderAttributePanel();
 
             var trackIds = Object.keys(this.tracks);
             if (trackIds.length === 0) {
@@ -1138,7 +1243,8 @@
 
                 html += '<div class="tracking-track-item' + (isActive ? ' active' : '') + '" data-track-id="' + track.id + '">';
                 html += '<span class="tracking-track-color" style="background:' + track.color + '"></span>';
-                html += '<span class="tracking-track-label">' + track.label + '</span>';
+                html += '<span class="tracking-track-label">' + String(track.label)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
                 html += '<span class="tracking-track-info">' + kfCount + ' kf, ' + track.interpolation + '</span>';
                 html += '<button class="tracking-track-delete" data-track-id="' + track.id + '">&times;</button>';
                 html += '</div>';

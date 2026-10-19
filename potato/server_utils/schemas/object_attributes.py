@@ -172,3 +172,29 @@ def _check_value(value: Any, definition: Dict[str, Any], at: str) -> Any:
 def applies_to(definition: Dict[str, Any], label: Optional[str]) -> bool:
     labels = definition.get("labels")
     return labels is None or label in labels
+
+
+def panel_html(escaped_name: str, attributes: List[Dict[str, Any]], noun: str = "shape") -> str:
+    """The panel that edits the selected object's attributes, filled in by JS.
+
+    Empty when the scheme declares none. When any attribute is required, a
+    hidden `validation="required"` input joins the form so that
+    validateRequiredFields() checks it; the panel then sets the form's
+    data-incomplete-reason while an object is missing a required value.
+    """
+    if not attributes:
+        return ""
+    requirement = ""
+    if any(a.get("required") for a in attributes):
+        requirement = (f'<input type="hidden" class="attribute-requirement" '
+                       f'id="attribute-requirement-{escaped_name}" '
+                       f'validation="required" value="ok">')
+    return f"""
+                <section class="object-attribute-panel" id="attributes-{escaped_name}"
+                         aria-labelledby="attributes-title-{escaped_name}">
+                    <h4 class="attribute-panel-title" id="attributes-title-{escaped_name}">Object attributes</h4>
+                    <p class="attribute-panel-hint">Select a {noun} to set its attributes.</p>
+                    <div class="attribute-fields"></div>
+                    <p class="attribute-panel-status" aria-live="polite"></p>
+                    {requirement}
+                </section>"""

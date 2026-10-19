@@ -3086,6 +3086,32 @@ def _reject_duplicate_scheme_names(schemes: Any, path: str) -> None:
         seen[name] = index
 
 
+def _reject_second_tracking_video_scheme(schemes: Any, path: str) -> None:
+    """Refuse two video schemes in `tracking` or `combined` mode on one page.
+
+    The object tracker is not scoped to its scheme: its keyboard handler is
+    document-wide, so `t` creates a track in every tracker on the page, and
+    its propagation status is looked up the same way. With tracks now saved,
+    the second scheme would store tracks the annotator never meant to draw.
+    One tracking scheme per page, with several labels, covers the same need.
+    """
+    if not isinstance(schemes, list):
+        return
+    first = None
+    for index, scheme in enumerate(schemes):
+        if (isinstance(scheme, dict) and scheme.get("annotation_type") == "video_annotation"
+                and scheme.get("mode") in ("tracking", "combined")):
+            if first is not None:
+                raise ConfigValidationError(
+                    f"{path}[{index}] is a second video_annotation scheme in "
+                    f"tracking or combined mode (the first is {path}[{first}]). "
+                    f"The object tracker's keyboard shortcuts act on the whole "
+                    f"page, so two trackers would both receive every track you "
+                    f"create. Use one tracking scheme with several labels, or "
+                    f"put the second one in its own phase.")
+            first = index
+
+
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     """
     Validate annotation schemes configuration.
@@ -3132,6 +3158,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError("annotation_schemes cannot be empty")
 
         _reject_duplicate_scheme_names(schemes, "annotation_schemes")
+        _reject_second_tracking_video_scheme(schemes, "annotation_schemes")
         for i, scheme in enumerate(schemes):
             validate_single_annotation_scheme(scheme, f"annotation_schemes[{i}]")
 
@@ -3150,6 +3177,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
 
                     _reject_duplicate_scheme_names(
                         schemes, f"phases[{i}].annotation_schemes")
+                    _reject_second_tracking_video_scheme(schemes, f"phases[{i}].annotation_schemes")
                     for j, scheme in enumerate(schemes):
                         validate_single_annotation_scheme(scheme, f"phases[{i}].annotation_schemes[{j}]")
                 elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
@@ -3175,6 +3203,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
 
                     _reject_duplicate_scheme_names(
                         schemes, f"phases.{phase_name}.annotation_schemes")
+                    _reject_second_tracking_video_scheme(schemes, f"phases.{phase_name}.annotation_schemes")
                     for j, scheme in enumerate(schemes):
                         validate_single_annotation_scheme(scheme, f"phases.{phase_name}.annotation_schemes[{j}]")
                 elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
@@ -4086,6 +4115,24 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
+
+    # Per-object attributes on video tracks and point-cloud objects; the image
+    # type checks its own below, beside its tools.
+    if scheme['annotation_type'] in ('video_annotation', 'spatial_annotation') \
+            and scheme.get('attributes') is not None:
+        from potato.server_utils.schemas.object_attributes import (
+            AttributeConfigError, normalize_attributes)
+        label_names = [l if isinstance(l, str) else (l or {}).get('name')
+                       for l in scheme.get('labels') or []]
+        try:
+            normalize_attributes(scheme['attributes'], [str(n) for n in label_names], path)
+        except AttributeConfigError as e:
+            raise ConfigValidationError(str(e)) from e
+        if scheme['annotation_type'] == 'video_annotation' \
+                and scheme.get('mode', 'segment') not in ('tracking', 'combined'):
+            raise ConfigValidationError(
+                f"{path}.attributes: attributes belong to object tracks, so they need "
+                f"mode 'tracking' or 'combined'")
 
     # Turn-level binding validation (per-turn annotation framework)
     if scheme.get('turn_level'):

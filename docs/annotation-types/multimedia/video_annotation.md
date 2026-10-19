@@ -156,6 +156,7 @@ For object tracking across video frames with keyframe-based bounding box annotat
 |-------|------|---------|-------------|
 | `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
 | `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
+| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list. See [Per-Object Attributes](object_attributes.md) |
 
 **Model-assisted tracking**
 
@@ -286,21 +287,53 @@ annotation_schemes:
             "interpolation": "linear",
             "startFrame": 0,
             "endFrame": 150,
+            "attributes": {"occluded": "partial"},
             "keyframes": {
                 "0": {
                     "frame": 0,
                     "time": 0.0,
-                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160}
+                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160},
+                    "bboxNorm": {"x": 0.15, "y": 0.12, "width": 0.13, "height": 0.4}
                 },
                 "30": {
                     "frame": 30,
                     "time": 1.0,
-                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165}
+                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165},
+                    "bboxNorm": {"x": 0.23, "y": 0.15, "width": 0.13, "height": 0.41}
                 }
             }
         }
     }
 }
+```
+
+`bbox` is in the overlay's pixels, which depend on the annotator's window size.
+`bboxNorm` is the same box as fractions of the video picture (0 to 1), which is
+what agreement compares and what an export should read. Tracks are saved as
+they change, with the rest of the scheme's answer.
+
+Only one video scheme per page can use `tracking` or `combined` mode. The
+tracker's keyboard shortcuts act on the whole page, so a second tracker would
+receive every track you create; the config is refused at startup. Put a second
+tracking task in its own phase, or use one scheme with several labels.
+
+**Getting tracks out.** No exporter converts tracks to a tracking format yet:
+`mot` and `cvat` read `image_annotation` schemes only and refuse a config that
+has none. Tracks reach the `jsonl`, `csv` and `parquet` exports, and each
+annotator's `user_state.json`, as the scheme's answer: a JSON string under
+`_data` with the structure shown above. In `jsonl` that is
+`labels.<scheme>._data`; in `csv` and `parquet` it is the column
+`<scheme>._data`. Parse the string and read `tracks.<id>.attributes` and
+`tracks.<id>.keyframes.<frame>.bboxNorm`:
+
+```python
+import json
+for line in open("export/annotations.jsonl"):
+    row = json.loads(line)
+    answer = json.loads(row["labels"]["object_tracking"]["_data"])
+    for track in answer["tracks"].values():
+        print(row["instance_id"], track["label"], track["attributes"],
+              [kf["bboxNorm"] for kf in track["keyframes"].values()])
 ```
 
 ### Combined Mode (`combined`)

@@ -63,6 +63,7 @@ all in the file's own frame. You don't need to re-centre the file yourself.
 | `default_box_height` | `1.7` | Height a new box starts at, in metres |
 | `fit_box_height` | `true` | Snap a new box's vertical extent to the points inside its footprint |
 | `min_annotations` / `max_annotations` | — | Completion rules |
+| `attributes` | — | Typed fields for each box or point (occlusion, ...), edited in a panel under the viewer for the selected object. See [Per-Object Attributes](../multimedia/object_attributes.md) |
 
 `color_mode: rgb` needs a file that carries colour, and `intensity` needs one
 that carries intensity. When the data is absent the viewer falls back to height

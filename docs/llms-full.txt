@@ -4835,7 +4835,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders | `examples/classification/soft-label/config.yaml` |
 | `span` | `labels` | `sequential_key_binding`, `bad_text_label`, `title`, `allow_discontinuous`, `entity_linking`, `show_span_labels`, `target_field`, `columns`, `displaying_score`, `codebook` | Text span annotation/highlighting with optional entity linking to knowledge bases | `examples/span/span-labeling/config.yaml` |
 | `span_link` | `link_types`, `span_schema` | `visual_display` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | `examples/span/span-linking/config.yaml` |
-| `spatial_annotation` | `tools`, `labels` | `source_field`, `calibration_field`, `color_mode`, `point_size`, `max_points`, `lod`, `point_budget`, `min_screen_size`, `max_loaded_nodes`, `mpr`, `slab_thickness`, `default_box_height`, `fit_box_height`, `min_annotations`, `max_annotations` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | `examples/spatial/kitti-cuboids/config.yaml` |
+| `spatial_annotation` | `tools`, `labels` | `source_field`, `calibration_field`, `color_mode`, `point_size`, `max_points`, `lod`, `point_budget`, `min_screen_size`, `max_loaded_nodes`, `mpr`, `slab_thickness`, `default_box_height`, `fit_box_height`, `min_annotations`, `max_annotations`, `attributes` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | `examples/spatial/kitti-cuboids/config.yaml` |
 | `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction`, `turns_key`, `speaker_key`, `text_key` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction | `examples/agent-traces/speech-transcript/config.yaml` |
 | `table_grid` | (none beyond name/description) | `image_key`, `rows_key`, `cols_key`, `default_rows`, `default_cols`, `roles` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | `examples/agent-traces/table-grid/config.yaml` |
 | `temporal_grounding` | (none beyond name/description) | `video_key`, `events_key`, `duration` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | `examples/agent-traces/temporal-grounding/config.yaml` |
@@ -4850,7 +4850,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `triage` | (none beyond name/description) | `accept_label`, `reject_label`, `skip_label`, `auto_advance`, `show_progress`, `accept_key`, `reject_key`, `skip_key` | Binary accept/reject triage for rapid data curation | `examples/advanced/triage/config.yaml` |
 | `vas` | (none beyond name/description) | `left_label`, `right_label`, `min_value`, `max_value`, `show_value`, `precision` | Continuous visual analog scale for fine-grained magnitude estimation | `examples/classification/vas/config.yaml` |
 | `video` | `video_path` | `autoplay`, `loop`, `muted`, `controls`, `custom_css`, `fallback_text`, `additional_sources` | Video player display | `examples/video/video-player/config.yaml` |
-| `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field`, `propagation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
+| `video_annotation` | `labels` | `mode`, `segment_schemes`, `min_segments`, `max_segments`, `timeline_height`, `overview_height`, `zoom_enabled`, `playback_rate_control`, `frame_stepping`, `show_timecode`, `video_fps`, `tracking_options`, `ai_support`, `source_field`, `propagation`, `attributes` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | `examples/video/video-frame-annotation/config.yaml` |
 | `voice_interaction` | (none beyond name/description) | `turns_key`, `audio_key`, `speaker_key`, `user_speakers`, `overlap_labels`, `rating_scale`, `text_key` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | `examples/agent-traces/voice-interaction/config.yaml` |
 
 ## Label Structure
@@ -14983,9 +14983,11 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedi
 A box labelled `car` is often only half of what a dataset records. Driving and
 detection datasets also note how occluded each object is, whether the image edge
 cuts it off, and whether a vehicle is parked. These belong to the object, not the
-image. `attributes` on an `image_annotation` scheme adds typed fields that the
-annotator fills in for each shape. Potato then reports agreement on each
-attribute over the objects that two annotators both drew.
+image. `attributes` adds typed fields that the annotator fills in for each
+object: each shape on an `image_annotation` scheme, each track on a
+`video_annotation` scheme in `tracking` or `combined` mode, and each box or
+point on a `spatial_annotation` (point cloud) scheme. Potato then reports
+agreement on each attribute over the objects that two annotators both drew.
 
 ## Configuration
 
@@ -15045,7 +15047,12 @@ panel under the image. The panel lists only the attributes for that shape's
 label, and it changes when you relabel the shape. The fields are ordinary form
 controls: Tab moves between them, and they show a focus ring.
 
-If a required attribute is missing on any shape, the panel says how many shapes
+On a video, the panel sits under the track list and shows the active track's
+attributes: create a track or click it in the list. Attributes belong to the
+whole track, not to one frame. On a point cloud, the panel sits under the
+viewer and shows the selected box or point's attributes.
+
+If a required attribute is missing on any object, the panel says how many
 still need one, and pressing Next shows the same reason in the banner instead
 of moving on. A required field hidden by `show_if` does not count.
 
@@ -15067,12 +15074,26 @@ truncation and occlusion columns, MOT and Darwin as their own fields, and COCO
 as an `attributes` key on each annotation. The CVAT, KITTI, MOT, Darwin, VIA and
 COCO importers read them back, and they survive edits, undo and navigation.
 
+A video track stores its attributes beside its keyframes, and a point-cloud
+object beside its coordinates, in the same `attributes` object.
+
 ## Agreement over attributes
 
 With two or more annotators per image, `/admin/iaa` adds one group per
 attribute to the scheme's report. The units are the objects both annotators drew
-in the same place (matched by shape overlap, as for the scheme's detection and
-classification agreement), and the values are what each set:
+in the same place, and the values are what each set. Objects are matched by
+shape overlap on an image (as for the scheme's detection and classification
+agreement), by 3D box overlap on a point cloud, and on a video by how much
+two tracks overlap in time multiplied by how much their boxes overlap on the
+frames where both have one. Two tracks count as one object at 0.5 or
+more; when the box overlap holds steady along the track, that product equals
+their overlap in space and time together, so 0.5 is the usual bar for
+tracking. Video boxes are compared as fractions of the picture, which
+keyframes store beside the screen position (`bboxNorm`). A track with no
+`bboxNorm` (one imported or written by hand) is never matched, since on time
+alone a car and a pedestrian tracked over the same frames would look like
+one object; the report counts such tracks under "tracks without normalized
+boxes".
 
 | Attribute type | Krippendorff's alpha at |
 |---|---|
@@ -15088,8 +15109,8 @@ and the table prints the reason in its place rather than a bare n/a.
 
 ## Limits
 
-- Attributes are set per shape, not per frame. Video and point-cloud schemes do
-  not take `attributes` yet.
+- Attributes are set per object, not per frame: a video track has one value
+  for its whole length.
 - Brush masks have no attribute panel; masks imported with attributes keep them.
 - A box drawn on top of another shape is not selected automatically. Click it to
   see its attributes.
@@ -16370,6 +16391,7 @@ For object tracking across video frames with keyframe-based bounding box annotat
 |-------|------|---------|-------------|
 | `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
 | `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
+| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list. See [Per-Object Attributes](object_attributes.md) |
 
 **Model-assisted tracking**
 
@@ -16500,21 +16522,53 @@ annotation_schemes:
             "interpolation": "linear",
             "startFrame": 0,
             "endFrame": 150,
+            "attributes": {"occluded": "partial"},
             "keyframes": {
                 "0": {
                     "frame": 0,
                     "time": 0.0,
-                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160}
+                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160},
+                    "bboxNorm": {"x": 0.15, "y": 0.12, "width": 0.13, "height": 0.4}
                 },
                 "30": {
                     "frame": 30,
                     "time": 1.0,
-                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165}
+                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165},
+                    "bboxNorm": {"x": 0.23, "y": 0.15, "width": 0.13, "height": 0.41}
                 }
             }
         }
     }
 }
+```
+
+`bbox` is in the overlay's pixels, which depend on the annotator's window size.
+`bboxNorm` is the same box as fractions of the video picture (0 to 1), which is
+what agreement compares and what an export should read. Tracks are saved as
+they change, with the rest of the scheme's answer.
+
+Only one video scheme per page can use `tracking` or `combined` mode. The
+tracker's keyboard shortcuts act on the whole page, so a second tracker would
+receive every track you create; the config is refused at startup. Put a second
+tracking task in its own phase, or use one scheme with several labels.
+
+**Getting tracks out.** No exporter converts tracks to a tracking format yet:
+`mot` and `cvat` read `image_annotation` schemes only and refuse a config that
+has none. Tracks reach the `jsonl`, `csv` and `parquet` exports, and each
+annotator's `user_state.json`, as the scheme's answer: a JSON string under
+`_data` with the structure shown above. In `jsonl` that is
+`labels.<scheme>._data`; in `csv` and `parquet` it is the column
+`<scheme>._data`. Parse the string and read `tracks.<id>.attributes` and
+`tracks.<id>.keyframes.<frame>.bboxNorm`:
+
+```python
+import json
+for line in open("export/annotations.jsonl"):
+    row = json.loads(line)
+    answer = json.loads(row["labels"]["object_tracking"]["_data"])
+    for track in answer["tracks"].values():
+        print(row["instance_id"], track["label"], track["attributes"],
+              [kf["bboxNorm"] for kf in track["keyframes"].values()])
 ```
 
 ### Combined Mode (`combined`)
@@ -18414,6 +18468,7 @@ all in the file's own frame. You don't need to re-centre the file yourself.
 | `default_box_height` | `1.7` | Height a new box starts at, in metres |
 | `fit_box_height` | `true` | Snap a new box's vertical extent to the points inside its footprint |
 | `min_annotations` / `max_annotations` | — | Completion rules |
+| `attributes` | — | Typed fields for each box or point (occlusion, ...), edited in a panel under the viewer for the selected object. See [Per-Object Attributes](../multimedia/object_attributes.md) |
 
 `color_mode: rgb` needs a file that carries colour, and `intensity` needs one
 that carries intensity. When the data is absent the viewer falls back to height
@@ -50279,6 +50334,12 @@ python -m potato.export --config config.yaml --format tsv --output ./export/
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
+
+Answers stored as a JSON blob stay a JSON string inside the line. Video object
+tracks are one example: they sit at `labels.<scheme>._data`, and the
+[video annotation page](../annotation-types/multimedia/video_annotation.md)
+shows how to read them. CSV and Parquet carry the same string in the column
+`<scheme>._data`.
 
 ```bash
 python -m potato.export --config config.yaml --format jsonl --output ./export/

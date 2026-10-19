@@ -34,6 +34,14 @@ annotation_schemes:
     tracking_options:
       interpolation: linear
       auto_advance_frames: 5
+    # One value per track, in the panel under the track list.
+    attributes:
+      - name: occluded
+        type: select
+        options: [none, partial, heavy]
+        default: none
+      - name: leaves_frame
+        type: bool
     video_fps: 30
     show_timecode: true
     frame_stepping: true

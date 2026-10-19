@@ -3,9 +3,11 @@
 A box labelled `car` is often only half of what a dataset records. Driving and
 detection datasets also note how occluded each object is, whether the image edge
 cuts it off, and whether a vehicle is parked. These belong to the object, not the
-image. `attributes` on an `image_annotation` scheme adds typed fields that the
-annotator fills in for each shape. Potato then reports agreement on each
-attribute over the objects that two annotators both drew.
+image. `attributes` adds typed fields that the annotator fills in for each
+object: each shape on an `image_annotation` scheme, each track on a
+`video_annotation` scheme in `tracking` or `combined` mode, and each box or
+point on a `spatial_annotation` (point cloud) scheme. Potato then reports
+agreement on each attribute over the objects that two annotators both drew.
 
 ## Configuration
 
@@ -65,7 +67,12 @@ panel under the image. The panel lists only the attributes for that shape's
 label, and it changes when you relabel the shape. The fields are ordinary form
 controls: Tab moves between them, and they show a focus ring.
 
-If a required attribute is missing on any shape, the panel says how many shapes
+On a video, the panel sits under the track list and shows the active track's
+attributes: create a track or click it in the list. Attributes belong to the
+whole track, not to one frame. On a point cloud, the panel sits under the
+viewer and shows the selected box or point's attributes.
+
+If a required attribute is missing on any object, the panel says how many
 still need one, and pressing Next shows the same reason in the banner instead
 of moving on. A required field hidden by `show_if` does not count.
 
@@ -87,12 +94,26 @@ truncation and occlusion columns, MOT and Darwin as their own fields, and COCO
 as an `attributes` key on each annotation. The CVAT, KITTI, MOT, Darwin, VIA and
 COCO importers read them back, and they survive edits, undo and navigation.
 
+A video track stores its attributes beside its keyframes, and a point-cloud
+object beside its coordinates, in the same `attributes` object.
+
 ## Agreement over attributes
 
 With two or more annotators per image, `/admin/iaa` adds one group per
 attribute to the scheme's report. The units are the objects both annotators drew
-in the same place (matched by shape overlap, as for the scheme's detection and
-classification agreement), and the values are what each set:
+in the same place, and the values are what each set. Objects are matched by
+shape overlap on an image (as for the scheme's detection and classification
+agreement), by 3D box overlap on a point cloud, and on a video by how much
+two tracks overlap in time multiplied by how much their boxes overlap on the
+frames where both have one. Two tracks count as one object at 0.5 or
+more; when the box overlap holds steady along the track, that product equals
+their overlap in space and time together, so 0.5 is the usual bar for
+tracking. Video boxes are compared as fractions of the picture, which
+keyframes store beside the screen position (`bboxNorm`). A track with no
+`bboxNorm` (one imported or written by hand) is never matched, since on time
+alone a car and a pedestrian tracked over the same frames would look like
+one object; the report counts such tracks under "tracks without normalized
+boxes".
 
 | Attribute type | Krippendorff's alpha at |
 |---|---|
@@ -108,8 +129,8 @@ and the table prints the reason in its place rather than a bare n/a.
 
 ## Limits
 
-- Attributes are set per shape, not per frame. Video and point-cloud schemes do
-  not take `attributes` yet.
+- Attributes are set per object, not per frame: a video track has one value
+  for its whole length.
 - Brush masks have no attribute panel; masks imported with attributes keep them.
 - A box drawn on top of another shape is not selected automatically. Click it to
   see its attributes.

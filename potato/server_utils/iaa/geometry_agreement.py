@@ -512,7 +512,7 @@ def _canonicalize(objects_by_annotator: Dict[str, List[dict]]
 
 
 def _matched_clusters(objects_by_annotator: Dict[str, List[dict]],
-                      threshold: float) -> List[Dict[str, dict]]:
+                      threshold: float, similarity=None) -> List[Dict[str, dict]]:
     """
     Group one item's objects into clusters that different annotators agree on.
 
@@ -530,7 +530,7 @@ def _matched_clusters(objects_by_annotator: Dict[str, List[dict]],
                 if annotator in cluster:
                     continue
                 reference = next(iter(cluster.values()))
-                if geometry.similarity(reference, obj) >= threshold:
+                if (similarity or geometry.similarity)(reference, obj) >= threshold:
                     cluster[annotator] = obj
                     placed = True
                     break

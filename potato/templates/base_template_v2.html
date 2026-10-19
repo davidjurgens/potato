@@ -67,7 +67,15 @@
     {% if frontend_assets.image_annotation | default(false)
           or frontend_assets.spatial_annotation | default(false)
           or frontend_assets.episode_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=18">
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=19">
+    {% endif %}
+
+    <!-- Per-object attributes: image shapes, video tracks, point-cloud cuboids -->
+    {% if frontend_assets.image_annotation | default(false)
+          or frontend_assets.video_annotation | default(false)
+          or frontend_assets.spatial_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/object-attributes.css') }}?v=1">
+    <script src="{{ url_for('static', filename='object-attributes.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Point cloud viewer styles -->
@@ -867,7 +875,7 @@
     <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=8"></script>
     {% endif %}
 
     <!-- Depth maps. A display type, so it is gated on the display's wrapper
@@ -941,7 +949,7 @@
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=22"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=23"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -977,7 +985,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=12"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=14"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->

@@ -87,6 +87,8 @@
 
             this.canvas = null;
             this.container = null;
+            // Per-object attributes (schemas/object_attributes.py).
+            this.attributeDefs = Array.isArray(config && config.attributes) ? config.attributes : [];
             this.scene = null;
             this.camera = null;
             this.renderer = null;
@@ -146,6 +148,9 @@
             if (!this.canvas) return;
             this.container = this.canvas.closest(
                 '.pointcloud-annotation-container');
+            // The panel the generator renders when the scheme declares attributes.
+            this.attributePanel = this.container
+                && this.container.querySelector('.object-attribute-panel');
 
             if (typeof THREE === 'undefined') {
                 this._status('3D viewer unavailable: three.js did not load. '
@@ -860,8 +865,10 @@
             }
             this._addLocal({ type: 'cuboid_3d', label: this.currentLabel,
                                  color: this.currentColor,
-                                 coordinates: coords });
+                                 coordinates: coords,
+                                 attributes: this._newAttributes(this.currentLabel) });
             this.selectedIndex = this.annotations.length - 1;
+            this._renderAttributePanel();
             this._status(`Box added: ${describeBox(coords, this.origin)}. `
                          + 'Press q/e to rotate it, Delete to remove it.');
         }
@@ -872,8 +879,10 @@
                 return;
             }
             this._addLocal({ type: 'point_3d', label: this.currentLabel,
-                                 color: this.currentColor, coordinates: hit });
+                                 color: this.currentColor, coordinates: hit,
+                                 attributes: this._newAttributes(this.currentLabel) });
             this.selectedIndex = this.annotations.length - 1;
+            this._renderAttributePanel();
         }
 
         /** Select the annotation nearest a click, in screen space. */
@@ -931,7 +940,52 @@
             this._announce(message);
         }
 
+        // -------------------------------------------------------------
+        // Per-object attributes
+        // -------------------------------------------------------------
+
+        /** Defaults for an object a person just placed; undefined without defs. */
+        _newAttributes(label) {
+            if (!this.attributeDefs || !this.attributeDefs.length || !window.ObjectAttributes) return undefined;
+            return window.ObjectAttributes.defaults(this.attributeDefs, label);
+        }
+
+        /** The panel follows the selection; re-rendered only when it changes. */
+        _renderAttributePanel() {
+            if (!this.attributeDefs || !this.attributeDefs.length || !this.attributePanel
+                    || !window.ObjectAttributes) return;
+            const obj = this.selectedIndex >= 0 ? this.annotations[this.selectedIndex] : null;
+            const key = obj ? this.selectedIndex + '|' + obj.label : null;
+            if (key === this._attributePanelKey) return;
+            this._attributePanelKey = key;
+            if (obj && !obj.attributes) obj.attributes = {};
+            window.ObjectAttributes.render({
+                panel: this.attributePanel,
+                defs: this.attributeDefs,
+                label: obj ? obj.label : null,
+                values: obj ? obj.attributes : {},
+                idPrefix: 'pc-attr-' + (this.config.schema || 'pc'),
+                noun: 'object',
+                onChange: () => {
+                    // A model's object whose attributes a person changed is
+                    // no longer the model's answer, as with the image tool.
+                    if (obj && obj.source && obj.source !== 'human') obj.edited = true;
+                    this._saveState();
+                    this._updateAnnotationData();
+                },
+            });
+        }
+
+        _updateAttributeRequirement() {
+            if (!this.attributeDefs || !this.attributeDefs.length || !window.ObjectAttributes) return;
+            const missing = this.annotations.filter(obj => window.ObjectAttributes.incomplete(
+                this.attributeDefs, obj.label, obj.attributes || {})).length;
+            window.ObjectAttributes.updateRequirement(this.attributePanel, this.container,
+                                                      missing, 'object');
+        }
+
         _highlightSelection() {
+            this._renderAttributePanel();
             this.meshes.forEach((mesh, i) => {
                 if (!mesh || !mesh.material) return;
                 // Line width is capped at 1 on most platforms, so thickness
@@ -1832,6 +1886,8 @@
             // how one of them ends up forgotten and the photograph silently
             // disagrees with the viewport.
             this._drawOverlays();
+            this._renderAttributePanel();
+            this._updateAttributeRequirement();
 
             const input = document.getElementById(this.inputId);
             if (!input) return;

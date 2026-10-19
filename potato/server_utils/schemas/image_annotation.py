@@ -436,29 +436,9 @@ def _process_labels(labels_config):
 
 
 def _attribute_panel_html(escaped_name, attributes):
-    """The panel that edits the selected shape's attributes, filled in by JS.
-
-    Empty when the scheme declares none. When any attribute is required, a
-    hidden `validation="required"` input joins the form so that
-    validateRequiredFields() checks it; the panel then sets the form's
-    data-incomplete-reason while a shape is missing a required value.
-    """
-    if not attributes:
-        return ""
-    requirement = ""
-    if any(a.get("required") for a in attributes):
-        requirement = (f'<input type="hidden" class="attribute-requirement" '
-                       f'id="attribute-requirement-{escaped_name}" '
-                       f'validation="required" value="ok">')
-    return f"""
-                <section class="object-attribute-panel" id="attributes-{escaped_name}"
-                         aria-labelledby="attributes-title-{escaped_name}">
-                    <h4 class="attribute-panel-title" id="attributes-title-{escaped_name}">Object attributes</h4>
-                    <p class="attribute-panel-hint">Select a shape to set its attributes.</p>
-                    <div class="attribute-fields"></div>
-                    <p class="attribute-panel-status" aria-live="polite"></p>
-                    {requirement}
-                </section>"""
+    """See object_attributes.panel_html; shared with video and point clouds."""
+    from .object_attributes import panel_html
+    return panel_html(escaped_name, attributes, "shape")
 
 
 def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_enabled=False, ai_support=None):

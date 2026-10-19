@@ -130,6 +130,16 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     # source_field: Links this annotation schema to a display field from instance_display
     source_field = annotation_scheme.get("source_field", "")
 
+    # Per-track attributes (occlusion, truncation, ...), tracking modes only.
+    from .object_attributes import normalize_attributes
+    attributes = normalize_attributes(
+        annotation_scheme.get("attributes"), [label["name"] for label in labels],
+        f"annotation_schemes[{schema_name}]")
+    if attributes and mode not in ("tracking", "combined"):
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].attributes: attributes belong to object "
+            f"tracks, so they need mode 'tracking' or 'combined' (got {mode!r})")
+
     # Build config object for JavaScript
     js_config = {
         "schemaName": schema_name,
@@ -148,6 +158,7 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
         "sourceField": source_field,
+        "attributes": attributes,
     }
 
     # Generate HTML
@@ -210,6 +221,8 @@ def _generate_html(
     validation = generate_validation_attribute(annotation_scheme)
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
+    from .object_attributes import panel_html
+    attribute_panel = panel_html(escaped_name, js_config.get("attributes") or [], "track")
 
     # Per-segment question forms. See audio_annotation for the same wiring;
     # video had not even a placeholder, so `segmentSchemes` was inert.
@@ -417,6 +430,7 @@ def _generate_html(
                         Click "+ Track" to create a track, then draw bounding boxes on the video. Boxes are interpolated between keyframes.
                     </div>
                     <div class="tracking-track-list"></div>
+                    {attribute_panel}
                 </div>
 
                 <!-- Hidden input for storing annotation data -->
@@ -688,10 +702,16 @@ def _generate_html(
                                     canvas: trackingCanvas,
                                     video: videoEl,
                                     annotationManager: manager,
+                                    // Every change to the tracks is saved with the annotation.
+                                    onChange: function() {{ manager._saveData(); }},
+                                    attributePanel: container.querySelector('.object-attribute-panel'),
+                                    form: container.closest('.annotation-form'),
                                     config: {{
                                         videoFps: config.videoFps || 30,
                                         interpolation: 'linear',
-                                        autoAdvanceFrames: config.autoAdvanceFrames || 5
+                                        autoAdvanceFrames: config.autoAdvanceFrames || 5,
+                                        attributes: config.attributes || [],
+                                        schemaName: config.schemaName
                                     }}
                                 }});
 
@@ -782,18 +802,14 @@ def _generate_html(
                                     }});
                                 }}
 
-                                // Extend manager's save method to include tracking data
-                                var originalSave = manager.save ? manager.save.bind(manager) : null;
-                                manager.save = function() {{
-                                    var data = originalSave ? originalSave() : {{}};
-                                    data.tracks = trackingManager.getTrackingData();
-                                    return data;
-                                }};
-
-                                // Load existing tracking data if available
-                                var existingData = manager.getAnnotationData ? manager.getAnnotationData() : null;
-                                if (existingData && existingData.tracks) {{
-                                    trackingManager.loadTrackingData(existingData.tracks);
+                                // Tracks the item was saved with. This used to
+                                // override a save() nothing called and read a
+                                // getAnnotationData() that does not exist, so
+                                // tracks were neither saved nor restored.
+                                if (manager.loadedTracks) {{
+                                    trackingManager.loadTrackingData(manager.loadedTracks);
+                                }} else {{
+                                    trackingManager._renderAttributePanel(true);
                                 }}
 
                                 console.log('[VideoAnnotation] TrackingUIManager initialized successfully');

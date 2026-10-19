@@ -130,6 +130,12 @@ def _generate_internal(annotation_scheme):
 
     labels = _process_labels(annotation_scheme["labels"])
     escaped_name = escape_html_content(schema_name)
+
+    # Per-object attributes (occlusion, truncation, ...) on cuboids and points.
+    from .object_attributes import normalize_attributes, panel_html
+    attributes = normalize_attributes(
+        annotation_scheme.get("attributes"), [label["name"] for label in labels],
+        f"annotation_schemes[{schema_name}]")
     description = escape_html_content(annotation_scheme.get("description", ""))
 
     config = {
@@ -162,6 +168,7 @@ def _generate_internal(annotation_scheme):
         "fitBoxHeight": annotation_scheme.get("fit_box_height", True),
         "minAnnotations": annotation_scheme.get("min_annotations", 0),
         "maxAnnotations": annotation_scheme.get("max_annotations"),
+        "attributes": attributes,
     }
 
     html = f"""
@@ -237,6 +244,7 @@ def _generate_internal(annotation_scheme):
                  saw the object is checkable at a glance. -->
             <div class="pc-cameras" data-schema="{escaped_name}"
                  role="group" aria-label="Camera verification views"></div>
+            {panel_html(escaped_name, attributes, "box or point")}
 
             <input type="hidden"
                    name="{escaped_name}"

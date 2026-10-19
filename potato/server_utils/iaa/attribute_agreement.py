@@ -60,7 +60,8 @@ def _applies(definition: Dict[str, Any], label: Any) -> bool:
 
 def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                         definitions: List[Dict[str, Any]],
-                        threshold: float = 0.5) -> Dict[str, Dict[str, Any]]:
+                        threshold: float = 0.5,
+                        to_canonical=None, similarity=None) -> Dict[str, Dict[str, Any]]:
     """Per-attribute agreement over the objects annotators matched.
 
     Args:
@@ -70,6 +71,11 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
             (`schemas.object_attributes.normalize_attributes`).
         threshold: geometric similarity two shapes need to count as the same
             object.
+        to_canonical: client object -> canonical object, or None to skip it.
+            Image shapes by default; `spatial_canonical` for point clouds,
+            `track_canonical` for video tracks.
+        similarity: canonical a, b -> [0, 1]. `geometry.similarity` by
+            default, which covers image shapes and 3D objects.
 
     Returns:
         ``{attribute name: {"level", "alpha", "percent_agreement",
@@ -78,6 +84,7 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
     """
     from potato.server_utils.iaa import geometry_agreement as ga
 
+    to_canonical = to_canonical or ga.canonical_object
     scored = [d for d in definitions if d.get("type") in LEVELS]
     long_format: Dict[str, List[tuple]] = {d["name"]: [] for d in scored}
 
@@ -86,7 +93,7 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
         for annotator, objects in (per_user or {}).items():
             converted = []
             for obj in objects or []:
-                shape = ga.canonical_object(obj) if isinstance(obj, dict) else None
+                shape = to_canonical(obj) if isinstance(obj, dict) else None
                 if shape is None:
                     continue
                 shape = dict(shape)
@@ -97,7 +104,7 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                 converted.append(shape)
             canonical[annotator] = converted
 
-        for index, cluster in enumerate(ga._matched_clusters(canonical, threshold)):
+        for index, cluster in enumerate(ga._matched_clusters(canonical, threshold, similarity)):
             if len(cluster) < 2:
                 continue
             unit = f"{instance_id}#{index}"
@@ -149,3 +156,107 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                 entry["note"] = "too few matched objects for alpha to be defined"
         report[name] = entry
     return report
+
+
+# ---------------------------------------------------------------------------
+# Point clouds and video tracks
+# ---------------------------------------------------------------------------
+
+def spatial_objects_with_attributes(stored: Any) -> List[dict]:
+    """The client objects in a stored ``spatial_annotation`` value."""
+    from potato.server_utils.annotation_values import _parse_blob
+    return [o for o in _parse_blob(stored) if isinstance(o, dict)]
+
+
+def spatial_canonical(obj: dict):
+    from potato.export.spatial_utils import normalize_spatial_object
+    return normalize_spatial_object(obj)
+
+
+def track_objects(stored: Any) -> List[dict]:
+    """The tracks in a stored ``video_annotation`` value, one dict each."""
+    import json
+    raw = stored.get("_data") if isinstance(stored, dict) and "_data" in stored else stored
+    if isinstance(raw, dict) and "tracks" not in raw:
+        raw = next((v for v in raw.values() if isinstance(v, str) and "tracks" in v), raw)
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return []
+    tracks = raw.get("tracks") if isinstance(raw, dict) else None
+    if isinstance(tracks, dict):
+        tracks = list(tracks.values())
+    return [t for t in tracks or [] if isinstance(t, dict)]
+
+
+def track_canonical(track: dict):
+    """A track as {type, frames: {frame: normalized box or None}, start, end}."""
+    keyframes = track.get("keyframes") or {}
+    frames = {}
+    for key, kf in keyframes.items():
+        try:
+            frame = int(kf.get("frame", key)) if isinstance(kf, dict) else int(key)
+        except (TypeError, ValueError):
+            continue
+        frames[frame] = (kf.get("bboxNorm") if isinstance(kf, dict) else None)
+    if not frames:
+        return None
+    return {"type": "track", "frames": frames, "start": min(frames), "end": max(frames)}
+
+
+def _box_at(frames: Dict[int, Any], frame: int):
+    """Linearly interpolated normalized box at ``frame``, or None."""
+    known = sorted(f for f, b in frames.items() if isinstance(b, dict))
+    if not known or frame < known[0] or frame > known[-1]:
+        return None
+    if frame in frames and isinstance(frames[frame], dict):
+        return frames[frame]
+    before = max(f for f in known if f <= frame)
+    after = min(f for f in known if f >= frame)
+    a, b = frames[before], frames[after]
+    t = (frame - before) / (after - before) if after != before else 0.0
+    return {k: a[k] + (b[k] - a[k]) * t for k in ("x", "y", "width", "height")}
+
+
+def _iou(a: dict, b: dict) -> float:
+    ax2, ay2 = a["x"] + a["width"], a["y"] + a["height"]
+    bx2, by2 = b["x"] + b["width"], b["y"] + b["height"]
+    w = max(0.0, min(ax2, bx2) - max(a["x"], b["x"]))
+    h = max(0.0, min(ay2, by2) - max(a["y"], b["y"]))
+    inter = w * h
+    union = a["width"] * a["height"] + b["width"] * b["height"] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def track_similarity(a: dict, b: dict) -> float:
+    """How much two tracks are the same object, in [0, 1].
+
+    The overlap of their frame ranges (temporal IoU) times the mean IoU of
+    their normalized boxes at the keyframes either has. A pair with no frame
+    where both have a normalized box scores 0: on time alone a car and a
+    pedestrian tracked over the same frames would look identical, and their
+    attributes would be compared as if they were one object. The report
+    counts such tracks instead (`n_tracks_without_normalized_boxes`).
+    """
+    if not a or not b or a.get("type") != "track" or b.get("type") != "track":
+        return 0.0
+    overlap = min(a["end"], b["end"]) - max(a["start"], b["start"]) + 1
+    if overlap <= 0:
+        return 0.0
+    span = max(a["end"], b["end"]) - min(a["start"], b["start"]) + 1
+    temporal = overlap / span
+    ious = []
+    for frame in sorted(set(a["frames"]) | set(b["frames"])):
+        box_a, box_b = _box_at(a["frames"], frame), _box_at(b["frames"], frame)
+        if box_a and box_b:
+            ious.append(_iou(box_a, box_b))
+    if not ious:
+        return 0.0
+    return temporal * sum(ious) / len(ious)
+
+
+def has_normalized_box(track: dict) -> bool:
+    """Whether a stored track has a keyframe with a normalized box."""
+    canonical = track_canonical(track) if isinstance(track, dict) else None
+    return bool(canonical) and any(isinstance(b, dict) for b in canonical["frames"].values())
