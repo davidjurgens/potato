@@ -6,6 +6,15 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Trace score write-back to Langfuse and LangSmith.** With
+  `trace_ingestion.writeback`, a trace ingested from Langfuse or LangSmith gets
+  its merged answer back once `min_annotators` people have judged it (or after
+  adjudication, with `trigger: adjudicated`): a Langfuse score or a LangSmith
+  feedback per scheme, named `potato.<scheme>`, with the annotator count, the
+  distribution of answers and the pairwise agreement in its comment and
+  metadata. Delivery runs from a SQLite queue with retries; a changed answer
+  replaces the earlier score and an unchanged one is not re-sent.
+  `/admin/api/trace_writeback` reports the queue. See *Trace Score Write-Back*.
 - **Citable project snapshots.** `potato snapshot create|list|show|diff|tag|verify`
   freezes a project's config, data, annotations and databases under an id
   like `20261019-120000-335ae51e`, with a content hash over the config, data

@@ -817,6 +817,8 @@ class AdjudicationManager:
         # Outside the lock: the engine may read the queue back.
         from potato.labeling_engine.integration.hooks import on_adjudication
         on_adjudication(decision)
+        from potato.trace_ingestion.writeback import on_adjudication as writeback_on_adjudication
+        writeback_on_adjudication(decision, self.config)
         return True
 
     def _has_machine_raters(self, instance_id: str) -> bool:

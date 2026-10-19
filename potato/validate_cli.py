@@ -144,6 +144,11 @@ def validate_config_file(config_file: str) -> ValidationReport:
         # Same pre-validation pass the server runs, so validate does not report
         # errors a running server would not have (unexpanded ${ENV_VAR}s,
         # a defaulted task_dir).
+        # The server turns YAML's boolean keys (a bare `on:`) back into the
+        # words they were written as before anything reads the config; doing
+        # less here crashed the unknown-key check on a config the server runs.
+        from potato.server_utils.config_module import _restore_yaml_boolean_keys
+        config_data = _restore_yaml_boolean_keys(config_data, config_file)
         config_data = normalize_config_before_validation(config_data, config_file_dir)
         validate_yaml_structure(
             config_data,

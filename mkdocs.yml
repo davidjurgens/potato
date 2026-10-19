@@ -100,6 +100,7 @@ nav:
     - Agent Evaluation:
         - Agent Traces: agent-evaluation/agent_traces.md
         - Three-Pane Trace Eval: agent-evaluation/eval_trace.md
+        - Trace Score Write-Back: agent-evaluation/trace_writeback.md
         - Coding Agent Annotation: agent-evaluation/coding_agent_annotation.md
         - Web Agent Annotation: agent-evaluation/web_agent_annotation.md
         - Trajectory Evaluation: agent-evaluation/trajectory_eval.md

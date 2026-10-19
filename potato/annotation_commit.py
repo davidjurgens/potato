@@ -47,3 +47,8 @@ def finish_annotation_write(user_state, instance_id: str, username: str,
 
     from potato.labeling_engine.integration.hooks import on_human_save
     on_human_save(user_state, instance_id)
+
+    # An ingested trace with enough annotators goes back to Langfuse or
+    # LangSmith. Cheap when write-back is off; never raises.
+    from potato.trace_ingestion.writeback import on_save as writeback_on_save
+    writeback_on_save(instance_id)

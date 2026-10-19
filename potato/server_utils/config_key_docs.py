@@ -1303,6 +1303,56 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Push newly ingested traces to connected annotators",
         type="boolean", category=INTEG,
     ),
+    "trace_ingestion.writeback": _D(
+        "Send each ingested trace's merged answers back to Langfuse (as scores) "
+        "or LangSmith (as feedback), with the annotator count and agreement",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.writeback.trigger": _D(
+        "When to send: fully_annotated (once min_annotators have answered) or "
+        "adjudicated (only after an adjudication decision). An adjudication is "
+        "sent in either mode",
+        type="string", default="fully_annotated",
+        example="adjudicated", category=INTEG,
+    ),
+    "trace_ingestion.writeback.score_prefix": _D(
+        "Scores are named <score_prefix>.<scheme name>",
+        type="string", default="potato", category=INTEG,
+    ),
+    "trace_ingestion.writeback.min_annotators": _D(
+        "Annotators a trace needs before it is sent. Defaults to the study's "
+        "per-item cap, or 2 when there is none",
+        type="integer", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse": _D(
+        "Langfuse host and the environment variables holding its keys. The "
+        "host and keys default to a configured langfuse source's",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.host": _D(
+        "Langfuse base URL", type="string", default="https://cloud.langfuse.com",
+        category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.public_key_env": _D(
+        "Environment variable holding the Langfuse public key",
+        type="string", default="LANGFUSE_PUBLIC_KEY", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.secret_key_env": _D(
+        "Environment variable holding the Langfuse secret key",
+        type="string", default="LANGFUSE_SECRET_KEY", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langsmith": _D(
+        "LangSmith API URL and the environment variable holding its key",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langsmith.api_url": _D(
+        "LangSmith API base URL", type="string",
+        default="https://api.smith.langchain.com", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langsmith.api_key_env": _D(
+        "Environment variable holding the LangSmith API key",
+        type="string", default="LANGSMITH_API_KEY", category=INTEG,
+    ),
     "agent_proxy": _D(
         "Run an agent as the subject of annotation. This block only configures "
         "the backend -- to put the chat on the page, add an `instance_display` "

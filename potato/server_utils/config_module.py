@@ -368,10 +368,16 @@ KNOWN_CONFIG_KEYS = {
         "allow_debug",
     },
     "trace_ingestion": {
-        "enabled", "sources", "api_key", "notify_annotators",
+        "enabled": None, "sources": None, "api_key": None, "notify_annotators": None,
         # Opt back in to an unauthenticated receiver. Without an api_key the
         # webhook endpoints now reject every request; this re-opens them.
-        "allow_unauthenticated",
+        "allow_unauthenticated": None,
+        # Scores back to Langfuse / LangSmith (trace_ingestion/writeback.py).
+        "writeback": {
+            "trigger": None, "score_prefix": None, "min_annotators": None,
+            "langfuse": {"host", "public_key_env", "secret_key_env"},
+            "langsmith": {"api_url", "api_key_env"},
+        },
     },
     "cot_segmentation": {
         "source_key", "target_key", "strategy", "min_step_chars", "max_steps",
@@ -976,9 +982,20 @@ def validate_unknown_keys(config_data, schema=None, path=""):
     known_keys = set(schema.keys()) if isinstance(schema, dict) else schema
     unknown_keys = set(config_data.keys()) - known_keys
 
-    for key in sorted(unknown_keys):
-        full_key = f"{path}.{key}" if path else key
-        matches = difflib.get_close_matches(key, known_keys, n=3, cutoff=0.6)
+    for key in sorted(unknown_keys, key=str):
+        full_key = f"{path}.{key}" if path else str(key)
+        if not isinstance(key, str):
+            # YAML 1.1 reads bare on/off/yes/no (and numbers) as non-strings,
+            # keys included. difflib cannot compare them, and the author wrote
+            # a word: say which one and how to keep it a word.
+            logger.warning(
+                "Config key %r at %s is not a string, which happens when YAML "
+                "reads a bare on/off/yes/no or a number as a value. Quote the "
+                "key (\"%s\":) to keep it as text.",
+                key, path or "the top level", key)
+            continue
+        matches = difflib.get_close_matches(key, [k for k in known_keys if isinstance(k, str)],
+                                            n=3, cutoff=0.6)
         if matches:
             suggestions = ", ".join(f"'{m}'" for m in matches)
             logger.warning(

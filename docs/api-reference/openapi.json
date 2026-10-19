@@ -2311,6 +2311,29 @@
         ]
       }
     },
+    "/admin/api/trace_writeback": {
+      "get": {
+        "operationId": "get_admin_api_trace_writeback",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Langfuse / LangSmith write-back: how many scores are pending, sent and",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/api/user/{username}/set_instances": {
       "post": {
         "operationId": "post_admin_api_set_user_instances",

@@ -4815,6 +4815,22 @@ def admin_api_create_snapshot():
     return jsonify({"unchanged": False, "snapshot": _snapshot_row(manifest)}), 201
 
 
+@app.route("/admin/api/trace_writeback", methods=["GET"])
+def admin_api_trace_writeback():
+    """
+    Langfuse / LangSmith write-back: how many scores are pending, sent and
+    failed, and the latest errors (trace_ingestion/writeback.py).
+    Admin-only endpoint requiring API key or an admin session.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.trace_ingestion.writeback import get_queue
+    queue = get_queue(config, start=False)
+    if queue is None:
+        return jsonify({"enabled": False})
+    return jsonify({"enabled": True, **queue.status()})
+
+
 @app.route("/admin/api/behavioral_analytics", methods=["GET"])
 def admin_api_behavioral_analytics():
     """
@@ -10757,6 +10773,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/ai_influence", "admin_api_ai_influence", admin_api_ai_influence, methods=["GET"])
     app.add_url_rule("/admin/api/snapshots", "admin_api_snapshots", admin_api_snapshots, methods=["GET"])
     app.add_url_rule("/admin/api/snapshots", "admin_api_create_snapshot", admin_api_create_snapshot, methods=["POST"])
+    app.add_url_rule("/admin/api/trace_writeback", "admin_api_trace_writeback", admin_api_trace_writeback, methods=["GET"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])

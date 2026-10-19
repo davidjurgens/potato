@@ -226,7 +226,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `mcp` |  | object |  | Model Context Protocol control surface, letting an agent query and control this running task. Off unless every tool is named explicitly | `allow_debug`, `audit_log`, `auth`, `destructive`, `enabled`, `scope`, `tools` |
 | `mturk` |  | object |  | Amazon Mechanical Turk. Needs `enabled: true` and `config_file_path` pointing at the credentials YAML, plus boto3 installed. MTurk closed to new customers in July 2026 and the loader says so on startup |  |
 | `prolific` |  | object |  |  | `completion_code`, `config_file_path`, `max_concurrent_sessions`, `sandbox_mode`, `study_id`, `token`, `workload_checker`, `workload_checker_period` |
-| `trace_ingestion` |  | object |  | Accept agent traces posted to /api/traces/* | `allow_unauthenticated`, `api_key`, `enabled`, `notify_annotators`, `sources` |
+| `trace_ingestion` |  | object |  | Accept agent traces posted to /api/traces/* | `allow_unauthenticated`, `api_key`, `enabled`, `notify_annotators`, `sources`, `writeback` |
 | `webhooks` |  | object |  | Post task events to external URLs as they happen | `enabled`, `endpoints` |
 
 ## Publishing & Export

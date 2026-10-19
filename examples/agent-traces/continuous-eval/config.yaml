@@ -43,6 +43,12 @@ trace_ingestion:
   #     public_key: pk-...
   #     secret_key: sk-...
   #     poll_interval: 30   # seconds
+  # Uncomment to send each trace's merged answer back to Langfuse as a score
+  # once two people have judged it (keys from LANGFUSE_PUBLIC_KEY and
+  # LANGFUSE_SECRET_KEY, or the source above):
+  # writeback:
+  #   trigger: fully_annotated
+  #   min_annotators: 2
 
 # --- Display: three-pane eval_trace --------------------------------------
 instance_display:

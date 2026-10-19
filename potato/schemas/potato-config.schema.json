@@ -5412,6 +5412,10 @@
         "sources": {
           "description": "Upstream trace sources to poll",
           "type": "array"
+        },
+        "writeback": {
+          "description": "Send each ingested trace's merged answers back to Langfuse (as scores) or LangSmith (as feedback), with the annotator count and agreement",
+          "type": "object"
         }
       },
       "type": "object"

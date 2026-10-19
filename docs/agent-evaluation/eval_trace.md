@@ -111,6 +111,10 @@ Runtime-added traces are immediately assignable to annotators (dynamic sources
 default the per-user quota to unlimited). See
 `examples/agent-traces/continuous-eval/README.md` for curl examples.
 
+Traces that came from Langfuse or LangSmith can have the annotators' merged
+answer sent back to them as a score or feedback; see
+[Trace Score Write-Back](trace_writeback.md).
+
 ## Notes & limitations
 
 - `eval_trace` pairs naturally with annotation schemes (e.g. `reasoning_quality`,
