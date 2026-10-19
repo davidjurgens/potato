@@ -358,3 +358,62 @@
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* Open issues assigned to this annotator, on any item. */
+.memo-assigned-count {
+    margin-left: var(--memo-space-1);
+    font-weight: 600;
+    color: #9a3412;
+}
+
+.memo-assigned {
+    padding: var(--memo-space-3) var(--memo-space-4);
+    border-bottom: 1px solid var(--memo-line);
+    background: #fff8f2;
+}
+
+.memo-assigned-title {
+    margin: 0 0 var(--memo-space-2);
+    font-size: 13px;
+    font-weight: 600;
+    color: #9a3412;
+}
+
+.memo-assigned-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--memo-space-2);
+}
+
+.memo-assigned-text {
+    display: block;
+    color: var(--memo-ink);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.memo-assigned-meta {
+    display: block;
+    margin-top: 2px;
+    color: var(--memo-ink-soft);
+    font-size: 12px;
+}
+
+.memo-assigned-go {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--memo-accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.memo-assigned-go:focus-visible {
+    outline: 2px solid var(--memo-focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+}

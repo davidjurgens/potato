@@ -195,7 +195,7 @@
     {% endif %}
 
     <!-- Universal Memos sidebar styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=14">
 
@@ -1065,13 +1065,14 @@
     {% if is_annotation_page %}
     {% if memos_enabled | default(false) %}
     <button type="button" id="memo-panel-toggle" class="memo-panel-toggle" hidden>
-        &#128221; Notes
+        &#128221; Notes<span id="memo-assigned-count" class="memo-assigned-count" hidden></span>
     </button>
     <div id="memo-panel" class="memo-panel" hidden aria-label="Notes panel">
         <div class="memo-panel-header">
             <span>Notes</span>
             <button type="button" id="memo-panel-close" aria-label="Close notes">&times;</button>
         </div>
+        <section id="memo-assigned" class="memo-assigned" hidden aria-label="Issues assigned to you"></section>
         <div id="memo-list" class="memo-list"></div>
         <div id="memo-status" class="memo-status" role="status" aria-live="polite" hidden></div>
         <div class="memo-composer">
@@ -1107,7 +1108,7 @@
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='memos.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=6"></script>
     {% endif %}
 
     <!-- Annotator search-and-claim sidebar. Rendered only when

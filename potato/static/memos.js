@@ -287,7 +287,7 @@
         if (action === "cancel") { state.replyingTo = null; state.assigningId = null; return render(); }
         if (action === "resolve" || action === "reopen") {
             return send("PATCH", path, { status: action === "resolve" ? "resolved" : "open" })
-                .then(load, function () {});
+                .then(function () { load(); loadAssigned(); }, function () {});
         }
         if (action === "send-reply") {
             var input = el("memo-reply-" + id);
@@ -299,7 +299,7 @@
         if (action === "save-assign") {
             var who = el("memo-assign-" + id);
             return send("PATCH", path, { assignee: who ? who.value : "" })
-                .then(function () { state.assigningId = null; load(); }, function () {});
+                .then(function () { state.assigningId = null; load(); loadAssigned(); }, function () {});
         }
     }
 
@@ -336,6 +336,52 @@
             });
         inFlight = { iid: iid, promise: pending };
         return pending;
+    }
+
+    // Open issues assigned to this annotator, on any item. The count sits on
+    // the Notes button, so an assignment is seen even with the panel closed.
+    function loadAssigned() {
+        return api("GET", "/issues?status=open&assignee=me")
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (data) {
+                if (data) renderAssigned(data.issues || []);
+            })
+            .catch(function () { /* network: leave as-is */ });
+    }
+
+    function renderAssigned(issues) {
+        var box = el("memo-assigned"), count = el("memo-assigned-count");
+        var here = currentInstanceId();
+        if (count) {
+            count.hidden = !issues.length;
+            count.textContent = issues.length ? " \u00b7 " + issues.length + " assigned to you" : "";
+        }
+        if (!box) return;
+        box.hidden = !issues.length;
+        if (!issues.length) { box.innerHTML = ""; return; }
+        box.innerHTML = '<h3 class="memo-assigned-title">Assigned to you (' + issues.length + ')</h3>' +
+            '<ul class="memo-assigned-list">' + issues.map(function (m) {
+                var text = String(m.body || "");
+                if (text.length > 90) text = text.slice(0, 89) + "\u2026";
+                var where;
+                if (m.instance_id === here) {
+                    where = '<span class="memo-assigned-where">This item</span>';
+                } else if (typeof m.position === "number") {
+                    where = '<button type="button" class="memo-assigned-go" data-pos="' + m.position +
+                        '">Go to item ' + (m.position + 1) + '</button>';
+                } else {
+                    where = '<span class="memo-assigned-where">Item ' + esc(m.instance_id) +
+                        ' (not in your queue)</span>';
+                }
+                return '<li><span class="memo-assigned-text">' + esc(text) + '</span>' +
+                    '<span class="memo-assigned-meta">from ' + esc(m.created_by) + ' \u00b7 ' + where + '</span></li>';
+            }).join("") + '</ul>';
+        box.querySelectorAll(".memo-assigned-go").forEach(function (b) {
+            b.addEventListener("click", function () {
+                var pos = parseInt(b.getAttribute("data-pos"), 10);
+                if (typeof window.navigateToInstance === "function") window.navigateToInstance(pos);
+            });
+        });
     }
 
     function resetComposer() {
@@ -400,7 +446,7 @@
                 field: state._pendingAnchor.field,
             };
         }
-        send("POST", "", payload).then(function () { resetComposer(); load(); }, function () {});
+        send("POST", "", payload).then(function () { resetComposer(); load(); loadAssigned(); }, function () {});
     }
 
     function wireSelectionAffordance() {
@@ -477,10 +523,10 @@
         if (!window.config || !window.config.is_annotation_page) return;
         if (!el("memo-panel")) return;
         wire();
-        load();
+        load().then(function () { if (state.enabled) loadAssigned(); });
     }
 
-    window.MemoPanel = { reload: load, _sameGeometry: sameGeometry };
+    window.MemoPanel = { reload: load, reloadAssigned: loadAssigned, _sameGeometry: sameGeometry };
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", init);

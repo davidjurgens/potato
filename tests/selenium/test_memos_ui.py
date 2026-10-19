@@ -86,7 +86,7 @@ class TestMemosUI(unittest.TestCase):
         # Passwordless login via the web form (proven pattern).
         self.driver.get(f"{self.server.base_url}/")
         self.wait.until(EC.presence_of_element_located((By.ID, "login-email")))
-        uid = f"memo_user_{int(time.time()*1000)}"
+        uid = self.uid = f"memo_user_{int(time.time()*1000)}"
         field = self.driver.find_element(By.ID, "login-email")
         field.clear()
         field.send_keys(uid)

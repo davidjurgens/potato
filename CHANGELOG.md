@@ -6,6 +6,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Issues assigned to you.** The Notes tab counts the open issues assigned to
+  the annotator on any item, and the panel lists them with a link to each item
+  in their queue. A new webhook event, `memo.issue_assigned`, fires when an
+  issue gets an assignee; it carries ids only, never the note's text.
+  `GET /api/memos/issues` gives each issue's `position` in the requester's
+  queue, and `POST /api/memos` refuses an `instance_id` that names no item.
+  See *Memos*.
 - **Plugins.** A package can add annotation and display types by declaring a
   `potato.plugins` entry point, and a project turns it on with
   `plugins: [name]`. Only listed plugins load, by entry-point name, never a

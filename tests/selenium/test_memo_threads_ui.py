@@ -66,6 +66,38 @@ class TestMemoThreadsUI(memos_ui.TestMemosUI):
         self.assertTrue(item.find_elements(By.CSS_SELECTOR, 'button[data-act="reopen"]'))
         self.assertIn("resolved by", item.text)
 
+    def test_an_issue_assigned_elsewhere_is_announced_and_reachable(self):
+        """Someone else assigns this annotator an issue on another of their
+        items: the closed Notes tab counts it, and the panel jumps there."""
+        import requests
+        start = self._instance_id()
+        target = next(i for i in ("m1", "m2", "m3") if i != start)
+        lead = requests.Session()
+        lead.post(f"{self.server.base_url}/register", data={"email": "lead", "pass": "pw"})
+        lead.post(f"{self.server.base_url}/auth", data={"email": "lead", "pass": "pw"})
+        made = lead.post(f"{self.server.base_url}/api/memos", json={
+            "instance_id": target, "body": "please recheck this one", "visibility": "private",
+            "issue": True, "assignee": self.uid})
+        self.assertEqual(made.status_code, 200, made.text)
+
+        self.driver.refresh()
+        self.wait.until(EC.text_to_be_present_in_element(
+            (By.ID, "memo-panel-toggle"), "1 assigned to you"))
+        self._open_panel()
+        assigned = self.wait.until(EC.visibility_of_element_located((By.ID, "memo-assigned")))
+        self.assertIn("please recheck this one", assigned.text)
+        old = self.driver.find_element(By.ID, "instance_id")
+        self._click("#memo-assigned .memo-assigned-go")
+        self.wait.until(EC.staleness_of(old))
+        self.wait.until(EC.presence_of_element_located((By.ID, "instance_id")))
+        self.assertEqual(self._instance_id(), target)
+        # Notes stay closed by default in standard mode; the count is still on the tab.
+        self.wait.until(EC.text_to_be_present_in_element(
+            (By.ID, "memo-panel-toggle"), "1 assigned to you"))
+        self._open_panel()
+        self.wait.until(EC.text_to_be_present_in_element((By.ID, "memo-assigned"), "This item"))
+        self.assertIn("please recheck this one", self.driver.find_element(By.ID, "memo-list").text)
+
 
 if __name__ == "__main__":
     unittest.main()

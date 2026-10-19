@@ -70,6 +70,20 @@ An issue records who resolved it and when. The admin dashboard's overview
 shows how many issues are open and how many are resolved, and
 `GET /admin/api/memo_issues?status=open` lists them, private ones included.
 
+### Issues assigned to you
+
+The Notes tab counts the open issues assigned to you on any item, for example
+`Notes · 2 assigned to you`, so an assignment shows even with the panel
+closed. The panel lists them at the top. An issue on an item in your own queue
+has a **Go to item** link; one on an item you are not assigned says so. The
+links are left out when `jumping_to_id_disabled` is set.
+
+To hear about assignments outside Potato, subscribe a
+[webhook](../integrations/webhooks.md) to `memo.issue_assigned`. It fires when
+an issue gets an assignee, when it is raised or later, and carries the memo
+id, the item id, the assignee, who assigned it and the status. The note's text
+is not sent, because an issue can be private.
+
 ### Issues on an image region
 
 Select a shape on an image annotation canvas, then open the Notes panel: the
@@ -107,7 +121,7 @@ position. If the shape has since been moved or deleted, the panel says so.
 | `POST /api/memos` | A note: `instance_id`, `body`, `visibility`, `anchor`, and `issue: true` with an optional `assignee` |
 | `POST /api/memos/<id>/reply` | A reply: `body` |
 | `PATCH /api/memos/<id>` | Any of `body`, `visibility`, `status` (`open` or `resolved`), `assignee` (empty to clear) |
-| `GET /api/memos/issues?status=open&assignee=me` | Issues across the project that you can see |
+| `GET /api/memos/issues?status=open&assignee=me` | Issues across the project that you can see. Each issue on an item in your queue has `position`, its 0-based place there |
 
 ## Exporting memos
 
