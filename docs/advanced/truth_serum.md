@@ -14,7 +14,7 @@ truth — **no gold labels required**. The intuition: people who hold a correct 
 view typically *know* they're a minority, so their answer ends up more popular than
 anyone predicted.
 
-Potato is, to our knowledge, the first annotation tool to ship peer-prediction scoring.
+We know of no other annotation tool that offers peer-prediction scoring.
 
 ## What you get
 

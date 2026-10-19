@@ -3,9 +3,12 @@
 Rank unlabeled images by how much annotating them would teach the model, so
 annotators spend their time where it counts.
 
-**CVAT has no active learning at all**, so the goal here is not to match a
-competitor's model stage — it is to be the only self-hostable annotation tool
-with real active learning over images.
+CVAT documents no active learning. In Label Studio the automated loop
+(retrain on new labels, then fetch new predictions) is an Enterprise feature;
+the Community edition can sort tasks by predictions it fetches by hand.
+FiftyOne's active learning is a community plugin that retrains a scikit-learn
+classifier on embeddings. Potato's runs self-hosted, over images as well as
+text, and retrains as annotators label.
 
 ## How little had to change
 

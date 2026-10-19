@@ -64,7 +64,7 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Text-prompt segmentation | Yes (in-browser) | - | Via ML backend | Yes (SAM 3) | Yes (SAM 3) | Via apps | - |
 | Keypoints / skeletons | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Polylines, ellipses, 2D cuboids | Yes | Yes | Partial | Partial | Yes | Yes | Yes |
-| Per-object attributes | - | Yes | Yes | Yes | Yes | Yes | Yes |
+| Per-object attributes | Yes (with agreement per attribute) | Yes | Yes | Yes | Yes | Yes | Yes |
 | Video tracking with interpolation | Yes | Yes | Partial | Partial | Yes | Yes | Yes |
 | Model-based mask propagation | Yes (SAM 2, server-side) | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
 | Deep zoom / tiled gigapixel images | Yes (DZI + IIIF) | Partial | - | - | Yes | Yes | - |
@@ -80,7 +80,7 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Generative-video / world-model evaluation | Yes | - | - | - | - | - | - |
 | VLM grounding & pointing evaluation | Yes | - | - | - | - | - | - |
 
-On most rows the mature CV platforms match or beat Potato. Two rows are worth reading closely rather than as a tick: Potato's text-prompt segmentation runs in the browser under an Apache-2.0 model, where the commercial equivalents run server-side on SAM 3's non-commercial terms; and its mask propagation runs on the server, so the free tier gets the capability but not in-browser. On the last four rows, Potato is doing something the other tools do not offer.
+On most rows the mature CV platforms match or beat Potato. Two rows are worth reading closely rather than as a tick: Potato's text-prompt segmentation runs in the browser under an Apache-2.0 model, where the commercial equivalents run server-side on SAM 3's non-commercial terms; and its mask propagation runs on the server, so the free tier gets the capability but not in-browser. On the last four rows, none of the other tools in the table lists an equivalent.
 
 ## Potato's strengths
 
@@ -110,7 +110,9 @@ Potato integrates with 15 AI endpoint types, with no plugin to install: OpenAI, 
 - **AI rationales** explaining each label choice
 - **Active learning** with uncertainty sampling and diversity clustering
 
-While Label Studio and Prodigy now offer LLM integration, Potato provides the broadest set of AI assistance modes (hints, highlighting, suggestions, rationales, option scoring) in a single platform.
+Label Studio and Prodigy offer LLM integration too. Potato can also measure what its assistance does to the answers: `ai_support.holdout` withholds it from a random share of annotator-item pairs and compares the two groups ([AI assist effect](ai-intelligence/assist_effect.md)).
+
+**Machine labels with a stated error rate.** Several tools now label with a model and let a person approve or discard the result: FiftyOne's Verified Auto Labeling is a confidence slider with approve and discard, Label Studio's Prompts reports accuracy against ground truth, and Roboflow's Auto Label shows a preview. Potato's [labeling engine](labeling-engine/overview.md) states the error rate its accepted machine labels stay under, at a stated confidence, tests it on a blind random sample of human labels, and ships the result as a certificate with the dataset.
 
 ### Research-Oriented Workflow
 
@@ -125,7 +127,7 @@ Potato is designed for research annotation studies with built-in support for:
 
 ### Data Source Flexibility
 
-Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon S3, Google Cloud Storage, Azure Blob Storage, HuggingFace datasets, Google Sheets, and databases. Databases and the three object stores can also be polled for new data while a study runs. Most tools only support local file upload.
+Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon S3, Google Cloud Storage, Azure Blob Storage, HuggingFace datasets, Google Sheets, and databases. Databases and the three object stores can also be polled for new data while a study runs. Label Studio and CVAT also read from S3, GCS and Azure.
 
 ### Export Format Coverage
 
@@ -151,7 +153,7 @@ Define complete annotation tasks in YAML: schemas, display types, assignment str
 
 Label Studio provides the broadest single-tool modality coverage among general-purpose platforms. It supports text, image, audio, video, and time series annotation through XML-based templates. The Community Edition includes ML backend integration (OpenAI, Azure OpenAI, Ollama via ML SDK) for pre-annotation. The Enterprise Edition adds a managed "Prompts" interface with 9+ LLM providers (Anthropic, Gemini, Cohere, Mistral, etc.), quality review with raw-agreement metrics (exact match, IoU, span overlap and others) plus a consensus score, none of them chance-corrected, along with ground truth evaluation and annotator performance dashboards. The Community Edition has no agreement scoring, review workflow or task assignment, and since March 2026 its releases have been security patches only. Label Studio does not provide research-oriented features like consent workflows, validated survey instruments, or MACE-based adjudication.
 
-**Compared to Potato:** Label Studio offers broader enterprise project management but lacks Potato's research workflow features (multi-phase progression, surveys, behavioral tracking, crowdsourcing integration). Potato provides more AI assistance modes (hints, highlighting, rationales, option scoring) and unique features like Solo Mode.
+**Compared to Potato:** Label Studio offers broader enterprise project management but lacks Potato's research workflow features (multi-phase progression, surveys, behavioral tracking, crowdsourcing integration). Potato provides more AI assistance modes (hints, highlighting, rationales, option scoring) and Solo Mode.
 
 ### CVAT (Computer Vision Annotation Tool)
 - **Type:** Open-source (OpenCV)
@@ -357,7 +359,7 @@ Open-source toolkit for generating labeled training data entirely from teacher L
 ### Specialized Annotation
 
 **EventFull** (NAACL 2025) - Eirew et al. ([paper](https://aclanthology.org/2025.naacl-demo.40/))
-First tool supporting consistent annotation of temporal, causal, and coreference relations in a unified process.
+Its authors describe it as the first tool to annotate temporal, causal, and coreference relations consistently in one process.
 
 **First-AID** (ACL 2025) - Menini et al. ([paper](https://aclanthology.org/2025.acl-demo.54/))
 Human-in-the-loop data collection for knowledge-driven synthetic dialogue generation using LLM prompting.
@@ -415,7 +417,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Use Case | Recommended Tool | Why |
 |----------|-----------------|-----|
 | General NLP annotation with AI assistance | **Potato** | Broadest AI assistance modes, YAML config, research features |
-| Single annotator + LLM collaboration | **Potato** (Solo Mode) | Only tool with structured progressive-autonomy workflow |
+| Single annotator + LLM collaboration | **Potato** (Solo Mode) | A structured progressive-autonomy workflow; MEGAnno+ is the closest, LLM-first |
 | Research annotation with surveys/tracking | **Potato** | Multi-phase workflow, 55 surveys, behavioral tracking, MACE |
 | Crowdsourced annotation (MTurk/Prolific) | **Potato** | Native providers for both, and for seven other recruitment routes |
 | Complex linguistic annotation + knowledge bases | **INCEpTION** | Strongest KB linking, coreference, IAA, curation |
