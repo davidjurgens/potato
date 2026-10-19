@@ -56,6 +56,24 @@ function carryProvenance(target, src) {
     return target;
 }
 
+/**
+ * Copy a shape's per-object `attributes` (occlusion, truncation, track id ...)
+ * from `src` onto `target`.
+ *
+ * Importers (CVAT, KITTI, MOT, Darwin, VIA, ...) put them on the shape and the
+ * CVAT, KITTI, MOT and Darwin exporters read them back. Every rebuild of a
+ * shape in this file goes through here; one that skipped it dropped them on
+ * the first save, so an import -> export round trip lost them silently.
+ */
+function carryAttributes(target, src) {
+    if (!target || !src) return target;
+    const attrs = src.attributes;
+    if (!attrs || typeof attrs !== 'object' || Array.isArray(attrs)) return target;
+    if (!Object.keys(attrs).length) return target;
+    target.attributes = Object.assign({}, attrs);
+    return target;
+}
+
 const MaskBuffer = (function () {
     const scope = (typeof globalThis !== 'undefined') ? globalThis
         : (typeof window !== 'undefined' ? window : null);
@@ -3596,6 +3614,7 @@ class ImageAnnotationManager {
                 // Who put this shape here. Written for every shape that knows,
                 // omitted for annotations made before provenance existed.
                 carryProvenance(ann, obj.annotationData);
+                carryAttributes(ann, obj.annotationData);
                 annotations.push(ann);
             }
         });
@@ -3645,6 +3664,7 @@ class ImageAnnotationManager {
                 entry.iscrowd = mask.iscrowd;
             }
             carryProvenance(entry, mask);
+            carryAttributes(entry, mask);
             annotations.push(entry);
         }
 
@@ -3725,11 +3745,11 @@ class ImageAnnotationManager {
             ? `${ann.label}#${ann.instance}`
             : ann.label;
 
-        this.masks[key] = carryProvenance({
+        this.masks[key] = carryAttributes(carryProvenance({
             label: ann.label,
             color: ann.color,
             buffer: buffer,
-        }, ann);
+        }, ann), ann);
         if (ann.instance !== undefined && ann.instance !== null) {
             this.masks[key].instance = ann.instance;
         }
@@ -3969,13 +3989,13 @@ class ImageAnnotationManager {
                 });
                 // Carried through so the serializer can rebuild the ordered
                 // list; the Group itself cannot supply it.
-                obj.annotationData = carryProvenance({
+                obj.annotationData = carryAttributes(carryProvenance({
                     type: 'keypoint_set',
                     label: ann.label,
                     color: ann.color,
                     skeleton: ann.skeleton || '',
                     keypoints: kps,
-                }, ann);
+                }, ann), ann);
                 this.canvas.add(obj);
                 return;
             }
@@ -4004,10 +4024,10 @@ class ImageAnnotationManager {
                 obj = new fabric.Group(parts, {
                     selectable: true, hasControls: true,
                 });
-                obj.annotationData = carryProvenance({
+                obj.annotationData = carryAttributes(carryProvenance({
                     type: 'cuboid_2d', label: ann.label, color: ann.color,
                     front: front, back: back,
-                }, ann);
+                }, ann), ann);
                 this.canvas.add(obj);
                 return;
             }
@@ -4078,11 +4098,11 @@ class ImageAnnotationManager {
         }
 
         if (obj) {
-            obj.annotationData = carryProvenance({
+            obj.annotationData = carryAttributes(carryProvenance({
                 type: ann.type,
                 label: ann.label,
                 color: ann.color,
-            }, ann);
+            }, ann), ann);
             this.canvas.add(obj);
         }
     }
@@ -4642,6 +4662,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // The declared provenance vocabulary, so a test can ask this file what it
     // claims to carry rather than restating the list and agreeing with itself.
     module.exports.PROVENANCE_KEYS = PROVENANCE_KEYS;
+    module.exports.carryAttributes = carryAttributes;
 }
 
 // Make available in browser environments

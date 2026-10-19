@@ -24,6 +24,18 @@ All notable changes to the Potato annotation platform are documented in this fil
 - `potato deploy up --provider huggingface` without huggingface_hub said to
   install `potato-annotation[deploy]`, which does not include it. It now says
   `potato-annotation[huggingface]`.
+- **Imported per-object attributes were lost on the first save.** The CVAT,
+  KITTI, MOT, Darwin and VIA importers put each shape's attributes (CVAT
+  `<attribute>` elements, KITTI truncation and occlusion, MOT track id and
+  visibility) on the object, but the image annotation page rebuilt every
+  restored shape without them. Saving an imported item wrote the shapes back
+  bare, and a CVAT or KITTI export lost those values with no warning. Restored
+  shapes and masks now keep `attributes` through edits and saves.
+- `potato import -i annotations.xml` rejected every single-file CVAT and
+  Pascal VOC export as "neither JSON nor newline-delimited JSON". Only the
+  directory form worked. An XML file now goes to the XML importers, with or
+  without `-f`. A JSON file that starts with a UTF-8 byte-order mark also
+  imports now, instead of failing to parse.
 
 ## [2.11.1] - Debug Without --host, Image Classifiers and Prelabels After a Restart
 

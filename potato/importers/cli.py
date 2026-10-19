@@ -368,8 +368,19 @@ def _load_document(path: str):
 
     Returns ``(data, error_message)``; exactly one is set.
     """
-    with open(path, "r", encoding="utf-8") as fh:
+    # utf-8-sig drops a byte-order mark, which json.loads otherwise rejects
+    # as "Unexpected UTF-8 BOM" on a file that is otherwise fine.
+    with open(path, "r", encoding="utf-8-sig") as fh:
         text = fh.read()
+
+    # CVAT and Pascal VOC export one XML file. Their importers parse the text
+    # themselves, and detection tells them apart by root element. Running it
+    # through json.loads first rejected every single-file CVAT export with
+    # "neither JSON nor newline-delimited JSON". Leading whitespace is dropped
+    # too: ElementTree refuses an <?xml?> declaration that is not at offset 0.
+    stripped = text.lstrip()
+    if stripped.startswith("<"):
+        return stripped, None
 
     try:
         return json.loads(text), None
@@ -647,7 +658,7 @@ def main(args=None) -> int:
                       file=sys.stderr)
                 return 2
 
-    if parsed.image_dir and data is not None:
+    if parsed.image_dir and isinstance(data, dict):
         filled = _probe_dimensions(data, parsed.image_dir)
         if filled:
             logger.info("Read dimensions for %d image(s) from %s",

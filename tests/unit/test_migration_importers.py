@@ -329,3 +329,78 @@ class TestDirectoryDetection:
     def test_malformed_xml_does_not_crash_detection(self, tmp_path):
         (tmp_path / "bad.xml").write_text("<unclosed>")
         assert self.detect(tmp_path) == "pascal_voc"   # falls back, does not raise
+
+
+class TestSingleXMLFileThroughTheCLI:
+    """
+    `potato import -i annotations.xml` is how a CVAT export arrives: one file.
+
+    The CLI read every single-file input with json.loads, so a CVAT or Pascal
+    VOC file was rejected as "neither JSON nor newline-delimited JSON" before
+    any importer saw it. Only the directory form worked.
+    """
+
+    def run(self, tmp_path, xml_text, *extra):
+        import json as _json
+        from potato.importers.cli import main
+        path = tmp_path / "annotations.xml"
+        path.write_text(xml_text)
+        out = tmp_path / "project"
+        code = main(["-i", str(path), "-o", str(out), *extra])
+        data_dir = out / "data"
+        records = []
+        if data_dir.is_dir():
+            for f in data_dir.iterdir():
+                text = f.read_text()
+                try:
+                    doc = _json.loads(text)
+                    records.extend(doc if isinstance(doc, list) else [doc])
+                except ValueError:
+                    records.extend(_json.loads(l) for l in text.splitlines() if l.strip())
+        return code, records
+
+    def test_cvat_file_imports_and_keeps_attributes(self, tmp_path):
+        code, records = self.run(tmp_path, cvat_xml(
+            '<box label="car" xtl="0" ytl="0" xbr="10" ybr="10" occluded="0">'
+            '<attribute name="occlusion">partial</attribute></box>'))
+        assert code == 0
+        [record] = records
+        [obj] = record["predictions"]["image_annotation"]
+        assert obj["attributes"] == {"occlusion": "partial"}
+
+    def test_explicit_format_works_too(self, tmp_path):
+        code, records = self.run(tmp_path, cvat_xml(
+            '<box label="car" xtl="0" ytl="0" xbr="10" ybr="10"/>'), "-f", "cvat")
+        assert code == 0 and len(records) == 1
+
+    def test_a_byte_order_mark_does_not_hide_the_xml(self, tmp_path):
+        code, _ = self.run(tmp_path, "﻿" + cvat_xml(
+            '<box label="car" xtl="0" ytl="0" xbr="10" ybr="10"/>'))
+        assert code == 0
+
+    def test_voc_file_imports(self, tmp_path):
+        code, records = self.run(
+            tmp_path,
+            "<annotation><filename>a.jpg</filename>"
+            "<size><width>100</width><height>100</height></size>"
+            "<object><name>dog</name><bndbox><xmin>1</xmin><ymin>2</ymin>"
+            "<xmax>30</xmax><ymax>40</ymax></bndbox></object></annotation>")
+        assert code == 0
+        assert len(records) == 1
+
+    def test_whitespace_before_the_xml_declaration_is_tolerated(self, tmp_path):
+        code, records = self.run(tmp_path, "\n  <?xml version='1.0'?>" + cvat_xml(
+            '<box label="car" xtl="0" ytl="0" xbr="10" ybr="10"/>'))
+        assert code == 0 and len(records) == 1
+
+    def test_a_json_file_with_a_byte_order_mark_imports(self, tmp_path):
+        import json as _json
+        from potato.importers.cli import main
+        path = tmp_path / "instances.json"
+        path.write_text("﻿" + _json.dumps({
+            "images": [{"id": 1, "file_name": "a.jpg", "width": 10, "height": 10}],
+            "annotations": [{"id": 1, "image_id": 1, "category_id": 1,
+                             "bbox": [0, 0, 5, 5], "area": 25, "iscrowd": 0}],
+            "categories": [{"id": 1, "name": "dog"}],
+        }), encoding="utf-8")
+        assert main(["-i", str(path), "-o", str(tmp_path / "p")]) == 0
