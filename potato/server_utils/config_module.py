@@ -375,7 +375,7 @@ KNOWN_CONFIG_KEYS = {
         # Scores back to Langfuse / LangSmith (trace_ingestion/writeback.py).
         "writeback": {
             "trigger": None, "score_prefix": None, "min_annotators": None,
-            "langfuse": {"host", "public_key_env", "secret_key_env"},
+            "langfuse": {"host", "public_key_env", "secret_key_env", "score_configs"},
             "langsmith": {"api_url", "api_key_env"},
         },
     },

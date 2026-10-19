@@ -5202,6 +5202,39 @@ def validate_annotation(annotation):
     return isinstance(annotation, dict)
 
 # Configure the Flask application
+def _langfuse_poller_for(flask_app, source):
+    """A LangfusePoller for one `trace_ingestion.sources` entry, not yet started.
+
+    The poller runs on its own thread, and _inject_trace reads the app's
+    config, so each trace is injected inside an app context. It used to be
+    started with no callback at all, so every trace it fetched was dropped.
+    """
+    from potato.routes_trace_ingestion import _inject_trace
+    from potato.trace_ingestion.langfuse_poller import LangfusePoller
+
+    def _inject_langfuse_trace(trace):
+        with flask_app.app_context():
+            return _inject_trace(trace)
+
+    def _already_ingested(item_id):
+        try:
+            return get_item_state_manager().has_item(item_id)
+        except Exception:  # noqa: BLE001 - not loaded yet: not known
+            return False
+
+    return LangfusePoller(
+        api_url=source.get("api_url", "https://cloud.langfuse.com"),
+        public_key=source.get("public_key", ""),
+        secret_key=source.get("secret_key", source.get("api_key", "")),
+        poll_interval=source.get("poll_interval", 30),
+        lookback_hours=float(source.get("lookback_hours", 24)),
+        settle_seconds=float(source.get("settle_seconds", 30)),
+        max_trace_seconds=float(source.get("max_trace_seconds", 3600)),
+        on_trace=_inject_langfuse_trace,
+        is_known=_already_ingested,
+    )
+
+
 def configure_app(flask_app):
     """
     Configure the Flask application instance
@@ -5393,13 +5426,7 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         sources = trace_ingestion_config.get("sources") or []
         for source in sources:
             if source.get("type") == "langfuse":
-                from potato.trace_ingestion.langfuse_poller import LangfusePoller
-                poller = LangfusePoller(
-                    api_url=source.get("api_url", "https://cloud.langfuse.com"),
-                    public_key=source.get("public_key", ""),
-                    secret_key=source.get("secret_key", source.get("api_key", "")),
-                    poll_interval=source.get("poll_interval", 30),
-                )
+                poller = _langfuse_poller_for(flask_app, source)
                 poller.start()
                 logger.info(f"Started Langfuse poller (interval={source.get('poll_interval', 30)}s)")
 

@@ -163,6 +163,76 @@ def item_answers(instance_id: str, schemes: List[dict]) -> Dict[str, Dict[str, A
     return out
 
 
+def _step_types():
+    from potato.server_utils.iaa.structured import TRACE_TYPES
+    return TRACE_TYPES
+
+
+#: process_reward stores a step's reward as a number; Langfuse shows the word.
+_REWARD_NAMES = {"1": "correct", "-1": "incorrect", "0": "neutral"}
+
+
+def step_answers(instance_id: str, scheme: dict) -> Dict[str, Dict[str, str]]:
+    """``{annotator: {step index: label}}`` for a step-level trace scheme."""
+    from potato.item_state_management import get_item_state_manager
+    from potato.step_agreement import steps_from_stored
+    from potato.user_state_management import get_user_state_manager
+
+    usm = get_user_state_manager()
+    out: Dict[str, Dict[str, str]] = {}
+    for user in sorted(get_item_state_manager().get_annotators_for_item(instance_id) or []):
+        state = usm.get_user_state(user)
+        if state is None:
+            continue
+        for label, value in (state.get_label_annotations(instance_id) or {}).items():
+            if (label.get_schema() if hasattr(label, "get_schema") else None) != scheme["name"]:
+                continue
+            steps = steps_from_stored(value)
+            if steps:
+                names = _REWARD_NAMES if scheme.get("annotation_type") == "process_reward" else {}
+                out[user] = {str(k): names.get(str(v), str(v)) for k, v in steps.items()}
+                break
+    return out
+
+
+def summarize_steps(answers: Dict[str, Dict[str, str]], min_annotators: int) -> Dict[str, Dict[str, Any]]:
+    """``{step index: summary}`` for the steps ``min_annotators`` people labelled.
+
+    The majority label per step, like a radio scheme; a tied step is not sent.
+    """
+    by_step: Dict[str, List[str]] = {}
+    for steps in answers.values():
+        for index, label in steps.items():
+            by_step.setdefault(index, []).append(label)
+    out = {}
+    for index, labels in by_step.items():
+        n = len(labels)
+        if n < min_annotators:
+            continue
+        counts = Counter(labels).most_common()
+        if len(counts) > 1 and counts[0][1] == counts[1][1]:
+            continue
+        pairs = list(combinations(labels, 2))
+        label, k = counts[0]
+        out[index] = {"data_type": "CATEGORICAL", "value": label, "n": n,
+                      "comment": f"Potato: {k} of {n} annotator(s) chose {label} for this step",
+                      "metadata": {"annotators": n, "distribution": dict(counts), "step_index": int(index),
+                                   "pairwise_agreement": sum(a == b for a, b in pairs) / len(pairs)}}
+    return out
+
+
+def _observation_ids(item_data: Any, scheme: dict) -> Dict[str, str]:
+    """``{step index: Langfuse observation id}`` from an ingested trace's steps."""
+    steps = (item_data or {}).get(scheme.get("steps_key") or "steps") if isinstance(item_data, dict) else None
+    out = {}
+    for position, step in enumerate(steps or []):
+        if isinstance(step, dict):
+            obs = (step.get("metadata") or {}).get("observation_id")
+            if obs:
+                out[str(step.get("step_index", position))] = str(obs)
+    return out
+
+
 def adjudicated_value(scheme: dict, decided: Any) -> Optional[Dict[str, Any]]:
     """An adjudicator's decision for one scheme, in the shape :func:`summarize` returns."""
     kind = scheme.get("annotation_type")
@@ -215,6 +285,49 @@ def langsmith_feedback(run_id: str, key: str, summary: Dict[str, Any], *,
     return body
 
 
+def _label_names(scheme: dict) -> List[str]:
+    names = []
+    for label in scheme.get("labels") or []:
+        name = label if isinstance(label, str) else (label or {}).get("name")
+        if name is not None:
+            names.append(str(name))
+    return names
+
+
+def score_config_spec(scheme: dict, step: bool = False) -> Optional[Dict[str, Any]]:
+    """The Langfuse score config a scheme's scores fit, or None.
+
+    Langfuse accepts a score carrying a ``configId`` and then, in its worker,
+    drops it if the value is not one of the config's categories -- the client
+    gets 202 either way. So a config is only described for schemes whose every
+    possible value is a category (or a number within bounds). A multiselect
+    sends a comma-joined set, which no category list can hold.
+    """
+    kind = scheme.get("annotation_type")
+    if step:
+        if kind != "process_reward":
+            return None
+        labels = ["correct", "incorrect"] + (["neutral"] if scheme.get("allow_neutral") else [])
+        return {"dataType": "CATEGORICAL",
+                "categories": [{"label": n, "value": i} for i, n in enumerate(labels)]}
+    if kind in ("radio", "select") or (kind == "likert" and scheme.get("labels")):
+        labels = _label_names(scheme)
+        if not labels:
+            return None
+        return {"dataType": "CATEGORICAL",
+                "categories": [{"label": n, "value": i} for i, n in enumerate(labels)]}
+    if kind == "likert":
+        return {"dataType": "NUMERIC", "minValue": 1, "maxValue": int(scheme.get("size") or 5)}
+    if kind in ("slider", "number"):
+        spec: Dict[str, Any] = {"dataType": "NUMERIC"}
+        for key, out in (("min_value", "minValue"), ("min", "minValue"),
+                         ("max_value", "maxValue"), ("max", "maxValue")):
+            if out not in spec and _is_number(scheme.get(key)):
+                spec[out] = float(scheme[key])
+        return spec
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
@@ -244,6 +357,7 @@ def settings(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "prefix": str(block.get("score_prefix") or "potato"),
         "min_annotators": int(block.get("min_annotators") or (cap if cap and cap > 0 else 2)),
         "langfuse": {
+            "score_configs": bool(lf.get("score_configs", False)),
             "host": str(lf.get("host") or source.get("api_url") or "https://cloud.langfuse.com").rstrip("/"),
             "public_key": os.environ.get(str(lf.get("public_key_env") or "LANGFUSE_PUBLIC_KEY"))
                           or source.get("public_key") or "",
@@ -272,6 +386,10 @@ class WritebackQueue:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        #: Langfuse score config ids by score name (None: not usable).
+        self._score_configs: Dict[str, Optional[str]] = {}
+        #: Score names whose existing Langfuse config does not match the scheme.
+        self.config_mismatches: List[str] = []
         with self._connect() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS writeback (
                 key TEXT PRIMARY KEY, target TEXT NOT NULL, item_id TEXT NOT NULL,
@@ -388,6 +506,12 @@ class WritebackQueue:
             return False, False, "no Langfuse keys (set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY)"
         token = base64.b64encode(f"{lf['public_key']}:{lf['secret_key']}".encode()).decode()
         headers = {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
+        score = dict(score)
+        spec = score.pop("_score_config", None)
+        if spec:
+            config_id = self._score_config_id(score["name"], spec, headers)
+            if config_id:
+                score["configId"] = config_id
         url = f"{lf['host']}/api/public/scores"
         response = self.session.post(url, json=[score], headers=headers, timeout=20)
         if response.status_code in (400, 422):
@@ -397,6 +521,46 @@ class WritebackQueue:
             # Partly accepted: Langfuse says not to retry a 207 automatically.
             return False, False, f"HTTP 207: {response.text[:300]}"
         return self._verdict(response)
+
+    def _score_config_id(self, name: str, spec: Dict[str, Any], headers) -> Optional[str]:
+        """The id of the Langfuse score config called ``name``, created if missing.
+
+        An existing config whose type or categories differ from ``spec`` is not
+        used: Langfuse would silently drop any value outside its categories.
+        """
+        cache = self._score_configs
+        if name in cache:
+            return cache[name]
+        host = self.cfg["langfuse"]["host"]
+        found, page = None, 1
+        while found is None:
+            response = self.session.get(f"{host}/api/public/score-configs",
+                                        params={"page": page, "limit": 100}, headers=headers, timeout=20)
+            if response.status_code != 200:
+                return None  # not cached: retried with the next score
+            body = response.json()
+            found = next((c for c in body.get("data") or []
+                          if c.get("name") == name and not c.get("isArchived")), None)
+            if page >= int((body.get("meta") or {}).get("totalPages") or 1):
+                break
+            page += 1
+        if found is None:
+            response = self.session.post(f"{host}/api/public/score-configs", headers=headers, timeout=20,
+                                         json={"name": name, "description": "Created by Potato", **spec})
+            if response.status_code not in (200, 201):
+                return None
+            found = response.json()
+        if found.get("dataType") != spec["dataType"] or (
+                spec.get("categories") is not None
+                and sorted(c.get("label") for c in found.get("categories") or [])
+                != sorted(c["label"] for c in spec["categories"])):
+            logger.warning("Langfuse score config %r does not match the scheme's labels; "
+                           "sending %r without a config", name, name)
+            self.config_mismatches = sorted(set(self.config_mismatches) | {name})
+            cache[name] = None
+            return None
+        cache[name] = found.get("id")
+        return cache[name]
 
     def _send_langsmith(self, feedback: Dict[str, Any], already_sent: bool) -> Tuple[bool, bool, str]:
         ls = self.cfg["langsmith"]
@@ -447,7 +611,8 @@ class WritebackQueue:
                 "recent_errors": [dict(zip(("target", "item_id", "scheme", "attempts",
                                             "error", "updated_at"), row)) for row in failures],
                 "held": [dict(zip(("target", "item_id", "scheme", "reason", "updated_at"), row))
-                         for row in held]}
+                         for row in held],
+                "score_config_mismatches": list(self.config_mismatches)}
 
 
 # ---------------------------------------------------------------------------
@@ -491,11 +656,14 @@ def _item_data(instance_id: str) -> Any:
 
 
 def _queue_item(config, queue, cfg, instance_id: str, summaries: Dict[str, Optional[dict]],
-                held: Optional[Dict[str, str]] = None) -> int:
-    target = trace_target(_item_data(instance_id))
+                held: Optional[Dict[str, str]] = None,
+                step_summaries: Optional[Dict[str, Dict[str, dict]]] = None) -> int:
+    item_data = _item_data(instance_id)
+    target = trace_target(item_data)
     if target is None:
         return 0
     service, trace_id = target
+    schemes_by_name = {s["name"]: s for s in _schemes(config)}
     for scheme, reason in (held or {}).items():
         queue.hold(service, instance_id, scheme, reason)
         logger.info("Trace write-back for %s/%s held: %s", instance_id, scheme, reason)
@@ -508,7 +676,30 @@ def _queue_item(config, queue, cfg, instance_id: str, summaries: Dict[str, Optio
         payload = (langfuse_score(trace_id, name, summary, instance_id=instance_id, score_uuid=uid)
                    if service == "langfuse" else
                    langsmith_feedback(trace_id, name, summary, instance_id=instance_id, score_uuid=uid))
+        if service == "langfuse" and cfg["langfuse"].get("score_configs"):
+            spec = score_config_spec(schemes_by_name.get(scheme, {}))
+            if spec:
+                payload["_score_config"] = spec
         queued += queue.enqueue(service, instance_id, scheme, payload)
+    if service == "langfuse":
+        # Step scores go on the step's own observation. LangSmith items carry
+        # no child run ids, so they get trace-level feedback only.
+        for scheme, per_step in (step_summaries or {}).items():
+            observations = _observation_ids(item_data, schemes_by_name.get(scheme, {}))
+            spec = (score_config_spec(schemes_by_name.get(scheme, {}), step=True)
+                    if cfg["langfuse"].get("score_configs") else None)
+            for index, summary in sorted(per_step.items(), key=lambda kv: int(kv[0])):
+                observation = observations.get(index)
+                if observation is None:
+                    continue
+                key = f"{scheme}#step{index}"
+                payload = langfuse_score(trace_id, f"{cfg['prefix']}.{scheme}", summary,
+                                         instance_id=instance_id,
+                                         score_uuid=score_id(service, instance_id, key))
+                payload["observationId"] = observation
+                if spec:
+                    payload["_score_config"] = spec
+                queued += queue.enqueue(service, instance_id, key, payload)
     return queued
 
 
@@ -535,9 +726,14 @@ def on_save(instance_id: str, config: Optional[Dict[str, Any]] = None) -> int:
                          instance_id, most, cfg["min_annotators"])
             return 0
         decided = _adjudicated(config, instance_id)
-        summaries, held = {}, {}
+        summaries, held, step_summaries = {}, {}, {}
         for scheme in schemes:
             name = scheme["name"]
+            if scheme.get("annotation_type") in _step_types():
+                per_step = summarize_steps(step_answers(instance_id, scheme), cfg["min_annotators"])
+                if per_step:
+                    step_summaries[name] = per_step
+                continue
             if name in decided:
                 summaries[name] = decided[name]
             elif len(answers.get(name, {})) >= cfg["min_annotators"]:
@@ -547,7 +743,8 @@ def on_save(instance_id: str, config: Optional[Dict[str, Any]] = None) -> int:
                     if reason:
                         held[name] = reason
         queue = get_queue(config)
-        return _queue_item(config, queue, cfg, instance_id, summaries, held) if queue else 0
+        return (_queue_item(config, queue, cfg, instance_id, summaries, held, step_summaries)
+                if queue else 0)
     except Exception:  # noqa: BLE001 - a save must never fail because of this
         logger.exception("Could not queue trace write-back for %s", instance_id)
         return 0

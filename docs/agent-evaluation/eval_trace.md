@@ -103,13 +103,50 @@ evaluated as they arrive:
 
 - **Webhook + SSE** — `trace_ingestion: {enabled: true}` exposes
   `POST /api/traces/webhook` and notifies annotators via `GET /api/traces/stream`.
-- **Langfuse polling** — add a `langfuse` source under `trace_ingestion.sources`.
+- **Langfuse polling** — add a `langfuse` source under `trace_ingestion.sources`
+  (see below).
 - **Directory watch** — `data_directory` + `watch_data_directory: true` ingests
   dropped `.json`/`.jsonl` files.
 
 Runtime-added traces are immediately assignable to annotators (dynamic sources
 default the per-user quota to unlimited). See
 `examples/agent-traces/continuous-eval/README.md` for curl examples.
+
+### Langfuse polling
+
+```yaml
+trace_ingestion:
+  enabled: true
+  sources:
+    - type: langfuse
+      api_url: https://cloud.langfuse.com
+      public_key: pk-lf-...
+      secret_key: sk-lf-...
+      poll_interval: 30      # seconds between polls
+      lookback_hours: 24     # how far back the first poll reaches
+      settle_seconds: 30     # wait this long after a run finishes
+      max_trace_seconds: 3600  # the longest a run may take
+```
+
+Each Langfuse trace becomes one item, `langfuse_<trace id>`. Its steps are the
+trace's observations in start order, without the root span, which stands for
+the whole run; the root's input and output go in the item's metadata.
+
+Langfuse's SDKs send a step when it ends, so while a run is going Langfuse
+holds its finished steps and nothing else. The root span ends last, so the
+poller takes a trace once its root has arrived and `settle_seconds` have
+passed since it ended. A trace whose root never arrives (a crashed run) is
+taken after `max_trace_seconds`, with what it has, and marked
+`complete: false` in its metadata. Each poll reads back over the last
+`max_trace_seconds`, because a long call appears only when it ends, carrying
+its start time; a busy project with a long bound fetches more per poll. A
+trace already in the project is not added again after a restart.
+
+The poller reads Langfuse v4's Observations API
+(`GET /api/public/v2/observations`). Self-hosted Langfuse v4 refuses the
+older traces API, and Langfuse Cloud removes it on 2026-11-16. Against an
+older server without the v2 endpoint, the poller falls back to the traces API
+and reads each new trace in full.
 
 Traces that came from Langfuse or LangSmith can have the annotators' merged
 answer sent back to them as a score or feedback; see

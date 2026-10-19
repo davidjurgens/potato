@@ -6,6 +6,21 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Plugins.** A package can add annotation and display types by declaring a
+  `potato.plugins` entry point, and a project turns it on with
+  `plugins: [name]`. Only listed plugins load, by entry-point name, never a
+  path. A collision with a built-in or another plugin's type, or an error
+  inside the plugin, registers nothing. A plugin's scripts and styles are
+  served at `/plugin-static/<plugin>/` and loaded on the project's pages.
+  `potato plugins` lists installed plugins; the MCP server gains
+  `list_plugins` and a `plugin` field on its type listings. An installable
+  example is in `examples/plugins/counter/`. See *Plugins*.
+- **Langfuse step scores and score configs.** Write-back sends a score per
+  step for step-level trace schemes (`process_reward` and the other trace
+  types), on the step's own Langfuse observation. With
+  `writeback.langfuse.score_configs: true`, each score carries a Langfuse
+  score config built from the scheme's labels or scale, attached only where
+  every value Potato can send fits it. See *Trace Score Write-Back*.
 - **Google Cloud Storage and Azure Blob sources, prefixes, and live object
   stores.** `data_sources` gains `type: gcs` and `type: azure_blob`, and S3,
   GCS and Azure take `prefix` (every JSON, JSONL, CSV and TSV object under it)
@@ -153,6 +168,20 @@ All notable changes to the Potato annotation platform are documented in this fil
   server ignores the block and still logs the warnings.
 
 ### Fixes
+
+- **The Langfuse poller ingested nothing.** It was started without the
+  callback that adds a trace to the project, so every trace it fetched was
+  dropped; it also read the trace list's observation ids as observations. It
+  now adds each trace as an item, and reads Langfuse v4's Observations API,
+  which self-hosted Langfuse v4 requires and Langfuse Cloud will require from
+  2026-11-16, falling back to the older traces API on servers without it. A
+  trace is taken once its run has finished (its root span has arrived), so a
+  long LLM call is not cut off. New source keys: `lookback_hours`,
+  `settle_seconds` and `max_trace_seconds`. Checked end to end against a
+  self-hosted Langfuse 4.63.
+- **`potato validate` now checks survey-phase question files.** A phase file
+  with an unknown `annotation_type` passed validation and stopped the server
+  at boot; validation and boot now run the same check.
 
 - AI-assistant usage telemetry recorded the scheme as its position ("0",
   "1", ...) instead of its name, so the save path never matched an event to

@@ -1341,6 +1341,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Environment variable holding the Langfuse secret key",
         type="string", default="LANGFUSE_SECRET_KEY", category=INTEG,
     ),
+    "trace_ingestion.writeback.langfuse.score_configs": _D(
+        "Attach a Langfuse score config to each categorical or numeric score, "
+        "creating it from the scheme's labels if missing. Multiselect and text "
+        "schemes never get one",
+        type="boolean", default=False, category=INTEG,
+    ),
     "trace_ingestion.writeback.langsmith": _D(
         "LangSmith API URL and the environment variable holding its key",
         type="object", category=INTEG,

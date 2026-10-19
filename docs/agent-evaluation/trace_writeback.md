@@ -29,6 +29,7 @@ trace_ingestion:
 | `trigger` | `fully_annotated` | `fully_annotated` sends once `min_annotators` people have answered. `adjudicated` waits for an adjudication decision. An adjudication is sent in either mode |
 | `min_annotators` | the study's per-item cap, or 2 | How many people must answer before a trace is sent |
 | `score_prefix` | `potato` | Scores are named `<score_prefix>.<scheme name>`, for example `potato.outcome` |
+| `langfuse.score_configs` | `false` | Attach a Langfuse score config to each score; see [Score configs](#score-configs) |
 | `langfuse.host` | the langfuse source's `api_url`, else `https://cloud.langfuse.com` | Langfuse base URL |
 | `langfuse.public_key_env`, `langfuse.secret_key_env` | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Environment variables holding the keys. Without them, the langfuse source's keys are used |
 | `langsmith.api_url` | `https://api.smith.langchain.com` | LangSmith API base URL |
@@ -36,6 +37,12 @@ trace_ingestion:
 
 Keys are read from the environment, not from the config, so they stay out of
 the project folder and out of [snapshots](../tools/snapshots.md).
+
+Write-back to Langfuse was run end to end against a self-hosted Langfuse
+4.63: traces from the Langfuse Python SDK, pulled in by the poller, judged by
+two annotators, and read back through `GET /api/public/v3/scores`, including
+step scores and score configs. LangSmith delivery follows LangSmith's published
+API and Python client and has not been run against the service.
 
 ## Eligible traces
 
@@ -61,21 +68,53 @@ example `Potato: 2 of 3 annotator(s) chose success`. The metadata holds the
 annotator count, the distribution of answers, the share of annotator pairs who
 agreed (or the standard deviation, for numbers), and Potato's item id. An
 adjudicated value replaces the vote, with the comment `Potato: adjudicated` and
-the adjudicator in the metadata.
+`adjudicated: true` in the metadata.
 
 In LangSmith a numeric value goes in `score` and a categorical one in `value`,
 with the comment and metadata on the feedback (`feedback_source.type: api`).
+
+### Step scores
+
+Step-level trace schemes (`process_reward`, `trajectory_eval`,
+`tool_call_review`, `failure_attribution`, `gui_trajectory`) label each step of
+the trace. For a trace from the Langfuse poller, each step whose label
+`min_annotators` people gave gets its own score on that step's observation
+(`observationId`), named `potato.<scheme>` like the trace-level scores. The
+value is the label most annotators gave the step; a tied step is not sent.
+`process_reward` rewards are sent as words: `correct`, `incorrect`,
+`neutral`. LangSmith items carry no ids for their child runs, so LangSmith gets
+trace-level feedback only.
+
+### Score configs
+
+With `langfuse.score_configs: true`, each score carries a Langfuse score
+config named after it (`potato.<scheme>`). Potato creates the config from the
+scheme the first time it sends one: the scheme's labels as categories for
+radio, select, labelled likert and `process_reward` steps, and the scale's
+bounds for unlabelled likert, slider and number. Langfuse then shows the
+categories in its filters and charts.
+
+Langfuse accepts a score with a config and then drops it in the background if
+its value is not one of the config's categories, so a config is attached only
+where every value Potato can send is a category. Multiselect scores (a
+comma-separated set) and text are sent without one. If a config with the same
+name already exists with other categories, for example after the scheme's
+labels changed, Potato sends without it and lists the name under
+`score_config_mismatches` in `/admin/api/trace_writeback`. Archive or rename
+the old config in Langfuse to let Potato create a new one.
 
 ### Fields sent
 
 Only these fields are sent:
 
-- the trace or run id, the score name and value
+- the trace or run id, the score name and value, and for a step score the
+  observation id
+- with `score_configs`, the config id
 - the comment
 - in the metadata: the annotator count, the count of each answer (or the
   numeric values, for sliders and numbers), the pairwise agreement or standard
-  deviation, whether the value was adjudicated, Potato's item id, and
-  `source: potato`
+  deviation, whether the value was adjudicated, the step index for a step
+  score, Potato's item id, and `source: potato`
 
 Nothing names a person. Usernames and the adjudicator's name are not sent,
 and neither is any free-text answer, since text schemes are not sent at all.

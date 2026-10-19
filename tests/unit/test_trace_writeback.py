@@ -23,6 +23,8 @@ class FakeService:
     def __init__(self):
         self.requests = []
         self.replies = []
+        #: (method, path prefix) -> (status, JSON body), for the score-config calls.
+        self.answers = {}
         service = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -31,13 +33,19 @@ class FakeService:
                 body = json.loads(self.rfile.read(length) or b"null")
                 service.requests.append({"method": self.command, "path": self.path,
                                          "headers": dict(self.headers), "body": body})
-                code = service.replies.pop(0) if service.replies else 202
+                canned = next((v for (m, prefix), v in service.answers.items()
+                               if m == self.command and self.path.startswith(prefix)), None)
+                if canned is not None:
+                    code, reply = canned(body) if callable(canned) else canned
+                else:
+                    code = service.replies.pop(0) if service.replies else 202
+                    reply = {"ok": True}
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(b'{"ok": true}')
+                self.wfile.write(json.dumps(reply).encode())
 
-            do_POST = do_PATCH = _handle
+            do_POST = do_PATCH = do_GET = _handle
 
             def log_message(self, *args):
                 pass
@@ -224,7 +232,8 @@ class TestSettings:
         cfg = wb.settings({"trace_ingestion": {"enabled": True, "writeback": {},
                            "sources": [{"type": "langfuse", "api_url": "https://lf.example/",
                                         "public_key": "pk", "secret_key": "sk"}]}})
-        assert cfg["langfuse"] == {"host": "https://lf.example", "public_key": "pk", "secret_key": "sk"}
+        assert cfg["langfuse"] == {"host": "https://lf.example", "public_key": "pk", "secret_key": "sk",
+                                   "score_configs": False}
         assert (cfg["trigger"], cfg["prefix"], cfg["min_annotators"]) == ("fully_annotated", "potato", 2)
 
     def test_keys_from_the_named_environment_variables(self, monkeypatch):
@@ -290,6 +299,126 @@ class TestHooks:
     def test_a_failure_inside_never_reaches_the_save(self, monkeypatch):
         monkeypatch.setattr(wb, "_item_data", lambda iid: 1 / 0)
         assert wb.on_save("i1", self.CONFIG) == 0
+
+
+PRM = {"annotation_type": "process_reward", "name": "prm", "description": "steps"}
+STEPS_ITEM = {"metadata": {"source": "langfuse", "original_id": "trace-1"},
+              "steps": [{"step_index": 0, "metadata": {"observation_id": "obs-a"}},
+                        {"step_index": 1, "metadata": {"observation_id": "obs-b"}},
+                        {"step_index": 2, "metadata": {}}]}
+
+
+class TestStepScores:
+    def test_each_step_takes_its_majority_and_ties_are_left_out(self):
+        steps = wb.summarize_steps({"a": {"0": "correct", "1": "incorrect", "2": "correct"},
+                                    "b": {"0": "correct", "1": "correct"},
+                                    "c": {"0": "correct", "1": "incorrect"}}, min_annotators=2)
+        assert {i: s["value"] for i, s in steps.items()} == {"0": "correct", "1": "incorrect"}
+        assert steps["1"]["comment"] == "Potato: 2 of 3 annotator(s) chose incorrect for this step"
+        assert steps["1"]["metadata"]["step_index"] == 1
+        # Step 2: one annotator only. A 1-1 split is a tie.
+        assert wb.summarize_steps({"a": {"0": "x"}, "b": {"0": "y"}}, 2) == {}
+
+    def test_rewards_are_read_as_words(self, monkeypatch):
+        class Label:
+            def __init__(self, schema): self.schema = schema
+            def get_schema(self): return self.schema
+
+        class State:
+            def __init__(self, blob): self.blob = blob
+            def get_label_annotations(self, iid):
+                return {Label("other"): "x", Label("prm"): self.blob}
+
+        blobs = {"a": json.dumps({"steps": [{"index": 0, "reward": 1}, {"index": 1, "reward": -1},
+                                            {"index": 2, "reward": None}]})}
+
+        class ISM:
+            def get_annotators_for_item(self, iid): return ["a"]
+
+        class USM:
+            def get_user_state(self, user): return State(blobs[user])
+
+        import potato.item_state_management as ism_mod
+        import potato.user_state_management as usm_mod
+        monkeypatch.setattr(ism_mod, "get_item_state_manager", lambda: ISM())
+        monkeypatch.setattr(usm_mod, "get_user_state_manager", lambda: USM())
+        assert wb.step_answers("i1", PRM) == {"a": {"0": "correct", "1": "incorrect"}}
+
+    def test_a_step_score_goes_on_its_observation(self, queue, monkeypatch):
+        monkeypatch.setattr(wb, "_item_data", lambda iid: STEPS_ITEM)
+        monkeypatch.setattr(wb, "get_queue", lambda config, start=True: queue)
+        monkeypatch.setattr(wb, "_adjudicated", lambda c, iid: {})
+        monkeypatch.setattr(wb, "item_answers", lambda iid, s: {"prm": {"a": "x", "b": "x"}})
+        monkeypatch.setattr(wb, "step_answers", lambda iid, scheme: {
+            "a": {"0": "correct", "1": "incorrect", "2": "correct"},
+            "b": {"0": "correct", "1": "incorrect", "2": "correct"}})
+        config = {"trace_ingestion": {"enabled": True, "writeback": {}},
+                  "annotation_schemes": [PRM], "max_annotations_per_item": 2}
+        # Step 2 has no observation id, so it has nowhere to go.
+        assert wb.on_save("i1", config) == 2
+        import sqlite3
+        with sqlite3.connect(queue.db_path) as db:
+            payloads = sorted((json.loads(p) for (p,) in db.execute("SELECT payload FROM writeback")),
+                              key=lambda p: p["observationId"])
+        assert [(p["observationId"], p["value"], p["name"], p["traceId"]) for p in payloads] == [
+            ("obs-a", "correct", "potato.prm", "trace-1"), ("obs-b", "incorrect", "potato.prm", "trace-1")]
+        assert payloads[0]["id"] != payloads[1]["id"]
+
+
+class TestScoreConfigs:
+    def test_which_schemes_get_a_config(self):
+        assert wb.score_config_spec(RADIO) == {"dataType": "CATEGORICAL", "categories": [
+            {"label": "success", "value": 0}, {"label": "failure", "value": 1}]}
+        assert wb.score_config_spec({"annotation_type": "slider", "min_value": 1, "max_value": 7}) == {
+            "dataType": "NUMERIC", "minValue": 1.0, "maxValue": 7.0}
+        assert wb.score_config_spec({"annotation_type": "likert", "size": 7}) == {
+            "dataType": "NUMERIC", "minValue": 1, "maxValue": 7}
+        # A comma-joined set fits no category list: Langfuse would drop it.
+        assert wb.score_config_spec({"annotation_type": "multiselect", "labels": ["a", "b"]}) is None
+        assert wb.score_config_spec({"annotation_type": "text"}) is None
+        assert [c["label"] for c in wb.score_config_spec(PRM, step=True)["categories"]] == ["correct", "incorrect"]
+
+    def _score(self):
+        summary = wb.summarize(RADIO, {"a": "success", "b": "success"})
+        payload = wb.langfuse_score("t1", "potato.outcome", summary, instance_id="i1", score_uuid="u1")
+        payload["_score_config"] = wb.score_config_spec(RADIO)
+        return payload
+
+    def _sent_scores(self, service):
+        return [r["body"][0] for r in service.requests
+                if r["method"] == "POST" and r["path"] == "/api/public/scores"]
+
+    def test_a_missing_config_is_created_and_attached(self, queue, service):
+        service.answers[("GET", "/api/public/score-configs")] = (200, {"data": [], "meta": {"totalPages": 1}})
+        service.answers[("POST", "/api/public/score-configs")] = lambda body: (200, {"id": "cfg-new", **body})
+        queue.enqueue("langfuse", "i1", "outcome", self._score())
+        assert queue.deliver_due() == 1
+        created = [r["body"] for r in service.requests if r["path"] == "/api/public/score-configs"
+                   and r["method"] == "POST"]
+        assert created[0]["name"] == "potato.outcome" and created[0]["dataType"] == "CATEGORICAL"
+        [score] = self._sent_scores(service)
+        assert score["configId"] == "cfg-new" and "_score_config" not in score
+
+    def test_an_existing_matching_config_is_reused_once_looked_up(self, queue, service):
+        existing = {"id": "cfg-1", "name": "potato.outcome", "dataType": "CATEGORICAL", "isArchived": False,
+                    "categories": [{"label": "failure", "value": 5}, {"label": "success", "value": 6}]}
+        service.answers[("GET", "/api/public/score-configs")] = (200, {"data": [existing], "meta": {}})
+        queue.enqueue("langfuse", "i1", "outcome", self._score())
+        queue.enqueue("langfuse", "i2", "outcome", {**self._score(), "id": "u2"})
+        assert queue.deliver_due() == 2
+        assert [s["configId"] for s in self._sent_scores(service)] == ["cfg-1", "cfg-1"]
+        lookups = [r for r in service.requests if r["path"].startswith("/api/public/score-configs")]
+        assert len(lookups) == 1  # cached; nothing created
+
+    def test_a_config_with_other_categories_is_not_used(self, queue, service):
+        stale = {"id": "cfg-old", "name": "potato.outcome", "dataType": "CATEGORICAL", "isArchived": False,
+                 "categories": [{"label": "success", "value": 0}, {"label": "partial", "value": 1}]}
+        service.answers[("GET", "/api/public/score-configs")] = (200, {"data": [stale], "meta": {}})
+        queue.enqueue("langfuse", "i1", "outcome", self._score())
+        assert queue.deliver_due() == 1
+        [score] = self._sent_scores(service)
+        assert "configId" not in score
+        assert queue.status()["score_config_mismatches"] == ["potato.outcome"]
 
 
 class TestYamlKey:
