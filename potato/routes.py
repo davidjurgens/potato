@@ -4755,6 +4755,66 @@ def admin_api_ai_influence():
     return jsonify(result)
 
 
+def _snapshot_config_path():
+    path = config.get("__config_file__")
+    if not path:
+        raise LookupError("The server does not know its config file path")
+    return path
+
+
+def _snapshot_row(manifest):
+    return {k: v for k, v in manifest.items() if k != "bundle_contents"}
+
+
+@app.route("/admin/api/snapshots", methods=["GET"])
+def admin_api_snapshots():
+    """
+    The project's citable snapshots, newest first (potato/snapshots).
+    Admin-only endpoint requiring API key or an admin session.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.snapshots.store import list_snapshots
+    try:
+        snapshots = list_snapshots(_snapshot_config_path())
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"snapshots": [_snapshot_row(m) for m in snapshots]})
+
+
+@app.route("/admin/api/snapshots", methods=["POST"])
+def admin_api_create_snapshot():
+    """
+    Freeze the project as it is now (`potato snapshot create`).
+
+    JSON Body (optional):
+        note (str): what the snapshot is for
+        tag (str): a name to point at it
+        force (bool): write one even if nothing changed
+
+    Returns 201 with the manifest, or 200 with ``unchanged: true`` and the
+    existing snapshot when nothing changed since the latest one.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key'), permission="export_data"):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.snapshots.build import SnapshotUnchanged, create_snapshot
+    data = request.get_json(silent=True) or {}
+    try:
+        manifest = create_snapshot(_snapshot_config_path(), note=str(data.get("note") or ""),
+                                   tag=(str(data["tag"]).strip() or None) if data.get("tag") else None,
+                                   force=bool(data.get("force")))
+    except SnapshotUnchanged as unchanged:
+        return jsonify({"unchanged": True, "snapshot": _snapshot_row(unchanged.existing)})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except FileExistsError as exc:
+        return jsonify({"error": str(exc)}), 409
+    except (LookupError, OSError) as exc:
+        logger.exception("Snapshot failed")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"unchanged": False, "snapshot": _snapshot_row(manifest)}), 201
+
+
 @app.route("/admin/api/behavioral_analytics", methods=["GET"])
 def admin_api_behavioral_analytics():
     """
@@ -10695,6 +10755,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/expertise", "admin_api_expertise", admin_api_expertise, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
     app.add_url_rule("/admin/api/ai_influence", "admin_api_ai_influence", admin_api_ai_influence, methods=["GET"])
+    app.add_url_rule("/admin/api/snapshots", "admin_api_snapshots", admin_api_snapshots, methods=["GET"])
+    app.add_url_rule("/admin/api/snapshots", "admin_api_create_snapshot", admin_api_create_snapshot, methods=["POST"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])

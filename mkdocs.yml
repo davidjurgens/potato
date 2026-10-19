@@ -218,6 +218,7 @@ nav:
         - MCP Server: tools/mcp_server.md
         - Agent Instructions: tools/authoring-agents.md
         - Migration CLI: tools/migration_cli.md
+        - Project Snapshots: tools/snapshots.md
         - Simulator: tools/simulator.md
         - Debugging Guide: tools/debugging_guide.md
     - Integrations:

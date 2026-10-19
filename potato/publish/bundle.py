@@ -34,6 +34,9 @@ class PublishBundle:
     media_files: List[str] = field(default_factory=list)
     card_markdown: str = ""
     warnings: List[str] = field(default_factory=list)
+    #: The snapshot this release was frozen as (potato/snapshots manifest),
+    #: cited in the dataset card. Empty when freezing failed.
+    snapshot: Dict[str, Any] = field(default_factory=dict)
 
     def split_row_counts(self) -> Dict[str, int]:
         return {name: len(rows) for name, rows in self.splits.items()}

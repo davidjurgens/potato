@@ -72,6 +72,20 @@
                padding: 0.35rem 0.7rem; font-size: 0.8rem; color: var(--muted-foreground); }
   .pub-split b { font-variant-numeric: tabular-nums; color: var(--heading-color);
                  font-weight: 700; }
+  /* A grid column is at least as wide as its widest content unless told
+     otherwise; without this the snapshots table pushed the page sideways on
+     a phone instead of scrolling inside .pub-snaps. */
+  .pub-grid > div { min-width: 0; }
+  .pub-snaps { overflow-x: auto; margin-top: 0.85rem; }
+  .pub-snaps table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+  .pub-snaps th, .pub-snaps td { text-align: left; padding: 0.4rem 0.5rem;
+                 border-bottom: 1px solid var(--border); vertical-align: top; }
+  .pub-snaps th { font-weight: 600; color: var(--heading-color); white-space: nowrap; }
+  .pub-snaps td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  .pub-snaps code { font-size: 0.75rem; white-space: nowrap; }
+  .pub-snaps .snap-tag { display: inline-block; margin: 0.15rem 0.25rem 0 0;
+                 padding: 0 0.4rem; border-radius: 999px; font-size: 0.7rem;
+                 border: 1px solid var(--primary); color: var(--primary); }
   .hidden { display: none !important; }
   /* The [hidden] attribute must win over .pub-form's explicit display:grid,
      otherwise the credential blocks stay visible when hidden. */
@@ -268,6 +282,32 @@
         <h3>Result</h3>
         <div id="result" aria-live="polite"></div>
       </div>
+      <div class="dashboard-card" id="snapshots-card">
+        <h3>Snapshots</h3>
+        <p class="pub-hint">A snapshot freezes this project's config, data and
+          annotations under an id a paper can cite, with a content hash a reader
+          can check. Publishing freezes one and names it in the dataset card.</p>
+        <div class="pub-form" style="margin-top: 0.75rem;">
+          <div class="pub-row">
+            <div><label for="snap-note">Note</label>
+              <input type="text" id="snap-note" placeholder="pilot round finished"></div>
+            <div><label for="snap-tag">Tag (optional)</label>
+              <input type="text" id="snap-tag" placeholder="paper-v1"></div>
+          </div>
+        </div>
+        <div class="pub-actions">
+          <button type="button" class="shadcn-button shadcn-button-outline" id="btn-snapshot">Create snapshot</button>
+          <span class="pub-status" id="snap-status" role="status" aria-live="polite"></span>
+        </div>
+        <div class="pub-snaps">
+          <table>
+            <thead><tr><th scope="col">Snapshot</th><th scope="col">Created</th>
+              <th scope="col">Items</th><th scope="col">Annotators</th>
+              <th scope="col">Answers</th><th scope="col">Note</th></tr></thead>
+            <tbody id="snap-rows"><tr><td colspan="6" class="pub-hint">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -454,6 +494,7 @@ async function poll() {
   }
   document.getElementById("btn-publish").disabled = false;
   if (status.state === "success") {
+    loadSnapshots();
     setStatus("Done" + ((status.warnings || []).length
       ? " · " + status.warnings.join(" ") : ""), "ok");
   } else {
@@ -462,9 +503,98 @@ async function poll() {
   renderResult(status);
 }
 
+function snapshotRow(s) {
+  const tr = document.createElement("tr");
+  const idCell = document.createElement("td");
+  const code = document.createElement("code");
+  code.textContent = s.id;
+  code.title = "content hash " + (s.content_hash || "");
+  idCell.appendChild(code);
+  (s.tags || []).forEach(t => {
+    const tag = document.createElement("span");
+    tag.className = "snap-tag";
+    tag.textContent = t;
+    idCell.appendChild(document.createElement("br"));
+    idCell.appendChild(tag);
+  });
+  tr.appendChild(idCell);
+  const counts = s.counts || {};
+  const cells = [[(s.created_at || "").replace("T", " ").replace("+00:00", " UTC"), ""],
+                 [counts.items, "num"], [counts.annotators, "num"],
+                 [counts.annotations, "num"], [s.note || "", ""]];
+  cells.forEach(([value, cls]) => {
+    const td = document.createElement("td");
+    td.textContent = value == null ? "" : String(value);
+    if (cls) td.className = cls;
+    tr.appendChild(td);
+  });
+  return tr;
+}
+
+async function loadSnapshots() {
+  const body = document.getElementById("snap-rows");
+  try {
+    const r = await fetch("/admin/api/snapshots");
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    body.replaceChildren();
+    if (!data.snapshots.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6; td.className = "pub-hint";
+      td.textContent = "No snapshots yet.";
+      tr.appendChild(td); body.appendChild(tr);
+      return;
+    }
+    data.snapshots.forEach(s => body.appendChild(snapshotRow(s)));
+  } catch (e) {
+    body.replaceChildren();
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6; td.className = "pub-status err";
+    td.textContent = "Could not load snapshots: " + e.message;
+    tr.appendChild(td); body.appendChild(tr);
+  }
+}
+
+async function createSnapshot() {
+  const status = document.getElementById("snap-status");
+  const button = document.getElementById("btn-snapshot");
+  button.disabled = true;
+  status.className = "pub-status run";
+  status.textContent = "Freezing…";
+  try {
+    const r = await fetch("/admin/api/snapshots", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({note: document.getElementById("snap-note").value,
+                            tag: document.getElementById("snap-tag").value})});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    status.className = "pub-status ok";
+    const warnings = data.unchanged ? [] : (data.snapshot.warnings || []);
+    status.className = warnings.length ? "pub-status err" : "pub-status ok";
+    status.textContent = (data.unchanged
+      ? "Nothing has changed since " + data.snapshot.id + "."
+      : "Snapshot " + data.snapshot.id + " written.")
+      + (warnings.length ? " Warning: " + warnings.join(" ") : "");
+    if (!data.unchanged) document.getElementById("snap-note").value = "";
+    loadSnapshots();
+  } catch (e) {
+    status.className = "pub-status err";
+    status.textContent = e.message;
+  } finally {
+    button.disabled = false;
+    // Disabling the focused button sent focus to <body>; put it back so a
+    // keyboard user is where they were.
+    if (document.activeElement === document.body) button.focus();
+  }
+}
+
+document.getElementById("btn-snapshot").addEventListener("click", createSnapshot);
 document.getElementById("btn-preview").addEventListener("click", preview);
 document.getElementById("btn-publish").addEventListener("click", publish);
 prefill();
+loadSnapshots();
 </script>
 </body>
 </html>

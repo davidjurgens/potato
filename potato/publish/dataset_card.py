@@ -139,6 +139,13 @@ def _citation_section(bundle: PublishBundle) -> str:
     if getattr(bundle.metadata, "citation", ""):
         parts.append("If you use this dataset, please cite:\n\n"
                       "```bibtex\n" + bundle.metadata.citation.strip() + "\n```")
+    snapshot = getattr(bundle, "snapshot", None) or {}
+    if snapshot.get("id"):
+        parts.append(
+            f"This release is Potato snapshot `{snapshot['id']}` (content hash "
+            f"`{snapshot.get('content_hash', '')}`). Anyone holding the project "
+            f"folder can check that their copy is this one with "
+            f"`potato snapshot verify config.yaml {snapshot['id']}`.")
     parts.append("This dataset was created with Potato:\n\n"
                  "```bibtex\n" + paper_report.BIB.strip() + "\n```")
     return "\n\n".join(parts)

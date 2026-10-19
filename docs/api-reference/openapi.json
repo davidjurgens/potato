@@ -2151,6 +2151,50 @@
         ]
       }
     },
+    "/admin/api/snapshots": {
+      "get": {
+        "operationId": "get_admin_api_snapshots",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The project's citable snapshots, newest first (potato/snapshots).",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      },
+      "post": {
+        "operationId": "post_admin_api_create_snapshot",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Freeze the project as it is now (`potato snapshot create`).",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/api/stale_assignments": {
       "get": {
         "operationId": "get_admin_api_stale_assignments",

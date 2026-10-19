@@ -161,6 +161,8 @@ examples/**/engine.sqlite-wal
 examples/**/engine.sqlite-shm
 examples/**/engine_payloads/
 examples/**/admin_api_key.txt
+# `potato snapshot create` output from running an example
+examples/**/snapshots/
 qa-testing/
 
 # Segmentation model weights: fetched per install via

@@ -6,6 +6,15 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Citable project snapshots.** `potato snapshot create|list|show|diff|tag|verify`
+  freezes a project's config, data, annotations and databases under an id
+  like `20261019-120000-335ae51e`, with a content hash over the config, data
+  and answers, read-only files, and Paper Mode's agreement summary. `create`
+  writes nothing when nothing changed; `diff` reports items, annotators and
+  answers added, removed or changed and the change in alpha; `verify`
+  re-hashes a snapshot from its own bundle. The publish page has a Snapshots
+  card (`/admin/api/snapshots`), and every publish freezes a snapshot and
+  names it in the dataset card's citation section. See *Project Snapshots*.
 - **FiftyOne annotation backend.** `view.annotate(..., backend="potato")`
   writes a FiftyOne view out as a Potato project for several annotators
   (`annotations_per_item`), with any existing labels as pre-annotations.

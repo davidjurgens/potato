@@ -123,10 +123,15 @@ class PublishManager:
 
     def _run(self, options, metadata, target, credentials):
         try:
+            self._set(step="freezing a snapshot")
+            snapshot, snapshot_warning = freeze_snapshot(self._config_path(), target)
             self._set(step="preprocessing")
             bundle = run_pipeline(self._config_path(), options=options,
                                   metadata_overrides=metadata,
                                   publish_config=self.publish_config)
+            bundle.snapshot = snapshot
+            if snapshot_warning:
+                bundle.warnings.append(snapshot_warning)
             self._set(step="generating dataset card")
             bundle.card_markdown = generate_dataset_card(
                 bundle, repo_id=credentials.get("repo_id", ""), target=target)
@@ -176,6 +181,20 @@ class PublishManager:
     def last_archive(self) -> Optional[str]:
         with self._lock:
             return self._last_archive
+
+
+def freeze_snapshot(config_path: str, target: str):
+    """The snapshot a release corresponds to: a new one, or the latest if
+    nothing changed since it. Returns ``(manifest, warning)``; a failure to
+    freeze is a warning, not a failed publish."""
+    from potato.snapshots.build import SnapshotUnchanged, create_snapshot
+    try:
+        return create_snapshot(config_path, note=f"published ({target})"), None
+    except SnapshotUnchanged as unchanged:
+        return unchanged.existing, None
+    except Exception as exc:  # the release itself must still go out
+        logger.exception("Could not freeze a snapshot for this release")
+        return {}, f"No snapshot was frozen for this release: {exc}"
 
 
 def init_publish_manager(config: Dict[str, Any]) -> "PublishManager":

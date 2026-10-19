@@ -20,6 +20,7 @@ STAGE1_COMMANDS = {
     "mcp": "run the MCP server for coding agents",
     "import": "build a project from an existing annotation file",
     "label": "label a dataset with models, and certify the labels",
+    "snapshot": "freeze a project under an id you can cite, and compare snapshots",
     "transcripts": "convert transcripts into annotation data",
     "convokit": "build a project from a ConvoKit corpus",
     "deploy": "put a task on a host, and take it down again",

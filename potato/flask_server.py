@@ -6697,6 +6697,11 @@ def main():
         from potato.labeling_engine.cli import main as label_main
         sys.exit(label_main(sys.argv[2:]))
 
+    # ``snapshot`` freezes a project under a citable id. See potato/snapshots.
+    if len(sys.argv) > 1 and sys.argv[1] == 'snapshot':
+        from potato.snapshots.cli import main as snapshot_main
+        sys.exit(snapshot_main(sys.argv[2:]))
+
     # Parse command line arguments
     args = arguments()
 

@@ -43,6 +43,11 @@ A local archive additionally contains a `README.md` (the dataset card), a `LICEN
 a `.zenodo.json` metadata file, and a `paper_report/` folder with a cut-paste
 `paper.tex` dataset report, its `paper.bib`, and per-table CSVs.
 
+Each publish first freezes a [project snapshot](../tools/snapshots.md), or
+reuses the latest one if nothing has changed, and the dataset card's citation
+section names its id and content hash. `potato snapshot verify` then lets
+anyone holding the project folder confirm their copy is the published one.
+
 ## Preprocessing options
 
 All optional; sensible, privacy-preserving defaults are applied.
@@ -192,6 +197,7 @@ README, the `paper.tex`, and the admin IAA page always agree.
 
 ## Related documentation
 
+- [Project Snapshots](../tools/snapshots.md): the frozen version a release cites
 - [Export Formats](export_formats.md) — COCO, YOLO, CoNLL, Parquet, and more
 - [HuggingFace Hub Export](huggingface_export.md) — the underlying Hub push
 - [Quality Control](../workflow/quality_control.md) — attention checks and gold standards
