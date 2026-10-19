@@ -36,7 +36,7 @@ If `audiowaveform` is not installed, client-side waveform generation will be use
 
 ### Client-Side
 
-The frontend uses [Peaks.js](https://github.com/bbc/peaks.js) (loaded from CDN) for waveform rendering.
+The frontend uses [Peaks.js](https://github.com/bbc/peaks.js), bundled with Potato, for waveform rendering.
 
 ## Configuration
 

@@ -162,10 +162,9 @@ selected.
 
 OpenSeadragon is **vendored** (`potato/static/vendor/`), like fabric.js and
 three.js, and is loaded only for schemas that ask for `viewer: deepzoom`. No
-part of deep zoom reaches the internet.
-
-Note that the rest of the application is not yet fully air-gap clean — see
-[Air-gapped deployment](../../deployment/air_gap.md) for what still is not.
+part of deep zoom reaches the internet. See
+[Air-gapped deployment](../../deployment/air_gap.md) for the rest of the
+application.
 
 ---
 

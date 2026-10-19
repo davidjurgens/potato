@@ -24,7 +24,7 @@ Python dependency, and no outbound network at annotation time. That last point
 is not a nicety: several research groups deploy Potato air-gapped, where a
 model fetched at click time is a missing feature rather than a slow one.
 
-So the planned default is **ONNX Runtime Web** running a distilled SAM-class
+So the default is **ONNX Runtime Web** running a distilled SAM-class
 model in the annotator's browser. A server endpoint exists for labs that have a
 GPU and want a larger model, but it is the exception.
 

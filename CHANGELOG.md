@@ -1425,8 +1425,8 @@ with no decay), behind a single model zoo; **deep zoom** with masks at the
 source's full resolution; 15 importers and 29 exporters with a format matrix a
 test keeps honest; media ingest for TIFF, HEIC, RAW, HEVC and ProRes; **point
 clouds** with octree LOD, calibration and 2D projection, **depth maps**, and
-orthographic slab views; **embodied episodes** (LeRobot v2, RLDS, HDF5, ROS
-bags); **world-model rollout evaluation** with break-point agreement; and **VLM
+orthographic slab views; **embodied episodes** (LeRobot v2, RLDS,
+HDF5); **world-model rollout evaluation** with break-point agreement; and **VLM
 grounding, pointing and region captioning**.
 
 Also: threaded conversation rendering and ConvoKit import/export both ways;

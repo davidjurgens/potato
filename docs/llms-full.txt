@@ -901,7 +901,7 @@ Most of the tools below are very good at what they were built for, and several b
 | Triage (accept/reject) | Yes | - | - | Yes | - | - | - | - |
 | Image bounding boxes | Yes | Yes | Yes | Yes | - | - | - | - |
 | Image segmentation masks | Yes | Yes | Yes | - | - | - | - | - |
-| Audio segmentation | Yes | Yes | - | Yes | - | - | Yes | - |
+| Audio segmentation | Yes | Yes | Yes | Yes | - | - | Yes | - |
 | Video temporal annotation | Yes | Yes | Yes | Yes | - | - | Yes | - |
 | Video object tracking | Yes | - | Yes | - | - | - | - | - |
 | PDF/document annotation | Yes | - | - | - | - | - | - | - |
@@ -912,7 +912,7 @@ Most of the tools below are very good at what they were built for, and several b
 | Multiple LLM providers (3+) | Yes | Yes | - | Yes | - | - | - | - |
 | AI rationales / explanations | Yes | - | - | - | - | - | - | - |
 | Active learning | Yes | Enterprise | - | Yes | Yes | - | - | - |
-| Inter-annotator agreement | Yes | Enterprise | - | Yes | Yes | - | - | - |
+| Inter-annotator agreement | Yes | Enterprise | Partial† | Yes | Yes | - | - | - |
 | Adjudication interface | Yes | Enterprise | - | Yes | Yes | - | - | - |
 | MACE competence estimation | Yes | - | - | - | - | - | - | - |
 | Attention checks | Yes | - | - | - | - | - | - | - |
@@ -925,10 +925,12 @@ Most of the tools below are very good at what they were built for, and several b
 | Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 32 | Multiple | 19 | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 32 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
+
+† CVAT's consensus scores each object from 0 to 1 across replica jobs. The scoring works in the free Community edition through the API; the interface for it is paid. It is not chance-corrected.
 
 ## Vision, 3D, and Model Evaluation at a Glance
 
@@ -1025,9 +1027,9 @@ Define complete annotation tasks in YAML: schemas, display types, assignment str
 - **Type:** Open-source + commercial (HumanSignal)
 - **URL:** [github.com/HumanSignal/label-studio](https://github.com/HumanSignal/label-studio)
 - **License:** Apache 2.0 (Community Edition)
-- **Pricing:** Community Edition free; Starter Cloud $149/month; Enterprise custom pricing
+- **Pricing:** Community Edition free; Starter Cloud $99/month plus $49 per extra user; Enterprise custom pricing
 
-Label Studio provides the broadest single-tool modality coverage among general-purpose platforms. It supports text, image, audio, video, and time series annotation through XML-based templates. The Community Edition includes ML backend integration (OpenAI, Azure OpenAI, Ollama via ML SDK) for pre-annotation. The Enterprise Edition adds a managed "Prompts" interface with 9+ LLM providers (Anthropic, Gemini, Cohere, Mistral, etc.), quality review with 30+ agreement metrics, ground truth evaluation, and annotator performance dashboards. Label Studio does not provide research-oriented features like consent workflows, validated survey instruments, or MACE-based adjudication.
+Label Studio provides the broadest single-tool modality coverage among general-purpose platforms. It supports text, image, audio, video, and time series annotation through XML-based templates. The Community Edition includes ML backend integration (OpenAI, Azure OpenAI, Ollama via ML SDK) for pre-annotation. The Enterprise Edition adds a managed "Prompts" interface with 9+ LLM providers (Anthropic, Gemini, Cohere, Mistral, etc.), quality review with raw-agreement metrics (exact match, IoU, span overlap and others) plus a consensus score, none of them chance-corrected, along with ground truth evaluation and annotator performance dashboards. The Community Edition has no agreement scoring, review workflow or task assignment, and since March 2026 its releases have been security patches only. Label Studio does not provide research-oriented features like consent workflows, validated survey instruments, or MACE-based adjudication.
 
 **Compared to Potato:** Label Studio offers broader enterprise project management but lacks Potato's research workflow features (multi-phase progression, surveys, behavioral tracking, crowdsourcing integration). Potato provides more AI assistance modes (hints, highlighting, rationales, option scoring) and unique features like Solo Mode.
 
@@ -1037,7 +1039,7 @@ Label Studio provides the broadest single-tool modality coverage among general-p
 - **License:** MIT
 - **Pricing:** Self-hosted free; hosted tiers available
 
-CVAT is the leading open-source tool for computer vision annotation. It provides bounding boxes, polygons, polylines, ellipses, cuboids, skeletons, brush/mask segmentation, and video tracking with keyframe interpolation. ML-assisted annotation includes SAM (Segment Anything), YOLO, HuggingFace models, and Roboflow integration via serverless Nuclio functions. CVAT supports customizable keyboard shortcuts, consensus-based annotation scoring, and a review/QA workflow. It does **not** support text annotation or NLP tasks.
+CVAT is the leading open-source tool for computer vision annotation. It provides bounding boxes, polygons, polylines, ellipses, cuboids, skeletons, brush/mask segmentation, and video tracking with keyframe interpolation. ML-assisted annotation includes SAM (Segment Anything), YOLO, HuggingFace models, and Roboflow integration via serverless Nuclio functions. Since September 2026 it also annotates audio intervals, and SAM 3 can segment from a label name. CVAT supports customizable keyboard shortcuts, consensus-based annotation scoring (available in the free Community edition through the API), and a review/QA workflow. It does **not** support text annotation or NLP tasks.
 
 **Compared to Potato:** CVAT excels at image/video CV annotation with deep model integration but has zero NLP support. Potato covers both text and image/audio/video annotation in a single platform.
 
@@ -1113,7 +1115,7 @@ Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, key
 
 **vs. Label Studio.** Label Studio offers the broadest template system and the largest integration ecosystem, and its Enterprise tier adds review workflows and agreement scoring. Potato's agreement measures are chance-corrected and available in the free, self-hosted product; Label Studio's are exact-match, IoU, and span overlap.
 
-**vs. Labelbox, SuperAnnotate, Encord, Kili, V7.** These are mature commercial platforms with workforce management, enterprise governance, and strong model-assisted labelling (SAM 3, GroundingDINO, auto-tracking). If you need a managed workforce, compliance certifications, or petabyte-scale curation, they are the right answer. Potato is free, self-hosted, and research-workflow-first.
+**vs. Labelbox, SuperAnnotate, Encord, Kili, V7.** These are mature commercial platforms with workforce management, enterprise governance, and strong model-assisted labelling (SAM 3, GroundingDINO, auto-tracking). If you need a managed workforce, compliance certifications, or petabyte-scale curation, they are the right answer. Potato is free, self-hosted, and research-workflow-first. In 2026 SuperAnnotate retired its consensus and benchmark features, deprecated its point-cloud project type (May 31) and removed semantic search (October 11).
 
 **vs. X-AnyLabeling, LabelMe, labelImg.** X-AnyLabeling bundles Grounding DINO, Grounded-SAM 2, SAM 2.1, and YOLO in a desktop app, and for one person labelling locally across a wide range of models it is hard to beat. Potato ships a narrower model set and runs in the browser, so nothing is installed on the annotator's machine; its advantage begins when there is more than one annotator.
 
@@ -1251,9 +1253,10 @@ Code-mixed multilingual text annotation framework claiming 5x faster annotations
 - **Type:** Open-source (Hugging Face ecosystem)
 - **URL:** [github.com/argilla-io/argilla](https://github.com/argilla-io/argilla)
 - **License:** Apache 2.0
-- **Pricing:** Free (self-hosted); Argilla Cloud available
+- **Pricing:** Free (self-hosted)
+- **Status:** No release since March 2025; the maintainers have said no new features are planned
 
-Argilla (formerly Rubrix) is purpose-built for LLM alignment, preference data collection, and RLHF workflows. It integrates deeply with Hugging Face Datasets, provides a Python SDK, and includes the Distilabel framework for synthetic data generation. It supports text classification, token classification, and text generation evaluation.
+Argilla (formerly Rubrix) is purpose-built for LLM alignment, preference data collection, and RLHF workflows. It integrates deeply with Hugging Face Datasets, provides a Python SDK, and includes the Distilabel framework for synthetic data generation. It supports text classification, token classification, and text generation evaluation. A self-hosted server needs Elasticsearch or OpenSearch alongside Postgres, Redis and a background worker. Argilla 2.x reports no agreement statistics.
 
 **Compared to Potato:** Argilla excels at LLM alignment workflows and Hugging Face integration. Potato is broader in annotation types and research workflow features, with Solo Mode offering a more structured human-LLM collaboration approach.
 
@@ -1268,6 +1271,16 @@ Commercial platform focused on computer vision and multimodal annotation. Strong
 - **Pricing:** Enterprise custom pricing
 
 Managed annotation platform combining human workforce with AI assistance. Primarily targets enterprise ML training data pipelines. Not self-hosted.
+
+### FiftyOne
+- **Type:** Open-source + commercial (Voxel51)
+- **URL:** [github.com/voxel51/fiftyone](https://github.com/voxel51/fiftyone)
+- **License:** Apache 2.0
+- **Pricing:** Open-source edition free; FiftyOne Enterprise custom pricing
+
+FiftyOne started as a dataset curation and model-evaluation tool: embedding views, similarity search, and model-vs-label error review across image, video and 3D data. Since February 2026 it also annotates natively in its app, and it can hand labeling off to external backends such as CVAT and Label Studio. The open-source edition is single-user; multi-user workflows are part of Enterprise.
+
+**Compared to Potato:** FiftyOne is the stronger tool for finding what to label and what was labeled wrong. Potato is built for collecting labels from several annotators and measuring how far they agree.
 
 ### Amazon SageMaker Ground Truth
 - **Type:** Commercial (AWS)
@@ -1301,7 +1314,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | World-model / rollout evaluation | **Potato** | Break-point marking with agreement over *when* the world broke |
 | VLM grounding and pointing evaluation | **Potato** | Point-in-region scoring, threshold sweeps, region captions with semantic agreement |
 | Active learning with spaCy | **Prodigy** | Deep spaCy integration, efficient model-in-the-loop |
-| LLM alignment / RLHF data | **Argilla** | Purpose-built for preference data, HuggingFace ecosystem |
+| LLM alignment / RLHF data | **Argilla** | Purpose-built for preference data, HuggingFace ecosystem (no release since March 2025) |
 | Time-aligned audio/video research | **ELAN** | Gold standard for multimedia linguistics research |
 | Fine-grained text evaluation | **Thresh** | YAML-driven, community sharing hub |
 | Quick lightweight text annotation | **doccano** | Simple setup, MIT license |
@@ -14704,7 +14717,7 @@ Python dependency, and no outbound network at annotation time. That last point
 is not a nicety: several research groups deploy Potato air-gapped, where a
 model fetched at click time is a missing feature rather than a slow one.
 
-So the planned default is **ONNX Runtime Web** running a distilled SAM-class
+So the default is **ONNX Runtime Web** running a distilled SAM-class
 model in the annotator's browser. A server endpoint exists for labs that have a
 GPU and want a larger model, but it is the exception.
 
@@ -15169,7 +15182,7 @@ If `audiowaveform` is not installed, client-side waveform generation will be use
 
 ### Client-Side
 
-The frontend uses [Peaks.js](https://github.com/bbc/peaks.js) (loaded from CDN) for waveform rendering.
+The frontend uses [Peaks.js](https://github.com/bbc/peaks.js), bundled with Potato, for waveform rendering.
 
 ## Configuration
 
@@ -16288,7 +16301,7 @@ A scrollable list showing all annotations:
 ## Dependencies
 
 The video annotation feature uses:
-- **Peaks.js**: For timeline visualization (loaded from CDN)
+- **Peaks.js**: For timeline visualization (bundled with Potato)
 - **HTML5 Video**: Standard browser video element
 
 No additional server-side dependencies are required. The waveform for the timeline is generated from the video's audio track using the existing WaveformService (if audiowaveform is installed).
@@ -17538,10 +17551,9 @@ selected.
 
 OpenSeadragon is **vendored** (`potato/static/vendor/`), like fabric.js and
 three.js, and is loaded only for schemas that ask for `viewer: deepzoom`. No
-part of deep zoom reaches the internet.
-
-Note that the rest of the application is not yet fully air-gap clean — see
-[Air-gapped deployment](../../deployment/air_gap.md) for what still is not.
+part of deep zoom reaches the internet. See
+[Air-gapped deployment](../../deployment/air_gap.md) for the rest of the
+application.
 
 ---
 
@@ -62174,8 +62186,8 @@ See [Deep Zoom](../annotation-types/multimedia/deep_zoom.md).
   streams plus M time series (joint positions, gripper state, force-torque,
   reward) on one timeline. Action-phase segmentation, success/failure with a
   cause taxonomy, dense progress-reward curves, hindsight instruction
-  relabelling, and affordance points. Imports LeRobot v2, RLDS/TFDS, HDF5 and
-  ROS bags; exports LeRobot v2 plus a JSONL sidecar that does not require
+  relabelling, and affordance points. Imports LeRobot v2, RLDS/TFDS and HDF5;
+  exports LeRobot v2 plus a JSONL sidecar that does not require
   rewriting the source dataset. See
   [Episodes](../annotation-types/embodied/episodes.md).
 

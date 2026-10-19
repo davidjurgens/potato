@@ -511,7 +511,7 @@ A scrollable list showing all annotations:
 ## Dependencies
 
 The video annotation feature uses:
-- **Peaks.js**: For timeline visualization (loaded from CDN)
+- **Peaks.js**: For timeline visualization (bundled with Potato)
 - **HTML5 Video**: Standard browser video element
 
 No additional server-side dependencies are required. The waveform for the timeline is generated from the video's audio track using the existing WaveformService (if audiowaveform is installed).
