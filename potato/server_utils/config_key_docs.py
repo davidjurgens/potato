@@ -3022,6 +3022,21 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", default="", category=AGENT_EVAL,
         see_also=("item_properties.text_key",),
     ),
+    "grid_view": _D(
+        "A page at /annotate/grid that labels many items at once for one "
+        "radio or multiselect scheme: select tiles, press a label",
+        type="object", category=UI,
+    ),
+    "grid_view.enabled": _D("Serve the grid page", type="boolean", default=False, category=UI),
+    "grid_view.scheme": _D(
+        "The radio or multiselect scheme the grid labels. Other schemes are "
+        "answered on the normal page",
+        type="string", category=UI,
+    ),
+    "grid_view.page_size": _D(
+        "Items per grid page, from the annotator's own assignment",
+        type="integer", default=24, category=UI,
+    ),
     "validation": _D(
         "Settings read by `potato validate`, not by the running server",
         type="object", category=DEBUG,

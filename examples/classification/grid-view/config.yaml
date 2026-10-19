@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Grid labeling
+#
+# Annotators can label many short texts at once at /annotate/grid: select a
+# run of tiles, press 1, 2 or 3, and save the page. The normal one-at-a-time
+# page still works and shows the same items. Both write through the same save
+# path, so agreement and adjudication treat grid labels like any others.
+#
+# Run from the repository root, then open http://localhost:8000/annotate/grid
+#   python potato/flask_server.py start examples/classification/grid-view/config.yaml -p 8000
+
+task_dir: .
+port: 8000
+annotation_task_name: Headline sentiment (grid)
+output_annotation_dir: annotation_output/grid-view/
+
+data_files:
+  - data/headlines.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+grid_view:
+  enabled: true
+  scheme: sentiment
+  page_size: 12
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: What is the sentiment of this headline?
+    labels: [positive, neutral, negative]
+    sequential_key_binding: true

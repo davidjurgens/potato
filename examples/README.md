@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 219 examples, generated from the configs themselves.
+All 220 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (57)
@@ -374,7 +374,7 @@ The `Types` column lists the annotation types each one uses.
 | [`tiered-annotation/`](audio/tiered-annotation/) | Tiered Annotation Example | `tiered_annotation` |
 | [`transcript-formats/`](audio/transcript-formats/) | Transcript Formats | `radio`, `span` |
 
-### classification/ (30)
+### classification/ (31)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -389,6 +389,7 @@ The `Types` column lists the annotation types each one uses.
 | [`dialogue-classification/`](classification/dialogue-classification/) | Dialogue Classification | `multiselect`, `radio` |
 | [`error-span/`](classification/error-span/) | MQM Translation Quality Evaluation | `error_span` |
 | [`extractive-qa/`](classification/extractive-qa/) | SQuAD-Style Extractive QA | `extractive_qa` |
+| [`grid-view/`](classification/grid-view/) | Headline sentiment (grid) | `radio` |
 | [`hierarchical-multiselect/`](classification/hierarchical-multiselect/) | Hierarchical Topic Classification | `hierarchical_multiselect` |
 | [`iterative-bws/`](classification/iterative-bws/) | Sentiment Intensity (Iterative BWS) | `bws` |
 | [`likert/`](classification/likert/) | Simple Likert Scale Example | `likert` |

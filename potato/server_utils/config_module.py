@@ -451,6 +451,7 @@ KNOWN_CONFIG_KEYS = {
     "arena": {"enabled", "models"},
     # Read only by `potato validate`, never by the server.
     "validation": {"acknowledge"},
+    "grid_view": {"enabled", "scheme", "page_size"},
     # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
     "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
@@ -2582,6 +2583,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
     validate_scheme_keys(config_data, config_file_dir or project_dir)
+    validate_grid_view_config(config_data)
 
 
 def _phase_file_schemes(config_data: Dict[str, Any],
@@ -2641,6 +2643,32 @@ def _phase_file_schemes(config_data: Dict[str, Any],
                 if isinstance(scheme, dict):
                     found.append((f"phases.{phase_name} ({os.path.basename(path)})", scheme))
     return found
+
+
+def validate_grid_view_config(config_data: Dict[str, Any]) -> None:
+    """`grid_view` names one top-level radio or multiselect scheme."""
+    grid = config_data.get("grid_view")
+    if grid is None:
+        return
+    if not isinstance(grid, dict):
+        raise ConfigValidationError("grid_view must be a mapping")
+    if not grid.get("enabled"):
+        return
+    name = grid.get("scheme")
+    schemes = {s.get("name"): s for s in config_data.get("annotation_schemes") or []
+               if isinstance(s, dict)}
+    if name not in schemes:
+        raise ConfigValidationError(
+            f"grid_view.scheme must name a top-level annotation scheme; "
+            f"'{name}' is not one ({', '.join(map(str, schemes)) or 'none defined'})")
+    kind = schemes[name].get("annotation_type")
+    if kind not in ("radio", "multiselect"):
+        raise ConfigValidationError(
+            f"grid_view.scheme '{name}' is a {kind}. The grid labels many items "
+            f"with one click, so it takes a radio or multiselect scheme.")
+    size = grid.get("page_size", 24)
+    if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= 200:
+        raise ConfigValidationError("grid_view.page_size must be a whole number from 1 to 200")
 
 
 def validate_scheme_keys(config_data: Dict[str, Any],

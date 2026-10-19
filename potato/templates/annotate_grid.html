@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Grid</title>
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='grid-view.css') }}?v=2">
+    <!-- Rewrites grid-view.js's root-relative fetch('/updateinstance') under a
+         path prefix (POTATO_URL_PREFIX / X-Forwarded-Prefix). -->
+    <script type="text/javascript">{% include '_url_prefix.js' %}</script>
+</head>
+<body>
+<header class="grid-header">
+    <div class="grid-header-inner">
+        <h1 class="grid-title">{{ title }}</h1>
+        <span class="grid-progress">{{ n_annotated }} annotated</span>
+        <a class="grid-switch" href="{{ url_for('annotate') }}">One at a time</a>
+        <span class="grid-user">{{ username }}</span>
+    </div>
+</header>
+
+<main class="grid-main" id="grid-root"
+      data-scheme="{{ scheme_name }}"
+      data-multiple="{{ 'true' if multiple else 'false' }}">
+    <section class="grid-toolbar" aria-label="Labels">
+        <p class="grid-question">{{ scheme_description }}</p>
+        <div class="grid-labels" role="group" aria-label="Apply a label to the selected items">
+            {% for label in labels %}
+            <button type="button" class="grid-label-btn" data-label="{{ label.name }}"
+                    {% if label.key %}data-key="{{ label.key }}" aria-keyshortcuts="{{ label.key }}"{% endif %}>
+                {% if label.key %}<kbd>{{ label.key }}</kbd>{% endif %}{{ label.name }}
+            </button>
+            {% endfor %}
+            {% if multiple %}
+            <button type="button" class="grid-label-btn grid-clear-btn" data-clear="true">Clear</button>
+            {% endif %}
+        </div>
+        <p class="grid-help">
+            Click a tile to select it; Shift-click selects a range and Ctrl or
+            Cmd-click adds one. Arrow keys move, Space selects, a number applies
+            that label, A selects every tile.
+            {% if multiple %}A label toggles on the selected tiles.{% endif %}
+        </p>
+        <p class="grid-status" aria-live="polite"></p>
+    </section>
+
+    {% if tiles %}
+    <ol class="grid-tiles" role="listbox" aria-multiselectable="true" aria-label="Items to label">
+        {% for tile in tiles %}
+        <li class="grid-tile" role="option" aria-selected="false" tabindex="{{ '0' if loop.first else '-1' }}"
+            data-instance-id="{{ tile.id }}">
+            {% if tile.kind == 'image' %}
+            <img class="grid-tile-image" src="{{ tile.content }}" alt="Item {{ tile.id }}" loading="lazy">
+            {% else %}
+            <p class="grid-tile-text">{{ tile.content }}</p>
+            {% endif %}
+            <span class="grid-tile-labels" aria-label="Labels"></span>
+        </li>
+        {% endfor %}
+    </ol>
+    <div class="grid-actions">
+        <span class="grid-unlabelled"></span>
+        <button type="button" class="btn btn-primary grid-save" id="grid-save">Save and load more</button>
+    </div>
+    {% else %}
+    <p class="grid-empty">There is nothing left to label in the grid. <a href="{{ url_for('annotate') }}">Go to the annotation page</a>.</p>
+    {% endif %}
+</main>
+
+<script src="{{ url_for('static', filename='grid-view.js') }}?v=1"></script>
+</body>
+</html>

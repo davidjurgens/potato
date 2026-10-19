@@ -273,3 +273,33 @@ class TestPhaseFiles:
             found += [f"{path.relative_to(REPO_ROOT)}: {r.getMessage()}"
                       for r in caplog.records if "Unrecognized config key" in r.getMessage()]
         assert not found, "\n".join(found)
+
+
+class TestGridViewConfig:
+    from potato.server_utils.config_module import ConfigValidationError as _E
+
+    def base(self, **grid):
+        return {"annotation_schemes": [
+                    {"annotation_type": "radio", "name": "s", "description": "d", "labels": ["a"]},
+                    {"annotation_type": "text", "name": "t", "description": "d"}],
+                "grid_view": dict({"enabled": True, "scheme": "s"}, **grid)}
+
+    def test_a_radio_scheme_is_accepted(self):
+        from potato.server_utils.config_module import validate_grid_view_config
+        validate_grid_view_config(self.base(page_size=12))
+
+    @pytest.mark.parametrize("grid,fragment", [
+        ({"scheme": "nope"}, "must name a top-level annotation scheme"),
+        ({"scheme": "t"}, "takes a radio or multiselect scheme"),
+        ({"page_size": 0}, "from 1 to 200"),
+        ({"page_size": "24"}, "from 1 to 200"),
+    ])
+    def test_mistakes_are_refused(self, grid, fragment):
+        from potato.server_utils.config_module import (
+            ConfigValidationError, validate_grid_view_config)
+        with pytest.raises(ConfigValidationError, match=fragment):
+            validate_grid_view_config(self.base(**grid))
+
+    def test_disabled_is_not_checked(self):
+        from potato.server_utils.config_module import validate_grid_view_config
+        validate_grid_view_config(self.base(enabled=False, scheme="nope"))

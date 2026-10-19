@@ -170,6 +170,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `base_css` |  | string |  | Extra stylesheet to load |  |
 | `format_handling` |  | object |  | How rich text and markup in item fields are rendered | `default_format`, `enabled`, `pdf`, `spreadsheet` |
+| `grid_view` |  | object |  | A page at /annotate/grid that labels many items at once for one radio or multiselect scheme: select tiles, press a label | `enabled`, `page_size`, `scheme` |
 | `hide_navbar` |  | boolean |  | Hide the top navigation bar |  |
 | `horizontal_key_bindings` |  | boolean |  | Lay keyboard shortcut hints out horizontally |  |
 | `instance_display` |  | object |  | How each item is rendered: one entry per field, with a type drawn from the display registry (text, image, audio, video, ...) | `fields`, `layout`, `resizable` |

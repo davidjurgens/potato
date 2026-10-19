@@ -3746,6 +3746,26 @@
         ]
       }
     },
+    "/annotate/grid": {
+      "get": {
+        "operationId": "get_annotate_grid",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Label a page of items at once for one radio or multiselect scheme.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/api-frontend": {
       "get": {
         "operationId": "get_api_frontend",

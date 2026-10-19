@@ -3920,6 +3920,27 @@
       "description": "Gold items file, the flat alternative to the gold_standards block",
       "type": "string"
     },
+    "grid_view": {
+      "additionalProperties": true,
+      "description": "A page at /annotate/grid that labels many items at once for one radio or multiselect scheme: select tiles, press a label",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Serve the grid page",
+          "type": "boolean"
+        },
+        "page_size": {
+          "default": 24,
+          "description": "Items per grid page, from the annotator's own assignment",
+          "type": "integer"
+        },
+        "scheme": {
+          "description": "The radio or multiselect scheme the grid labels. Other schemes are answered on the normal page",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "header_file": {
       "description": "Ignored. The header template path is no longer configurable, and nothing reads this key -- `potato validate` reports it",
       "type": "string"

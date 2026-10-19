@@ -6,6 +6,15 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Grid labeling.** `grid_view: {enabled, scheme, page_size}` serves
+  `/annotate/grid`, a page of tiles for one radio or multiselect scheme: select
+  tiles by click, Shift-click, Ctrl/Cmd-click or arrow keys, apply a label by
+  button or number key, and save the page. Items come from the annotator's own
+  assignment and saves go through `/updateinstance`, so assignment, the
+  per-item cap, quality control and agreement count grid labels like any
+  others. Attention checks and gold items are placed among the tiles at the
+  configured frequency and scored as on the normal page. See *Grid Labeling*
+  and `examples/classification/grid-view/`.
 - **Per-object attributes, with agreement over them.** An `image_annotation`
   scheme can declare `attributes`: typed fields (`select`, `multi`, `text`,
   `number`, `bool`) that the annotator sets for each shape in a panel under the

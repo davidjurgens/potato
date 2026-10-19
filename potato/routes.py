@@ -1994,6 +1994,104 @@ def _ibws_check_and_advance(user_state) -> bool:
 NAVIGATION_REQUEST_HEADER = "X-Potato-Navigation"
 
 
+#: Image references the grid shows as pictures rather than as text.
+_GRID_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+                        ".tif", ".tiff", ".avif")
+
+
+def _grid_tile_kind(value) -> str:
+    if not isinstance(value, str):
+        return "text"
+    path = value.split("?", 1)[0].split("#", 1)[0].lower()
+    if value.startswith("data:image/") or path.endswith(_GRID_IMAGE_SUFFIXES):
+        return "image"
+    return "text"
+
+
+@app.route("/annotate/grid", methods=["GET"])
+def annotate_grid():
+    """Label a page of items at once for one radio or multiselect scheme.
+
+    The items come from the annotator's own assignment, topped up through
+    assign_instances_to_user exactly as Next does, so the assignment strategy
+    and the per-item annotator cap hold. Saving goes through /updateinstance,
+    one item at a time, from the page: the grid has no save path of its own,
+    so both the user side and the item side are written and agreement sees
+    grid labels like any others.
+    """
+    grid = config.get("grid_view") or {}
+    if not grid.get("enabled"):
+        return redirect(url_for("annotate"))
+    if "username" not in session:
+        return redirect(url_for("home"))
+    username = session["username"]
+    usm = get_user_state_manager()
+    if not usm.has_user(username):
+        return redirect(url_for("annotate"))
+    user_state = usm.get_user_state(username)
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return redirect(url_for("annotate"))
+    # Blocked by attention checks: the annotation page says so and stops.
+    if _qc_blocked(username):
+        return redirect(url_for("annotate"))
+
+    scheme = next((s for s in config.get("annotation_schemes") or []
+                   if isinstance(s, dict) and s.get("name") == grid.get("scheme")), None)
+    if scheme is None:
+        return redirect(url_for("annotate"))
+    page_size = int(grid.get("page_size", 24))
+
+    ism = get_item_state_manager()
+    annotated = set(user_state.get_annotated_instance_ids())
+
+    def pending():
+        return [iid for iid in user_state.instance_id_ordering
+                if iid not in annotated and ism.has_item(iid)]
+
+    items = pending()
+    while len(items) < page_size:
+        if not ism.assign_instances_to_user(user_state):
+            break
+        topped_up = pending()
+        if len(topped_up) == len(items):
+            break
+        items = topped_up
+
+    # Attention checks and gold items, placed in the page at the configured
+    # frequency and assigned the way the single-item page assigns them, so a
+    # grid save is scored like any other.
+    from potato.server_utils.quality_control_injection import quality_control_page
+    try:
+        page_ids = quality_control_page(username, user_state, config, items[:page_size])
+    except Exception:  # never refuse the page over quality control
+        logger.exception("Could not place quality-control items in the grid for %s", username)
+        page_ids = items[:page_size]
+
+    tiles = []
+    for iid in page_ids:
+        content = ism.get_item(iid).get_text()
+        kind = _grid_tile_kind(content)
+        tiles.append({"id": iid, "kind": kind,
+                      "content": content if isinstance(content, str) else str(content)})
+
+    labels = []
+    for index, label in enumerate(scheme.get("labels") or []):
+        name = label if isinstance(label, str) else (label or {}).get("name")
+        labels.append({"name": str(name), "key": str(index + 1) if index < 9 else ""})
+
+    return render_template(
+        "annotate_grid.html",
+        title=config.get("annotation_task_name", "Annotation"),
+        scheme_name=scheme["name"],
+        scheme_description=scheme.get("description", ""),
+        multiple=scheme.get("annotation_type") == "multiselect",
+        labels=labels,
+        tiles=tiles,
+        n_annotated=len(annotated),
+        username=username,
+    )
+
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
@@ -10409,6 +10507,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/prestudy", "prestudy", prestudy, methods=["GET", "POST"])
     app.add_url_rule("/training", "training", training, methods=["GET", "POST"])
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
+    app.add_url_rule("/annotate/grid", "annotate_grid", annotate_grid, methods=["GET"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
     app.add_url_rule("/get_annotations", "get_annotations", get_annotations, methods=["GET"])

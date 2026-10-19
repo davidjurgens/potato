@@ -5,7 +5,7 @@
     "agent-traces": 56,
     "ai-assisted": 6,
     "audio": 8,
-    "classification": 30,
+    "classification": 31,
     "conversation": 4,
     "crowdsourcing": 6,
     "custom-layouts": 6,
@@ -17,7 +17,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 219,
+  "count": 220,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -3270,6 +3270,26 @@
       "path": "examples/classification/extractive-qa/config.yaml",
       "run": "potato start examples/classification/extractive-qa/config.yaml -p 8000",
       "task_name": "SQuAD-Style Extractive QA"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/headlines.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/classification/grid-view",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "grid-view",
+      "path": "examples/classification/grid-view/config.yaml",
+      "run": "potato start examples/classification/grid-view/config.yaml -p 8000",
+      "task_name": "Headline sentiment (grid)"
     },
     {
       "annotation_types": [

@@ -56,30 +56,7 @@ def inject_quality_control_item_if_needed(username, user_state,
     insert_index = current_index + 1 if current_index >= 0 else 0
 
     def inject_item(item_data):
-        item_id = item_data.get("id")
-        if not item_id or item_id in seen_qc_ids:
-            return False
-
-        prepared_item = dict(item_data)
-        text_key = (config.get("item_properties") or {}).get("text_key", "text")
-        if "displayed_text" not in prepared_item:
-            raw_text = prepared_item.get(text_key, prepared_item.get("text", ""))
-            prepared_item["displayed_text"] = (
-                _displayed_text(raw_text) if raw_text is not None else "")
-
-        item_manager = get_item_state_manager()
-        if item_manager.has_item(item_id):
-            existing_item = item_manager.get_item(item_id)
-            if existing_item and isinstance(existing_item.get_data(), dict):
-                existing_data = existing_item.get_data()
-                if "displayed_text" not in existing_data:
-                    existing_data["displayed_text"] = prepared_item["displayed_text"]
-            item = item_manager.get_item(item_id)
-        else:
-            item_manager.add_item(item_id, prepared_item)
-            item = item_manager.get_item(item_id)
-
-        return user_state.assign_instance_at_index(item, insert_index)
+        return _place_item(user_state, item_data, config, insert_index, seen_qc_ids)
 
     if qc_manager.should_inject_attention_check(username):
         attention_item = qc_manager.get_attention_check_item(username, exclude=seen_qc_ids)
@@ -96,6 +73,108 @@ def inject_quality_control_item_if_needed(username, user_state,
             return True
 
     return False
+
+
+def _place_item(user_state, item_data, config, index, seen_qc_ids) -> bool:
+    """Add a check or gold item to the item store and the user's ordering."""
+    from potato.item_state_management import get_item_state_manager
+
+    item_id = item_data.get("id")
+    if not item_id or item_id in seen_qc_ids:
+        return False
+
+    prepared_item = dict(item_data)
+    text_key = (config.get("item_properties") or {}).get("text_key", "text")
+    if "displayed_text" not in prepared_item:
+        raw_text = prepared_item.get(text_key, prepared_item.get("text", ""))
+        prepared_item["displayed_text"] = (
+            _displayed_text(raw_text) if raw_text is not None else "")
+
+    item_manager = get_item_state_manager()
+    if item_manager.has_item(item_id):
+        existing_item = item_manager.get_item(item_id)
+        if existing_item and isinstance(existing_item.get_data(), dict):
+            existing_data = existing_item.get_data()
+            if "displayed_text" not in existing_data:
+                existing_data["displayed_text"] = prepared_item["displayed_text"]
+        item = item_manager.get_item(item_id)
+    else:
+        item_manager.add_item(item_id, prepared_item)
+        item = item_manager.get_item(item_id)
+
+    placed = user_state.assign_instance_at_index(item, index)
+    if placed:
+        seen_qc_ids.add(item_id)
+    return placed
+
+
+def quality_control_page(username, user_state, config, normal_ids):
+    """A page of item ids with attention checks and gold items placed in it.
+
+    For surfaces that show several items at once (the grid). The single-item
+    injector adds one item and resets the manager's counter, which is right
+    for a page of one; on a page of 24 it delivered one check where the config
+    asked for eight, and the grid -- the surface built for fast clicking --
+    delivered none at all.
+
+    Counts are projected across the page: with `frequency: N` a check goes in
+    after every N regular items, starting from how many the annotator has done
+    since their last one. Each placed item is assigned exactly as the
+    single-item path assigns it, so saving it is scored the same way. Handing
+    an item out resets the manager's counter, so the next page may open with
+    a check: delivery errs towards more checks, never fewer.
+    """
+    from potato.quality_control import get_quality_control_manager
+
+    qc = get_quality_control_manager()
+    if not qc:
+        return list(normal_ids)
+
+    assigned = set(user_state.get_assigned_instance_ids())
+    annotated = set(user_state.get_annotated_instance_ids())
+    seen_qc_ids = assigned | annotated
+    cfg = qc.qc_config
+
+    attention_on = bool(cfg.attention_checks_enabled and qc.attention_items)
+    gold_on = bool(cfg.gold_standards_enabled and qc.gold_items
+                   and getattr(cfg, "gold_mode", None) != "training")
+    since_attention = qc.user_items_since_attention.get(username, 0)
+    since_gold = qc.user_items_since_gold.get(username, 0)
+
+    def due(on, since, frequency, probability=None):
+        if not on:
+            return False
+        if frequency:
+            return since >= frequency
+        if probability:
+            import random
+            return random.random() < probability
+        return False
+
+    page = []
+    ordering = user_state.instance_id_ordering
+    for iid in list(normal_ids) + [None]:
+        # Before each regular item (and once after the last), place whatever
+        # is due. `None` marks the end of the page.
+        index = ordering.index(iid) if iid in ordering else len(ordering)
+        if due(attention_on, since_attention, cfg.attention_frequency,
+               getattr(cfg, "attention_probability", None)):
+            item = qc.get_attention_check_item(username, exclude=seen_qc_ids)
+            if item and _place_item(user_state, item, config, index, seen_qc_ids):
+                page.append(item["id"])
+                since_attention = 0
+                index += 1
+        if due(gold_on, since_gold, getattr(cfg, "gold_frequency", None)):
+            item = qc.get_gold_standard_item(username, exclude=seen_qc_ids)
+            if item and _place_item(user_state, item, config, index, seen_qc_ids):
+                page.append(item["id"])
+                since_gold = 0
+        if iid is None:
+            break
+        page.append(iid)
+        since_attention += 1
+        since_gold += 1
+    return page
 
 
 def _displayed_text(raw_text):
