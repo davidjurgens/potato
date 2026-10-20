@@ -424,7 +424,7 @@ Give the IdP administrator Potato's service-provider metadata, served at
 |-----|----------|-------------|
 | `idp_metadata_url` | One of three | The IdP's metadata (https only), fetched once, when first needed |
 | `idp_metadata_file` | One of three | The same metadata saved to a file |
-| `idp` | One of three | `entity_id`, `sso_url` and `x509cert` (PEM text or a file path) |
+| `idp` | One of three | `entity_id`, `sso_url` and `x509cert` (PEM text or a file path), and `slo_url` for single logout |
 | `idp_entity_id` | No | Which entity to use when the metadata lists several |
 | `sp_base_url` | Behind a proxy | The public address Potato is reached at. Behind a proxy that ends TLS, Potato sees `http` and an internal host, and the IdP's response fails the destination check |
 | `sp_entity_id` | No | Default `<sp_base_url>/saml/metadata` |
@@ -434,6 +434,7 @@ Give the IdP administrator Potato's service-provider metadata, served at
 | `required_attribute` | No | `{name, values}`: sign-in is refused unless the attribute holds one of the values |
 | `claim_attributes` | No | Attributes whose values become `group:<value>` SSO claims for role mapping |
 | `display_name` | No | The sign-in button's label |
+| `single_logout` | No | Default `true`: when the IdP has a logout service, signing out of Potato also ends the IdP session. `false` keeps sign-out local |
 
 #### What Potato checks
 
@@ -448,9 +449,31 @@ Potato starts every sign-in itself and accepts a response only when:
   inside its validity window;
 - it has not been used before.
 
-Single logout is not supported: signing out of Potato ends the Potato
-session, not the IdP session. `allow_local_login` and `auto_register` work as
-they do for OAuth.
+`allow_local_login` and `auto_register` work as they do for OAuth.
+
+#### Single logout
+
+When the IdP's metadata names a logout service (`SingleLogoutService`, HTTP
+Redirect binding), or `idp.slo_url` is set, Potato adds its own logout service
+to `/saml/metadata` at `<sp_base_url>/saml/sls`, and signing out works both
+ways:
+
+- **Signing out of Potato** ends the Potato session, then sends the browser to
+  the IdP with a LogoutRequest naming the session it signed in with (NameID and
+  SessionIndex). The IdP sends the browser back to `/saml/sls`. The page says
+  whether the IdP confirmed it: a signed Success that answers Potato's request.
+  If the IdP never answers, the annotator is still signed out of Potato.
+- **Signing out at the IdP**, or of another service in the same IdP session,
+  brings the browser to `/saml/sls` with the IdP's LogoutRequest. Potato acts
+  only on a request signed with the IdP's certificate, and ends the session
+  only if the request names this browser's NameID (and SessionIndex, when it
+  gives one). Each request is accepted once; a replayed copy is refused. It then sends the IdP a LogoutResponse so the IdP can continue to
+  the next service.
+
+Many IdPs want the LogoutRequest signed. Set `sp_cert_file` and `sp_key_file`
+and Potato signs its LogoutRequests and LogoutResponses. Logout over the SOAP
+back channel is not supported. The IdP has to send the browser, which carries
+the session cookie Potato uses to find the session.
 
 #### HTTPS is required
 

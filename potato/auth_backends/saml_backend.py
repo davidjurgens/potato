@@ -111,6 +111,9 @@ class SAMLBackend(AuthBackend):
                                         "binding": REDIRECT_BINDING},
                 "x509cert": _read_cert(manual.get("x509cert", "")),
             }
+            if manual.get("slo_url"):
+                idp["singleLogoutService"] = {"url": manual["slo_url"],
+                                              "binding": REDIRECT_BINDING}
         if not idp.get("entityId") or not (idp.get("singleSignOnService") or {}).get("url"):
             raise ValueError("authentication.saml: the IdP metadata names no entity id "
                              "or sign-on URL")
@@ -133,6 +136,8 @@ class SAMLBackend(AuthBackend):
         cert, key = _read_file(cfg.get("sp_cert_file")), _read_file(cfg.get("sp_key_file"))
         if cert and key:
             sp["x509cert"], sp["privateKey"] = cert, key
+        if self.slo_enabled():
+            sp["singleLogoutService"] = {"url": f"{base}/saml/sls", "binding": REDIRECT_BINDING}
         return {
             "strict": True,
             "debug": False,
@@ -140,6 +145,8 @@ class SAMLBackend(AuthBackend):
             "idp": self._load_idp(),
             "security": {
                 "authnRequestsSigned": bool(cert and key),
+                "logoutRequestSigned": bool(cert and key),
+                "logoutResponseSigned": bool(cert and key),
                 # Shibboleth signs the Response by default, not the
                 # Assertion. In strict mode python3-saml still requires a
                 # valid signature on one of the two and refuses a response
@@ -167,8 +174,12 @@ class SAMLBackend(AuthBackend):
         return url, auth.get_last_request_id()
 
     def process_response(self, request_data: Dict[str, Any], base_url: str,
-                         request_id: Optional[str]) -> Tuple[str, Dict[str, List[str]]]:
-        """Validate a POSTed response; return (user id, attributes) or raise SAMLError."""
+                         request_id: Optional[str], with_session: bool = False):
+        """Validate a POSTed response; return (user id, attributes) or raise SAMLError.
+
+        With ``with_session`` also the IdP session's identifiers (NameID and
+        its qualifiers, SessionIndex), which a single-logout request names.
+        """
         from onelogin.saml2.auth import OneLogin_Saml2_Auth
         if not request_id:
             # python3-saml accepts any response when no request id is given.
@@ -204,7 +215,104 @@ class SAMLBackend(AuthBackend):
         allowed, reason = self.check_restrictions(attributes)
         if not allowed:
             raise SAMLError(reason)
+        if with_session:
+            return user_id, attributes, {
+                "name_id": auth.get_nameid(),
+                "name_id_format": auth.get_nameid_format(),
+                "name_id_nq": auth.get_nameid_nq(),
+                "name_id_spnq": auth.get_nameid_spnq(),
+                "session_index": auth.get_session_index(),
+            }
         return user_id, attributes
+
+    # -- single logout ---------------------------------------------------
+
+    def slo_enabled(self) -> bool:
+        """True when the IdP has a logout service and ``single_logout`` is not off."""
+        if self.saml_config.get("single_logout") is False:
+            return False
+        try:
+            service = self._load_idp().get("singleLogoutService") or {}
+        except Exception:  # noqa: BLE001 - unreachable metadata: no SLO, not a crash
+            return False
+        return bool(service.get("url"))
+
+    def logout_redirect(self, request_data: Dict[str, Any], base_url: str,
+                        session_info: Dict[str, Any]) -> Tuple[str, str]:
+        """URL that sends the browser to the IdP with a LogoutRequest, and its id."""
+        from onelogin.saml2.auth import OneLogin_Saml2_Auth
+        auth = OneLogin_Saml2_Auth(request_data, self.settings(base_url))
+        url = auth.logout(name_id=session_info.get("name_id"),
+                          session_index=session_info.get("session_index"),
+                          nq=session_info.get("name_id_nq"),
+                          name_id_format=session_info.get("name_id_format"),
+                          spnq=session_info.get("name_id_spnq"))
+        return url, auth.get_last_request_id()
+
+    def process_logout(self, request_data: Dict[str, Any], base_url: str,
+                       request_id: Optional[str],
+                       session_info: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """A message from the IdP at /saml/sls.
+
+        Returns ``{"kind", "confirmed", "end_session", "redirect"}``:
+
+        * ``kind: "response"`` answers a logout this SP started. ``confirmed``
+          is True only for a signed Success that answers ``request_id``; the
+          Potato session ended before the browser left, so an unconfirmed
+          answer changes nothing here.
+        * ``kind: "request"`` is a logout the IdP started. It must be signed:
+          an unsigned one would let any page end an annotator's session.
+          ``end_session`` is True when it names this browser's IdP session,
+          and ``redirect`` carries the LogoutResponse back to the IdP.
+
+        Raises SAMLError for a request that is unsigned or fails validation.
+        """
+        from onelogin.saml2.auth import OneLogin_Saml2_Auth
+        from onelogin.saml2.logout_request import OneLogin_Saml2_Logout_Request
+        from onelogin.saml2.utils import OneLogin_Saml2_Utils
+
+        get_data = request_data.get("get_data") or {}
+        signed = bool(get_data.get("Signature"))
+        auth = OneLogin_Saml2_Auth(request_data, self.settings(base_url))
+        if "SAMLResponse" in get_data:
+            if not request_id:
+                return {"kind": "response", "confirmed": False, "end_session": False,
+                        "redirect": None}
+            auth.process_slo(keep_local_session=True, request_id=request_id)
+            errors = auth.get_errors()
+            if errors:
+                logger.warning("SAML logout response refused: %s (%s)", errors,
+                               auth.get_last_error_reason())
+            return {"kind": "response", "confirmed": signed and not errors,
+                    "end_session": False, "redirect": None}
+        if "SAMLRequest" not in get_data:
+            raise SAMLError("This is not a logout message.")
+        if not signed:
+            raise SAMLError("This logout request is not signed, so it was not acted on.")
+        redirect_to = auth.process_slo(keep_local_session=True)
+        errors = auth.get_errors()
+        if errors:
+            logger.warning("SAML logout request refused: %s (%s)", errors,
+                           auth.get_last_error_reason())
+            raise SAMLError("This logout request could not be verified.")
+        xml = OneLogin_Saml2_Utils.decode_base64_and_inflate(get_data["SAMLRequest"])
+        # A captured request must not work twice, as an assertion must not.
+        # Logout ids share the sign-in replay record (they cannot collide:
+        # the prefix keeps the two kinds apart).
+        from lxml import etree
+        expires = etree.fromstring(xml.encode("utf-8") if isinstance(xml, str) else xml).get(
+            "NotOnOrAfter")
+        expires_at = OneLogin_Saml2_Utils.parse_SAML_to_time(expires) if expires else None
+        if not self._replay.claim("logout:" + OneLogin_Saml2_Logout_Request.get_id(xml),
+                                  expires_at):
+            raise SAMLError("This logout request has already been used.")
+        name_id = OneLogin_Saml2_Logout_Request.get_nameid(xml)
+        indexes = OneLogin_Saml2_Logout_Request.get_session_indexes(xml)
+        mine = session_info or {}
+        end_session = bool(mine) and name_id == mine.get("name_id") and (
+            not indexes or not mine.get("session_index") or mine["session_index"] in indexes)
+        return {"kind": "request", "confirmed": True, "end_session": end_session,
+                "redirect": redirect_to}
 
     def metadata(self, base_url: str) -> str:
         from onelogin.saml2.settings import OneLogin_Saml2_Settings
@@ -322,6 +430,11 @@ def request_data_from_flask(request, sp_base_url: Optional[str]) -> Tuple[Dict[s
         "script_name": prefix + request.path,
         "get_data": request.args.copy(),
         "post_data": request.form.copy(),
+        # A Redirect-binding signature covers the query string as the IdP
+        # encoded it; rebuilding it from the parsed values breaks on IdPs that
+        # percent-encode in lower case (ADFS).
+        "query_string": request.query_string.decode("latin-1"),
+        "validate_signature_from_qs": True,
     }
     base = f"{public.scheme}://{data['http_host']}{prefix}"
     return data, base

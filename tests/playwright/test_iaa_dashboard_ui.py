@@ -219,3 +219,23 @@ class TestAgreementDashboard:
         for name in (payload.get("schemas") or {}):
             assert name.lower() in body, (
                 f"the JSON reports on {name!r} and the page never mentions it")
+
+
+class TestNarrowScreen:
+    def test_a_wide_metric_table_scrolls_inside_its_card(self, page):
+        """
+        Each banded value carries screen-reader text (`.sr-only`,
+        position: absolute). With no positioned ancestor inside the table's
+        scroll container it escaped the container and widened the page, so a
+        phone scrolled the whole report sideways.
+        """
+        page.set_viewport_size({"width": 320, "height": 640})
+        with project("iaa_ui_narrow", 9487, seed_agreeing) as server:
+            open_report(page, server)
+            widths = page.evaluate("""() => {
+                const c = document.querySelector('.admin-table-container');
+                return {page: document.documentElement.scrollWidth, viewport: innerWidth,
+                        table: c.scrollWidth, card: c.clientWidth};
+            }""")
+        assert widths["table"] > widths["card"], widths      # the case under test
+        assert widths["page"] <= widths["viewport"], widths

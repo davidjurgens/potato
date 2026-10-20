@@ -70,7 +70,10 @@ _RAW = {"percent_agreement", "mean_jaccard", "mean_agreement",
         "mean_iou", "median_iou",
         # The sweep column: the fraction of compared expression pairs that
         # clear the row's IoU threshold.
-        "agreement"}
+        "agreement",
+        # Tracking identity between two annotators (iaa/identity.py). MOTA
+        # can go below 0 when the errors outnumber the objects.
+        "mota", "idf1"}
 _COVERAGE = {"reward_coverage", "answered_fraction"}
 _SPAN = {"span_f1_exact", "span_f1_partial", "token_level_kappa"}
 _LOWER = {"mae", "rmse", "spearman_footrule", "mean_offset", "median_offset",
@@ -78,13 +81,15 @@ _LOWER = {"mae", "rmse", "spearman_footrule", "mean_offset", "median_offset",
           # A caption distance, or the gap between two annotators' points: 0
           # means they gave the same answer, so banding either as an agreement
           # score inverts it.
-          "mean_pairwise_distance", "median_pairwise_distance"}
+          "mean_pairwise_distance", "median_pairwise_distance",
+          # Times a track's partner changed; 0 is perfect.
+          "id_switches"}
 _COUNT_NAMES = {"fps", "tolerance", "tolerance_frames", "headline_tolerance",
                 "cap", "answered_stream_responses",
                 "possible_stream_responses",
                 # Parameters of the grounding sweep, not measurements taken
                 # from it.
-                "iou_threshold", "headline_iou_threshold"}
+                "iou_threshold", "headline_iou_threshold", "match_iou"}
 
 #: alpha and kappa appear as a whole underscore-separated token in every name
 #: this codebase produces — `alpha`, `detection_alpha`, `alpha_masi`,

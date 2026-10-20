@@ -189,6 +189,19 @@ class TestKITTICalibration:
         u_right, _ = project_point(cam, (12.0, -4.0, -1.5))
         assert u_left < PRINCIPAL_U < u_right
 
+    def test_the_tracking_benchmark_layout_reads_the_same(self):
+        # The tracking calib files name the rectification and the lidar
+        # transform R_rect and Tr_velo_cam, with no colon after either.
+        tracking = (KITTI_CALIB.replace("R0_rect:", "R_rect")
+                    .replace("Tr_velo_to_cam:", "Tr_velo_cam")
+                    .replace("Tr_imu_to_velo:", "Tr_imu_velo"))
+        assert "R_rect 9.99" in tracking and "Tr_velo_cam 7.5" in tracking
+        standard = parse_kitti_calib(KITTI_CALIB)
+        parsed = parse_kitti_calib(tracking)
+        assert parsed.warnings == []
+        assert parsed.reference_rt == pytest.approx(standard.reference_rt)
+        assert parsed.cameras[0].rt == pytest.approx(standard.cameras[0].rt)
+
     def test_a_point_behind_the_lidar_is_not_visible(self):
         assert project_point(kitti_camera(), (-8.0, 0.0, -1.5)) is None
 

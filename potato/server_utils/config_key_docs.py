@@ -322,11 +322,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "authentication.saml": _D(
         "SAML 2.0 sign-in through an institution's identity provider (method: "
         "saml). Keys: display_name; one of idp_metadata_url (https), "
-        "idp_metadata_file or idp {entity_id, sso_url, x509cert}; sp_base_url, "
-        "sp_entity_id, sp_cert_file + sp_key_file, name_id_format; "
+        "idp_metadata_file or idp {entity_id, sso_url, x509cert, slo_url}; "
+        "sp_base_url, sp_entity_id, sp_cert_file + sp_key_file, name_id_format; "
         "user_identity_attribute (default: the NameID, refused when "
         "transient); required_attribute {name, values}; claim_attributes; "
-        "want_assertions_encrypted",
+        "want_assertions_encrypted; single_logout (default true: signing out "
+        "also ends the IdP session when the IdP has a logout service)",
         type="object", category=AUTH, see_also=("authentication.method",),
     ),
     "authentication.providers": _D(

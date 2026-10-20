@@ -312,6 +312,15 @@ annotation_schemes:
 what agreement compares and what an export should read. Tracks are saved as
 they change, with the rest of the scheme's answer.
 
+**Agreement on tracks.** With two or more annotators on a video, the
+agreement report gives tracks an `identity` group: `mota`, `idf1` and
+`id_switches`, computed between each pair of annotators with boxes matched at
+IoU 0.5 on every frame of each track. They catch what box overlap cannot: two
+annotators who box the same cars but swap two of them halfway through. The
+measures are explained under
+[point-cloud sequences](../spatial/point_cloud.md#sequences), which get the
+same group.
+
 Only one video scheme per page can use `tracking` or `combined` mode. The
 tracker's keyboard shortcuts act on the whole page, so a second tracker would
 receive every track you create; the config is refused at startup. Put a second

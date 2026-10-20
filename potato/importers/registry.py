@@ -107,6 +107,7 @@ def _register_builtin_importers():
     from .davis_importer import DAVISImporter
     from .hf_importer import HuggingFaceImporter
     from .kitti_importer import KITTIImporter
+    from .kitti_tracking_importer import KITTITrackingImporter
     from .labelbox_importer import LabelboxImporter
     from .labelme_importer import LabelMeImporter
     from .mot_importer import MOTImporter
@@ -125,6 +126,7 @@ def _register_builtin_importers():
     for importer in [COCOImporter(), DarwinImporter(), LabelboxImporter(),
                      CityscapesImporter(), VIAImporter(), CVATImporter(),
                      VOCImporter(), YOLOImporter(), KITTIImporter(),
+                     KITTITrackingImporter(),
                      MOTImporter(), DAVISImporter(), OpenImagesImporter(),
                      WebDatasetImporter(), HuggingFaceImporter(),
                      LabelMeImporter()]:

@@ -101,6 +101,9 @@ class Volume:
     header: Any = None
     #: DICOM source files in canonical k order, for SEG export.
     dicom_files: List[str] = field(default_factory=list)
+    #: For a multi-frame (enhanced) source: the single file's frame index of
+    #: each slice in canonical k order; None for a classic series.
+    dicom_frames: Optional[List[int]] = None
     #: nibabel orientation of the source, to put a mask back into it.
     source_ornt: Any = None
     source_shape: Tuple[int, ...] = ()
@@ -220,11 +223,15 @@ def _read_dicom_series(directory: str) -> Volume:
                           "put each series in its own directory")
     series = next(iter(by_series.values()))
     first = series[0][1]
-    if int(getattr(first, "NumberOfFrames", 1) or 1) > 1:
-        raise VolumeError("multi-frame (enhanced) DICOM is not supported; convert it to "
-                          "a classic series or to NIfTI (dcm2niix)")
-    for attr in ("ImageOrientationPatient", "ImagePositionPatient", "PixelSpacing"):
-        if not hasattr(first, attr):
+    multiframe = [item for item in series if int(getattr(item[1], "NumberOfFrames", 1) or 1) > 1]
+    if multiframe and (len(multiframe) > 1 or len(series) > 1):
+        raise VolumeError("this series mixes several multi-frame files, or multi-frame and "
+                          "single-frame files; put one multi-frame file in its own directory")
+    frames = _enhanced_frames(*multiframe[0]) if multiframe else [_classic_frame(f, ds)
+                                                                  for f, ds in series]
+    for key, attr in (("orientation", "ImageOrientationPatient"),
+                      ("position", "ImagePositionPatient"), ("spacing", "PixelSpacing")):
+        if any(frame[key] is None for frame in frames):
             raise VolumeError(f"the DICOM images have no {attr}, so they cannot be "
                               "placed in 3D")
     if any(str(getattr(ds, "BurnedInAnnotation", "")).upper() == "YES" for _f, ds in series):
@@ -234,24 +241,22 @@ def _read_dicom_series(directory: str) -> Volume:
                           "details may be written into the pixels. Remove them from "
                           "the images before using the series")
 
-    orientation = np.array(first.ImageOrientationPatient, dtype=float)
-    for _f, ds in series:
-        if not np.allclose(np.array(ds.ImageOrientationPatient, dtype=float),
-                           orientation, atol=1e-4):
+    orientation = np.array(frames[0]["orientation"], dtype=float)
+    for frame in frames:
+        if not np.allclose(np.array(frame["orientation"], dtype=float), orientation, atol=1e-4):
             raise VolumeError("the slices do not all have the same orientation "
                               "(ImageOrientationPatient); a localizer or scout image "
                               "may be in the series. Remove it and try again")
     row_dir, col_dir = orientation[:3], orientation[3:]
     normal = np.cross(row_dir, col_dir)
-    series.sort(key=lambda item: float(np.dot(np.array(item[1].ImagePositionPatient,
-                                                       dtype=float), normal)))
-    positions = [np.array(ds.ImagePositionPatient, dtype=float) for _f, ds in series]
-    if len(series) > 1:
+    frames.sort(key=lambda frame: float(np.dot(np.array(frame["position"], dtype=float), normal)))
+    positions = [np.array(frame["position"], dtype=float) for frame in frames]
+    if len(frames) > 1:
         steps = np.diff([float(np.dot(p, normal)) for p in positions])
         if np.any(steps <= 0) or np.ptp(steps) > 0.01 * max(abs(steps.mean()), 1e-6):
             raise VolumeError("the DICOM slices are not evenly spaced along one axis "
                               "(missing or duplicated slices?)")
-        slice_vector = (positions[-1] - positions[0]) / (len(series) - 1)
+        slice_vector = (positions[-1] - positions[0]) / (len(frames) - 1)
         cosine = abs(float(np.dot(slice_vector, normal))) / max(np.linalg.norm(slice_vector), 1e-9)
         tilt = float(np.degrees(np.arccos(min(1.0, cosine))))
         if tilt > 0.5:
@@ -260,20 +265,21 @@ def _read_dicom_series(directory: str) -> Volume:
             raise VolumeError(f"the series has a {tilt:.1f} degree gantry tilt; resample "
                               "it to orthogonal slices first (dcm2niix does this)")
     else:
-        thickness = float(getattr(first, "SliceThickness", 1.0) or 1.0)
-        slice_vector = normal * thickness
+        slice_vector = normal * float(frames[0]["thickness"] or 1.0)
 
-    slices = []
-    for full, _ds in series:
-        ds = pydicom.dcmread(full)
-        pixels = ds.pixel_array.astype(np.float32)
-        slope = float(getattr(ds, "RescaleSlope", 1) or 1)
-        intercept = float(getattr(ds, "RescaleIntercept", 0) or 0)
-        slices.append(pixels * slope + intercept)
+    if multiframe:
+        pixels_all = pydicom.dcmread(multiframe[0][0]).pixel_array
+        slices = [pixels_all[frame["frame"]].astype(np.float32) * frame["slope"] + frame["intercept"]
+                  for frame in frames]
+    else:
+        slices = []
+        for frame in frames:
+            pixels = pydicom.dcmread(frame["file"]).pixel_array.astype(np.float32)
+            slices.append(pixels * frame["slope"] + frame["intercept"])
     stack = np.stack(slices, axis=0)                      # (slice, row, col)
     data_ijk = np.ascontiguousarray(stack.transpose(2, 1, 0))  # (col, row, slice)
 
-    row_spacing, col_spacing = (float(v) for v in first.PixelSpacing)
+    row_spacing, col_spacing = (float(v) for v in frames[0]["spacing"])
     lps = np.eye(4)
     lps[:3, 0] = row_dir * col_spacing                    # i: along a row
     lps[:3, 1] = col_dir * row_spacing                    # j: down a column
@@ -282,7 +288,7 @@ def _read_dicom_series(directory: str) -> Volume:
     ras = np.diag([-1.0, -1.0, 1.0, 1.0]) @ lps
 
     windows = []
-    centers, widths = getattr(first, "WindowCenter", None), getattr(first, "WindowWidth", None)
+    centers, widths = frames[0]["window"]
     if centers is not None and widths is not None:
         centers = list(centers) if hasattr(centers, "__iter__") else [centers]
         widths = list(widths) if hasattr(widths, "__iter__") else [widths]
@@ -292,9 +298,71 @@ def _read_dicom_series(directory: str) -> Volume:
                         modality=str(getattr(first, "Modality", "") or ""),
                         dicom_windows=windows, header=first)
     # Source order: source voxel k is dicom_files[k] (to_source_order maps a
-    # canonical mask back onto it).
-    volume.dicom_files = [f for f, _ds in series]
+    # canonical mask back onto it), or frame dicom_frames[k] of the one
+    # multi-frame file.
+    if multiframe:
+        volume.dicom_files = [multiframe[0][0]]
+        volume.dicom_frames = [frame["frame"] for frame in frames]
+    else:
+        volume.dicom_files = [frame["file"] for frame in frames]
     return volume
+
+
+def _classic_frame(path: str, ds) -> Dict[str, Any]:
+    """One single-frame DICOM file as a frame record."""
+    return {"file": path, "frame": None,
+            "orientation": getattr(ds, "ImageOrientationPatient", None),
+            "position": getattr(ds, "ImagePositionPatient", None),
+            "spacing": getattr(ds, "PixelSpacing", None),
+            "thickness": getattr(ds, "SliceThickness", None),
+            "slope": float(getattr(ds, "RescaleSlope", 1) or 1),
+            "intercept": float(getattr(ds, "RescaleIntercept", 0) or 0),
+            "window": (getattr(ds, "WindowCenter", None), getattr(ds, "WindowWidth", None))}
+
+
+def _enhanced_frames(path: str, ds) -> List[Dict[str, Any]]:
+    """Each frame of a multi-frame (enhanced) DICOM file as a frame record.
+
+    Enhanced files keep each frame's geometry in its own functional groups
+    (PerFrameFunctionalGroupsSequence), with what all frames share in
+    SharedFunctionalGroupsSequence; a value per frame wins over a shared one,
+    and a shared one over the same attribute at the top level.
+    """
+    shared_seq = getattr(ds, "SharedFunctionalGroupsSequence", None)
+    shared = shared_seq[0] if shared_seq else None
+    per_frame = list(getattr(ds, "PerFrameFunctionalGroupsSequence", None) or [])
+    count = int(getattr(ds, "NumberOfFrames", 1) or 1)
+    if len(per_frame) != count:
+        raise VolumeError(f"{Path(path).name} has {count} frames but "
+                          f"{len(per_frame)} per-frame functional groups")
+
+    def value(group, sequence, attr):
+        for owner in (group, shared):
+            items = getattr(owner, sequence, None) if owner is not None else None
+            if items:
+                found = getattr(items[0], attr, None)
+                if found is not None:
+                    return found
+        # Some vendor and legacy-converted files leave a value (RescaleSlope,
+        # WindowCenter) at the top level instead of in a functional group.
+        return getattr(ds, attr, None)
+
+    frames = []
+    for index, group in enumerate(per_frame):
+        slope = value(group, "PixelValueTransformationSequence", "RescaleSlope")
+        intercept = value(group, "PixelValueTransformationSequence", "RescaleIntercept")
+        frames.append({
+            "file": path, "frame": index,
+            "orientation": value(group, "PlaneOrientationSequence", "ImageOrientationPatient"),
+            "position": value(group, "PlanePositionSequence", "ImagePositionPatient"),
+            "spacing": value(group, "PixelMeasuresSequence", "PixelSpacing"),
+            "thickness": value(group, "PixelMeasuresSequence", "SliceThickness"),
+            "slope": float(slope if slope is not None else 1) or 1.0,
+            "intercept": float(intercept if intercept is not None else 0),
+            "window": (value(group, "FrameVOILUTSequence", "WindowCenter"),
+                       value(group, "FrameVOILUTSequence", "WindowWidth")),
+        })
+    return frames
 
 
 def to_source_order(volume: "Volume", array: np.ndarray) -> np.ndarray:
@@ -399,11 +467,27 @@ def header_tags(volume: Volume, display_tags: Sequence[str],
             continue
         value = volume.header.get(keyword)
         if value is None:
+            value = _shared_functional_value(volume.header, keyword)
+        if value is None:
             continue
         text = str(value.value if hasattr(value, "value") else value)
         if text:
             shown[keyword] = text
     return shown
+
+
+def _shared_functional_value(header, keyword: str):
+    """A tag an enhanced file keeps in its shared functional groups
+    (SliceThickness under PixelMeasuresSequence, say), or None."""
+    shared = getattr(header, "SharedFunctionalGroupsSequence", None)
+    if not shared:
+        return None
+    for element in shared[0]:
+        if element.VR == "SQ" and element.value:
+            found = element.value[0].get(keyword)
+            if found is not None:
+                return found
+    return None
 
 
 def describe(volume: Volume, display_tags=(), allow_identifying_tags=()) -> Dict[str, Any]:

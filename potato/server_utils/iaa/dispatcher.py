@@ -186,7 +186,9 @@ def metrics_for_schema(scheme: Dict[str, Any],
             "<row>.alpha_nominal",
         ],
         SchemaKind.RANKING: ["kendall_tau", "spearman_footrule"],
-        SchemaKind.SPATIAL: ["mean_agreement", "mean_object_count_diff"],
+        SchemaKind.SPATIAL: ["mean_agreement", "mean_object_count_diff",
+                             # Sequences only: identity over tracks.
+                             "identity.mota", "identity.idf1", "identity.id_switches"],
         SchemaKind.VOLUME: ["mean_dice", "dice_by_label.<label>"],
         SchemaKind.SEGMENTS: ["mean_agreement", "mean_object_count_diff"],
         SchemaKind.TRACE: ["alpha_nominal", "cohen_kappa", "percent_agreement"],
@@ -203,6 +205,8 @@ def metrics_for_schema(scheme: Dict[str, Any],
         SchemaKind.TEMPORAL: [
             "mean_agreement", "mean_matched_iou", "detection_f1",
             "mean_object_count_diff",
+            # Video tracks only.
+            "identity.mota", "identity.idf1", "identity.id_switches",
         ],
         # Three groups rather than a flat list, because an episode annotation
         # is three different kinds of answer and blending them would hide which
@@ -1500,6 +1504,17 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
                     scheme, _gather_raw(overlap_items, user_states, name))
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("attribute agreement failed for %s: %s", name, exc)
+        # Video tracks: whether the annotators kept the same objects under the
+        # same ids, which frame-level matching cannot see.
+        if scheme.get("annotation_type") == "video_annotation" and isinstance(metrics, dict):
+            from potato.server_utils.iaa.identity import video_identity
+            try:
+                tracks_identity = video_identity(_gather_raw(overlap_items, user_states, name))
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("identity agreement failed for %s: %s", name, exc)
+                tracks_identity = None
+            if tracks_identity is not None:
+                metrics["identity"] = tracks_identity
         schema_report[name] = {
             "kind": kind.value,
             "annotation_type": scheme.get("annotation_type"),

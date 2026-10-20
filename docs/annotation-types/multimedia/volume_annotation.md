@@ -105,7 +105,10 @@ images, as DICOM requires; a NIfTI export carries none.
   slices of the selected label. Paint the first and last slice and one or
   more in between where the shape changes; the filled slices are ordinary
   mask and can be painted over. **Undo** (<kbd>Ctrl</kbd>+<kbd>Z</kbd>)
-  removes them.
+  removes them. Two outlines that do not overlap blend to nothing in the
+  middle; those slices stay empty and the status line names them. A blended
+  slice smaller than a tenth of the smaller painted outline counts as empty
+  too, instead of leaving a few stray pixels.
 
 Views are drawn in radiological convention: the patient's right is on the
 viewer's left. Every volume is put in one orientation (RAS) when read, so
@@ -115,13 +118,15 @@ orthogonal grid, not true axial, coronal and sagittal planes.
 
 ## Inputs
 
-- **DICOM**: a directory holding one classic series (one file per slice).
-  Slices are ordered by position along the slice normal. Refused, with the
-  reason: a directory with two series; missing or duplicated slices; slices
-  with different orientations (a localizer left in the series); a gantry
-  tilt over 0.5°, which `dcm2niix` resamples away; and `BurnedInAnnotation`
-  YES. Multi-frame (enhanced) DICOM is not supported: convert it to a
-  classic series or to NIfTI (for example with `dcm2niix`).
+- **DICOM**: a directory holding one series, either classic (one file per
+  slice) or one multi-frame (enhanced) file, whose per-frame position,
+  orientation, spacing and rescale come from its functional groups. Slices
+  are ordered by position along the slice normal. Refused, with the reason: a
+  directory with two series, or with more than one multi-frame file; missing
+  or duplicated slices; slices with different orientations (a localizer left
+  in the series); a gantry tilt over 0.5°, which `dcm2niix` resamples away;
+  and `BurnedInAnnotation` YES. A DICOM SEG exported from a multi-frame
+  source refers to that file's frames in the file's own order.
 - **NIfTI**: `.nii` and `.nii.gz`, 3D (a 4D file with one volume is read as
   3D).
 - **RTSTRUCT**: closed planar contours on axial slices of the series. ROIs

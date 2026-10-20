@@ -62,7 +62,7 @@ over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 62 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 492 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 493 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -955,7 +955,7 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Depth maps with windowing | Yes | - | - | - | Partial | - | - |
 | DICOM / NIfTI / WSI | Yes | - | - | - | Yes | Yes | - |
 | Model training in the same product | Partial (text and image classifiers) | Partial | - | Yes | Yes | Yes | - |
-| CV format import | 15 formats | Extensive | Partial | Extensive | Partial | Extensive | Partial |
+| CV format import | 16 formats | Extensive | Partial | Extensive | Partial | Extensive | Partial |
 | **Chance-corrected agreement over geometry** | **Yes** | - | - | - | - | - | - |
 | Robot episode annotation (LeRobot, RLDS, HDF5) | Yes | - | - | - | - | - | - |
 | Generative-video / world-model evaluation | Yes | - | - | - | - | - | - |
@@ -1012,7 +1012,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 35 formats and import from 22 (15 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 35 formats and import from 23 (16 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -1110,7 +1110,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 15 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -1332,7 +1332,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Annotation schemas | 62 |
 | Display types | 24 |
 | Export formats | 35 |
-| Import formats (15 CV, 5 text, 2 whole-project) | 22 |
+| Import formats (16 CV, 5 text, 2 whole-project) | 23 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |
 | Assignment strategies | 13 |
@@ -16633,6 +16633,15 @@ annotation_schemes:
 what agreement compares and what an export should read. Tracks are saved as
 they change, with the rest of the scheme's answer.
 
+**Agreement on tracks.** With two or more annotators on a video, the
+agreement report gives tracks an `identity` group: `mota`, `idf1` and
+`id_switches`, computed between each pair of annotators with boxes matched at
+IoU 0.5 on every frame of each track. They catch what box overlap cannot: two
+annotators who box the same cars but swap two of them halfway through. The
+measures are explained under
+[point-cloud sequences](../spatial/point_cloud.md#sequences), which get the
+same group.
+
 Only one video scheme per page can use `tracking` or `combined` mode. The
 tracker's keyboard shortcuts act on the whole page, so a second tracker would
 receive every track you create; the config is refused at startup. Put a second
@@ -18307,7 +18316,10 @@ images, as DICOM requires; a NIfTI export carries none.
   slices of the selected label. Paint the first and last slice and one or
   more in between where the shape changes; the filled slices are ordinary
   mask and can be painted over. **Undo** (<kbd>Ctrl</kbd>+<kbd>Z</kbd>)
-  removes them.
+  removes them. Two outlines that do not overlap blend to nothing in the
+  middle; those slices stay empty and the status line names them. A blended
+  slice smaller than a tenth of the smaller painted outline counts as empty
+  too, instead of leaving a few stray pixels.
 
 Views are drawn in radiological convention: the patient's right is on the
 viewer's left. Every volume is put in one orientation (RAS) when read, so
@@ -18317,13 +18329,15 @@ orthogonal grid, not true axial, coronal and sagittal planes.
 
 ## Inputs
 
-- **DICOM**: a directory holding one classic series (one file per slice).
-  Slices are ordered by position along the slice normal. Refused, with the
-  reason: a directory with two series; missing or duplicated slices; slices
-  with different orientations (a localizer left in the series); a gantry
-  tilt over 0.5°, which `dcm2niix` resamples away; and `BurnedInAnnotation`
-  YES. Multi-frame (enhanced) DICOM is not supported: convert it to a
-  classic series or to NIfTI (for example with `dcm2niix`).
+- **DICOM**: a directory holding one series, either classic (one file per
+  slice) or one multi-frame (enhanced) file, whose per-frame position,
+  orientation, spacing and rescale come from its functional groups. Slices
+  are ordered by position along the slice normal. Refused, with the reason: a
+  directory with two series, or with more than one multi-frame file; missing
+  or duplicated slices; slices with different orientations (a localizer left
+  in the series); a gantry tilt over 0.5°, which `dcm2niix` resamples away;
+  and `BurnedInAnnotation` YES. A DICOM SEG exported from a multi-frame
+  source refers to that file's frames in the file's own order.
 - **NIfTI**: `.nii` and `.nii.gz`, 3D (a 4D file with one volume is read as
   3D).
 - **RTSTRUCT**: closed planar contours on axial slices of the series. ROIs
@@ -18973,6 +18987,26 @@ report's `n_frames` counts the (item, frame) pairs that anyone annotated.
 Attribute agreement matches whole tracks, by how much they overlap in time
 multiplied by their mean 3D overlap.
 
+Frame-by-frame matching cannot see an identity error: two annotators who box
+the same objects on every frame but swap two tracks' ids where the objects
+cross score 1.0. The report's `identity` group adds the tracking measures,
+computed between each pair of annotators with boxes matched at 3D IoU 0.25:
+
+| Measure | Meaning |
+|---|---|
+| `identity.mota` | 1 − (misses + extra boxes + ID switches) / object-frames. Can go below 0 |
+| `identity.idf1` | The share of object-frames kept under the best one-to-one pairing of the two annotators' tracks |
+| `identity.id_switches` | How often a track's matched partner changed |
+
+Neither annotator is ground truth, so MOTA and ID switches are counted with
+each one as the reference and pooled (`id_switches` is per direction). An
+annotator who drew nothing on a sequence another annotator tracked makes that
+pair's MOTA −1: every object-frame is a miss one way and an extra box the
+other. Classes
+are not compared here; the frame-level report covers them. Video tracks get
+the same group, with 2D boxes matched at IoU 0.5; see
+[video annotation](../multimedia/video_annotation.md).
+
 The labeling engine compares a model's sequence answer with a person's the same
 way, frame by frame.
 
@@ -18980,6 +19014,45 @@ The `kitti_3d` export writes a sequence as KITTI tracking labels, with a line
 on every frame of each track and each box's 2D projection in the camera image;
 see
 [3D labels](../../data-export/format_matrix.md#kitti-3d-labels).
+
+When a frame has loaded, the viewer fetches the next frame, the previous one
+and the one after next in the background, and keeps the last few in memory, so
+stepping through a sequence does not wait on the network. With an octree cloud
+it fetches each neighbour's coarse first level; finer detail still loads as
+the camera moves.
+
+### Importing KITTI tracking labels
+
+`potato import` reads the KITTI tracking benchmark's layout:
+
+```
+training/
+  label_02/0000.txt          frame track_id type truncated occluded alpha bbox h w l x y z ry
+  velodyne/0000/000000.bin   one scan per frame
+  calib/0000.txt
+```
+
+```bash
+potato import -i ./training -o lidar-project --schema-name objects
+python potato/flask_server.py start lidar-project/config.yaml -p 8000
+```
+
+Each sequence becomes one item: its scans in `point_cloud`, its calibration in
+`calibration`, and its labels as pre-annotations that every annotator starts
+from. The labels are in the camera frame, so each box goes through the
+sequence's calibration into the lidar frame, the reverse of the `kitti_3d`
+export. A sequence without a calibration file is skipped with a warning, and
+so is one with a scan missing from the middle: Potato numbers frames by scan
+position and KITTI by file name, and a gap would shift every later frame.
+Every labelled frame becomes a keyframe. `truncated` and `occluded` become
+attributes of the same names, which the export reads back. `DontCare` rows
+mark regions KITTI leaves out of evaluation; they are left out and counted. A
+track that disappears and comes back under the same id is interpolated across
+the gap, and the import reports how many such gaps there are.
+
+The config's `media_directory` points at the dataset folder, so the scans are
+served from where they are. Keep the project and the dataset in place, or edit
+that path.
 
 ## The slab views
 
@@ -47657,7 +47730,7 @@ Give the IdP administrator Potato's service-provider metadata, served at
 |-----|----------|-------------|
 | `idp_metadata_url` | One of three | The IdP's metadata (https only), fetched once, when first needed |
 | `idp_metadata_file` | One of three | The same metadata saved to a file |
-| `idp` | One of three | `entity_id`, `sso_url` and `x509cert` (PEM text or a file path) |
+| `idp` | One of three | `entity_id`, `sso_url` and `x509cert` (PEM text or a file path), and `slo_url` for single logout |
 | `idp_entity_id` | No | Which entity to use when the metadata lists several |
 | `sp_base_url` | Behind a proxy | The public address Potato is reached at. Behind a proxy that ends TLS, Potato sees `http` and an internal host, and the IdP's response fails the destination check |
 | `sp_entity_id` | No | Default `<sp_base_url>/saml/metadata` |
@@ -47667,6 +47740,7 @@ Give the IdP administrator Potato's service-provider metadata, served at
 | `required_attribute` | No | `{name, values}`: sign-in is refused unless the attribute holds one of the values |
 | `claim_attributes` | No | Attributes whose values become `group:<value>` SSO claims for role mapping |
 | `display_name` | No | The sign-in button's label |
+| `single_logout` | No | Default `true`: when the IdP has a logout service, signing out of Potato also ends the IdP session. `false` keeps sign-out local |
 
 #### What Potato checks
 
@@ -47681,9 +47755,31 @@ Potato starts every sign-in itself and accepts a response only when:
   inside its validity window;
 - it has not been used before.
 
-Single logout is not supported: signing out of Potato ends the Potato
-session, not the IdP session. `allow_local_login` and `auto_register` work as
-they do for OAuth.
+`allow_local_login` and `auto_register` work as they do for OAuth.
+
+#### Single logout
+
+When the IdP's metadata names a logout service (`SingleLogoutService`, HTTP
+Redirect binding), or `idp.slo_url` is set, Potato adds its own logout service
+to `/saml/metadata` at `<sp_base_url>/saml/sls`, and signing out works both
+ways:
+
+- **Signing out of Potato** ends the Potato session, then sends the browser to
+  the IdP with a LogoutRequest naming the session it signed in with (NameID and
+  SessionIndex). The IdP sends the browser back to `/saml/sls`. The page says
+  whether the IdP confirmed it: a signed Success that answers Potato's request.
+  If the IdP never answers, the annotator is still signed out of Potato.
+- **Signing out at the IdP**, or of another service in the same IdP session,
+  brings the browser to `/saml/sls` with the IdP's LogoutRequest. Potato acts
+  only on a request signed with the IdP's certificate, and ends the session
+  only if the request names this browser's NameID (and SessionIndex, when it
+  gives one). Each request is accepted once; a replayed copy is refused. It then sends the IdP a LogoutResponse so the IdP can continue to
+  the next service.
+
+Many IdPs want the LogoutRequest signed. Set `sp_cert_file` and `sp_key_file`
+and Potato signs its LogoutRequests and LogoutResponses. Logout over the SOAP
+back channel is not supported. The IdP has to send the browser, which carries
+the session cookie Potato uses to find the session.
 
 #### HTTPS is required
 
@@ -51330,6 +51426,7 @@ direction. If you are deciding whether to migrate a dataset, this is the page.
 | `yolo` | `data.yaml` + `labels/*.txt` | ✅ | ✅ | ❌ ² | ❌ | ❌ |
 | `labelme` | one JSON per image | ✅ | ✅ | ⚠️ ³ | ✅ | ✅ |
 | `kitti` | `label_2/*.txt` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `kitti_tracking` | `label_02/`, `velodyne/`, `calib/` | ✅ 3D cuboids on lidar sequences ¹⁴ | ❌ | ❌ | ❌ | ❌ |
 | `mot` | `seqinfo.ini` + `gt/gt.txt` | ✅ ⁸ | ❌ | ❌ | ❌ | ❌ |
 | `cityscapes` | `*_gtFine_polygons.json` | ❌ | ✅ | ❌ ⁹ | ❌ | ❌ |
 | `davis` | indexed PNG per frame | ❌ | ❌ | ✅ per instance | ❌ | ❌ |
@@ -51377,6 +51474,13 @@ the PNGs with `--input-format davis`.
 to whichever importer recognises them, so a WebDataset-wrapped LabelMe file
 imports as LabelMe, with LabelMe's conventions and caveats. Whatever that
 format supports is what survives.
+
+¹⁴ One item per sequence, its scans listed in `point_cloud` and its
+`calib/<seq>.txt` as the calibration. Every labelled frame is a keyframe;
+`DontCare` rows are left out and counted. Truncation and occlusion become the
+`truncated` and `occluded` attributes the `kitti_3d` export reads back. A
+track that disappears and comes back under the same id is interpolated across
+the gap, and the import counts such gaps.
 
 ## Export
 
@@ -51433,7 +51537,8 @@ rather than as CV geometry.
 | V7 Darwin → Potato → Darwin | ✅ for boxes, polygons, ellipses, lines and keypoints; holes and raster masks are reported |
 | KITTI → Potato → KITTI | ✅ for 2D boxes; `truncated` / `occluded` / `alpha` and the 3D fields ride through untouched |
 | Potato → KITTI 3D | ✅ with the calibration; pitch and roll are dropped — see [3D labels](#kitti-3d-labels) |
-| KITTI 3D → Potato | ⚠️ library only: `kitti3d.kitti_to_cuboid` converts a label exactly, but no `potato import` format reads 3D label files yet |
+| KITTI tracking → Potato → KITTI tracking | ✅ to the format's two decimals, through each sequence's calibration. It imports as `kitti_tracking` and exports as `kitti_3d`, so the format name alone is one-way |
+| KITTI 3D object labels (`label_2` per cloud) → Potato | ⚠️ library only: `kitti3d.kitti_to_cuboid` converts a label exactly, but no `potato import` format reads per-cloud 3D label files yet |
 | MOT → Potato → MOT | ✅ for boxes, track ids, ignore regions and visibility |
 | Cityscapes → Potato → Cityscapes | ✅ for polygons, crowd `group` labels and painter's order |
 | DAVIS → Potato → DAVIS | ✅ for per-instance masks and stable object ids |
@@ -52708,12 +52813,19 @@ Point at the dataset root, not at a file inside it.
 | Pascal VOC | `potato import -i ./VOC2012 -o proj` | `.xml` with an `<annotation>` root |
 | CVAT | `potato import -i ./export -o proj` | `.xml` with an `<annotations>` root |
 | KITTI | `potato import -i ./training -o proj --image-dir ./training/image_2` | `label_2/` |
+| KITTI tracking (lidar) | `potato import -i ./kitti_tracking -o proj --schema-name objects` | `label_02/` |
 | MOT | `potato import -i ./MOT17-02 -o proj` | `seqinfo.ini` or `gt/gt.txt` |
 | Cityscapes | `potato import -i ./gtFine -o proj` | `*_gtFine_polygons.json` |
 | DAVIS | `potato import -i ./DAVIS -o proj` | `Annotations/**/*.png` |
 | Open Images | `potato import -i ./oid -o proj` | a CSV with `ImageID,LabelName,XMin` |
 | WebDataset | `potato import -i shard.tar -o proj --extract-media ./media` | any readable `.tar` |
 | HuggingFace | `potato import -i ./saved-dataset -o proj` | `dataset_info.json` |
+
+A KITTI tracking import needs `label_02/`, `velodyne/` and `calib/` in one
+folder (`training/` or `testing/`, or the folder above them). It writes a
+point-cloud project with one item per sequence, the scans listed in order and
+each labelled object a keyframe of its track; see
+[Point clouds: importing KITTI tracking labels](../annotation-types/spatial/point_cloud.md#importing-kitti-tracking-labels).
 
 CVAT and Pascal VOC are **both XML**, so the file extension decides nothing.
 Detection reads the root element instead — guessing from the suffix sent every
@@ -62594,7 +62706,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **492 paths / 530 operations**, generated by
+An index of Potato's HTTP surface: **493 paths / 531 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:

@@ -1134,11 +1134,18 @@ def oauth_callback(provider):
     return _finish_sso_sign_in(user_id, sso_claims, provider)
 
 
-def _finish_sso_sign_in(user_id, sso_claims, provider):
-    """Start the Potato session for an identity a provider vouched for."""
+def _finish_sso_sign_in(user_id, sso_claims, provider, saml_session=None):
+    """Start the Potato session for an identity a provider vouched for.
+
+    ``saml_session`` (NameID and SessionIndex) is kept so that signing out
+    can end the IdP session too, and so an IdP-initiated logout can tell
+    whether it names this browser's session.
+    """
     session.clear()
     session['username'] = user_id
     session['sso_claims'] = sso_claims
+    if saml_session:
+        session['saml'] = saml_session
     session.permanent = True
     logger.info("SSO login successful: provider=%s, user=%s", provider, user_id)
 
@@ -1165,6 +1172,9 @@ def _finish_sso_sign_in(user_id, sso_claims, provider):
 #: Cookie holding the signed AuthnRequest id between /saml/login and /saml/acs.
 SAML_REQUEST_COOKIE = "potato_saml_request"
 SAML_REQUEST_MAX_AGE = 600
+#: Cookie holding the signed LogoutRequest id between /logout and /saml/sls.
+#: The IdP returns the browser with a top-level GET, so SameSite=Lax is sent.
+SAML_LOGOUT_COOKIE = "potato_saml_logout"
 
 
 def _saml_cookie(secure):
@@ -1239,7 +1249,8 @@ def saml_acs():
         except BadSignature:
             request_id = None
     try:
-        user_id, attributes = backend.process_response(data, base, request_id)
+        user_id, attributes, saml_session = backend.process_response(
+            data, base, request_id, with_session=True)
     except SAMLError as exc:
         return _saml_refusal(str(exc))
     except Exception as exc:
@@ -1257,9 +1268,101 @@ def saml_acs():
         logger.warning("Refused SAML sign-in for %r: %s", user_id, result)
         return _saml_refusal("Your account could not be created on this task.")
 
-    response = _finish_sso_sign_in(user_id, backend.sso_claims(attributes), "saml")
+    response = _finish_sso_sign_in(user_id, backend.sso_claims(attributes), "saml",
+                                   saml_session=saml_session)
     response.delete_cookie(cookie_name, path=cookie_path, secure=data["https"] == "on")
     return response
+
+
+def _saml_logout_cookie(secure):
+    if secure:
+        return "__Host-" + SAML_LOGOUT_COOKIE, "/"
+    return SAML_LOGOUT_COOKIE, (request.script_root or "") + "/saml/"
+
+
+def _saml_single_logout(saml_session):
+    """Send the browser to the IdP to end its session too, or None.
+
+    Called after the Potato session is cleared, so an IdP that never answers
+    still leaves the annotator signed out of Potato.
+    """
+    from potato.auth_backends.saml_backend import request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None or not saml_session or not backend.slo_enabled():
+        return None
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    try:
+        target, request_id = backend.logout_redirect(data, base, saml_session)
+    except Exception as exc:
+        logger.error("SAML single logout could not start: %s", exc)
+        return None
+    response = redirect(target)
+    secure = data["https"] == "on"
+    name, path = _saml_logout_cookie(secure)
+    response.set_cookie(name, _saml_serializer().dumps(request_id),
+                        max_age=SAML_REQUEST_MAX_AGE, httponly=True, secure=secure,
+                        samesite="Lax", path=path)
+    return response
+
+
+@app.route("/saml/sls")
+def saml_sls():
+    """The IdP's side of single logout: the answer to ours, or one it started."""
+    from itsdangerous import BadSignature
+    from potato.auth_backends.saml_backend import SAMLError, request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None:
+        return redirect(url_for("home"))
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    secure = data["https"] == "on"
+    title = config.get("annotation_task_name", "Annotation Platform")
+    if "SAMLResponse" in request.args:
+        name, path = _saml_logout_cookie(secure)
+        request_id = None
+        token = request.cookies.get(name)
+        if token:
+            try:
+                request_id = _saml_serializer().loads(token, max_age=SAML_REQUEST_MAX_AGE)
+            except BadSignature:
+                request_id = None
+        try:
+            result = backend.process_logout(data, base, request_id, None)
+        except Exception as exc:
+            logger.error("SAML logout response could not be processed: %s", exc)
+            result = {"confirmed": False}
+        detail = ("You are signed out of this task and of your institution's sign-in."
+                  if result.get("confirmed") else
+                  "You are signed out of this task. Your institution did not confirm "
+                  "that its own sign-in ended, so close the browser if others use "
+                  "this computer.")
+        response = make_response(render_template(
+            "logged_out.html", title=title, detail=detail, sign_in_url=url_for("home")))
+        response.delete_cookie(name, path=path, secure=secure)
+        return response
+    def refused(message):
+        # Nothing was signed out, so the page must not say so.
+        still_in = bool(session.get("username"))
+        return (render_template(
+            "logged_out.html", title=title, heading="Logout request not accepted", refused=True,
+            subtitle=("You are still signed in to this task." if still_in
+                      else "Nothing was changed."),
+            detail=message, sign_in_url=None if still_in else url_for("home")), 400)
+
+    try:
+        result = backend.process_logout(data, base, None, session.get("saml"))
+    except SAMLError as exc:
+        return refused(str(exc))
+    except Exception as exc:
+        logger.error("SAML logout request could not be processed: %s", exc)
+        return refused("This logout request could not be verified.")
+    if result.get("end_session"):
+        logger.info("IdP-initiated logout ended the session of %s", session.get("username"))
+        session.clear()
+    if result.get("redirect"):
+        return redirect(result["redirect"])
+    return render_template("logged_out.html", title=title,
+                           detail="You are signed out of this task.",
+                           sign_in_url=url_for("home"))
 
 
 @app.route("/saml/metadata")
@@ -1305,10 +1408,17 @@ def logout_page():
     # Check login type before clearing session (config is module-level, not session-dependent)
     login_config = config.get('login', {})
     login_type = login_config.get('type', 'standard')
+    saml_session = session.get('saml')
 
     # Clear the session
     session.clear()
     logger.info("User logged out successfully")
+
+    # Signed in through SAML with an IdP that offers single logout: end the
+    # institution's session too, which returns to /saml/sls.
+    single_logout = _saml_single_logout(saml_session)
+    if single_logout is not None:
+        return single_logout
 
     if login_type in ['url_direct', 'prolific']:
         # Cannot redirect to home — it requires a URL parameter (e.g., PROLIFIC_PID)
@@ -11145,6 +11255,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/saml/login", "saml_login", saml_login, methods=["GET"])
     app.add_url_rule("/saml/acs", "saml_acs", saml_acs, methods=["POST"])
     app.add_url_rule("/saml/metadata", "saml_metadata", saml_metadata, methods=["GET"])
+    app.add_url_rule("/saml/sls", "saml_sls", saml_sls, methods=["GET"])
 
     # Chat support API routes
     app.add_url_rule("/api/chat/send", "chat_send", chat_send, methods=["POST"])

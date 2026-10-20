@@ -119,7 +119,7 @@ def _by_frame(objects: List[dict]) -> Dict[int, List[dict]]:
     return out
 
 
-def spatial_distance(a: List[dict], b: List[dict]) -> float:
+def spatial_distance(a: List[dict], b: List[dict], sim_fn=None) -> float:
     """1 - matched 3D overlap between two annotators' objects.
 
     On a sequence (objects with `frame` and `track_id`) this is the mean of
@@ -129,14 +129,18 @@ def spatial_distance(a: List[dict], b: List[dict]) -> float:
     """
     from potato.server_utils.annotation_values import _matched_set_distance
     a, b = a or [], b or []
-    if _is_sequence(a) or _is_sequence(b):
+    # One frame's objects (spatial_report expands a sequence that way) need
+    # no interpolating again: compare them as they are.
+    one_frame = len({o.get("frame") for o in a + b if isinstance(o, dict)}) <= 1
+    if not one_frame and (_is_sequence(a) or _is_sequence(b)):
         frames_a, frames_b = _by_frame(a), _by_frame(b)
         frames = sorted(set(frames_a) | set(frames_b))
         if not frames:
             return 0.0
         return sum(float(_matched_set_distance(frames_a.get(f, []), frames_b.get(f, []),
-                                               SPATIAL_MATCH)) for f in frames) / len(frames)
-    return float(_matched_set_distance(a, b, SPATIAL_MATCH))
+                                               SPATIAL_MATCH, sim_fn=sim_fn))
+                   for f in frames) / len(frames)
+    return float(_matched_set_distance(a, b, SPATIAL_MATCH, sim_fn=sim_fn))
 
 
 def segment_distance(a: List[dict], b: List[dict]) -> float:
@@ -182,13 +186,30 @@ def spatial_report(rows: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     A sequence item (objects with `frame` and `track_id`) is scored frame by
     frame, with the boxes between keyframes interpolated, so a box on frame 0
     is never matched with one on frame 9. Each (item, frame) that anyone
-    annotated is a unit; `n_frames` counts them.
+    annotated is a unit; `n_frames` counts them. Sequences also get
+    `identity`: MOTA, IDF1 and ID switches between each pair of annotators'
+    tracks (see `identity`).
     """
     from potato.export.spatial_sequences import dense_frames
     from potato.server_utils.annotation_values import _parse_blob
 
+    from potato.server_utils.iaa import geometry, identity
+
+    # The frame-level matching and the identity measures compare the same
+    # pairs of boxes; each pair's 3D IoU (polyhedron clipping) is worked out
+    # once for both. Keyed by the objects themselves, which this call holds.
+    memo: Dict[Any, Any] = {}
+
+    def similarity(obj_a: dict, obj_b: dict) -> float:
+        key = (id(obj_a), id(obj_b))
+        hit = memo.get(key)
+        if hit is None:
+            hit = memo[key] = (geometry.similarity(obj_a, obj_b), obj_a, obj_b)
+        return hit[0]
+
     expanded: Dict[str, Dict[str, Any]] = {}
     sequence_items = set()
+    identity_pairs: List[Dict[str, Any]] = []
     for iid, per_user in rows.items():
         raw = {uid: [o for o in _parse_blob(v) if isinstance(o, dict)]
                for uid, v in per_user.items()}
@@ -203,13 +224,22 @@ def spatial_report(rows: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
             per_frame = {uid: frames[frame] for uid, frames in dense.items()}
             if any(per_frame.values()):
                 expanded[f"{iid}@{frame}"] = per_frame
+        tracked = {uid: {f: [(str(o["track_id"]), o) for o in objs]
+                         for f, objs in frames.items() if objs}
+                   for uid, frames in dense.items()}
+        for (_ua, a), (_ub, b) in itertools.combinations(sorted(tracked.items()), 2):
+            identity_pairs.append(identity.pair_counts(a, b, similarity, SPATIAL_MATCH))
     report = _set_report(expanded, lambda value: value if isinstance(value, list)
-                         else spatial_objects(value), spatial_distance)
+                         else spatial_objects(value),
+                         lambda x, y: spatial_distance(x, y, sim_fn=similarity))
     if sequence_items:
         units = [key for key in expanded if key.split("@")[0] in sequence_items]
         report["n_frames"] = len(units)
         report["n_items"] = len({key.split("@")[0] for key in expanded
                                  if len(expanded[key]) >= 2})
+        # Frame-by-frame matching cannot see two annotators swapping ids where
+        # two objects cross; the tracking measures can.
+        report["identity"] = identity.identity_report(identity_pairs, SPATIAL_MATCH)
     return report
 
 

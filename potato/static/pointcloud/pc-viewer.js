@@ -124,6 +124,10 @@
             this.frameIndex = 0;
             this.sequenceStore = [];
             this._loadToken = 0;
+            // Parsed clouds by URL, oldest first: the frame showing and its
+            // neighbours, so stepping through a sequence does not wait on
+            // the network for a frame it has already passed or prefetched.
+            this._cloudCache = new Map();
             // Subtracted from the cloud by the server; null for a cloud near
             // zero. Set when the cloud or octree manifest arrives.
             this.origin = null;
@@ -324,7 +328,10 @@
         }
 
         _cloudUrl() {
-            const path = this._cloudPath();
+            return this._urlForPath(this._cloudPath());
+        }
+
+        _urlForPath(path) {
             if (!path) return null;
             if (/^https?:\/\//i.test(path)) {
                 // A remote cloud still has to go through the converter, so the
@@ -398,32 +405,12 @@
             // A sequence can switch frames faster than a cloud arrives; only
             // the latest request may replace the points.
             const token = ++this._loadToken;
-            this._status('Loading point cloud…');
-            let response;
-            try {
-                response = await fetch(url, { credentials: 'same-origin' });
-            } catch (err) {
-                this._status(`Could not fetch the point cloud: ${err.message}`,
-                             'error');
-                return;
-            }
-            if (!response.ok) {
-                // The server sends an actionable message for a format it cannot
-                // read ("convert with laszip"); surfacing the status code alone
-                // would throw that away.
-                let detail = `HTTP ${response.status}`;
-                try {
-                    detail = (await response.json()).error || detail;
-                } catch (_e) { /* not JSON; keep the status */ }
-                this._status(detail, 'error');
-                return;
-            }
-
+            if (!this._cloudCache.has(url)) this._status('Loading point cloud…');
             let parsed;
             try {
-                parsed = wire.parseWire(await response.arrayBuffer());
+                parsed = await this._fetchParsed(url);
             } catch (err) {
-                this._status(`Point cloud is unreadable: ${err.message}`, 'error');
+                if (token === this._loadToken) this._status(err.message, 'error');
                 return;
             }
             if (token !== this._loadToken) return;
@@ -431,6 +418,76 @@
             this._setOrigin(wire.originOf(parsed.header));
             this._buildPoints(parsed);
             this._status(this._frameStatus(wire.describeCloud(parsed.header)));
+            this._prefetchNeighbours();
+        }
+
+        /**
+         * A parsed cloud, from the cache or the network.
+         *
+         * The promise is cached, so a prefetch still in flight is shared by
+         * the frame change that wants it. A failure is not kept: the next
+         * attempt fetches again rather than replaying the error.
+         */
+        _fetchParsed(url, kind) {
+            const cache = this._cloudCache;
+            if (cache.has(url)) {
+                const hit = cache.get(url);
+                cache.delete(url);       // most recently used goes last
+                cache.set(url, hit);
+                return hit;
+            }
+            const pending = (async () => {
+                let response;
+                try {
+                    response = await fetch(url, { credentials: 'same-origin' });
+                } catch (err) {
+                    throw new Error(`Could not fetch the point cloud: ${err.message}`);
+                }
+                if (!response.ok) {
+                    // The server sends an actionable message for a format it
+                    // cannot read ("convert with laszip"); surfacing the status
+                    // code alone would throw that away.
+                    let detail = `HTTP ${response.status}`;
+                    try {
+                        detail = (await response.json()).error || detail;
+                    } catch (_e) { /* not JSON; keep the status */ }
+                    throw new Error(detail);
+                }
+                try {
+                    return kind === 'json' ? await response.json()
+                        : wire.parseWire(await response.arrayBuffer());
+                } catch (err) {
+                    throw new Error(`Point cloud is unreadable: ${err.message}`);
+                }
+            })();
+            cache.set(url, pending);
+            pending.catch(() => { if (cache.get(url) === pending) cache.delete(url); });
+            while (cache.size > PREFETCH_CACHE_SIZE) cache.delete(cache.keys().next().value);
+            return pending;
+        }
+
+        /**
+         * Start loading the next frame, the previous one and the one after
+         * next, in that order, so the usual step forward is already parsed.
+         * For an octree cloud that is the manifest and the root node, the
+         * coarse sample a frame shows first; finer nodes follow the view.
+         */
+        _prefetchNeighbours() {
+            if (!this.frames) return;
+            const lod = this._lodEnabled();
+            const quiet = () => { /* shown if that frame is opened */ };
+            [1, -1, 2].forEach((offset) => {
+                const path = this.frames[this.frameIndex + offset];
+                const url = looksLikeCloud(path) ? this._urlForPath(path.trim()) : null;
+                if (!url) return;
+                if (!lod) {
+                    this._fetchParsed(url).catch(quiet);
+                    return;
+                }
+                const manifest = withParam(url, 'lod', '1');
+                this._fetchParsed(manifest, 'json').catch(quiet);
+                this._fetchParsed(withParam(manifest, 'node', 'r')).catch(quiet);
+            });
         }
 
         /**
@@ -561,20 +618,9 @@
             const manifestUrl = withParam(baseUrl, 'lod', '1');
             let manifest;
             try {
-                const response = await fetch(manifestUrl,
-                                             { credentials: 'same-origin' });
-                if (!response.ok) {
-                    let detail = `HTTP ${response.status}`;
-                    try {
-                        detail = (await response.json()).error || detail;
-                    } catch (_e) { /* not JSON; keep the status */ }
-                    this._status(detail, 'error');
-                    return;
-                }
-                manifest = await response.json();
+                manifest = await this._fetchParsed(manifestUrl, 'json');
             } catch (err) {
-                this._status(`Could not fetch the point cloud: ${err.message}`,
-                             'error');
+                if (token === this._loadToken) this._status(err.message, 'error');
                 return;
             }
 
@@ -606,6 +652,7 @@
                 this.groundZ = groundLevel(rootParsed.positions);
             }
             this._updateLod();
+            this._prefetchNeighbours();
         }
 
         _frameOn(frame) {
@@ -623,12 +670,18 @@
             // A node of the previous frame must not land in this one.
             const base = this._lodBaseUrl;
             try {
-                const response = await fetch(
-                    withParam(withParam(this._lodBaseUrl, 'lod', '1'),
-                              'node', key),
-                    { credentials: 'same-origin' });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const parsed = wire.parseWire(await response.arrayBuffer());
+                const url = withParam(withParam(this._lodBaseUrl, 'lod', '1'), 'node', key);
+                // The root, which every frame loads first, goes through the
+                // cache so a prefetched neighbour's is ready. Deeper nodes
+                // depend on the view and would only push neighbours out.
+                let parsed;
+                if (key === 'r') {
+                    parsed = await this._fetchParsed(url);
+                } else {
+                    const response = await fetch(url, { credentials: 'same-origin' });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    parsed = wire.parseWire(await response.arrayBuffer());
+                }
                 if (base !== this._lodBaseUrl) return;
                 if (key === 'r') this._setColorRange(parsed);
                 this.lodParsed.set(key, parsed);
@@ -2579,6 +2632,12 @@
      * produce a request for that prose, and so a missing source reports "no
      * point cloud for this item" rather than a 404 for a sentence.
      */
+    /**
+     * The frame showing, two ahead and one behind, plus one being replaced;
+     * twice that for octree clouds, which cache a manifest and a root each.
+     */
+    const PREFETCH_CACHE_SIZE = 10;
+
     function looksLikeCloud(value) {
         if (!value || typeof value !== 'string') return false;
         if (value.length > 512 || /\s/.test(value.trim())) return false;

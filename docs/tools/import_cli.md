@@ -79,12 +79,19 @@ Point at the dataset root, not at a file inside it.
 | Pascal VOC | `potato import -i ./VOC2012 -o proj` | `.xml` with an `<annotation>` root |
 | CVAT | `potato import -i ./export -o proj` | `.xml` with an `<annotations>` root |
 | KITTI | `potato import -i ./training -o proj --image-dir ./training/image_2` | `label_2/` |
+| KITTI tracking (lidar) | `potato import -i ./kitti_tracking -o proj --schema-name objects` | `label_02/` |
 | MOT | `potato import -i ./MOT17-02 -o proj` | `seqinfo.ini` or `gt/gt.txt` |
 | Cityscapes | `potato import -i ./gtFine -o proj` | `*_gtFine_polygons.json` |
 | DAVIS | `potato import -i ./DAVIS -o proj` | `Annotations/**/*.png` |
 | Open Images | `potato import -i ./oid -o proj` | a CSV with `ImageID,LabelName,XMin` |
 | WebDataset | `potato import -i shard.tar -o proj --extract-media ./media` | any readable `.tar` |
 | HuggingFace | `potato import -i ./saved-dataset -o proj` | `dataset_info.json` |
+
+A KITTI tracking import needs `label_02/`, `velodyne/` and `calib/` in one
+folder (`training/` or `testing/`, or the folder above them). It writes a
+point-cloud project with one item per sequence, the scans listed in order and
+each labelled object a keyframe of its track; see
+[Point clouds: importing KITTI tracking labels](../annotation-types/spatial/point_cloud.md#importing-kitti-tracking-labels).
 
 CVAT and Pascal VOC are **both XML**, so the file extension decides nothing.
 Detection reads the root element instead — guessing from the suffix sent every

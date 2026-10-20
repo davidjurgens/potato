@@ -180,3 +180,16 @@ def test_a_password_cannot_sign_in_as_an_sso_identity(server, idp):
     other.post(f"{server.base_url}/auth", data={"email": "grace@uni.test", "pass": "x"},
                timeout=10)
     assert not _signed_in(other, server)
+
+
+def test_without_a_logout_service_sign_out_stays_local(server, idp):
+    """This IdP's metadata names no SingleLogoutService, so /logout ends the
+    Potato session and goes home, as before single logout existed."""
+    s, rid, acs, audience = _start(server, idp)
+    assert _post(s, server, idp.response(_good(idp, rid, acs, audience), acs=acs,
+                                         in_response_to=rid)).status_code == 302
+    assert _signed_in(s, server)
+    r = s.get(f"{server.base_url}/logout", allow_redirects=False, timeout=10)
+    assert r.status_code == 302 and not r.headers["Location"].startswith(idp.slo_url)
+    assert not _signed_in(s, server)
+    assert "SingleLogoutService" not in s.get(f"{server.base_url}/saml/metadata", timeout=10).text

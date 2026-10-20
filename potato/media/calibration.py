@@ -413,9 +413,14 @@ def parse_kitti_calib(text: str, *, images: Optional[Dict[str, str]] = None,
     """
     rows: Dict[str, List[float]] = {}
     for line in text.splitlines():
-        if ":" not in line:
-            continue
-        key, _, rest = line.partition(":")
+        # The tracking benchmark's calib files write `R_rect` and
+        # `Tr_velo_cam` with no colon (`R_rect 9.99e-01 ...`). Skipping lines
+        # without one dropped both, and the lidar frame was then taken to be
+        # the camera frame.
+        if ":" in line:
+            key, _, rest = line.partition(":")
+        else:
+            key, _, rest = line.strip().partition(" ")
         values = _numbers(rest)
         if values:
             rows[key.strip()] = values

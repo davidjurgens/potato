@@ -49,6 +49,13 @@ class ImportResult:
     #: Tools the generated schema needs, derived from what the file contains.
     tools: List[str] = field(default_factory=list)
 
+    #: For a project that is not image annotation (a KITTI tracking import is
+    #: point-cloud sequences): ``annotation_type``, ``source_field``,
+    #: ``media_root`` (absolute; the config points ``media_directory`` at it),
+    #: ``noun`` for the summary line, and extra ``scheme`` keys. Empty for
+    #: every image format.
+    project: Dict[str, Any] = field(default_factory=dict)
+
     @property
     def num_objects(self) -> int:
         return sum(len(img.objects) for img in self.images)

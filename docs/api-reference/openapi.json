@@ -10752,6 +10752,26 @@
         ]
       }
     },
+    "/saml/sls": {
+      "get": {
+        "operationId": "get_saml_sls",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The IdP's side of single logout: the answer to ours, or one it started.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/screenshots/{filepath}": {
       "get": {
         "operationId": "get_serve_trace_screenshot",

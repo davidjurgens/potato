@@ -6,6 +6,32 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Multi-frame (enhanced) DICOM volumes.** A directory holding one
+  multi-frame file reads as a volume, with each frame placed from its
+  functional groups, and a DICOM SEG exported from it refers to the file's
+  frames in the file's order.
+- **SAML single logout.** When the IdP has a logout service, signing out of
+  Potato also ends the IdP session, and a logout the IdP starts ends the
+  Potato session it names. Potato acts only on signed logout requests,
+  advertises `/saml/sls` in its metadata, and signs its own logout messages
+  when `sp_cert_file` and `sp_key_file` are set. `single_logout: false` keeps
+  sign-out local.
+- **KITTI tracking import.** `potato import` reads the tracking benchmark's
+  `label_02/`, `velodyne/` and `calib/` into a point-cloud project: one item
+  per sequence, each labelled object a keyframe of its track, placed in the
+  lidar frame through the sequence's calibration. `truncated` and `occluded`
+  become attributes the `kitti_3d` export reads back; `DontCare` rows and
+  gaps in a track are counted.
+- **Identity agreement on tracks.** The agreement report adds `identity.mota`,
+  `identity.idf1` and `identity.id_switches` between each pair of annotators,
+  on point-cloud sequences (3D IoU 0.25) and video tracks (IoU 0.5). Two
+  annotators who swap two objects' ids where they cross score 1.0 frame by
+  frame; these measures show the swap.
+- **Point-cloud sequences load neighbouring frames ahead.** After a frame
+  loads, the next, previous and one-after-next clouds (for an octree cloud,
+  their first level) are fetched in the background and kept in memory.
+- **Pre-annotations on point clouds.** `spatial_annotation` schemes take
+  `pre_annotation` objects like image schemes do.
 - **Throughput charts.** The Throughput tab adds a histogram of active time
   per item with its percentiles (and a small copy on each annotator's row) and,
   once work spans two or more days, charts of items saved per day and items
@@ -299,6 +325,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- **Interpolation filled in slivers.** Between two volume outlines that do not
+  overlap, the slices next to the empty middle came out as a few pixels each.
+  A blended slice under a tenth of the smaller painted outline now counts as
+  empty and is reported with the others.
+- **KITTI tracking calibration files lost their lidar transform.** They write
+  `R_rect` and `Tr_velo_cam` without a colon, and the parser skipped lines
+  without one, so the lidar frame was taken to be the camera frame. Both
+  layouts now read the same.
+- **A narrow agreement page scrolled sideways.** The screen-reader text on
+  each banded value escaped the metric table's scroll container and widened
+  the page past the table.
 - **A point-cloud attribute edit right after deleting a keyframe was lost.**
   The panel stayed bound to the deleted keyframe's object, because the
   interpolated object that replaced it had the same position in the list on

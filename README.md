@@ -325,7 +325,7 @@ curated by hand:
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
 | [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 171 config keys, 62 annotation types, 24 display types — validates a `config.yaml` before the server runs |
-| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 492 HTTP paths, with per-operation auth and config gating |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 493 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`
 modeline, so editors validate it live. See

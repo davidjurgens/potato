@@ -167,6 +167,10 @@
   /* Scroll, never clip: with `overflow: hidden` the right-hand columns of a
      wide table were unreachable on a narrow screen. */
   overflow-x: auto;
+  /* The containing block for a cell's .sr-only text (position: absolute).
+     Without it that text escaped the scroller and widened the whole page, so
+     a narrow /admin/iaa scrolled sideways past the table. */
+  position: relative;
 }
 
 .admin-table {

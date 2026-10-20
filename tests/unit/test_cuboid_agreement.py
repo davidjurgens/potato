@@ -307,3 +307,62 @@ class TestDispatchAndMatching:
         # which is exactly what the unmatched lists are for.
         assert only_first == [1]
         assert only_second == [1]
+
+
+class TestLevelBoxesFastPath:
+    """Boxes rotated only about z take a footprint-clip shortcut. It must give
+    the general half-space construction's answer, not an approximation."""
+
+    def test_it_agrees_with_the_general_construction(self, monkeypatch):
+        import random
+        from potato.server_utils.iaa import geometry
+        rng = random.Random(7)
+        pairs = []
+        for _ in range(300):
+            size_a = [rng.uniform(0.5, 6), rng.uniform(0.5, 3), rng.uniform(0.5, 3)]
+            size_b = [rng.uniform(0.5, 6), rng.uniform(0.5, 3), rng.uniform(0.5, 3)]
+            centre_b = [rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-1.5, 1.5)]
+            pairs.append((box([0, 0, 0], size_a, yaw=rng.uniform(-math.pi, math.pi)),
+                          box(centre_b, size_b, yaw=rng.uniform(-math.pi, math.pi))))
+        fast = [cuboid_intersection_volume(a, b) for a, b in pairs]
+        monkeypatch.setattr(geometry, "_level_intersection_volume", lambda a, b: None)
+        general = [cuboid_intersection_volume(a, b) for a, b in pairs]
+        assert sum(1 for v in general if v > 0) > 100          # most pairs overlap
+        for f, g in zip(fast, general):
+            assert f == pytest.approx(g, rel=1e-6, abs=1e-9)
+
+    def test_a_tilted_box_takes_the_general_path(self):
+        from potato.server_utils.iaa.geometry import _level_intersection_volume
+        tilt = [math.sin(0.1), 0.0, 0.0, math.cos(0.1)]          # 0.2 rad about x
+        assert _level_intersection_volume(box([0, 0, 0], [4, 2, 1.5], rotation=tilt),
+                                          box([0, 0, 0], [4, 2, 1.5])) is None
+
+    def test_centres_beyond_both_reaches_score_zero_without_clipping(self, monkeypatch):
+        from potato.server_utils.iaa import geometry
+        monkeypatch.setattr(geometry, "cuboid_intersection_volume",
+                            lambda a, b: pytest.fail("clipped a pair that cannot touch"))
+        far = geometry.iou_cuboid_3d(box([0, 0, 0], [4, 2, 1.5]), box([10, 0, 0], [4, 2, 1.5]))
+        assert far == 0.0
+
+
+def test_identity_metrics_at_kitti_scale_are_quick():
+    """A hundred frames of forty tracks per annotator. Before each frame's
+    similarities were shared and level boxes clipped in 2D, one annotator
+    pair took over four seconds of /admin/iaa time."""
+    import json
+    import time
+    from potato.server_utils.iaa.structured import spatial_report
+
+    def annotator(dx):
+        return [{"type": "cuboid_3d", "label": "car", "frame": f, "track_id": str(t),
+                 "coordinates": {"center": [(t % 8) * 7 + f * 0.1 + dx, (t // 8) * 5, 0.0],
+                                 "size": [4.0, 1.8, 1.5], "rotation": [0, 0, 0, 1]}}
+                for t in range(40) for f in (0, 99)]
+
+    started = time.perf_counter()
+    report = spatial_report({"s": {"a": json.dumps(annotator(0.0)),
+                                   "b": json.dumps(annotator(0.2))}})
+    elapsed = time.perf_counter() - started
+    assert report["identity"]["n_object_frames"] == 8000
+    assert report["identity"]["mota"] == 1.0
+    assert elapsed < 2.5, f"{elapsed:.2f} s"

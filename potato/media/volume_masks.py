@@ -106,26 +106,40 @@ def _signed_distance(mask: np.ndarray) -> np.ndarray:
     return outside - inside
 
 
-def interpolate_slices(slices: Dict[int, np.ndarray]) -> Dict[int, np.ndarray]:
+#: An interpolated slice smaller than this share of the smaller painted end
+#: is a sliver, not a shape. Blending two outlines that do not overlap
+#: shrinks each toward a point before the gap empties, and the last few
+#: pixels of that shrinking would otherwise be filled in as if real.
+MIN_SLIVER_FRACTION = 0.1
+
+
+def interpolate_slices(slices: Dict[int, np.ndarray],
+                       min_area_fraction: float = MIN_SLIVER_FRACTION) -> Dict[int, np.ndarray]:
     """Fill the gaps between painted slices of one label.
 
     Shape-based interpolation: each pair of consecutive painted slices with
     unpainted slices between them is blended through their signed distance
     maps. Returns only the new slices; painted ones are never changed, and
     the run before the first and after the last painted slice stays empty.
+    A blended slice under ``min_area_fraction`` of the smaller end's area is
+    left out, so interpolation_gaps reports it as empty.
     """
     painted = sorted(k for k, m in slices.items() if np.asarray(m).any())
     filled: Dict[int, np.ndarray] = {}
     for low, high in zip(painted, painted[1:]):
         if high - low < 2:
             continue
-        a = _signed_distance(np.asarray(slices[low], dtype=bool))
-        b = _signed_distance(np.asarray(slices[high], dtype=bool))
+        mask_low = np.asarray(slices[low], dtype=bool)
+        mask_high = np.asarray(slices[high], dtype=bool)
+        floor = min_area_fraction * min(int(mask_low.sum()), int(mask_high.sum()))
+        a, b = _signed_distance(mask_low), _signed_distance(mask_high)
         for k in range(low + 1, high):
             if k in slices and np.asarray(slices[k]).any():
                 continue
             t = (k - low) / (high - low)
-            filled[k] = ((1 - t) * a + t * b) <= 0
+            blended = ((1 - t) * a + t * b) <= 0
+            if blended.any() and blended.sum() >= floor:
+                filled[k] = blended
     return filled
 
 
@@ -221,7 +235,7 @@ def to_dicom_seg(labels: Sequence[str], label_masks: Dict[str, np.ndarray], volu
     from potato.media.volumes import to_source_order
 
     if volume.kind != "dicom" or not volume.dicom_files:
-        raise ValueError("DICOM SEG export needs a DICOM series source")
+        raise ValueError("DICOM SEG export needs a DICOM source")
     sources = [pydicom.dcmread(path) for path in volume.dicom_files]
     # The patient and study modules' Type 2 attributes must be present, even
     # if empty; de-identified series often drop them. Filled on the in-memory
@@ -237,7 +251,14 @@ def to_dicom_seg(labels: Sequence[str], label_masks: Dict[str, np.ndarray], volu
     frames = []
     for label in present:
         source = to_source_order(volume, label_masks[label])          # [col, row, slice]
-        frames.append(np.ascontiguousarray(source.transpose(2, 1, 0)))  # [slice, row, col]
+        stacked = np.ascontiguousarray(source.transpose(2, 1, 0))     # [slice, row, col]
+        if volume.dicom_frames is not None:
+            # One multi-frame source: its frames are in file order, which is
+            # not necessarily the slice order the volume was built in.
+            in_file_order = np.empty_like(stacked)
+            in_file_order[volume.dicom_frames] = stacked
+            stacked = in_file_order
+        frames.append(stacked)
     pixel_array = np.stack(frames, axis=-1).astype(np.uint8)
     tissue = Code("85756007", "SCT", "Tissue")
     descriptions = [

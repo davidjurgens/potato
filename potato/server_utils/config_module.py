@@ -4988,7 +4988,7 @@ _SAML_KEYS = {
     "display_name", "idp_metadata_url", "idp_metadata_file", "idp_entity_id",
     "idp", "sp_base_url", "sp_entity_id", "sp_cert_file", "sp_key_file",
     "name_id_format", "user_identity_attribute", "required_attribute",
-    "claim_attributes", "want_assertions_encrypted",
+    "claim_attributes", "want_assertions_encrypted", "single_logout",
 }
 
 

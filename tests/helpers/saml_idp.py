@@ -25,6 +25,7 @@ def _iso(moment: dt.datetime) -> str:
 class TestIdP:
     entity_id = "https://idp.test/idp"
     sso_url = "https://idp.test/sso"
+    slo_url = "https://idp.test/slo"
 
     def __init__(self):
         from cryptography import x509
@@ -46,7 +47,9 @@ class TestIdP:
         self.cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
         self.cert_b64 = "".join(self.cert_pem.strip().splitlines()[1:-1])
 
-    def metadata_xml(self) -> str:
+    def metadata_xml(self, slo: bool = False) -> str:
+        logout = (f'<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" '
+                  f'Location="{self.slo_url}"/>') if slo else ""
         return f"""<?xml version="1.0"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="{self.entity_id}">
   <md:IDPSSODescriptor protocolSupportEnumeration="{SAMLP}">
@@ -55,6 +58,7 @@ class TestIdP:
         <ds:X509Data><ds:X509Certificate>{self.cert_b64}</ds:X509Certificate></ds:X509Data>
       </ds:KeyInfo>
     </md:KeyDescriptor>
+    {logout}
     <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
                             Location="{self.sso_url}"/>
   </md:IDPSSODescriptor>
@@ -126,3 +130,60 @@ class TestIdP:
         if sign_response:
             xml = self.sign(xml)
         return base64.b64encode(xml.encode()).decode()
+
+
+    # -- single logout (HTTP-Redirect binding) ----------------------------
+
+    @staticmethod
+    def message_from_redirect(location: str, kind: str = "SAMLRequest"):
+        """(xml element, query params) of the message in a redirect to the IdP."""
+        params = {k: v[0] for k, v in parse_qs(urlparse(location).query).items()}
+        xml = zlib.decompress(base64.b64decode(params[kind]), -15).decode()
+        from lxml import etree
+        return etree.fromstring(xml.encode()), params
+
+    def _redirect_params(self, kind: str, xml: str, sign: bool, lowercase: bool = False) -> str:
+        """The query string carrying ``xml``, signed as the binding specifies.
+
+        ``lowercase`` percent-encodes as ADFS does (``%2f``, not ``%2F``)."""
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+        from onelogin.saml2.constants import OneLogin_Saml2_Constants as C
+        from onelogin.saml2.utils import OneLogin_Saml2_Utils as U
+
+        def esc(value):
+            return U.escape_url(value, lowercase_urlencoding=lowercase)
+        query = f"{kind}={esc(U.deflate_and_base64_encode(xml))}"
+        if sign:
+            query += f"&SigAlg={esc(C.RSA_SHA256)}"
+            key = serialization.load_pem_private_key(self.key_pem.encode(), password=None)
+            signature = key.sign(query.encode(), padding.PKCS1v15(), hashes.SHA256())
+            query += f"&Signature={esc(base64.b64encode(signature).decode())}"
+        return query
+
+    def logout_request(self, *, destination: str, name_id: str,
+                       session_index: Optional[str] = None, sign: bool = True,
+                       lowercase: bool = False,
+                       name_id_format: str = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified") -> str:
+        """An IdP-initiated LogoutRequest, as a query string for the SP's /saml/sls."""
+        now = dt.datetime.now(dt.timezone.utc)
+        index = f"<samlp:SessionIndex>{session_index}</samlp:SessionIndex>" if session_index else ""
+        xml = (f'<samlp:LogoutRequest xmlns:samlp="{SAMLP}" xmlns:saml="{SAML}" '
+               f'ID="_l{uuid.uuid4().hex}" Version="2.0" IssueInstant="{_iso(now)}" '
+               f'Destination="{destination}" NotOnOrAfter="{_iso(now + dt.timedelta(minutes=5))}">'
+               f"<saml:Issuer>{self.entity_id}</saml:Issuer>"
+               f'<saml:NameID Format="{name_id_format}">{escape(name_id)}</saml:NameID>'
+               f"{index}</samlp:LogoutRequest>")
+        return self._redirect_params("SAMLRequest", xml, sign, lowercase)
+
+    def logout_response(self, *, destination: str, in_response_to: str, sign: bool = True,
+                        status: str = "urn:oasis:names:tc:SAML:2.0:status:Success") -> str:
+        """The IdP's answer to the SP's LogoutRequest, as a query string."""
+        now = dt.datetime.now(dt.timezone.utc)
+        xml = (f'<samlp:LogoutResponse xmlns:samlp="{SAMLP}" xmlns:saml="{SAML}" '
+               f'ID="_lr{uuid.uuid4().hex}" Version="2.0" IssueInstant="{_iso(now)}" '
+               f'Destination="{destination}" InResponseTo="{in_response_to}">'
+               f"<saml:Issuer>{self.entity_id}</saml:Issuer>"
+               f'<samlp:Status><samlp:StatusCode Value="{status}"/></samlp:Status>'
+               f"</samlp:LogoutResponse>")
+        return self._redirect_params("SAMLResponse", xml, sign)

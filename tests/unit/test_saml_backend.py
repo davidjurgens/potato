@@ -78,6 +78,7 @@ class _FakeRequest:
     path = "/saml/acs"
     args = {}
     form = {"SAMLResponse": "x"}
+    query_string = b""
 
 
 def test_behind_a_proxy_the_public_url_comes_from_sp_base_url():
@@ -177,3 +178,38 @@ def test_encryption_is_advertised_only_when_asked_for(idp, tmp_path):
     asked = SAMLBackend({"method": "saml", "saml": dict(
         common, want_assertions_encrypted=True)}).metadata(BASE)
     assert 'use="encryption"' in asked
+
+
+class TestSingleLogoutSettings:
+    @staticmethod
+    def _backend(test_idp, slo_url=None, **saml):
+        manual = {"entity_id": test_idp.entity_id, "sso_url": test_idp.sso_url,
+                  "x509cert": test_idp.cert_b64}
+        if slo_url:
+            manual["slo_url"] = slo_url
+        return SAMLBackend({"method": "saml", "saml": {"idp": manual, **saml}})
+
+    def test_on_when_the_idp_has_a_logout_service(self, idp):
+        backend = self._backend(idp, slo_url=idp.slo_url)
+        assert backend.slo_enabled()
+        assert backend.settings(BASE)["sp"]["singleLogoutService"]["url"] == f"{BASE}/saml/sls"
+        assert "SingleLogoutService" in backend.metadata(BASE)
+
+    def test_off_without_one_or_when_turned_off(self, idp):
+        assert not self._backend(idp).slo_enabled()
+        assert "SingleLogoutService" not in self._backend(idp).metadata(BASE)
+        off = self._backend(idp, slo_url=idp.slo_url, single_logout=False)
+        assert not off.slo_enabled() and "singleLogoutService" not in off.settings(BASE)["sp"]
+
+    def test_the_session_identifiers_come_back_with_the_sign_in(self, backend, idp):
+        login, _rid = backend.login_redirect(
+            {"https": "on", "http_host": "annotate.example.edu", "server_port": "443",
+             "script_name": "/saml/login", "get_data": {}, "post_data": {}}, BASE)
+        rid = idp.request_id_from_redirect(login)
+        body = idp.response(idp.sign(idp.assertion(
+            in_response_to=rid, acs=ACS, audience=AUDIENCE, name_id="opaque-9")),
+            acs=ACS, in_response_to=rid)
+        user, _attrs, session = backend.process_response(_acs_request(body), BASE, rid,
+                                                         with_session=True)
+        assert user == "opaque-9" and session["name_id"] == "opaque-9"
+        assert session["session_index"].startswith("_s")

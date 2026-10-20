@@ -246,6 +246,22 @@ class TestMasks:
         overlap = {0: a, 10: np.roll(a, 1, axis=1)}
         assert vm.interpolation_gaps(overlap, vm.interpolate_slices(overlap)) == []
 
+    def test_slivers_count_as_empty(self):
+        # Two discs of 197 px that do not overlap blend to 95 px on slices 1
+        # and 9, 16 px slivers on 2 and 8, and nothing between. The slivers
+        # are under a tenth of either end, so they are not filled and the
+        # gap report names them.
+        def disc(cx):
+            y, x = np.mgrid[:64, :64]
+            return (x - cx) ** 2 + (y - 32) ** 2 <= 64
+        slices = {0: disc(16), 10: disc(48)}
+        assert int(slices[0].sum()) == 197
+        filled = vm.interpolate_slices(slices)
+        assert sorted(filled) == [1, 9]
+        assert vm.interpolation_gaps(slices, filled)[0]["empty"] == list(range(2, 9))
+        kept = vm.interpolate_slices(slices, min_area_fraction=0)
+        assert sorted(kept) == [1, 2, 8, 9] and int(kept[2].sum()) == 16
+
     def test_dice(self):
         a = np.zeros((4, 4, 4), bool)
         b = a.copy()
@@ -313,3 +329,78 @@ class TestAgreement:
         assert report["dice_by_label"]["Bone"] is None       # nobody painted it
         assert report["mean_dice"] == pytest.approx(expected, abs=1e-4)
         assert report["n_items"] == 1
+
+
+@pytest.fixture(scope="module")
+def enhanced_dir(gen, tmp_path_factory):
+    """The phantom series as one enhanced (multi-frame) CT file, built by
+    highdicom's legacy converter, which writes the frames in descending z:
+    file order is not the volume's slice order."""
+    hd = pytest.importorskip("highdicom")
+    import pydicom
+    datasets = [pydicom.dcmread(f) for f in sorted((gen.HERE / "media" / "phantom_dicom").glob("*.dcm"))]
+    image = hd.legacy.LegacyConvertedEnhancedCTImage(
+        legacy_datasets=datasets, series_instance_uid=hd.UID(), series_number=7,
+        sop_instance_uid=hd.UID(), instance_number=1)
+    folder = tmp_path_factory.mktemp("enhanced")
+    image.save_as(str(folder / "frames.dcm"))
+    return folder
+
+
+class TestEnhancedDicom:
+    def test_a_multi_frame_file_reads_as_the_classic_series_does(self, enhanced_dir, dicom):
+        volume = vol.read_volume(str(enhanced_dir))
+        assert volume.shape == dicom.shape
+        assert np.allclose(volume.affine, dicom.affine)
+        assert np.array_equal(np.asarray(volume.data), np.asarray(dicom.data))
+        assert volume.dicom_windows == dicom.dicom_windows
+        assert volume.dicom_files == [str(enhanced_dir / "frames.dcm")]
+        # Slice k (ascending along the normal) is frame 47 - k of the file.
+        assert volume.dicom_frames == list(range(47, -1, -1))
+
+    def test_dicom_seg_from_a_multi_frame_source_lines_up_with_its_frames(
+            self, enhanced_dir, lesion_truth):
+        import highdicom as hd
+        import pydicom
+        volume = vol.read_volume(str(enhanced_dir))
+        seg = vm.to_dicom_seg(["Lesion"], {"Lesion": lesion_truth}, volume)
+        buffer = io.BytesIO()
+        seg.save_as(buffer)
+        buffer.seek(0)
+        parsed = hd.seg.Segmentation.from_dataset(pydicom.dcmread(buffer))
+        source = pydicom.dcmread(volume.dicom_files[0])
+        pixels = parsed.get_pixels_by_source_frame(
+            source_sop_instance_uid=source.SOPInstanceUID,
+            source_frame_numbers=list(range(1, 49)), segment_numbers=[1],
+            combine_segments=False,
+            assert_missing_frames_are_empty=True)[..., 0].astype(bool)   # empty frames are not stored
+        by_slice = vol.to_source_order(volume, lesion_truth).transpose(2, 1, 0)
+        assert pixels.any()
+        for k, frame in enumerate(volume.dicom_frames):
+            assert np.array_equal(pixels[frame], by_slice[k]), k
+
+    def test_header_tags_reach_into_the_shared_functional_groups(self, enhanced_dir):
+        volume = vol.read_volume(str(enhanced_dir))
+        assert "SliceThickness" not in volume.header          # not at the top level
+        shown = vol.header_tags(volume, ["Modality", "SliceThickness", "PatientName"])
+        assert shown == {"Modality": "CT", "SliceThickness": "2.5"}   # PatientName stays hidden
+
+    def test_a_top_level_rescale_applies_when_no_group_has_one(self, enhanced_dir, dicom, tmp_path):
+        # Some vendor files keep RescaleSlope/Intercept at the top level only.
+        import pydicom
+        ds = pydicom.dcmread(enhanced_dir / "frames.dcm")
+        transform = ds.SharedFunctionalGroupsSequence[0].PixelValueTransformationSequence[0]
+        slope, intercept = float(transform.RescaleSlope), float(transform.RescaleIntercept)
+        del ds.SharedFunctionalGroupsSequence[0].PixelValueTransformationSequence
+        ds.RescaleSlope, ds.RescaleIntercept = slope, intercept
+        (tmp_path / "top").mkdir()
+        ds.save_as(tmp_path / "top" / "frames.dcm")
+        volume = vol.read_volume(str(tmp_path / "top"))
+        assert np.array_equal(np.asarray(volume.data), np.asarray(dicom.data))
+
+    def test_two_multi_frame_files_in_one_directory_are_refused(self, enhanced_dir, tmp_path):
+        import shutil
+        shutil.copy(enhanced_dir / "frames.dcm", tmp_path / "a.dcm")
+        shutil.copy(enhanced_dir / "frames.dcm", tmp_path / "b.dcm")
+        with pytest.raises(vol.VolumeError, match="multi-frame file in its own directory"):
+            vol.read_volume(str(tmp_path))

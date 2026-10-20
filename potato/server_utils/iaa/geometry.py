@@ -512,6 +512,66 @@ def _cuboid_aabb(center, size, rotation):
             [max(c[i] for c in corners) for i in range(3)])
 
 
+def _clip_polygon(subject: List[Tuple[float, float]],
+                  clip: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    """Sutherland-Hodgman: ``subject`` clipped to the convex, counter-clockwise ``clip``."""
+    output = subject
+    for k in range(len(clip)):
+        (ax, ay), (bx, by) = clip[k], clip[(k + 1) % len(clip)]
+        inputs, output = output, []
+        if not inputs:
+            break
+
+        def side(p):
+            return (bx - ax) * (p[1] - ay) - (by - ay) * (p[0] - ax)
+
+        for i, current in enumerate(inputs):
+            previous = inputs[i - 1]
+            s_cur, s_prev = side(current), side(previous)
+            if s_cur >= 0:
+                if s_prev < 0:
+                    t = s_prev / (s_prev - s_cur)
+                    output.append((previous[0] + t * (current[0] - previous[0]),
+                                   previous[1] + t * (current[1] - previous[1])))
+                output.append(current)
+            elif s_prev >= 0:
+                t = s_prev / (s_prev - s_cur)
+                output.append((previous[0] + t * (current[0] - previous[0]),
+                               previous[1] + t * (current[1] - previous[1])))
+    return output
+
+
+def _level_intersection_volume(a: Dict[str, Any], b: Dict[str, Any]) -> Optional[float]:
+    """The shared volume of two boxes rotated only about the vertical axis, or
+    None when either is tilted.
+
+    For two level boxes the overlap is exactly the overlap of their footprints
+    times the overlap of their height ranges, which is a polygon clip instead
+    of the general half-space construction. KITTI, nuScenes and most driving
+    labels are level, so this is the usual case and roughly ten times faster.
+    """
+    from potato.export.spatial_utils import cuboid_corners, rotation_matrix
+
+    for box in (a, b):
+        m = rotation_matrix(box["rotation"])
+        if max(abs(m[0][2]), abs(m[1][2]), abs(m[2][0]), abs(m[2][1])) > 1e-9:
+            return None
+    za = (a["center"][2] - abs(a["size"][2]) / 2, a["center"][2] + abs(a["size"][2]) / 2)
+    zb = (b["center"][2] - abs(b["size"][2]) / 2, b["center"][2] + abs(b["size"][2]) / 2)
+    height = min(za[1], zb[1]) - max(za[0], zb[0])
+    if height <= 0:
+        return 0.0
+    # The -Z face's corners, in +X, +Y winding: counter-clockwise from above.
+    foot_a = [(c[0], c[1]) for c in cuboid_corners(a["center"], a["size"], a["rotation"])[:4]]
+    foot_b = [(c[0], c[1]) for c in cuboid_corners(b["center"], b["size"], b["rotation"])[:4]]
+    shared = _clip_polygon(foot_a, foot_b)
+    if len(shared) < 3:
+        return 0.0
+    area = 0.5 * abs(sum(shared[i][0] * shared[i - 1][1] - shared[i - 1][0] * shared[i][1]
+                         for i in range(len(shared))))
+    return area * height
+
+
 def cuboid_intersection_volume(a: Dict[str, Any], b: Dict[str, Any]) -> float:
     """
     Volume shared by two oriented boxes, in cubic metres.
@@ -520,6 +580,9 @@ def cuboid_intersection_volume(a: Dict[str, Any], b: Dict[str, Any]) -> float:
     """
     if not a or not b or not a.get("size") or not b.get("size"):
         return 0.0
+    level = _level_intersection_volume(a, b)
+    if level is not None:
+        return level
 
     lo_a, hi_a = _cuboid_aabb(a["center"], a["size"], a["rotation"])
     lo_b, hi_b = _cuboid_aabb(b["center"], b["size"], b["rotation"])
@@ -591,6 +654,15 @@ def iou_cuboid_3d(a: Dict[str, Any], b: Dict[str, Any]) -> float:
         # A degenerate box is kept by the contract (with a warning) rather than
         # dropped, so it reaches here; it has no volume to share.
         return 0.0
+    # Each box lies inside the sphere through its corners, so boxes whose
+    # centres are further apart than the two radii cannot overlap. Exact, and
+    # it spares the polyhedron clipping for nearly every pair in a busy
+    # scene: a 40-car frame compares 1,600 pairs and about 40 can touch.
+    if a.get("center") and b.get("center"):
+        reach = 0.5 * (math.sqrt(sum(float(v) ** 2 for v in a["size"]))
+                       + math.sqrt(sum(float(v) ** 2 for v in b["size"])))
+        if math.dist(a["center"], b["center"]) > reach:
+            return 0.0
 
     intersection = cuboid_intersection_volume(a, b)
     union = vol_a + vol_b - intersection

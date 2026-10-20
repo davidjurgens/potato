@@ -24,6 +24,7 @@ direction. If you are deciding whether to migrate a dataset, this is the page.
 | `yolo` | `data.yaml` + `labels/*.txt` | ✅ | ✅ | ❌ ² | ❌ | ❌ |
 | `labelme` | one JSON per image | ✅ | ✅ | ⚠️ ³ | ✅ | ✅ |
 | `kitti` | `label_2/*.txt` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `kitti_tracking` | `label_02/`, `velodyne/`, `calib/` | ✅ 3D cuboids on lidar sequences ¹⁴ | ❌ | ❌ | ❌ | ❌ |
 | `mot` | `seqinfo.ini` + `gt/gt.txt` | ✅ ⁸ | ❌ | ❌ | ❌ | ❌ |
 | `cityscapes` | `*_gtFine_polygons.json` | ❌ | ✅ | ❌ ⁹ | ❌ | ❌ |
 | `davis` | indexed PNG per frame | ❌ | ❌ | ✅ per instance | ❌ | ❌ |
@@ -71,6 +72,13 @@ the PNGs with `--input-format davis`.
 to whichever importer recognises them, so a WebDataset-wrapped LabelMe file
 imports as LabelMe, with LabelMe's conventions and caveats. Whatever that
 format supports is what survives.
+
+¹⁴ One item per sequence, its scans listed in `point_cloud` and its
+`calib/<seq>.txt` as the calibration. Every labelled frame is a keyframe;
+`DontCare` rows are left out and counted. Truncation and occlusion become the
+`truncated` and `occluded` attributes the `kitti_3d` export reads back. A
+track that disappears and comes back under the same id is interpolated across
+the gap, and the import counts such gaps.
 
 ## Export
 
@@ -127,7 +135,8 @@ rather than as CV geometry.
 | V7 Darwin → Potato → Darwin | ✅ for boxes, polygons, ellipses, lines and keypoints; holes and raster masks are reported |
 | KITTI → Potato → KITTI | ✅ for 2D boxes; `truncated` / `occluded` / `alpha` and the 3D fields ride through untouched |
 | Potato → KITTI 3D | ✅ with the calibration; pitch and roll are dropped — see [3D labels](#kitti-3d-labels) |
-| KITTI 3D → Potato | ⚠️ library only: `kitti3d.kitti_to_cuboid` converts a label exactly, but no `potato import` format reads 3D label files yet |
+| KITTI tracking → Potato → KITTI tracking | ✅ to the format's two decimals, through each sequence's calibration. It imports as `kitti_tracking` and exports as `kitti_3d`, so the format name alone is one-way |
+| KITTI 3D object labels (`label_2` per cloud) → Potato | ⚠️ library only: `kitti3d.kitti_to_cuboid` converts a label exactly, but no `potato import` format reads per-cloud 3D label files yet |
 | MOT → Potato → MOT | ✅ for boxes, track ids, ignore regions and visibility |
 | Cityscapes → Potato → Cityscapes | ✅ for polygons, crowd `group` labels and painter's order |
 | DAVIS → Potato → DAVIS | ✅ for per-instance masks and stable object ids |

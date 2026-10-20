@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - Logged Out</title>
+    <title>{{ title }} - {{ heading or "Logged Out" }}</title>
     {% include '_theme_head.html' %}
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
@@ -11,19 +11,22 @@
 </head>
 <body class="potato-page-center">
     <div class="potato-page-card potato-page-card-wide" style="text-align: center;">
-        <div class="potato-page-icon potato-page-icon-success">
-            <i class="fas fa-sign-out-alt"></i>
+        <div class="potato-page-icon potato-page-icon-{{ 'info' if refused else 'success' }}">
+            <i class="fas {{ 'fa-info' if refused else 'fa-sign-out-alt' }}" aria-hidden="true"></i>
         </div>
 
-        <h1 class="potato-page-title">Logged Out</h1>
+        <h1 class="potato-page-title">{{ heading or "Logged Out" }}</h1>
         <p class="potato-page-subtitle">
-            You are logged out, and your responses are saved.
+            {{ subtitle or "You are logged out, and your responses are saved." }}
         </p>
 
         <div class="potato-alert potato-alert-info" style="text-align: left;">
             <i class="fas fa-info-circle me-2"></i>
-            You may close this window. If you need to return to the task, please use the original link provided by your platform.
+            {% if detail %}{{ detail }}{% else %}You may close this window. If you need to return to the task, please use the original link provided by your platform.{% endif %}
         </div>
+        {% if sign_in_url %}
+        <p style="margin-top: 1rem;"><a href="{{ sign_in_url }}">Sign in again</a></p>
+        {% endif %}
 
         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted-foreground);">
             <i class="fas fa-shield-alt me-1"></i> Your responses are stored on this study's own server.

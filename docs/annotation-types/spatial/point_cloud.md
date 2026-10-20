@@ -223,6 +223,26 @@ report's `n_frames` counts the (item, frame) pairs that anyone annotated.
 Attribute agreement matches whole tracks, by how much they overlap in time
 multiplied by their mean 3D overlap.
 
+Frame-by-frame matching cannot see an identity error: two annotators who box
+the same objects on every frame but swap two tracks' ids where the objects
+cross score 1.0. The report's `identity` group adds the tracking measures,
+computed between each pair of annotators with boxes matched at 3D IoU 0.25:
+
+| Measure | Meaning |
+|---|---|
+| `identity.mota` | 1 − (misses + extra boxes + ID switches) / object-frames. Can go below 0 |
+| `identity.idf1` | The share of object-frames kept under the best one-to-one pairing of the two annotators' tracks |
+| `identity.id_switches` | How often a track's matched partner changed |
+
+Neither annotator is ground truth, so MOTA and ID switches are counted with
+each one as the reference and pooled (`id_switches` is per direction). An
+annotator who drew nothing on a sequence another annotator tracked makes that
+pair's MOTA −1: every object-frame is a miss one way and an extra box the
+other. Classes
+are not compared here; the frame-level report covers them. Video tracks get
+the same group, with 2D boxes matched at IoU 0.5; see
+[video annotation](../multimedia/video_annotation.md).
+
 The labeling engine compares a model's sequence answer with a person's the same
 way, frame by frame.
 
@@ -230,6 +250,45 @@ The `kitti_3d` export writes a sequence as KITTI tracking labels, with a line
 on every frame of each track and each box's 2D projection in the camera image;
 see
 [3D labels](../../data-export/format_matrix.md#kitti-3d-labels).
+
+When a frame has loaded, the viewer fetches the next frame, the previous one
+and the one after next in the background, and keeps the last few in memory, so
+stepping through a sequence does not wait on the network. With an octree cloud
+it fetches each neighbour's coarse first level; finer detail still loads as
+the camera moves.
+
+### Importing KITTI tracking labels
+
+`potato import` reads the KITTI tracking benchmark's layout:
+
+```
+training/
+  label_02/0000.txt          frame track_id type truncated occluded alpha bbox h w l x y z ry
+  velodyne/0000/000000.bin   one scan per frame
+  calib/0000.txt
+```
+
+```bash
+potato import -i ./training -o lidar-project --schema-name objects
+python potato/flask_server.py start lidar-project/config.yaml -p 8000
+```
+
+Each sequence becomes one item: its scans in `point_cloud`, its calibration in
+`calibration`, and its labels as pre-annotations that every annotator starts
+from. The labels are in the camera frame, so each box goes through the
+sequence's calibration into the lidar frame, the reverse of the `kitti_3d`
+export. A sequence without a calibration file is skipped with a warning, and
+so is one with a scan missing from the middle: Potato numbers frames by scan
+position and KITTI by file name, and a gap would shift every later frame.
+Every labelled frame becomes a keyframe. `truncated` and `occluded` become
+attributes of the same names, which the export reads back. `DontCare` rows
+mark regions KITTI leaves out of evaluation; they are left out and counted. A
+track that disappears and comes back under the same id is interpolated across
+the gap, and the import reports how many such gaps there are.
+
+The config's `media_directory` points at the dataset folder, so the scans are
+served from where they are. Keep the project and the dataset in place, or edit
+that path.
 
 ## The slab views
 
