@@ -44,6 +44,21 @@ def _typing_summaries(user_state: dict, instance_id: str) -> dict:
     return bd.get("typing_summaries") or {}
 
 
+def _authenticity_summary(user_state: dict, instance_id: str) -> dict:
+    """The merged authenticity summary and verdict for one instance, or {}.
+
+    Per-view snapshots stay in user_state.json; the export carries the merge.
+    """
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if not isinstance(bd, dict):
+        return {}
+    record = bd.get("authenticity") or {}
+    if not isinstance(record, dict) or not record.get("summary"):
+        return {}
+    return {"summary": record.get("summary") or {},
+            "verdict": record.get("verdict") or {}}
+
+
 def _room_provenance(user_state: dict, instance_id: str) -> dict:
     """Which multiplayer room produced each of this instance's answers.
 
@@ -166,6 +181,9 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
                 # kept out of the flattened columns, written to its own sidecar
                 # file by the tabular exporters.
                 "_typing": _typing_summaries(user_state, instance_id),
+                # Page-level authenticity paradata (page leaves, item copies,
+                # external pastes, automation) and its verdict. Sidecar only.
+                "_authenticity": _authenticity_summary(user_state, instance_id),
                 # Which room, if any, produced each schema's answer. A room
                 # answer is a group answer -- the member saw their peers'
                 # labels at the reveal -- and nothing else in the record says

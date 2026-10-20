@@ -370,6 +370,23 @@
     </div>
     {% endif %}
 
+    {# Authenticity paradata and the general interaction tracker: same notice,
+       same reasons (server-rendered, cannot be suppressed by blocking scripts). #}
+    {% if authenticity_client_config and authenticity_client_config.enabled
+          and authenticity_client_config.disclosure_text %}
+    <div class="keystroke-disclosure" id="authenticity-disclosure" role="note">
+        <span class="keystroke-disclosure-icon" aria-hidden="true">&#9998;</span>
+        <span class="keystroke-disclosure-text">{{ authenticity_client_config.disclosure_text }}</span>
+    </div>
+    {% endif %}
+    {% if interaction_tracking_client_config
+          and interaction_tracking_client_config.disclosure_text %}
+    <div class="keystroke-disclosure" id="interaction-tracking-disclosure" role="note">
+        <span class="keystroke-disclosure-icon" aria-hidden="true">&#9998;</span>
+        <span class="keystroke-disclosure-text">{{ interaction_tracking_client_config.disclosure_text }}</span>
+    </div>
+    {% endif %}
+
     <div class="container-fluid">
         <!-- Main annotation area -->
         <div id="task_layout" class="shadcn-card mb-2 {% if has_image_annotation or has_video_annotation or has_audio_annotation %}media-annotation{% else %}text-annotation{% endif %}">
@@ -718,7 +735,21 @@
     </script>
 
     <!-- Load annotation JavaScript -->
-    <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=2"></script>
+    {# Always loaded -- other trackers and annotation.js call into it -- but it
+       records nothing when interaction_tracking.enabled is false. #}
+    <script type="text/javascript">
+        window.interactionTrackingConfig = {{ (interaction_tracking_client_config or {'enabled': true}) | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=3"></script>
+    <!-- Authenticity paradata (page-leave, item copy, external paste and
+         automation signals on every task type), conditional. Loads after
+         interaction_tracker.js because it hooks setInstanceId. -->
+    {% if authenticity_client_config and authenticity_client_config.enabled %}
+    <script type="text/javascript">
+        window.authenticityConfig = {{ authenticity_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='authenticity_tracker.js') }}?v=1"></script>
+    {% endif %}
     <!-- Keystroke logging / typing dynamics on free-text fields (conditional).
          Loads after interaction_tracker.js because it hooks setInstanceId to
          cut typing sessions on the same navigation boundary. -->

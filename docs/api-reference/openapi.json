@@ -549,6 +549,29 @@
         ]
       }
     },
+    "/admin/api/authenticity": {
+      "get": {
+        "operationId": "get_admin_api_authenticity",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Per-annotator authenticity rollup (page leaves, item copies, external",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
     "/admin/api/behavioral_analytics": {
       "get": {
         "operationId": "get_admin_api_behavioral_analytics",
@@ -7226,6 +7249,26 @@
           }
         },
         "summary": "Receive completed drawing sessions from the annotation telemetry tracker.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/track_authenticity": {
+      "post": {
+        "operationId": "post_track_authenticity",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Receive an authenticity-paradata snapshot for one view of an item.",
         "tags": [
           "core"
         ],

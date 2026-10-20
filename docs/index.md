@@ -44,7 +44,7 @@ over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 62 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 492 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 494 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -204,6 +204,7 @@ over prose when writing a config or calling the API.
 - [Keystroke Logging](advanced/keystroke_logging.md) - Content-blind typing dynamics on free-text fields
 - [Writing-Process Detection](advanced/writing_process_detection.md) - Tell composed text from transcribed or LLM-pasted text
 - [Keystroke Logging Ethics](advanced/keystroke_logging_ethics.md) - IRB, consent, and participant rights
+- [Authenticity Paradata](advanced/authenticity_paradata.md) - Page leaves, item copies, external pastes and automation on every task type
 - [Annotation History](administration/annotation_history.md) - Tracking annotation changes
 
 ## Data & Output

@@ -100,7 +100,7 @@ CATEGORY_ORDER = [
         "psychometrics", "boundary_probing", "event_template", "corpus_map",
         "rooms", "truth_serum", "thinkaloud", "pocket",
         "analytics", "annotator_dashboard", "keystroke_logging",
-        "annotation_telemetry",
+        "annotation_telemetry", "authenticity", "interaction_tracking",
     ]),
     ("UI & Layout", [
         "ui", "ui_config", "layout", "instance_display", "format_handling",
@@ -117,6 +117,7 @@ CATEGORY_ORDER = [
         "auto_redirect_on_completion", "auto_redirect_delay",
         "allow_phase_back_navigation", "require_fully_annotated",
         "export_include_phase_data", "export_annotation_format",
+        "export_include_typing_dynamics", "export_include_authenticity",
         "auto_export_interval",
     ]),
     ("Media", [

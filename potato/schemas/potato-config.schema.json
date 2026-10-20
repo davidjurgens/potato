@@ -3205,6 +3205,46 @@
       },
       "type": "object"
     },
+    "authenticity": {
+      "additionalProperties": true,
+      "description": "Page-level, content-blind authenticity paradata on every task type: leaving the page, copying the item, pasting text that did not come from the page, a narrowed window, and automation signals. Counts and durations only -- copied and pasted text never leaves the browser",
+      "properties": {
+        "detection": {
+          "description": "Server-side flags: `enabled` and `thresholds` (keys such as `away_from_task.min_events`, `copy_then_away.min_away_ms`). Thresholds are never sent to the browser",
+          "type": "object"
+        },
+        "disclose_to_annotators": {
+          "default": true,
+          "description": "Show the recording notice",
+          "type": "boolean"
+        },
+        "disclosure_text": {
+          "description": "Replace the default notice with your own wording",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Record authenticity paradata",
+          "type": "boolean"
+        },
+        "flush_interval_ms": {
+          "default": 10000,
+          "description": "How often the browser posts the current item's running totals",
+          "type": "integer"
+        },
+        "min_away_ms": {
+          "default": 1000,
+          "description": "Absences from the page shorter than this are not counted",
+          "type": "integer"
+        },
+        "track_pointer": {
+          "default": true,
+          "description": "Record pointer movement totals and clicks that land with no movement in between. false removes the pointermove listener",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "auto_export_interval": {
       "default": 60,
       "description": "Seconds between automatic exports",
@@ -3954,9 +3994,19 @@
       "description": "Write annotation_changes.csv, the timestamped record of every answer revision. Off by default: it is far larger than the annotations and carries interaction detail not every study wants to distribute",
       "type": "boolean"
     },
+    "export_include_authenticity": {
+      "default": false,
+      "description": "Write authenticity.csv, the per-item page-leave, copy, paste and automation paradata with its verdict. Off by default for the same reason",
+      "type": "boolean"
+    },
     "export_include_phase_data": {
       "default": false,
       "description": "Include consent, instruction and survey responses in exports. Off by default: survey answers are usually where the PII is",
+      "type": "boolean"
+    },
+    "export_include_typing_dynamics": {
+      "default": false,
+      "description": "Write typing_dynamics.csv, the per-field keystroke features and writing-process verdicts. Off by default: they describe identifiable annotators",
       "type": "boolean"
     },
     "format_handling": {
@@ -4253,6 +4303,27 @@
     },
     "instance_reclaim": {
       "description": "Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations`",
+      "type": "object"
+    },
+    "interaction_tracking": {
+      "additionalProperties": true,
+      "description": "The general behavioural tracker (clicks, focus, scroll, shortcut keys) that feeds the admin Behavioral tab. On by default",
+      "properties": {
+        "disclose_to_annotators": {
+          "default": false,
+          "description": "Show a notice that page interaction is recorded",
+          "type": "boolean"
+        },
+        "disclosure_text": {
+          "description": "Replace the default notice with your own wording",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Record the click, focus, scroll and key stream. AI-assistant usage and the annotation change trail are recorded either way",
+          "type": "boolean"
+        }
+      },
       "type": "object"
     },
     "item_properties": {

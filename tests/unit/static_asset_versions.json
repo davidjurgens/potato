@@ -35,6 +35,10 @@
     "sha256": "b2738a5168ffaa33",
     "version": "3"
   },
+  "authenticity_tracker.js": {
+    "sha256": "a07452bb123b975c",
+    "version": "1"
+  },
   "boundary-probe.js": {
     "sha256": "75c624a0f877f90e",
     "version": "6"
@@ -204,8 +208,8 @@
     "version": "1"
   },
   "interaction_tracker.js": {
-    "sha256": "efe5dc811c72a00a",
-    "version": "2"
+    "sha256": "9399e05a02a2fc02",
+    "version": "3"
   },
   "js/pdf-viewer.js": {
     "sha256": "64b0d86af915fb89",

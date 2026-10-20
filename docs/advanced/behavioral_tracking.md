@@ -196,6 +196,18 @@ Behavioral data is stored in:
 ### Enabling Behavioral Tracking
 
 Behavioral tracking is enabled by default. No additional configuration is required.
+It can be switched off, or announced to annotators with a notice:
+
+```yaml
+interaction_tracking:
+  enabled: false                # no click/focus/scroll/key stream
+  disclose_to_annotators: true  # show a notice when it is on
+```
+
+!!! note "Signs of AI use or automation on any task type"
+    Leaving the page, copying the item, pasting outside text and automation signals
+    are recorded by a separate opt-in feature. See
+    [Authenticity Paradata](authenticity_paradata.md).
 
 !!! note "Keystroke logging is a separate, opt-in feature"
     Fine-grained typing dynamics on free-text fields — pauses, bursts,

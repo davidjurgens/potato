@@ -175,6 +175,7 @@ nav:
         - Writing-Process Detection: advanced/writing_process_detection.md
         - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
         - Annotation Telemetry: advanced/annotation_telemetry.md
+        - Authenticity Paradata: advanced/authenticity_paradata.md
         - Qualitative Data Analysis (QDA): advanced/qda.md
         - Embeddings and the Corpus Map: advanced/embeddings.md
         - Geometry Agreement: advanced/geometry_agreement.md

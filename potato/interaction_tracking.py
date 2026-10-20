@@ -336,6 +336,11 @@ class BehavioralData:
     chat_history: List[ChatMessage] = field(default_factory=list)
     typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    #: Page-level authenticity paradata for this item -- leaving the page,
+    #: copying the item, pasting external text, automation signals -- as
+    #: ``{views: {view_id: {...}}, summary: {...}, verdict: {...}}``. Counts and
+    #: durations only, never text. See potato/authenticity.py.
+    authenticity: Dict[str, Any] = field(default_factory=dict)
     #: schema -> the multiplayer room this answer was produced in, mirrored
     #: from user_state.instance_id_to_room_provenance so that every consumer
     #: reading behavioural data gets it without knowing about a second store.
@@ -378,6 +383,7 @@ class BehavioralData:
             ],
             'typing_summaries': self.typing_summaries,
             'annotation_telemetry': self.annotation_telemetry,
+            'authenticity': self.authenticity,
             'room_provenance': dict(self.room_provenance),
             'bulk': dict(self.bulk),
         }
@@ -435,6 +441,7 @@ class BehavioralData:
         # deserialize unchanged.
         bd.typing_summaries = data.get('typing_summaries', {})
         bd.annotation_telemetry = data.get('annotation_telemetry', {})
+        bd.authenticity = data.get('authenticity', {}) or {}
         bd.room_provenance = data.get('room_provenance', {}) or {}
         bd.bulk = data.get('bulk', {}) or {}
 

@@ -366,6 +366,74 @@ def _write_annotation_changes(context: ExportContext, output_path: str,
     return out_file
 
 
+AUTHENTICITY_COLUMNS = [
+    "user_id", "instance_id", "views", "elapsed_ms", "server_span_ms",
+    # leaving the page
+    "hidden_events", "hidden_ms", "blur_events", "blur_ms", "max_away_ms",
+    "linked_away_events", "linked_away_ms",
+    # copy / paste
+    "item_copy_events", "item_copy_chars", "item_select_events",
+    "item_context_menu_events", "other_copy_events", "cut_events",
+    "paste_events", "item_paste_events", "external_paste_events",
+    "external_paste_words", "max_external_paste_words",
+    "max_away_after_item_copy_ms", "max_paste_words_after_item_copy",
+    # window / pointer / automation
+    "min_window_ratio", "large_screen", "resize_events", "zoom_changes",
+    "pointer_moves", "pointer_distance_px", "mouse_clicks", "teleport_clicks",
+    "touch_input", "untrusted_events", "webdriver",
+    # detector output
+    "verdict_level", "flags",
+]
+
+_AUTHENTICITY_BOOL_COLUMNS = {"large_screen", "touch_input", "webdriver"}
+
+
+def _write_authenticity(context: ExportContext, output_path: str,
+                        fmt_name: str, delimiter: str) -> Optional[str]:
+    """Write per-item authenticity paradata. Returns file path or None.
+
+    One row per (user, instance): whether the annotator left the page, copied
+    the item, pasted outside text, or showed signs of automation -- counts and
+    durations, never text. Only items that have an annotation record are
+    exported; survey and training pages are in the admin rollup. Written only when
+    ``export_include_authenticity: true``, for the same reason as the typing
+    sidecar: these describe identifiable annotators.
+    """
+    if not (context.config or {}).get("export_include_authenticity", False):
+        return None
+
+    rows = []
+    for ann in context.annotations:
+        record = ann.get("_authenticity") or {}
+        summary = record.get("summary") if isinstance(record, dict) else None
+        if not isinstance(summary, dict):
+            continue
+        verdict = record.get("verdict") or {}
+        row = {"user_id": ann.get("user_id", ""),
+               "instance_id": ann.get("instance_id", "")}
+        for col in AUTHENTICITY_COLUMNS[2:-2]:
+            value = summary.get(col, "")
+            if col in _AUTHENTICITY_BOOL_COLUMNS:
+                value = int(bool(value))
+            row[col] = value
+        row["verdict_level"] = verdict.get("level", "")
+        row["flags"] = "|".join(verdict.get("flag_names") or [])
+        rows.append(row)
+
+    if not rows:
+        return None
+
+    rows.sort(key=lambda r: (r["user_id"], r["instance_id"]))
+    out_file = os.path.join(output_path, f"authenticity.{fmt_name}")
+    with open(out_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=AUTHENTICITY_COLUMNS,
+                                delimiter=delimiter, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return out_file
+
+
 TYPING_DYNAMICS_COLUMNS = [
     "user_id", "instance_id", "schema", "label",
     # volume / product-to-process
@@ -509,6 +577,9 @@ def _write_delimited(context: ExportContext, output_path: str,
     typing_file = _write_typing_dynamics(context, output_path, fmt_name, delimiter)
     if typing_file:
         files_written.append(typing_file)
+    authenticity_file = _write_authenticity(context, output_path, fmt_name, delimiter)
+    if authenticity_file:
+        files_written.append(authenticity_file)
 
     warnings = []
     excl = _phase_exclusion_warning(context)

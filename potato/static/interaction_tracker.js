@@ -12,6 +12,13 @@
  *
  * Events are batched and sent periodically to minimize network overhead.
  * Uses sendBeacon API for reliable delivery on page unload.
+ *
+ * With `interaction_tracking.enabled: false` (window.interactionTrackingConfig)
+ * the ambient stream -- clicks, focus, scroll, keys -- is not recorded at all.
+ * The instance id is still tracked, because the other trackers and
+ * annotation.js rely on it, and AI-assistant usage and the annotation change
+ * trail are still sent: those are provenance of the saved answer, not ambient
+ * behaviour.
  */
 class InteractionTracker {
     constructor() {
@@ -25,6 +32,8 @@ class InteractionTracker {
         this.lastFlush = Date.now();
         this.isInitialized = false;
         this.debugMode = false;
+        const cfg = (typeof window !== 'undefined' && window.interactionTrackingConfig) || {};
+        this.enabled = cfg.enabled !== false;
 
         // Don't auto-init - wait for explicit init call or DOMContentLoaded
         if (document.readyState === 'loading') {
@@ -37,6 +46,7 @@ class InteractionTracker {
     init() {
         if (this.isInitialized) return;
         this.isInitialized = true;
+        if (!this.enabled) return;
 
         // Track clicks on annotation elements
         document.addEventListener('click', (e) => this.trackClick(e), true);
@@ -377,6 +387,7 @@ class InteractionTracker {
      * @param {Object} metadata - Additional metadata
      */
     addEvent(eventType, target, metadata = {}) {
+        if (!this.enabled) return;
         const event = {
             event_type: eventType,
             timestamp: Date.now() / 1000,  // Unix timestamp in seconds
