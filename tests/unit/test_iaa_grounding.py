@@ -98,25 +98,23 @@ class TestSetSimilarity:
 
 
 class TestPointsAreNotScoredWithIou:
-    def test_the_region_measure_calls_opposite_corners_strong_agreement(self):
+    def test_the_region_measure_no_longer_calls_opposite_corners_agreement(self):
         """
-        The trap, measured rather than assumed.
-
-        A point has no area, so `region_similarity` cannot use overlap and falls
-        back to a distance-derived score. That score is compressed into the top
-        of the range: two annotators pointing at OPPOSITE CORNERS of the image —
-        the most complete disagreement available — still score ~0.86, which the
-        admin page bands "strong agreement" in green.
-
-        This is a confidently wrong number rather than a missing one, which is
-        why pointing gets its own measure instead of reusing this one.
+        A point has no area, so `region_similarity` falls back to a score that
+        falls with distance. Its tolerance was 10 units, meant for pixels, and
+        on normalized points two annotators at OPPOSITE CORNERS of the image
+        scored ~0.86, banded "strong agreement". Normalized points now reach 0
+        at 5% of the image apart. Pointing keeps its own distance measure,
+        because every pair beyond 5% scores the same 0 here.
         """
         from potato.grounding.metrics import region_similarity
         from potato.server_utils.iaa.presentation import band_for
 
         worst_possible = region_similarity(point(0.0, 0.0), point(1.0, 1.0))
-        assert worst_possible > 0.8
-        assert band_for("localization.mean_iou", worst_possible) == "strong"
+        assert worst_possible == 0.0
+        assert band_for("localization.mean_iou", worst_possible) != "strong"
+        assert region_similarity(point(0.5, 0.5), point(0.5, 0.5)) == pytest.approx(1.0)
+        assert region_similarity(point(0.5, 0.5), point(0.51, 0.5)) == pytest.approx(0.8)
 
     def test_pointing_is_reported_as_distance_not_overlap(self):
         report = g.grounding_report(

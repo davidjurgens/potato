@@ -1088,18 +1088,20 @@ def _object_attribute_report(scheme, raw_rows):
     labels = [l if isinstance(l, str) else (l or {}).get("name")
               for l in scheme.get("labels") or []]
     definitions = normalize_attributes(
-        scheme["attributes"], [str(n) for n in labels], scheme.get("name", ""))
+        scheme["attributes"], [str(n) for n in labels], scheme.get("name", ""), keyframes=True)
     if scheme.get("annotation_type") == "spatial_annotation":
         from potato.server_utils.iaa.structured import SPATIAL_MATCH
         rows = {iid: {uid: aa.spatial_tracks_with_attributes(v) for uid, v in per_user.items()}
                 for iid, per_user in raw_rows.items()}
         return aa.attribute_agreement(rows, definitions, SPATIAL_MATCH,
                                       to_canonical=aa.spatial_track_canonical,
-                                      similarity=aa.spatial_track_similarity)
+                                      similarity=aa.spatial_track_similarity,
+                                      attribute_steps=aa.spatial_track_steps)
     rows = {iid: {uid: aa.track_objects(v) for uid, v in per_user.items()}
             for iid, per_user in raw_rows.items()}
     report = aa.attribute_agreement(rows, definitions, 0.5, to_canonical=aa.track_canonical,
-                                    similarity=aa.track_similarity)
+                                    similarity=aa.track_similarity,
+                                    attribute_steps=aa.video_track_steps)
     # Tracks with no normalized box cannot be matched (track_similarity), so
     # they are counted where the reader sees the alpha they are missing from.
     unboxed = sum(1 for per_user in rows.values() for tracks in per_user.values()

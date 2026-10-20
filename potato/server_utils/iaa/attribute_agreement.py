@@ -20,6 +20,14 @@ met chance correction needs to see what it corrected.
 
 An object whose label the attribute does not apply to, or whose annotator left
 the attribute blank, contributes no value for it.
+
+A ``per_keyframe`` attribute on tracks changes along the track, so its units
+are object-frames: for each matched cluster, every frame where any member's
+value changes (its first keyframe, and each keyframe that sets the
+attribute), with each member covering that frame contributing its value
+there (``track_attributes``). A keyframe where nothing changed adds no unit,
+so an attribute nobody changed is not inflated by keyframes drawn for the
+box. The report says ``"unit": "object-frame"``.
 """
 
 from __future__ import annotations
@@ -61,7 +69,8 @@ def _applies(definition: Dict[str, Any], label: Any) -> bool:
 def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                         definitions: List[Dict[str, Any]],
                         threshold: float = 0.5,
-                        to_canonical=None, similarity=None) -> Dict[str, Dict[str, Any]]:
+                        to_canonical=None, similarity=None,
+                        attribute_steps=None) -> Dict[str, Dict[str, Any]]:
     """Per-attribute agreement over the objects annotators matched.
 
     Args:
@@ -76,6 +85,9 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
             `track_canonical` for video tracks.
         similarity: canonical a, b -> [0, 1]. `geometry.similarity` by
             default, which covers image shapes and 3D objects.
+        attribute_steps: client object -> ``[(frame, attributes from then
+            on)]``, for scoring ``per_keyframe`` attributes per frame. Without
+            it (image shapes) every attribute is one value per object.
 
     Returns:
         ``{attribute name: {"level", "alpha", "percent_agreement",
@@ -101,6 +113,8 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                 # knows what each annotator set; geometry ignores both keys.
                 shape["_attributes"] = obj.get("attributes") or {}
                 shape["_label"] = obj.get("label")
+                if attribute_steps is not None:
+                    shape["_steps"] = attribute_steps(obj)
                 converted.append(shape)
             canonical[annotator] = converted
 
@@ -109,6 +123,10 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                 continue
             unit = f"{instance_id}#{index}"
             for definition in scored:
+                if definition.get("per_keyframe") and attribute_steps is not None:
+                    long_format[definition["name"]].extend(
+                        _per_frame_values(definition, cluster, unit))
+                    continue
                 values = []
                 for annotator, shape in cluster.items():
                     if not _applies(definition, shape["_label"]):
@@ -142,6 +160,8 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
             "n_annotators": len({a for a, _u, _v in rows_for}),
             "level": level,
         }
+        if definition.get("per_keyframe") and attribute_steps is not None:
+            entry["unit"] = "object-frame"
         if math.isnan(entry["alpha"]):
             if not rows_for:
                 entry["note"] = (
@@ -156,6 +176,46 @@ def attribute_agreement(rows: Dict[str, Dict[str, List[dict]]],
                 entry["note"] = "too few matched objects for alpha to be defined"
         report[name] = entry
     return report
+
+
+def _per_frame_values(definition, cluster, unit):
+    """(annotator, unit@frame, value) for a per-keyframe attribute."""
+    from potato.server_utils.track_attributes import value_at
+
+    name = definition["name"]
+    frames = set()
+    for shape in cluster.values():
+        previous = object()
+        for frame, values in shape.get("_steps") or []:
+            if values.get(name) != previous:      # this attribute changes here
+                frames.add(frame)
+                previous = values.get(name)
+    out = []
+    for frame in sorted(frames):
+        values = []
+        for annotator, shape in cluster.items():
+            if not _applies(definition, shape["_label"]):
+                continue
+            if not (shape.get("start", frame) <= frame <= shape.get("end", frame)):
+                continue
+            value = _value(definition, value_at(shape.get("_steps") or [], definition["name"], frame))
+            if value is not None:
+                values.append((annotator, f"{unit}@{frame}", value))
+        if len(values) >= 2:
+            out.extend(values)
+    return out
+
+
+def video_track_steps(track: dict):
+    from potato.server_utils.track_attributes import steps
+    return steps(track)
+
+
+def spatial_track_steps(obj: dict):
+    """A point-cloud track's keyframes each carry their full attributes."""
+    if obj.get("type") != "track3d":
+        return []
+    return [(frame, dict(kf.get("attributes") or {})) for frame, kf in obj.get("keyframes") or []]
 
 
 # ---------------------------------------------------------------------------

@@ -176,3 +176,38 @@ describe('viewer on a sequence', () => {
         expect(m.annotations[0].coordinates.center[0]).toBe(3);
     });
 });
+
+describe('per_keyframe attributes on a sequence', () => {
+    const cube = (frame, x, attributes) => ({
+        type: 'cuboid_3d', label: 'car', track_id: 't1', frame, attributes,
+        coordinates: { center: [x, 0, 0], size: [1, 1, 1], rotation: [0, 0, 0, 1] },
+    });
+
+    test('an in-between frame takes the earlier keyframe value', () => {
+        const store = [cube(0, 0, { occ: 'none' }), cube(10, 10, { occ: 'heavy' })];
+        expect(seq.objectAt(seq.tracksOf(store).t1, 5).attributes.occ).toBe('none');
+    });
+
+    test('changing one on an interpolated frame makes a keyframe and leaves the others', () => {
+        const store = [cube(0, 0, { occ: 'none', moving: false }), cube(10, 10, { occ: 'none', moving: false })];
+        const view = seq.viewAt(store, 4);
+        view[0].attributes.occ = 'partial';
+        const merged = seq.mergeView(store, 4, view, ['occ']);
+        expect(merged.map((k) => [k.frame, k.attributes.occ])).toEqual(
+            [[0, 'none'], [4, 'partial'], [10, 'none']]);
+    });
+
+    test('a per-track attribute is copied to every keyframe, a per_keyframe one is not', () => {
+        const store = [cube(0, 0, { occ: 'none', moving: false }), cube(10, 10, { occ: 'heavy', moving: false })];
+        const view = seq.viewAt(store, 0);
+        view[0].attributes.moving = true;
+        const merged = seq.mergeView(store, 0, view, ['occ']);
+        expect(merged.map((k) => [k.frame, k.attributes.occ, k.attributes.moving])).toEqual(
+            [[0, 'none', true], [10, 'heavy', true]]);
+    });
+
+    test('an untouched interpolation is still not stored', () => {
+        const store = [cube(0, 0, { occ: 'none' }), cube(10, 10, { occ: 'none' })];
+        expect(seq.mergeView(store, 4, seq.viewAt(store, 4), ['occ'])).toHaveLength(2);
+    });
+});

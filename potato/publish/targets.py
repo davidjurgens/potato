@@ -17,7 +17,7 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from potato.publish.bundle import PublishBundle, write_split
 
@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 
 def zenodo_metadata(bundle: PublishBundle) -> Dict[str, Any]:
     """Build a ``.zenodo.json`` metadata mapping from the bundle's metadata."""
-    md = bundle.metadata
+    return zenodo_metadata_for(bundle.metadata)
+
+
+def zenodo_metadata_for(md: Any) -> Dict[str, Any]:
+    """``.zenodo.json`` metadata from a DatasetMetadata (publish/config.py)."""
     creators = []
     for a in md.authors:
         creator: Dict[str, Any] = {"name": a.name or "Unknown"}
@@ -197,6 +201,26 @@ def deposit_to_zenodo(bundle: PublishBundle, token: Optional[str] = None,
     unpublished draft (``publish=False``) so nothing is minted accidentally. When
     ``publish=True`` the deposition is published and a DOI returned.
     """
+    workdir = archive_dir or tempfile.mkdtemp(prefix="zenodo_")
+    archive_base = os.path.join(workdir, (bundle.metadata.pretty_name or "dataset")
+                                .replace("/", "_").replace(" ", "_") or "dataset")
+    archive_path = write_archive(bundle, archive_base, "zip",
+                                 data_format=str(
+                                     bundle.config.get("__data_format__", "jsonl")))
+    return zenodo_deposit_files([(os.path.basename(archive_path), archive_path)],
+                                zenodo_metadata(bundle), token=token,
+                                sandbox=sandbox, publish=publish)
+
+
+def zenodo_deposit_files(files: List[Tuple[str, str]], metadata: Dict[str, Any],
+                         token: Optional[str] = None, sandbox: bool = True,
+                         publish: bool = False) -> Dict[str, Any]:
+    """Create a Zenodo deposition holding ``files`` (``(name, path)`` pairs).
+
+    Sandbox and an unpublished draft unless asked otherwise. Returns
+    ``deposition_id``, ``sandbox``, ``draft_url``, ``published``, ``doi`` (the
+    reserved one for a draft) and, once published, ``url``.
+    """
     import requests   # part of the core install
 
     token = token or os.environ.get("ZENODO_TOKEN")
@@ -214,21 +238,14 @@ def deposit_to_zenodo(bundle: PublishBundle, token: Optional[str] = None,
     dep_id = dep["id"]
     bucket = dep["links"]["bucket"]
 
-    # 2. build and upload the archive
-    workdir = archive_dir or tempfile.mkdtemp(prefix="zenodo_")
-    archive_base = os.path.join(workdir, (bundle.metadata.pretty_name or "dataset")
-                                .replace("/", "_").replace(" ", "_") or "dataset")
-    archive_path = write_archive(bundle, archive_base, "zip",
-                                 data_format=str(
-                                     bundle.config.get("__data_format__", "jsonl")))
-    fname = os.path.basename(archive_path)
-    with open(archive_path, "rb") as fp:
-        up = requests.put(f"{bucket}/{fname}", data=fp, timeout=600, **auth)
-    up.raise_for_status()
+    # 2. upload the files
+    for fname, path in files:
+        with open(path, "rb") as fp:
+            up = requests.put(f"{bucket}/{fname}", data=fp, timeout=600, **auth)
+        up.raise_for_status()
 
     # 3. attach metadata
-    meta = requests.put(f"{api}/{dep_id}", json=zenodo_metadata(bundle),
-                        timeout=60, **auth)
+    meta = requests.put(f"{api}/{dep_id}", json=metadata, timeout=60, **auth)
     meta.raise_for_status()
 
     result: Dict[str, Any] = {

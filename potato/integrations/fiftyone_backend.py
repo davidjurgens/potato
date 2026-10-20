@@ -27,6 +27,7 @@ This module imports FiftyOne at the top, so only FiftyOne loads it, through
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import subprocess
@@ -34,6 +35,7 @@ import sys
 import time
 import webbrowser
 from pathlib import Path
+from typing import Any, Dict
 
 import fiftyone.core.labels as fol
 import fiftyone.core.media as fom
@@ -43,7 +45,7 @@ from potato.integrations import fiftyone_project as fp
 
 logger = logging.getLogger(__name__)
 
-_LIST_TYPES = {"classifications", "detections", "polylines", "polygons"}
+_LIST_TYPES = {"classifications", "detections", "polylines", "polygons", "keypoints"}
 
 
 class PotatoBackendConfig(foua.AnnotationBackendConfig):
@@ -80,7 +82,7 @@ class PotatoBackend(foua.AnnotationBackend):
 
     @property
     def supported_media_types(self):
-        return [fom.IMAGE]
+        return [fom.IMAGE, fom.VIDEO]
 
     @property
     def supported_label_types(self):
@@ -92,7 +94,7 @@ class PotatoBackend(foua.AnnotationBackend):
 
     @property
     def supported_attr_types(self):
-        return []
+        return sorted(fp.ATTRIBUTE_TYPES)
 
     @property
     def supports_keyframes(self):
@@ -107,37 +109,65 @@ class PotatoBackend(foua.AnnotationBackend):
         return True
 
     def recommend_attr_tool(self, name, value):
+        if isinstance(value, bool):
+            return {"type": "checkbox"}
         return {"type": "text"}
 
     def requires_attr_values(self, attr_type):
-        return False
+        return attr_type in ("select", "radio")
 
     def upload_annotations(self, samples, anno_key, launch_editor=False):
         config = self.config
         project_dir = os.path.abspath(config.project_dir or f"potato-{anno_key}")
+        dataset = getattr(samples, "_dataset", samples)
+        video = samples.media_type == fom.VIDEO
+        if video:
+            samples.compute_metadata()
         label_schema = {}
         id_map = {}
         existing = {}
         for field, info in config.label_schema.items():
             label_type = info["type"]
-            fp.potato_kind(label_type)  # refuses unsupported types up front
-            classes = [c for c in (info.get("classes") or []) if isinstance(c, str)]
-            label_schema[field] = {"type": label_type, "classes": classes}
-            if info.get("existing_field"):
+            entry = {"type": label_type,
+                     "classes": [c for c in (info.get("classes") or []) if isinstance(c, str)]}
+            if samples._is_frame_field(field):
+                entry["frame_field"] = True
+                rates = [r for r in samples.values("metadata.frame_rate") if r]
+                if rates:
+                    entry["fps"] = max(set(rates), key=rates.count)
+            if info.get("attributes"):
+                entry["attributes"] = {name: dict(spec) for name, spec in info["attributes"].items()}
+            if label_type in ("keypoint", "keypoints"):
+                skeleton = dataset.skeletons.get(field) or dataset.default_skeleton
+                if skeleton is not None:
+                    names = list(skeleton.labels or []) or [
+                        str(i) for i in range(1 + max((max(e) for e in skeleton.edges), default=0))]
+                    entry["skeleton"] = {"names": names, "edges": [list(e) for e in skeleton.edges]}
+            if label_type == "segmentation":
+                entry["mask_targets"] = integer_mask_targets(field, info.get("mask_targets") or {})
+                entry["classes"] = list(entry["mask_targets"].values())
+            fp.field_kind(entry)  # refuses unsupported types up front
+            label_schema[field] = entry
+            if info.get("existing_field") and not entry.get("frame_field"):
                 ids, values = samples.values(["id", field])
-                existing[field] = {sid: _to_answer(label_type, v) for sid, v in zip(ids, values)}
+                existing[field] = {sid: _to_answer({**entry, "field": field}, v)
+                                   for sid, v in zip(ids, values)}
                 id_map[field] = {sid: _label_ids(v) for sid, v in zip(ids, values)}
+            elif info.get("existing_field"):
+                logger.warning(
+                    "%s already has labels. Potato does not show existing video tracks to "
+                    "annotators; new tracks are added beside them on load.", field)
 
         ids, paths = samples.values(["id", config.media_field])
         rows = [{"id": sid, "filepath": path,
                  "existing": {f: existing[f].get(sid) for f in existing}}
                 for sid, path in zip(ids, paths)]
-        dataset = getattr(samples, "_dataset", samples)
         fp.write_project(project_dir, rows, label_schema,
                          task_name=f"{dataset.name}: {anno_key}",
                          annotations_per_item=config.annotations_per_item,
                          media=config.media, anno_key=anno_key,
-                         dataset_name=dataset.name)
+                         dataset_name=dataset.name,
+                         media_type="video" if video else "image")
         logger.info("Wrote a Potato project for %d samples to %s", len(rows), project_dir)
         logger.info("Start it from %s with: potato start %s -p %d",
                     os.path.dirname(project_dir),
@@ -153,10 +183,16 @@ class PotatoBackend(foua.AnnotationBackend):
     def download_annotations(self, results):
         collected = fp.collect(results.project_dir)
         dataset = results.samples._dataset
+        schema = collected["manifest"]["label_schema"]
         annotations = {}
         for field, info in results.config.label_schema.items():
             label_type = info["type"]
             data = collected["fields"][field]
+            entry = schema[field]
+            if entry.get("kind") == "track":
+                annotations[field] = {"detections": _frame_annotations(
+                    results.samples, data["merged"])}
+                continue
             per_sample = {}
             current = {}
             if field in results.id_map:
@@ -176,7 +212,7 @@ class PotatoBackend(foua.AnnotationBackend):
             for sid, answer in data["merged"].items():
                 if answer in (None, []):
                     continue
-                labels = _to_labels(label_type, answer)
+                labels = _to_labels(entry, answer)
                 if labels:
                     per_sample[sid] = {label.id: label for label in labels}
             annotations[field] = {foua._RETURN_TYPES_MAP[label_type]: per_sample}
@@ -190,7 +226,7 @@ class PotatoBackend(foua.AnnotationBackend):
         dataset.save()
 
         if results.config.annotator_fields:
-            write_annotator_fields(dataset, results.config.label_schema, collected)
+            write_annotator_fields(dataset, schema, collected)
         return annotations
 
 
@@ -248,6 +284,8 @@ def _label_list(value):
         return list(value.detections)
     if isinstance(value, fol.Polylines):
         return list(value.polylines)
+    if isinstance(value, fol.Keypoints):
+        return list(value.keypoints)
     return [value]
 
 
@@ -255,7 +293,7 @@ def _label_ids(value):
     labels = _label_list(value)
     if not labels:
         return None
-    if isinstance(value, (fol.Classifications, fol.Detections, fol.Polylines)):
+    if isinstance(value, (fol.Classifications, fol.Detections, fol.Polylines, fol.Keypoints)):
         return [label.id for label in labels]
     return labels[0].id
 
@@ -264,57 +302,243 @@ def _labels_by_id(value):
     return {label.id: label for label in _label_list(value)}
 
 
-def _to_answer(label_type, value):
+def _entry(info):
+    """A label_schema entry, or a bare label type from older callers."""
+    return {"type": info} if isinstance(info, str) else info
+
+
+def _attributes_of(label, entry):
+    """The values of the schema's attributes set on a FiftyOne label."""
+    out = {}
+    for name in (entry.get("attributes") or {}):
+        value = label.get_attribute_value(name, None) if hasattr(label, "get_attribute_value") \
+            else getattr(label, name, None)
+        if value is not None:
+            out[name] = value
+    return out
+
+
+def _with_attributes(obj, label, entry):
+    attributes = _attributes_of(label, entry)
+    if attributes:
+        obj["attributes"] = attributes
+    return obj
+
+
+def _set_attributes(label, obj, entry):
+    for name, value in (obj.get("attributes") or {}).items():
+        if name in (entry.get("attributes") or {}):
+            label[name] = value
+    return label
+
+
+def integer_mask_targets(field: str, targets: Dict[Any, Any]) -> Dict[str, str]:
+    """``{value: class}`` without background, or a refusal for RGB targets.
+
+    FiftyOne also allows ``"#rrggbb"`` keys for RGB masks. Potato's masks are
+    one class per integer value, so those are refused by name rather than
+    failing on ``int("#ff0000")`` halfway through an upload.
+    """
+    out = {}
+    for value, cls in targets.items():
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"{field}: mask target {value!r} is not an integer. Potato reads integer "
+                f"mask targets (0 is background) and does not support RGB targets; give "
+                f"this field integer targets to annotate it in Potato.") from None
+        if number != 0:
+            out[str(number)] = str(cls)
+    return out
+
+
+def _rle(bitmap):
+    """A 2D 0/1 array as Potato's row-major RLE, starting with a run of 0s."""
+    import numpy as np
+    flat = np.asarray(bitmap, dtype=bool).ravel()
+    counts, current, run = [], False, 0
+    for value in flat:
+        if value == current:
+            run += 1
+        else:
+            counts.append(run)
+            current, run = value, 1
+    counts.append(run)
+    return {"counts": [int(c) for c in counts], "size": [int(bitmap.shape[0]), int(bitmap.shape[1])]}
+
+
+def _bitmap(rle):
+    import numpy as np
+    h, w = rle["size"]
+    flat = np.zeros(h * w, dtype=bool)
+    pos, value = 0, False
+    for count in rle["counts"]:
+        if value:
+            flat[pos:pos + count] = True
+        pos += count
+        value = not value
+    return flat.reshape(h, w)
+
+
+def _to_answer(info, value):
     """A sample's existing FiftyOne label(s) as a Potato answer."""
+    entry = _entry(info)
+    label_type = entry["type"]
     labels = _label_list(value)
     if not labels:
         return None
-    kind = fp.potato_kind(label_type)
+    kind = fp.field_kind(entry)
     if kind == "radio":
         return labels[0].label
     if kind == "multiselect":
         return sorted({label.label for label in labels})
+    if kind == "mask":
+        import numpy as np
+        mask = labels[0].get_mask() if hasattr(labels[0], "get_mask") else labels[0].mask
+        if mask is None:
+            return None
+        mask = np.asarray(mask)
+        if mask.ndim == 3:   # RGB targets are not supported; read the first channel
+            mask = mask[..., 0]
+        return [{"type": "mask", "label": cls, "color": "", "rle": _rle(mask == int(v))}
+                for v, cls in (entry.get("mask_targets") or {}).items() if (mask == int(v)).any()]
     objects = []
     for label in labels:
         if isinstance(label, fol.Detection) and label.bounding_box:
             x, y, w, h = label.bounding_box
-            objects.append({"type": "bbox", "label": label.label, "color": "",
-                            "coordinates": {"x": x, "y": y, "width": w, "height": h}})
+            objects.append(_with_attributes(
+                {"type": "bbox", "label": label.label, "color": "",
+                 "coordinates": {"x": x, "y": y, "width": w, "height": h}}, label, entry))
         elif isinstance(label, fol.Polyline):
             # A FiftyOne polyline can hold several shapes; Potato draws one
             # shape per object, so each becomes its own object.
             for shape in label.points or []:
                 if len(shape) < 2:
                     continue
-                objects.append({
+                objects.append(_with_attributes({
                     "type": "polygon" if label.closed else "polyline",
                     "label": label.label, "color": "",
                     "coordinates": [{"x": p[0], "y": p[1]} for p in shape],
-                    **({} if label.closed else {"closed": False})})
+                    **({} if label.closed else {"closed": False})}, label, entry))
+        elif isinstance(label, fol.Keypoint):
+            points = list(label.points or [])
+            if kind == "keypoint_set":
+                # Missing points are NaN in FiftyOne and visibility 0 in Potato.
+                names = entry["skeleton"]["names"]
+                coords = []
+                for i in range(len(names)):
+                    p = points[i] if i < len(points) else (math.nan, math.nan)
+                    known = not (math.isnan(p[0]) or math.isnan(p[1]))
+                    coords.append({"x": p[0] if known else 0.0, "y": p[1] if known else 0.0,
+                                   "v": 2 if known else 0})
+                objects.append(_with_attributes(
+                    {"type": "keypoint_set", "label": label.label, "color": "",
+                     "skeleton": fp.scheme_name(entry.get("field", "")) or "",
+                     "coordinates": coords}, label, entry))
+            else:
+                for p in points:
+                    if math.isnan(p[0]) or math.isnan(p[1]):
+                        continue
+                    objects.append(_with_attributes(
+                        {"type": "landmark", "label": label.label, "color": "",
+                         "coordinates": {"x": p[0], "y": p[1]}}, label, entry))
     return objects
 
 
-def _to_labels(label_type, answer):
+def _to_labels(info, answer):
     """A Potato answer as a list of FiftyOne labels."""
-    kind = fp.potato_kind(label_type)
+    entry = _entry(info)
+    label_type = entry["type"]
+    kind = fp.field_kind(entry)
     if kind == "radio":
         return [fol.Classification(label=str(answer))]
     if kind == "multiselect":
         return [fol.Classification(label=str(c)) for c in answer]
+    if kind == "mask":
+        return _segmentation(entry, answer)
     labels = []
     for obj in answer:
         coords = obj.get("coordinates")
         if obj.get("type") == "bbox" and isinstance(coords, dict):
-            labels.append(fol.Detection(label=obj.get("label"), bounding_box=[
-                coords["x"], coords["y"], coords["width"], coords["height"]]))
+            labels.append(_set_attributes(fol.Detection(label=obj.get("label"), bounding_box=[
+                coords["x"], coords["y"], coords["width"], coords["height"]]), obj, entry))
         elif obj.get("type") in ("polygon", "polyline") and isinstance(coords, list):
             closed = obj.get("type") == "polygon"
-            labels.append(fol.Polyline(
+            labels.append(_set_attributes(fol.Polyline(
                 label=obj.get("label"), closed=closed, filled=closed,
-                points=[[(p["x"], p["y"]) for p in coords]]))
+                points=[[(p["x"], p["y"]) for p in coords]]), obj, entry))
+        elif obj.get("type") == "landmark" and isinstance(coords, dict):
+            labels.append(_set_attributes(fol.Keypoint(
+                label=obj.get("label"), points=[(coords["x"], coords["y"])]), obj, entry))
+        elif obj.get("type") == "keypoint_set" and isinstance(coords, list):
+            points = [(p["x"], p["y"]) if p.get("v", 2) else (math.nan, math.nan) for p in coords]
+            labels.append(_set_attributes(fol.Keypoint(label=obj.get("label"), points=points),
+                                          obj, entry))
     if label_type not in _LIST_TYPES:
         labels = labels[:1]
     return labels
+
+
+def _segmentation(entry, objects):
+    """Per-class masks as one Segmentation. Where two classes overlap, the
+    one later in mask_targets wins."""
+    import numpy as np
+    values = {cls: int(v) for v, cls in (entry.get("mask_targets") or {}).items()}
+    masks = [obj for obj in objects or [] if obj.get("type") == "mask" and obj.get("rle")]
+    if not masks:
+        return []
+    h, w = masks[0]["rle"]["size"]
+    out = np.zeros((h, w), dtype=np.uint8 if max(values.values(), default=0) < 256 else np.uint16)
+    for cls, value in sorted(values.items(), key=lambda kv: kv[1]):
+        for obj in masks:
+            if obj.get("label") == cls and list(obj["rle"]["size"]) == [h, w]:
+                out[_bitmap(obj["rle"])] = value
+    return [fol.Segmentation(mask=out)]
+
+
+def _frame_annotations(samples, merged):
+    """Merged tracks as ``{sample_id: {frame_id: {label_id: Detection}}}``.
+
+    Every frame from a track's first keyframe to its last gets a box,
+    interpolated linearly between keyframes (held, for constant tracks), with
+    ``index`` the track's number and ``keyframe`` set on keyframes. Frame
+    numbers come from each keyframe's time at the video's own frame rate.
+    """
+    from potato.export.mot_exporter import _box_between, _normalized_keyframes, _real_frame
+    from potato.server_utils.track_attributes import attributes_at
+    samples.ensure_frames()
+    ids, rates, numbers, frame_ids = samples.values(
+        ["id", "metadata.frame_rate", "frames.frame_number", "frames.id"])
+    out = {}
+    for sid, fps, frame_numbers, fids in zip(ids, rates, numbers, frame_ids):
+        tracks = merged.get(sid)
+        if not tracks:
+            continue
+        by_number = dict(zip(frame_numbers, fids))
+        fps = fps or 30.0
+        per_frame = {}
+        for index, track in enumerate(tracks, start=1):
+            keyframes = _normalized_keyframes(track, page_fps=fps, fps=fps)
+            if not keyframes:
+                continue
+            keys = {frame for frame, _box in keyframes}
+            hold = (track.get("interpolation") or "linear") == "constant"
+            for frame in range(keyframes[0][0], keyframes[-1][0] + 1):
+                frame_id = by_number.get(frame + 1)   # FiftyOne numbers frames from 1
+                if frame_id is None:
+                    continue
+                box = _box_between(keyframes, frame, hold=hold)
+                label = fol.Detection(label=track.get("label"), index=index,
+                                      bounding_box=[box["x"], box["y"], box["width"], box["height"]],
+                                      keyframe=frame in keys)
+                # per_keyframe attributes change along the track.
+                for name, value in attributes_at(
+                        track, frame, lambda key, kf: _real_frame(key, kf, fps, fps)).items():
+                    label[name] = value
+                per_frame.setdefault(frame_id, {})[label.id] = label
+        out[sid] = per_frame
+    return out
 
 
 def _container(label_type, labels):
@@ -327,6 +551,8 @@ def _container(label_type, labels):
         return fol.Detections(detections=labels)
     if label_type in ("polylines", "polygons"):
         return fol.Polylines(polylines=labels)
+    if label_type == "keypoints":
+        return fol.Keypoints(keypoints=labels)
     return labels[0]
 
 
@@ -335,11 +561,18 @@ def annotator_field(field, user):
 
 
 def write_annotator_fields(dataset, label_schema, collected):
-    """Each annotator's own labels, into ``<label_field>_<username>``."""
+    """Each annotator's own labels, into ``<label_field>_<username>``.
+
+    Video tracks are left out: they are frame fields, and one per-annotator
+    copy of every frame is more than this option is for.
+    """
     per_field = {}
     for field, user, sid, answer in fp.iter_annotator_answers(collected):
-        label_type = label_schema[field]["type"]
-        value = _container(label_type, _to_labels(label_type, answer))
+        entry = label_schema[field]
+        if fp.field_kind(entry) == "track":
+            continue
+        label_type = entry["type"]
+        value = _container(label_type, _to_labels(entry, answer))
         if value is not None:
             per_field.setdefault(annotator_field(field, user), {})[sid] = value
     for name, values in per_field.items():

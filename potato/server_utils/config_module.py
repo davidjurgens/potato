@@ -4129,7 +4129,8 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         label_names = [l if isinstance(l, str) else (l or {}).get('name')
                        for l in scheme.get('labels') or []]
         try:
-            normalize_attributes(scheme['attributes'], [str(n) for n in label_names], path)
+            normalize_attributes(scheme['attributes'], [str(n) for n in label_names], path,
+                                 keyframes=True)
         except AttributeConfigError as e:
             raise ConfigValidationError(str(e)) from e
         if scheme['annotation_type'] == 'video_annotation' \

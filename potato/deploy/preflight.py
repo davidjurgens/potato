@@ -132,6 +132,42 @@ _SECRET_VALUE_SHAPES = (
     re.compile(r"^xox[baprs]-[A-Za-z0-9\-]{10,}$"), # Slack
 )
 
+#: The same shapes found anywhere in raw text (a key pasted into a layout's
+#: JavaScript or an .ini file), for files that are not parsed. Built from the
+#: list above so the two cannot drift.
+SECRET_VALUE_SEARCH = re.compile(
+    "|".join(r"(?<![A-Za-z0-9_\-])" + p.pattern.strip("^$") for p in _SECRET_VALUE_SHAPES)
+    .encode())
+
+
+#: Name endings that also mark a credential: admin_api_key, session_secret,
+#: hf_token. A key ending in _env holds the variable's name, not its value.
+_SECRET_KEY_SUFFIXES = ("_api_key", "_secret", "_token", "_password")
+
+
+def _secret_name(leaf: str) -> bool:
+    return leaf in _SECRET_KEY_NAMES or (not leaf.endswith("_env")
+                                         and leaf.endswith(_SECRET_KEY_SUFFIXES))
+
+
+def literal_secrets(config: Any) -> List[str]:
+    """Key paths holding what looks like a pasted credential.
+
+    A value counts when its key names a credential and it is at least 12
+    characters, or when it has the shape of a known provider's key, wherever
+    it sits. ``${VAR}`` references are resolved at load and never count.
+    Shared by the deploy preflight (D006) and ``potato snapshot deposit``.
+    """
+    found = []
+    for key_path, value in _walk(config):
+        if not isinstance(value, str) or not value or value.startswith("${"):
+            continue
+        leaf = key_path.split(".")[-1].split("[")[0]
+        if ((_secret_name(leaf) and len(value) >= 12)
+                or any(p.match(value) for p in _SECRET_VALUE_SHAPES)):
+            found.append(key_path)
+    return found
+
 
 def _walk(node: Any, path: str = ""):
     if isinstance(node, dict):
@@ -219,22 +255,15 @@ def _check_mcp_surface(ctx: CheckContext) -> List[Finding]:
 @check
 def _check_inline_secrets(ctx: CheckContext) -> List[Finding]:
     findings = []
-    for key_path, value in _walk(ctx.config):
-        if not isinstance(value, str) or not value:
-            continue
-        if value.startswith("${"):  # env reference, resolved at load
-            continue
+    for key_path in literal_secrets(ctx.config):
         leaf = key_path.split(".")[-1].split("[")[0]
-        looks_secret_by_name = leaf in _SECRET_KEY_NAMES and len(value) >= 12
-        looks_secret_by_shape = any(p.match(value) for p in _SECRET_VALUE_SHAPES)
-        if looks_secret_by_name or looks_secret_by_shape:
-            findings.append(Finding(
-                "D006", "error",
-                f"{key_path} looks like a literal credential; deploying would "
-                "upload it to the host and, for repo-backed providers, publish it.",
-                f"Replace it with ${{ENV_VAR}} and pass --secret {leaf.upper()}=<value>.",
-                key=key_path,
-            ))
+        findings.append(Finding(
+            "D006", "error",
+            f"{key_path} looks like a literal credential; deploying would "
+            "upload it to the host and, for repo-backed providers, publish it.",
+            f"Replace it with ${{ENV_VAR}} and pass --secret {leaf.upper()}=<value>.",
+            key=key_path,
+        ))
     return findings
 
 

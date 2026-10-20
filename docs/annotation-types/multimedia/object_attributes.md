@@ -54,6 +54,7 @@ annotation_schemes:
 | `show_if` | | `{attribute: <name>, equals: <value>}`: show this field only while another attribute has that value |
 | `min`, `max` | | Bounds for a `number` |
 | `description` | | Help text under the field |
+| `per_keyframe` | `false` | Video tracks and point-cloud sequences only: the value can change along the track (see [Values that change along a track](#values-that-change-along-a-track)) |
 
 A mistake in the block, such as a misspelled key, a select with no options, a
 `labels` entry that is not one of the scheme's labels, or a default that is not
@@ -69,8 +70,37 @@ controls: Tab moves between them, and they show a focus ring.
 
 On a video, the panel sits under the track list and shows the active track's
 attributes: create a track or click it in the list. Attributes belong to the
-whole track, not to one frame. On a point cloud, the panel sits under the
-viewer and shows the selected box or point's attributes.
+whole track unless they are `per_keyframe`. On a point cloud, the panel sits
+under the viewer and shows the selected box or point's attributes.
+
+### Values that change along a track
+
+A car can be in full view for a hundred frames and behind a truck for the next
+forty. With `per_keyframe: true` an attribute takes a value per keyframe
+instead of one per track:
+
+```yaml
+attributes:
+  - name: occluded
+    type: select
+    options: [none, partial, heavy]
+    default: none
+    per_keyframe: true
+  - name: parked          # still one value for the whole track
+    type: bool
+```
+
+The panel shows each attribute's value at the current frame, with a note
+under a `per_keyframe` one: "From frame N until the next keyframe that
+changes it". Changing it sets the value from the current frame on. On a
+frame between keyframes, Potato first pins a keyframe there with the
+interpolated box, as moving the box would. Values are never interpolated: each holds until
+the next keyframe that sets it, and before the first one the track's own
+value applies. Outside the track's first and last keyframe there is nothing
+to pin, and the panel says so.
+
+`per_keyframe` is refused on an image scheme, whose shapes have no
+keyframes.
 
 If a required attribute is missing on any object, the panel says how many
 still need one, and pressing Next shows the same reason in the banner instead
@@ -95,7 +125,12 @@ as an `attributes` key on each annotation. The CVAT, KITTI, MOT, Darwin, VIA and
 COCO importers read them back, and they survive edits, undo and navigation.
 
 A video track stores its attributes beside its keyframes, and a point-cloud
-object beside its coordinates, in the same `attributes` object.
+object beside its coordinates, in the same `attributes` object. A
+`per_keyframe` value set on a video frame is stored on that keyframe, as
+`keyframes.<frame>.attributes`, and only for what changes there (a `null`
+clears the value from that frame on). Each point-cloud sequence keyframe
+carries all of its attributes. The MOT export writes each row's value at its frame, and
+the FiftyOne backend sets each frame's detection to the value there.
 
 ## Agreement over attributes
 
@@ -124,6 +159,13 @@ boxes".
 | `multi` | MASI distance between the chosen sets |
 | `text` | not scored |
 
+A `per_keyframe` attribute is scored over object-frames instead: for each
+matched track, every frame where an annotator's value for it changes (the
+track's first keyframe, and each keyframe that sets it), with each annotator
+whose track covers that frame contributing the value there. Keyframes drawn
+only to move the box add no units. The report marks these groups
+`unit: object-frame`.
+
 Raw percent agreement is shown beside alpha. A shape only one annotator drew, a
 shape whose label the attribute does not apply to, and a blank value contribute
 nothing. When every annotator gave the same value everywhere, alpha is undefined
@@ -131,8 +173,8 @@ and the table prints the reason in its place rather than a bare n/a.
 
 ## Limits
 
-- Attributes are set per object, not per frame: a video track has one value
-  for its whole length.
+- Values that change along a track need `per_keyframe`; without it a track
+  has one value for its whole length.
 - Brush masks have no attribute panel; masks imported with attributes keep them.
 - A box drawn on top of another shape is not selected automatically. Click it to
   see its attributes.

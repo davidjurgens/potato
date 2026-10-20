@@ -146,6 +146,13 @@ def _citation_section(bundle: PublishBundle) -> str:
             f"`{snapshot.get('content_hash', '')}`). Anyone holding the project "
             f"folder can check that their copy is this one with "
             f"`potato snapshot verify config.yaml {snapshot['id']}`.")
+        # Sandbox DOIs and unpublished drafts resolve for nobody else.
+        public = [d for d in snapshot.get("deposits") or []
+                  if d.get("published") and not d.get("sandbox") and d.get("doi")]
+        if public:
+            parts.append(
+                f"The snapshot's files are deposited at https://doi.org/{public[-1]['doi']}; "
+                f"`potato snapshot verify --dir <folder>` checks a downloaded copy.")
     parts.append("This dataset was created with Potato:\n\n"
                  "```bibtex\n" + paper_report.BIB.strip() + "\n```")
     return "\n\n".join(parts)

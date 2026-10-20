@@ -4033,7 +4033,10 @@ class ImageAnnotationManager {
 
         this.masks[key] = carryAttributes(carryProvenance({
             label: ann.label,
-            color: ann.color,
+            // An imported mask often has no colour of its own ("" from the
+            // FiftyOne backend); without the label's, every such mask drew
+            // in the same fallback colour whatever its class.
+            color: ann.color || this.colorForLabel(ann.label) || ann.color,
             buffer: buffer,
         }, ann), ann);
         if (ann.instance !== undefined && ann.instance !== null) {

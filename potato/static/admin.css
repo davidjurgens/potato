@@ -1099,3 +1099,16 @@ body:has(> .admin-navbar) > main.dashboard {
     padding: var(--space-md);
   }
 }
+
+/* Throughput charts (admin.html loadThroughput) */
+.tp-chart { display: block; max-width: 100%; height: auto; overflow: visible; }
+.tp-chart rect { fill: var(--chart-series-1, #2a78d6); }
+.tp-chart text { fill: var(--muted-foreground); font-size: 10px; font-variant-numeric: tabular-nums; }
+.tp-chart .tp-base { stroke: var(--border, #e4e4e7); stroke-width: 1; }
+.tp-line { color: var(--chart-series-1, #2a78d6); }
+.tp-mini { display: inline-block; vertical-align: middle; }
+.tp-cell { white-space: nowrap; }
+.tp-range { color: var(--muted-foreground); margin-left: 0.35rem; }
+.tp-figure { margin: 0 0 0.75rem; }
+.tp-figure figcaption { color: var(--muted-foreground); font-size: 0.875rem; margin: 0.25rem 0; }
+.tp-trend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1rem; }

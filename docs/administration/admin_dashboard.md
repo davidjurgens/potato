@@ -275,10 +275,18 @@ How fast each annotator works, and how often their work is sent back.
   towards nothing.
 - Attention-check and gold items are not work on the data, so they are
   counted apart (**Check items**) and left out of every rate.
-- **By day** (UTC), from when each item was last touched. Saved items with no
-  interaction events, such as imported answers or saves made through the API,
-  are counted under *no events*, and the rates leave them out (a note says how
-  many).
+- **Time per item**: a histogram of active time per item over fixed bins
+  (under 5 s, 5–10 s, up to 10 minutes and over) and the 25th, 50th, 75th and
+  90th percentiles, for the project. Each annotator's row has a small
+  copy of the same histogram, with the 10th to 90th percentile range beside it. The
+  bins are the same for everyone, so an annotator whose bars sit at the left
+  is faster than the others; a block of items under 5 s is worth a look.
+- **By day** (UTC), from when each item was last touched, as a table and, once
+  work has been saved on two or more days, as two charts: items saved per day
+  and items per active hour. Each annotator's row has a line of their items
+  per active hour by day. Saved items with no interaction events, such as
+  imported answers or saves made through the API, are counted under
+  *no events*, and the rates leave them out (a note says how many).
 - With the [review workflow](../agent-evaluation/review_workflow.md) on, each
   annotator also gets **first-pass approval**, the share of their reviewed
   items that reached *done* without being sent back to an earlier review
@@ -538,10 +546,14 @@ GET /admin/api/throughput
 
 `annotators` holds one row per annotator: `items`, `qc_items` (attention and
 gold items, left out of the rates), `items_timed`,
-`active_seconds`, `items_per_active_hour`, `median_active_seconds` and
-`by_day`, plus `reviewed_items`, `first_pass_approval` and `rework_rate` when
+`active_seconds`, `items_per_active_hour`, `median_active_seconds`,
+`time_distribution` and `by_day`, plus `reviewed_items`, `first_pass_approval` and `rework_rate` when
 `review_enabled` is true. `project` holds the same totals and the by-day rows
 for everyone. A rate is `null` when there is no timed work to divide by.
+`time_distribution` is `null` with no timed items, otherwise `n`, `p10`,
+`p25`, `p50`, `p75`, `p90`, `max` (seconds) and `bins`, a list of
+`{from, to, count}` with `from` inclusive, `to` exclusive and `null` on the
+last, open-ended bin.
 
 ### Writing Process
 ```

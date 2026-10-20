@@ -19,6 +19,13 @@ over attributes in :mod:`potato.server_utils.iaa.attribute_agreement`.
         required: true
         default: none
         show_if: {attribute: truncated, equals: true}
+        per_keyframe: true      # video tracks and point-cloud sequences only
+
+An attribute is one value per object by default; on a track, one value for
+the whole track. ``per_keyframe: true`` lets the value change along the track
+(occluded from frame 40 to 90): it is stored on keyframes and holds from one
+keyframe to the next, starting from the track's own value before the first
+keyframe that sets it. :mod:`potato.server_utils.track_attributes` reads it.
 """
 
 from __future__ import annotations
@@ -30,7 +37,7 @@ TYPES = ("select", "multi", "text", "number", "bool")
 #: Keys an attribute definition may carry. Anything else is a typo, and a
 #: typo here (`option:` for `options:`) would otherwise render an empty select.
 KEYS = {"name", "type", "options", "labels", "required", "default", "show_if",
-        "description", "min", "max"}
+        "description", "min", "max", "per_keyframe"}
 
 
 class AttributeConfigError(ValueError):
@@ -38,8 +45,11 @@ class AttributeConfigError(ValueError):
 
 
 def normalize_attributes(raw: Any, label_names: List[str],
-                         where: str) -> List[Dict[str, Any]]:
+                         where: str, keyframes: bool = False) -> List[Dict[str, Any]]:
     """Validate an `attributes:` block and return the normalized definitions.
+
+    ``keyframes``: whether the scheme's objects have keyframes (video tracks,
+    point-cloud sequences), which ``per_keyframe`` needs.
 
     Raises AttributeConfigError with a message naming the scheme and the
     attribute, so a config error points at the line to fix.
@@ -80,6 +90,15 @@ def normalize_attributes(raw: Any, label_names: List[str],
                                "required": bool(entry.get("required", False))}
         if entry.get("description"):
             out["description"] = str(entry["description"])
+        if entry.get("per_keyframe") is not None:
+            if not isinstance(entry["per_keyframe"], bool):
+                raise AttributeConfigError(f"{at}.per_keyframe must be true or false")
+            if entry["per_keyframe"]:
+                if not keyframes:
+                    raise AttributeConfigError(
+                        f"{at}.per_keyframe: only video tracks and point-cloud sequences "
+                        f"have keyframes; on this scheme an attribute is one value per object")
+                out["per_keyframe"] = True
 
         if kind in ("select", "multi"):
             options = entry.get("options")

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from potato.throughput import compute_throughput, review_outcomes
+from potato.throughput import TIME_BINS, compute_throughput, review_outcomes, time_distribution
 
 DAY1 = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc).timestamp()
 DAY2 = datetime(2026, 10, 20, 9, 0, tzinfo=timezone.utc).timestamp()
@@ -118,3 +118,35 @@ class TestReview:
         report = compute_throughput(BEHAVIOR, SAVED)
         assert report["review_enabled"] is False
         assert "first_pass_approval" not in row(report, "a")
+
+
+class TestTimeDistribution:
+    def test_bins_and_percentiles_by_hand(self):
+        d = time_distribution([1, 2, 7, 12, 25, 45, 90, 200, 400, 900])
+        # One value in every bin but the first, which holds 1 and 2.
+        assert [b["count"] for b in d["bins"]] == [2, 1, 1, 1, 1, 1, 1, 1, 1]
+        assert (d["bins"][0]["from"], d["bins"][0]["to"]) == (0, 5)
+        assert (d["bins"][-1]["from"], d["bins"][-1]["to"]) == (600, None)
+        # Linear interpolation over 10 sorted values: the median sits halfway
+        # between the 5th and 6th (25, 45), p90 at 400 + 0.1 * (900 - 400).
+        assert (d["n"], d["p50"], d["p90"], d["max"]) == (10, 35.0, 450.0, 900.0)
+        assert d["p10"] == 1.9
+
+    def test_edges_belong_to_the_bin_they_open(self):
+        d = time_distribution([5, 10, 600])
+        counts = {b["from"]: b["count"] for b in d["bins"]}
+        assert (counts[5], counts[10], counts[600], counts[0]) == (1, 1, 1, 0)
+
+    def test_nothing_timed_is_none(self):
+        assert time_distribution([]) is None
+        assert time_distribution([0, 0]) is None
+
+    def test_in_the_report(self):
+        report = compute_throughput(BEHAVIOR, SAVED)
+        a = row(report, "a")["time_distribution"]
+        assert a["n"] == 2 and a["p50"] == 75.0
+        # 60 s falls in [60, 120), and so does 90 s.
+        assert [b["count"] for b in a["bins"]][TIME_BINS.index(60)] == 2
+        project = report["project"]["time_distribution"]
+        assert project["n"] == 3 and project["max"] == 300.0
+        assert row(report, "c")["time_distribution"] is None

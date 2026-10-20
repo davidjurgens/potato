@@ -783,9 +783,16 @@ def similarity(obj_a: Dict[str, Any], obj_b: Dict[str, Any],
     if type_a == "landmark":
         pa = (obj_a.get("points") or [[0, 0]])[0]
         pb = (obj_b.get("points") or [[0, 0]])[0]
-        # Scale tolerance to the objects' own size when we know it.
-        scale = max(1.0, _scale_area(obj_a, obj_b, reference, _box_diagonal))
         distance = math.hypot(float(pa[0]) - float(pb[0]), float(pa[1]) - float(pb[1]))
+        # The browser stores landmarks normalized to [0, 1] (cv_utils'
+        # coordinate contract). A tolerance of 10 units suits pixels; on
+        # normalized points it scored opposite corners 0.89, so every pair of
+        # landmarks matched. Normalized points fall to 0 at 5% of the image
+        # apart; pixel points keep 10 pixels, widened by the objects' size.
+        normalized = max(abs(float(v)) for v in (*pa[:2], *pb[:2])) <= 1.0
+        if normalized:
+            return max(0.0, 1.0 - distance / 0.05)
+        scale = max(1.0, _scale_area(obj_a, obj_b, reference, _box_diagonal))
         return max(0.0, 1.0 - distance / (scale * 10))
 
     return iou_bbox(obj_a.get("bbox") or [], obj_b.get("bbox") or [])

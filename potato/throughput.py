@@ -9,6 +9,9 @@ already keeps:
   an idle tab does not count as work);
 * **items per active hour** and the **median active time per item**, per
   annotator and per day;
+* the **distribution of active time per item**: percentiles and a histogram
+  over fixed bins (under 5 s up to 10 min and over), so a cluster of
+  suspiciously fast items or a long tail shows up where a median hides it;
 * **first-pass approval** and **rework**, when the review workflow is on: of
   the items an annotator worked on that reached review, the share that went to
   ``done`` without ever being sent back to an earlier review state, and the
@@ -68,6 +71,48 @@ def _finished_at(behavior: Any) -> Optional[float]:
     bulk = (behavior.get("bulk") if isinstance(behavior, dict)
             else getattr(behavior, "bulk", None)) or {}
     return float(bulk["saved_at"]) if bulk.get("saved_at") else None
+
+
+#: Histogram bin edges for active time per item, in seconds. Fixed rather
+#: than fitted, so two annotators' histograms line up bin for bin; the last
+#: bin is open-ended.
+TIME_BINS = (0, 5, 10, 20, 30, 60, 120, 300, 600)
+
+
+def _percentile(sorted_values: List[float], q: float) -> float:
+    """Linear-interpolated percentile (numpy's default) of sorted values."""
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    pos = (len(sorted_values) - 1) * q
+    low = int(pos)
+    high = min(low + 1, len(sorted_values) - 1)
+    return sorted_values[low] + (sorted_values[high] - sorted_values[low]) * (pos - low)
+
+
+def time_distribution(seconds: Iterable[float]) -> Optional[Dict[str, Any]]:
+    """Percentiles and a fixed-bin histogram of active seconds per item.
+
+    None when nothing was timed. A 0 is an item with no active interval
+    recorded, which is untimed (as ``items_timed`` counts), not instant, and is
+    left out. Bin ``from`` is inclusive and ``to`` exclusive; the last bin has
+    ``to`` None.
+    """
+    values = sorted(float(s) for s in seconds if s and s > 0)
+    if not values:
+        return None
+    counts = [0] * len(TIME_BINS)
+    for v in values:
+        index = len(TIME_BINS) - 1
+        for i in range(len(TIME_BINS) - 1):
+            if v < TIME_BINS[i + 1]:
+                index = i
+                break
+        counts[index] += 1
+    bins = [{"from": TIME_BINS[i],
+             "to": TIME_BINS[i + 1] if i + 1 < len(TIME_BINS) else None,
+             "count": counts[i]} for i in range(len(TIME_BINS))]
+    pct = {f"p{int(q * 100)}": round(_percentile(values, q), 1) for q in (0.1, 0.25, 0.5, 0.75, 0.9)}
+    return {"n": len(values), **pct, "max": round(values[-1], 1), "bins": bins}
 
 
 def _day(ts: Optional[float]) -> Optional[str]:
@@ -157,6 +202,7 @@ def compute_throughput(
             "active_hours": round(active_ms / 3_600_000, 3),
             "items_per_active_hour": _rate(len(timed), sum(timed)),
             "median_active_seconds": (round(statistics.median(timed) / 1000, 1) if timed else None),
+            "time_distribution": time_distribution(ms / 1000 for ms in timed),
             "by_day": _days(days),
         }
         if outcomes is not None:
@@ -185,6 +231,7 @@ def compute_throughput(
             "items_per_active_hour": _rate(total_items, total_ms),
             "median_active_seconds": (round(statistics.median(all_item_seconds), 1)
                                       if all_item_seconds else None),
+            "time_distribution": time_distribution(all_item_seconds),
             "by_day": _days(project_days),
         },
         "review_enabled": outcomes is not None,

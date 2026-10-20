@@ -6,6 +6,33 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Features
 
+- **Throughput charts.** The Throughput tab adds a histogram of active time
+  per item with its percentiles (and a small copy on each annotator's row) and,
+  once work spans two or more days, charts of items saved per day and items
+  per active hour, with a per-annotator pace line. `/admin/api/throughput`
+  gains `time_distribution`.
+- **Attributes that change along a track.** `per_keyframe: true` on a video
+  track or point-cloud sequence attribute stores its value per keyframe; it
+  holds until the next keyframe that changes it. Setting one on an in-between
+  frame pins a keyframe there. MOT export and the FiftyOne backend write the
+  value at each frame, and agreement scores such attributes over
+  object-frames.
+- **FiftyOne backend: keypoints, masks, attributes and video.** Keypoint
+  fields (as keypoint sets when the field has a skeleton, landmarks
+  otherwise), segmentation fields (one mask per class in `mask_targets`),
+  label attributes (`select`, `radio`, `checkbox`, `text`) and video frame
+  detections (as tracks, loaded back as per-frame detections with `index` and
+  `keyframe`) now go out to Potato and come back merged, with agreement.
+- **Snapshot deposits.** `potato snapshot deposit` uploads a snapshot's
+  files to Zenodo (sandbox draft by default), and
+  `potato snapshot verify --dir` checks a downloaded copy against its
+  manifest and prints its content hash. A literal credential in the bundle's
+  config files (YAML, JSON, `.env`, TOML), a provider-shaped key or a private
+  key in any other file, or a config file that cannot be read stops the
+  deposit. Annotator ids, which go
+  out as stored with every annotator's saved state, need
+  `--annotator-ids-public`. Snapshots now also leave out files named under
+  `ssl_key` or a `*key_file` key. A published DOI is cited in the dataset card.
 - **3D medical volumes.** `volume_annotation` opens a DICOM series or a
   NIfTI file in three linked views (axial, coronal, sagittal) with window
   presets and window drag. Annotators paint label masks, draw boxes and
@@ -271,6 +298,26 @@ All notable changes to the Potato annotation platform are documented in this fil
   server ignores the block and still logs the warnings.
 
 ### Fixes
+
+- **A point-cloud attribute edit right after deleting a keyframe was lost.**
+  The panel stayed bound to the deleted keyframe's object, because the
+  interpolated object that replaced it had the same position in the list on
+  the same frame.
+- **Landmark agreement counted any two landmarks as the same point.** The
+  distance tolerance was 10 units, meant for pixels, but landmarks are stored
+  normalized to [0, 1], so two landmarks at opposite corners scored 0.89 and
+  matched. Normalized landmarks now score 0 at 5% of the image apart.
+- **Imported masks without a colour all drew in one colour.** A pre-filled
+  mask with an empty `color` now takes its label's colour.
+- **The video tracker's time readout stayed at 0:00 / 0:00** on videos with no
+  audio track (Peaks.js does not start on them). It now reads the time and
+  duration from the video element.
+- **The deploy preflight missed credentials under longer key names.** Its
+  literal-credential check (D006) matched key names exactly, so
+  `admin_api_key: <literal>` passed and a repo-backed deploy (a Hugging Face
+  Space) published it. Names ending in `_api_key`, `_secret`, `_token` or
+  `_password` now count; names ending in `_env` hold a variable's name and do
+  not.
 
 - **Docs said Potato could not read whole-slide images,** and that it had no
   per-object attributes, point-cloud sequences or SAML; all four shipped in

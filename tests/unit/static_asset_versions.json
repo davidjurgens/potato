@@ -192,8 +192,8 @@
     "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "81c8bef5c9fcb651",
-    "version": "54"
+    "sha256": "22dacc9e32b8833b",
+    "version": "55"
   },
   "instance-display.js": {
     "sha256": "1f97e150e3d901c4",
@@ -260,8 +260,8 @@
     "version": "6"
   },
   "object-attributes.js": {
-    "sha256": "339d543d621cbb12",
-    "version": "2"
+    "sha256": "3d2caba2c3ef1d3a",
+    "version": "3"
   },
   "option_highlight_manager.js": {
     "sha256": "bb9254e571a8ecf9",
@@ -300,16 +300,16 @@
     "version": "1"
   },
   "pointcloud/pc-sequence.js": {
-    "sha256": "c80763b8b622136c",
-    "version": "2"
+    "sha256": "307eed7c2e52d8f4",
+    "version": "3"
   },
   "pointcloud/pc-viewer.css": {
     "sha256": "218c6fa81211acbe",
     "version": "8"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "5a01da384c29c68b",
-    "version": "12"
+    "sha256": "b64b82d0e00c210c",
+    "version": "13"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",
@@ -412,8 +412,8 @@
     "version": "2"
   },
   "tracking-ui.js": {
-    "sha256": "a37158ec25bae804",
-    "version": "14"
+    "sha256": "81187e571efed11d",
+    "version": "15"
   },
   "triage.js": {
     "sha256": "c2b0c1c31603b8ca",
@@ -436,8 +436,8 @@
     "version": "4"
   },
   "video-annotation.js": {
-    "sha256": "bbbf5a64a152d59a",
-    "version": "23"
+    "sha256": "913b05779170e631",
+    "version": "24"
   },
   "visual_ai_assistant.js": {
     "sha256": "f388e903a142dc96",

@@ -54,4 +54,7 @@ def test_rates_from_tracked_events(server):
     assert (ann["annotator"], ann["items"], ann["items_timed"]) == ("ann", 2, 2)
     assert (ann["items_per_active_hour"], ann["median_active_seconds"]) == (60.0, 60.0)
     assert data["review_enabled"] is False
+    # Both items fall in the 30-60 s and 60-120 s bins of the distribution.
+    dist = ann["time_distribution"]
+    assert {b["from"]: b["count"] for b in dist["bins"] if b["count"]} == {30: 1, 60: 1}
     assert requests.get(f"{server.base_url}/admin/api/throughput").status_code == 403

@@ -76,6 +76,7 @@
         const out = clone(obj);
         delete out.interpolated;
         delete out._from;
+        delete out._fromAttrs;
         return out;
     }
 
@@ -122,8 +123,10 @@
                 }
                 // The geometry the view started with, so a merge can tell an
                 // edited interpolation (which becomes a keyframe) from one
-                // that was only looked at.
+                // that was only looked at. The attributes too: changing a
+                // per_keyframe one on an in-between frame also makes one.
                 out._from = clone(out.coordinates);
+                out._fromAttrs = clone(out.attributes || {});
                 return out;
             }
         }
@@ -157,16 +160,21 @@
      * the store.
      *
      * An interpolated object whose geometry changed since the view was built
-     * becomes a keyframe at `frame`; an unchanged one stays interpolated and
-     * is not stored. A new object gets `frame` and a fresh track id.
-     * Keyframes missing from the view were deleted. Label, colour and
-     * attributes belong to the track, so the view's values are copied to
-     * every keyframe of the track.
+     * becomes a keyframe at `frame`, as does one whose `keyframeAttributes`
+     * (the per_keyframe attribute names) changed; an unchanged one stays
+     * interpolated and is not stored. A new object gets `frame` and a fresh
+     * track id. Keyframes missing from the view were deleted. Label, colour
+     * and the other attributes belong to the track, so the view's values are
+     * copied to every keyframe of the track; a per_keyframe attribute stays
+     * on its own keyframe and holds until the next one.
      *
      * Mutates the view objects (track id, frame, the `interpolated` flag) so
      * the caller can copy them back. Returns the new store.
      */
-    function mergeView(store, frame, view) {
+    function mergeView(store, frame, view, keyframeAttributes) {
+        const perKeyframe = new Set(keyframeAttributes || []);
+        const changedAttributes = (obj) => [...perKeyframe].some((name) =>
+            JSON.stringify((obj.attributes || {})[name]) !== JSON.stringify((obj._fromAttrs || {})[name]));
         const merged = (store || []).filter((obj) => obj.frame !== frame);
         view.forEach((obj) => {
             if (obj.track_id === undefined || obj.track_id === null) {
@@ -174,9 +182,10 @@
             }
             obj.frame = frame;
             if (obj.interpolated) {
-                if (sameCoordinates(obj._from, obj.coordinates)) return;
+                if (sameCoordinates(obj._from, obj.coordinates) && !changedAttributes(obj)) return;
                 delete obj.interpolated;
                 delete obj._from;
+                delete obj._fromAttrs;
             }
             merged.push(storedCopy(obj));
         });
@@ -185,7 +194,15 @@
                 if (k.track_id !== obj.track_id) return;
                 k.label = obj.label;
                 if (obj.color !== undefined) k.color = obj.color;
-                k.attributes = clone(obj.attributes || {});
+                if (k.frame === frame) return;   // the view's own copy, stored above
+                const attributes = {};
+                Object.entries(k.attributes || {}).forEach(([name, value]) => {
+                    if (perKeyframe.has(name)) attributes[name] = value;
+                });
+                Object.entries(obj.attributes || {}).forEach(([name, value]) => {
+                    if (!perKeyframe.has(name)) attributes[name] = clone(value);
+                });
+                k.attributes = attributes;
             });
         });
         // Frame, then track: the saved value reads in order.

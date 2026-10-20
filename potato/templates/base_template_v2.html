@@ -76,7 +76,7 @@
           or frontend_assets.video_annotation | default(false)
           or frontend_assets.spatial_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/object-attributes.css') }}?v=1">
-    <script src="{{ url_for('static', filename='object-attributes.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='object-attributes.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Point cloud viewer styles -->
@@ -820,7 +820,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=54"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=55"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -883,8 +883,8 @@
     <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-sequence.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=12"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-sequence.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=13"></script>
     {% endif %}
 
     <!-- Depth maps. A display type, so it is gated on the display's wrapper
@@ -958,7 +958,7 @@
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=23"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=24"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -994,7 +994,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=14"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=15"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->

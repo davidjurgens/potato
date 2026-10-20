@@ -191,13 +191,11 @@ With `region_type: point`, agreement is reported under `pointing` as the mean
 and median **distance** between the annotators' points, in normalized image
 units — 0 is perfect.
 
-This is not a stylistic choice. A point has no area, so the region measure falls
-back to a distance-derived score compressed into the top of its range: two
-annotators pointing at *opposite corners of the image* still score about 0.86,
-which the page would band as strong agreement in green. A pointing corpus scored
-that way looks near-perfect regardless of what the annotators did. The distance
-has no ceiling to saturate against, and is named a distance so nothing bands it
-as a coefficient.
+A point has no area, so the region measure falls back to a similarity that
+drops to 0 once two points are 5% of the image apart. Every pair further apart
+than that scores the same 0, so the score cannot tell a near miss from a point
+on the wrong object. The distance keeps that difference, and is named a distance
+so nothing bands it as a coefficient.
 
 ---
 

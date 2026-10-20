@@ -156,7 +156,7 @@ For object tracking across video frames with keyframe-based bounding box annotat
 |-------|------|---------|-------------|
 | `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
 | `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
-| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list. See [Per-Object Attributes](object_attributes.md) |
+| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list; `per_keyframe: true` lets one change along the track. See [Per-Object Attributes](object_attributes.md) |
 
 **Model-assisted tracking**
 

@@ -18,6 +18,8 @@ potato snapshot show config.yaml pilot
 potato snapshot diff config.yaml pilot latest
 potato snapshot tag config.yaml 20261019-120000 paper-v1
 potato snapshot verify config.yaml paper-v1
+potato snapshot deposit config.yaml paper-v1 --check
+potato snapshot verify --dir ./downloaded-snapshot
 ```
 
 | Command | What it does |
@@ -27,7 +29,8 @@ potato snapshot verify config.yaml paper-v1
 | `show [ref]` | One snapshot's hashes, counts and per-scheme alpha |
 | `diff <old> [new]` | Items and annotators added or removed, answers added, removed or changed, and the change in alpha per scheme |
 | `tag <ref> <name>` | Point a name at a snapshot. A tag can be moved to another snapshot; the snapshot itself never changes |
-| `verify [ref]` | Re-hash the snapshot's files and contents against its manifest |
+| `verify [ref]` | Re-hash the snapshot's files and contents against its manifest. `--dir <folder>` checks a folder holding a snapshot's files instead, such as a copy downloaded from a deposit, and needs no config |
+| `deposit [ref]` | Upload the snapshot's files to Zenodo (see [Depositing a snapshot](#depositing-a-snapshot)) |
 
 A `ref` is a snapshot id, the start of one (`20261019-1205`), a tag, or
 `latest`. `list`, `show` and `diff` take `--json`.
@@ -68,7 +71,8 @@ Snapshots are made to be cited and handed on, so the bundle leaves out:
   default `user_config.json` beside the output directory (inside it when
   `output_annotation_dir` ends in `/`).
 - Any file named under a config key that mentions a password, secret, token,
-  credential or API key.
+  credential, API key or private key (`ssl_key`, or a key ending in
+  `key_file`, such as `sp_key_file`).
 - `admin_api_key.txt`.
 
 `manifest.json` lists each file left out, and why, under `omitted`, and
@@ -117,6 +121,54 @@ section names it:
 
 If freezing fails, the release still goes out and the failure is reported as
 a warning.
+
+## Depositing a snapshot
+
+`potato snapshot deposit` uploads the snapshot's four files (`manifest.json`,
+`bundle.tar.gz`, `annotations.jsonl`, `items.json`) and a short README to a
+new Zenodo record, so a reader can download the frozen project and check it
+with `potato snapshot verify --dir <folder>`. That re-hashes the files,
+recomputes the content hash and prints it. A passing check only shows that the
+files agree with the manifest beside them, so compare the printed hash with
+the one the paper or dataset card cites. The title, authors, licence and
+keywords come from `dataset_metadata`; the record's version is the snapshot id.
+
+```bash
+export ZENODO_TOKEN=...
+potato snapshot deposit config.yaml paper-v1 --check                    # list, send nothing
+potato snapshot deposit config.yaml paper-v1 --annotator-ids-public     # sandbox draft
+potato snapshot deposit config.yaml paper-v1 --annotator-ids-public --production --publish
+```
+
+The default is the Zenodo sandbox and an unpublished draft; `--production`
+and `--publish` (which mints the DOI) are both needed for a public record.
+Each deposit is recorded in `snapshots/deposits.json`, and `show` lists it.
+Once a snapshot has a published DOI on zenodo.org, the dataset card of a
+release frozen as that snapshot links to it.
+
+The files go out exactly as frozen, because the hash check depends on it.
+`potato publish` works differently: a published dataset maps annotator
+ids to `A1`..`An` and leaves internal fields out, and a deposited snapshot
+does neither. Two checks run before anything is sent:
+
+- **Credentials.** The config and any other YAML, JSON, `.env` or TOML file
+  in the bundle (the data files aside) are read with the same test as the
+  deploy preflight: a key named `api_key`, `token`, `password` and the like,
+  or ending in `_api_key`, `_secret`, `_token` or `_password`, with a literal
+  value of 12 characters or more, or a value shaped like a known provider's
+  key. Every other file in the bundle (a custom layout's HTML or JavaScript,
+  an `.ini`) is searched for values shaped like a provider's key. A PEM
+  private key in any file stops the deposit too, and so does a config file
+  that cannot be parsed or is over 8 MB, since it cannot be checked. None of these can be overridden. Replace a value with
+  `${ENV_VAR}` or move the file out of the project, take a new snapshot, and
+  deposit that one.
+- **Annotator ids.** The deposit lists how many there are (and which look like
+  email addresses) and stops unless you pass `--annotator-ids-public`. The
+  count includes everyone with a saved state in the output directory, since
+  each state goes out in the bundle with its consent and survey answers, even
+  for an annotator who labelled nothing. If the ids must not be public,
+  publish the anonymized dataset with
+  [`potato publish`](../data-export/publishing_datasets.md) instead.
 
 ## Troubleshooting
 

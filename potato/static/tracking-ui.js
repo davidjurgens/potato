@@ -118,11 +118,14 @@
             if (!track) return;
 
             var frame = this._getCurrentFrame();
+            var previous = track.keyframes[frame];
             track.keyframes[frame] = {
                 frame: frame,
                 time: this.video ? this.video.currentTime : 0,
                 bbox: bbox
             };
+            // Redrawing a keyframe keeps what was set on it (per_keyframe).
+            if (previous && previous.attributes) track.keyframes[frame].attributes = previous.attributes;
 
             // Update track range
             this._updateTrackRange(track);
@@ -143,20 +146,27 @@
          *
          * @param {Object} shape - {type, bbox?, points?, rle?}
          */
-        addShapeKeyframe(shape) {
+        addShapeKeyframe(shape, atFrame) {
             if (!this.activeTrackId || !shape) return;
             var track = this.tracks[this.activeTrackId];
             if (!track) return;
 
-            var frame = this._getCurrentFrame();
+            // `atFrame`: a frame other than the one showing, for an attribute
+            // committed after playback moved on (see _commitAttributes).
+            var here = atFrame === undefined || atFrame === this._getCurrentFrame();
+            var frame = here ? this._getCurrentFrame() : atFrame;
             var keyframe = {
                 frame: frame,
-                time: this.video ? this.video.currentTime : 0,
+                time: here ? (this.video ? this.video.currentTime : 0) : frame / this._frameRate(),
                 type: shape.type || 'bbox'
             };
             if (shape.bbox) keyframe.bbox = shape.bbox;
             if (shape.points) keyframe.points = shape.points;
             if (shape.rle) keyframe.rle = shape.rle;
+            var previousKeyframe = track.keyframes[frame];
+            if (previousKeyframe && previousKeyframe.attributes) {
+                keyframe.attributes = previousKeyframe.attributes;
+            }
 
             // A polygon or mask still needs a bounding box: the timeline, the
             // label placement and every box-only consumer read it, and
@@ -445,18 +455,18 @@
          * an interpolated span should be able to confirm a frame without
          * redrawing a shape that is already correct.
          */
-        setKeyframeHere() {
+        setKeyframeHere(atFrame) {
             if (!this.activeTrackId) return null;
             var track = this.tracks[this.activeTrackId];
             if (!track || !window.TrackingInterpolationEngine) return null;
 
-            var frame = this._getCurrentFrame();
+            var frame = atFrame === undefined ? this._getCurrentFrame() : atFrame;
             if (track.keyframes[frame]) return frame;   // already one
 
             var shape = window.TrackingInterpolationEngine
                 .interpolateShape(track, frame);
             if (!shape) return null;
-            this.addShapeKeyframe(shape);
+            this.addShapeKeyframe(shape, frame);
             return frame;
         }
 
@@ -639,6 +649,10 @@
             if (this.mode === 'drawing' && this.drawStart && this.drawCurrent) {
                 this._drawPreviewRect(this.drawStart, this.drawCurrent);
             }
+
+            // The panel shows values at this frame when they can change per
+            // keyframe; it re-renders only when the frame changed.
+            if (this._hasKeyframeAttributes()) this._renderAttributePanel();
         }
 
         /**
@@ -700,24 +714,132 @@
             window.ObjectAttributes.updateRequirement(this.attributePanel, this.form, missing, 'track');
         }
 
-        /** Show the active track's attributes; only re-rendered on a change of track. */
+        _hasKeyframeAttributes() {
+            return (this.attributeDefs || []).some(function (d) { return d.per_keyframe; });
+        }
+
+        /**
+         * A track's attributes as they stand at `frame`: its own values, then
+         * each keyframe's `attributes` up to that frame (per_keyframe ones;
+         * see potato/server_utils/track_attributes.py). A null override
+         * clears the value from there on.
+         */
+        attributesAt(track, frame) {
+            var values = JSON.parse(JSON.stringify(track.attributes || {}));
+            Object.keys(track.keyframes || {}).map(Number).sort(function (a, b) { return a - b; })
+                .forEach(function (f) {
+                    var kf = track.keyframes[f];
+                    if (f > frame || !kf || !kf.attributes) return;
+                    Object.keys(kf.attributes).forEach(function (name) {
+                        if (kf.attributes[name] === null) delete values[name];
+                        else values[name] = kf.attributes[name];
+                    });
+                });
+            return values;
+        }
+
+        /**
+         * Store an edit from the panel. A per-track attribute goes on the
+         * track. A per_keyframe one goes on this frame's keyframe, pinning one
+         * here first if the frame is interpolated, as moving the box would.
+         * Returns false when the frame has no shape to pin (outside the
+         * track), so nothing could be stored.
+         */
+        _commitAttributes(track, values, frame) {
+            var self = this;
+            var before = this.attributesAt(track, frame);
+            var stored = true;
+            (this.attributeDefs || []).forEach(function (def) {
+                var name = def.name;
+                var value = values[name];
+                if (!def.per_keyframe) {
+                    if (value === undefined) delete track.attributes[name];
+                    else track.attributes[name] = value;
+                    return;
+                }
+                if (JSON.stringify(value) === JSON.stringify(before[name])) return;
+                if (!track.keyframes[frame]) {
+                    // The frame the value was set on, which during playback
+                    // is no longer the one showing.
+                    if (track.id !== self.activeTrackId || self.setKeyframeHere(frame) === null) {
+                        stored = false;
+                        return;
+                    }
+                }
+                var kf = track.keyframes[frame];
+                kf.attributes = kf.attributes || {};
+                kf.attributes[name] = value === undefined ? null : value;
+            });
+            return stored;
+        }
+
+        /**
+         * Show the active track's attributes. Re-rendered on a change of
+         * track, and of frame when an attribute can change per keyframe.
+         */
         _renderAttributePanel(force) {
             if (!this.attributeDefs || !this.attributeDefs.length || !this.attributePanel
                     || !window.ObjectAttributes) return;
             var track = this.activeTrackId ? this.tracks[this.activeTrackId] : null;
-            var key = track ? track.id + '|' + track.label : null;
+            var perFrame = this._hasKeyframeAttributes();
+            var frame = this._getCurrentFrame();
+            var trackKey = track ? track.id + '|' + track.label : null;
+            var key = trackKey !== null ? trackKey + (perFrame ? '|' + frame : '') : null;
             if (!force && key === this._attributePanelKey) return;
-            this._attributePanelKey = key;
             var self = this;
+            var panel = this.attributePanel;
+            var focused = document.activeElement;
+            if (!force && trackKey !== null && trackKey === this._attributePanelTrack
+                    && focused && panel.contains(focused)) {
+                // During playback the frame changes many times a second, and a
+                // re-render would wipe a value being typed or close an open
+                // select. The panel catches up when focus leaves it.
+                this._attributePanelStale = true;
+                if (!this._attributeFocusBound) {
+                    this._attributeFocusBound = true;
+                    panel.addEventListener('focusout', function (e) {
+                        if (self._attributePanelStale && !panel.contains(e.relatedTarget)) {
+                            self._attributePanelStale = false;
+                            self._renderAttributePanel();
+                        }
+                    });
+                }
+                return;
+            }
+            this._attributePanelStale = false;
+            this._attributePanelKey = key;
+            this._attributePanelTrack = trackKey;
             if (track && !track.attributes) track.attributes = {};
             window.ObjectAttributes.render({
                 panel: this.attributePanel,
                 defs: this.attributeDefs,
                 label: track ? track.label : null,
-                values: track ? track.attributes : {},
+                values: track ? (perFrame ? this.attributesAt(track, frame) : track.attributes) : {},
                 idPrefix: 'track-attr-' + (this.config.schemaName || 'video'),
                 noun: 'track',
-                onChange: function () { self._changed(); },
+                frameNote: 'From frame ' + frame + ' until the next keyframe that changes it',
+                onChange: function (values) {
+                    if (perFrame && track) {
+                        var stored = self._commitAttributes(track, values, frame);
+                        if (!stored) {
+                            self._renderAttributePanel(true);   // put the control back
+                            var status = self.attributePanel.querySelector('.attribute-panel-status');
+                            if (status) {
+                                status.textContent = 'This frame is outside the track: move to a frame '
+                                    + 'it covers to change the attribute there.';
+                            }
+                            return;
+                        }
+                        // Redraw on the next render whatever order the
+                        // browser sends change and focusout in: Chrome can
+                        // send focusout first, and the panel had then already
+                        // caught up, without this value, at the frame showing.
+                        self._attributePanelKey = null;
+                        self._renderTrackPanel();
+                        self.renderOverlay();
+                    }
+                    self._changed();
+                },
             });
         }
 

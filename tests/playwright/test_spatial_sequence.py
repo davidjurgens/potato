@@ -149,3 +149,51 @@ class TestSequence(BasePlaywrightTest):
         assert yaw(manager_eval(page, "m.annotations[0].coordinates.rotation")) == \
             pytest.approx(22.5, abs=0.5)
         assert manager_eval(page, "m.meshes[0].material.type") == "LineDashedMaterial"
+
+
+PER_KEYFRAME_SCHEMES = [dict(SCHEMES[0], attributes=[
+    {"name": "occluded", "type": "select", "options": ["none", "partly"], "default": "none",
+     "per_keyframe": True}])]
+
+
+@pytest.fixture
+def per_keyframe_server(make_server):
+    if not MEDIA.is_dir():
+        pytest.skip("run examples/spatial/lidar-sequence/generate_sequence.py first")
+    return make_server(
+        PER_KEYFRAME_SCHEMES,
+        items=[{"id": "drive_a", "point_cloud": FRAMES, "notes": "a"}],
+        extra_config={"media_directory": str(MEDIA),
+                      "item_properties": {"id_key": "id", "text_key": "notes"}},
+    )
+
+
+class TestPerKeyframeAttributes(TestSequence):
+    def test_changing_it_on_an_interpolated_frame_makes_a_keyframe_there(
+            self, per_keyframe_server, page):
+        open_sequence(self, page, per_keyframe_server)
+        self.draw_car(page)
+        page.click("body")
+        page.keyboard.press("f")                 # copy forward: keyframes 0, 1, 2
+        wait_for_frame(page, 1)
+        page.keyboard.press("f")
+        wait_for_frame(page, 2)
+        page.keyboard.press("[")                 # frame 1: delete its keyframe
+        wait_for_frame(page, 1)
+        page.keyboard.press(".")
+        page.keyboard.press("Delete")
+        assert [k["frame"] for k in stored(page)] == [0, 2]
+        assert manager_eval(page, "m.annotations[0].interpolated") is True
+
+        page.keyboard.press(".")                 # select the interpolated object
+        select = page.locator(".pointcloud-annotation-container .object-attribute-panel select")
+        select.select_option("partly")
+        frames = {k["frame"]: k["attributes"]["occluded"] for k in stored(page)}
+        assert frames == {0: "none", 1: "partly", 2: "none"}
+        assert "From frame 2" in page.inner_text(
+            ".pointcloud-annotation-container .attribute-scope")
+
+        page.keyboard.press("[")                 # frame 0 shows its own value
+        wait_for_frame(page, 0)
+        page.keyboard.press(".")
+        assert select.input_value() == "none"

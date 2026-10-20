@@ -408,3 +408,31 @@ class TestCostControl:
     def test_ordinary_projects_are_unaffected_by_the_default(self):
         report = geometry_agreement(corpus(offset=0.01, n=20))
         assert "truncated" not in report
+
+
+class TestLandmarkTolerance:
+    """Landmarks are stored normalized to [0, 1]. The tolerance used to be 10
+    units, meant for pixels, so two landmarks at opposite corners of the
+    image scored 0.89 and matched."""
+
+    @staticmethod
+    def mark(x, y):
+        from potato.server_utils.iaa.geometry_agreement import canonical_object
+        return canonical_object({"type": "landmark", "label": "p", "coordinates": {"x": x, "y": y}})
+
+    def test_normalized_points_fall_to_zero_at_five_percent(self):
+        from potato.server_utils.iaa.geometry import similarity
+        assert similarity(self.mark(0.1, 0.1), self.mark(0.9, 0.9)) == 0.0
+        assert similarity(self.mark(0.1, 0.1), self.mark(0.11, 0.1)) == pytest.approx(0.8)
+        assert similarity(self.mark(0.5, 0.5), self.mark(0.5, 0.5)) == 1.0
+
+    def test_pixel_points_keep_ten_pixels(self):
+        from potato.server_utils.iaa.geometry import similarity
+        a = {"type": "landmark", "points": [[100.0, 100.0]], "bbox": [100, 100, 0, 0]}
+        b = {"type": "landmark", "points": [[105.0, 100.0]], "bbox": [105, 100, 0, 0]}
+        assert similarity(a, b) == pytest.approx(0.5)
+
+    def test_opposite_corners_are_not_one_object(self):
+        from potato.server_utils.iaa.geometry_agreement import _matched_clusters
+        clusters = _matched_clusters({"a": [self.mark(0.05, 0.05)], "b": [self.mark(0.95, 0.95)]}, 0.5)
+        assert sorted(len(c) for c in clusters) == [1, 1]

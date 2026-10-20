@@ -4,7 +4,9 @@
 an external annotation tool and load the labels back. Potato is one of those
 tools. A view sent to Potato can be labeled by several people. Loading it back
 gives each sample one merged label, each person's own labels if you ask for
-them, and a chance-corrected agreement report stored on the dataset.
+them, and an agreement report stored on the dataset. Images and videos both
+work: classifications, boxes, polygons, polylines, keypoints, segmentation
+masks and video tracks, with attributes.
 
 ## Setup
 
@@ -92,14 +94,67 @@ your home directory.
 | `detection`, `detections` | Image annotation with the box tool |
 | `polygon`, `polygons` | Image annotation with the polygon tool |
 | `polyline`, `polylines` | Image annotation with the polyline tool |
+| `keypoint`, `keypoints` | With a skeleton for the field (`dataset.skeletons[field]` or `dataset.default_skeleton`): the keypoint-set tool, points in the skeleton's order. Without one: the landmark tool, one point per object |
+| `segmentation` | Image annotation with the brush and eraser, one mask per class in the field's `mask_targets` |
+| `detections` on a video frame field (`frames.<name>`) | Video annotation in tracking mode |
 
-Images only. Video, keypoints, segmentation masks, scalar fields and label
-attributes are not supported yet. `annotate` raises an error for an
-unsupported label type before writing anything.
+On a video dataset, sample-level `classification` and `classifications`
+fields also work, with the video shown above the question; a frame field must
+be `detections`. Scalar fields are not supported. `annotate` raises an error
+for an unsupported label type before writing anything.
 
-If the field already has labels, they are shown to annotators as
+If an image field already has labels, they are shown to annotators as
 pre-annotations to correct. A FiftyOne polyline with several shapes becomes
-one Potato object per shape.
+one Potato object per shape. A keypoint FiftyOne marks missing (NaN) is an
+unlabelled point (visibility 0) in Potato, and comes back as NaN.
+
+### Attributes
+
+Attributes on boxes, polygons, polylines, keypoints and video tracks become a
+panel beside the selected object:
+
+```python
+dataset.annotate("round2", backend="potato", label_field="ground_truth",
+                 label_type="detections", classes=["car", "person"],
+                 attributes={"occluded": {"type": "checkbox"},
+                             "state": {"type": "select", "values": ["parked", "moving"]}})
+```
+
+| FiftyOne attribute type | Potato control |
+|---|---|
+| `select`, `radio` | A choice from `values` |
+| `checkbox` | A checkbox |
+| `text` | A text box |
+
+Existing attribute values are pre-filled. On load each label gets the
+attribute values back as label fields (`detection["state"]`). Masks have no
+attributes. In the project the backend writes, a video track's attribute has
+one value for the whole track, and every frame's detection carries it.
+
+### Masks
+
+The field's `mask_targets` (from `annotate(mask_targets=...)`,
+`dataset.mask_targets[field]` or `dataset.default_mask_targets`) name the
+classes; 0 is background. Existing masks are pre-filled one class at a time.
+On load the classes' masks are combined into one `Segmentation`; where two
+overlap, the class with the higher value in `mask_targets` wins. RGB mask
+targets (`"#rrggbb"` keys) are not supported, and `annotate` raises an error
+for them before writing anything. Instance masks on detections are not
+supported either.
+
+### Video
+
+A `frames.<name>` detections field becomes a tracking task: annotators draw a
+box on a frame, move to a later frame and draw it again, and Potato
+interpolates between the keyframes. Potato reads each video's frame rate from
+its metadata (computed if missing). On load every frame from a track's first
+keyframe to its last gets a detection: interpolated linearly between
+keyframes (held, for a track set to constant), with the track's number as
+`index` and `keyframe=True` on the frames the annotator drew.
+
+Existing tracks on the field are not shown to annotators, and loading adds new
+tracks beside them rather than replacing them; the backend logs a warning
+when the field already has labels.
 
 ## Loading the labels back
 
@@ -119,6 +174,15 @@ For each sample with at least one saved answer:
   boxes. A polygon or polyline becomes the matched shape that overlaps the
   others most. If objects were drawn but none was found by a majority, the
   sample keeps its existing labels and counts in `n_ties`.
+- **Keypoints and masks:** the same rule, matched by OKS for keypoint sets,
+  distance for landmarks and IoU for masks; the kept object is the matched one
+  that agrees most with the others.
+- **Attributes:** each attribute takes the most common value among the matched
+  objects.
+- **Video tracks:** tracks are matched across annotators by how much their
+  frame ranges overlap times the IoU of their boxes. A track more than half of
+  the annotators drew is kept: the matched track that agrees most with the
+  others, with the most common class.
 
 With one annotator per sample, the merged label is that person's answer.
 
@@ -135,7 +199,8 @@ labels.
 
 With `annotator_fields=True`, each annotator's own labels are written to
 `<label_field>_<username>`, for example `ground_truth_alice`. Use them to look
-at one person's work, or to compare two people in the FiftyOne app.
+at one person's work, or to compare two people in the FiftyOne app. Video
+tracks are not copied this way.
 
 ### The agreement report
 
@@ -147,10 +212,13 @@ or more annotators.
   annotator pairs who agreed.
 - **Classifications:** α with the MASI distance, and the raw share of pairs
   who chose the same set.
-- **Boxes, polygons, polylines:** the [geometry agreement](../advanced/geometry_agreement.md)
+- **Boxes, polygons, polylines, keypoints, masks:** the [geometry agreement](../advanced/geometry_agreement.md)
   report, split into whether annotators found the same objects (`detection`),
   gave them the same class (`classification`), and drew them in the same place
   (`localization`).
+- **Video tracks:** `tracks_drawn`, `track_match_rate` (the share of tracks
+  matched by another annotator's track) and `mean_track_similarity` over the
+  matched pairs.
 
 When α is undefined, the report says why instead of giving a bare `None`. That
 happens when every annotator gave the same answer on every shared sample.

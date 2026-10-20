@@ -33,15 +33,13 @@ expression, the second with the drawing.
 ## Points are scored as distance, never with the region measure
 
 A point has no area, so there is no overlap to compute and
-``region_similarity`` falls back to a distance-derived score. That score is
-compressed into the top of the range: two annotators pointing at **opposite
-corners of the image** — the most complete disagreement available — still score
-about 0.86, which the admin page bands as *strong agreement*, in green.
-
-So the region measure applied to a ``region_type: point`` schema does not merely
-lose precision; it reports near-perfect agreement no matter what the annotators
-did. That is a confidently wrong number, which is worse than a missing one, and
-it is measured in ``tests/unit/test_iaa_grounding.py`` rather than asserted here.
+``region_similarity`` falls back to a score that falls with distance and reaches
+0 at a tolerance. The tolerance used to be 10 units, meant for pixels; on
+normalized points that scored two annotators pointing at **opposite corners of
+the image** about 0.86, which the admin page bands as *strong agreement*. It is
+now 5% of the image (``geometry.similarity``), but the score is still a
+similarity with a chosen cutoff: every pair further apart than 5% scores the
+same 0, so it cannot say how far off a pointing corpus is.
 
 Points therefore get their own section measuring the **distance** between them
 in normalized image units, where 0 is perfect and there is no ceiling to

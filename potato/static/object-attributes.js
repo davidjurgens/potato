@@ -70,8 +70,9 @@
      * Fill a panel (the markup schemas/object_attributes.panel_html makes)
      * with controls for one object's attributes.
      *
-     * options: {panel, defs, label, values, idPrefix, noun, onChange(values)}.
-     * `values` is edited in place; onChange runs after every edit.
+     * options: {panel, defs, label, values, idPrefix, noun, onChange(values),
+     * frameNote}. `values` is edited in place; onChange runs after every edit.
+     * `frameNote` is shown under each per_keyframe attribute.
      */
     function render(options) {
         const panel = options.panel;
@@ -190,6 +191,14 @@
                 help.className = 'attribute-help';
                 help.textContent = def.description;
                 row.appendChild(help);
+            }
+            if (def.per_keyframe && options.frameNote) {
+                // per_keyframe: the value set here holds from this frame
+                // until the next keyframe that changes it.
+                const scope = document.createElement('small');
+                scope.className = 'attribute-help attribute-scope';
+                scope.textContent = options.frameNote;
+                row.appendChild(scope);
             }
             fields.appendChild(row);
         });

@@ -135,7 +135,7 @@ def _generate_internal(annotation_scheme):
     from .object_attributes import normalize_attributes, panel_html
     attributes = normalize_attributes(
         annotation_scheme.get("attributes"), [label["name"] for label in labels],
-        f"annotation_schemes[{schema_name}]")
+        f"annotation_schemes[{schema_name}]", keyframes=True)
     description = escape_html_content(annotation_scheme.get("description", ""))
 
     config = {

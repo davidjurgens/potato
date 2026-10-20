@@ -311,7 +311,8 @@ class TestDiffTagsVerify:
     def test_verify_passes_and_catches_tampering(self, project):
         manifest = build.create_snapshot(project, now=T0)
         assert store.verify_snapshot(project, "latest") == {
-            "id": manifest["id"], "ok": True, "problems": []}
+            "id": manifest["id"], "ok": True, "problems": [],
+            "content_hash": manifest["content_hash"]}
         rows = os.path.join(folder_of(project, manifest), "annotations.jsonl")
         os.chmod(rows, stat.S_IRUSR | stat.S_IWUSR)
         with open(rows) as handle:

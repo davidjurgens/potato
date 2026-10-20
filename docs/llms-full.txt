@@ -15076,6 +15076,7 @@ annotation_schemes:
 | `show_if` | | `{attribute: <name>, equals: <value>}`: show this field only while another attribute has that value |
 | `min`, `max` | | Bounds for a `number` |
 | `description` | | Help text under the field |
+| `per_keyframe` | `false` | Video tracks and point-cloud sequences only: the value can change along the track (see [Values that change along a track](#values-that-change-along-a-track)) |
 
 A mistake in the block, such as a misspelled key, a select with no options, a
 `labels` entry that is not one of the scheme's labels, or a default that is not
@@ -15091,8 +15092,37 @@ controls: Tab moves between them, and they show a focus ring.
 
 On a video, the panel sits under the track list and shows the active track's
 attributes: create a track or click it in the list. Attributes belong to the
-whole track, not to one frame. On a point cloud, the panel sits under the
-viewer and shows the selected box or point's attributes.
+whole track unless they are `per_keyframe`. On a point cloud, the panel sits
+under the viewer and shows the selected box or point's attributes.
+
+### Values that change along a track
+
+A car can be in full view for a hundred frames and behind a truck for the next
+forty. With `per_keyframe: true` an attribute takes a value per keyframe
+instead of one per track:
+
+```yaml
+attributes:
+  - name: occluded
+    type: select
+    options: [none, partial, heavy]
+    default: none
+    per_keyframe: true
+  - name: parked          # still one value for the whole track
+    type: bool
+```
+
+The panel shows each attribute's value at the current frame, with a note
+under a `per_keyframe` one: "From frame N until the next keyframe that
+changes it". Changing it sets the value from the current frame on. On a
+frame between keyframes, Potato first pins a keyframe there with the
+interpolated box, as moving the box would. Values are never interpolated: each holds until
+the next keyframe that sets it, and before the first one the track's own
+value applies. Outside the track's first and last keyframe there is nothing
+to pin, and the panel says so.
+
+`per_keyframe` is refused on an image scheme, whose shapes have no
+keyframes.
 
 If a required attribute is missing on any object, the panel says how many
 still need one, and pressing Next shows the same reason in the banner instead
@@ -15117,7 +15147,12 @@ as an `attributes` key on each annotation. The CVAT, KITTI, MOT, Darwin, VIA and
 COCO importers read them back, and they survive edits, undo and navigation.
 
 A video track stores its attributes beside its keyframes, and a point-cloud
-object beside its coordinates, in the same `attributes` object.
+object beside its coordinates, in the same `attributes` object. A
+`per_keyframe` value set on a video frame is stored on that keyframe, as
+`keyframes.<frame>.attributes`, and only for what changes there (a `null`
+clears the value from that frame on). Each point-cloud sequence keyframe
+carries all of its attributes. The MOT export writes each row's value at its frame, and
+the FiftyOne backend sets each frame's detection to the value there.
 
 ## Agreement over attributes
 
@@ -15146,6 +15181,13 @@ boxes".
 | `multi` | MASI distance between the chosen sets |
 | `text` | not scored |
 
+A `per_keyframe` attribute is scored over object-frames instead: for each
+matched track, every frame where an annotator's value for it changes (the
+track's first keyframe, and each keyframe that sets it), with each annotator
+whose track covers that frame contributing the value there. Keyframes drawn
+only to move the box add no units. The report marks these groups
+`unit: object-frame`.
+
 Raw percent agreement is shown beside alpha. A shape only one annotator drew, a
 shape whose label the attribute does not apply to, and a blank value contribute
 nothing. When every annotator gave the same value everywhere, alpha is undefined
@@ -15153,8 +15195,8 @@ and the table prints the reason in its place rather than a bare n/a.
 
 ## Limits
 
-- Attributes are set per object, not per frame: a video track has one value
-  for its whole length.
+- Values that change along a track need `per_keyframe`; without it a track
+  has one value for its whole length.
 - Brush masks have no attribute panel; masks imported with attributes keep them.
 - A box drawn on top of another shape is not selected automatically. Click it to
   see its attributes.
@@ -16435,7 +16477,7 @@ For object tracking across video frames with keyframe-based bounding box annotat
 |-------|------|---------|-------------|
 | `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
 | `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
-| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list. See [Per-Object Attributes](object_attributes.md) |
+| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list; `per_keyframe: true` lets one change along the track. See [Per-Object Attributes](object_attributes.md) |
 
 **Model-assisted tracking**
 
@@ -18910,7 +18952,9 @@ track. Deleting a keyframe between two others leaves the box interpolated there.
 
 The class and [attributes](../multimedia/object_attributes.md) belong to the
 track: changing them on any frame changes them on every keyframe, without
-adding one. Polylines and painted points are not interpolated; they appear only
+adding one. An attribute marked `per_keyframe: true` is the exception: its
+value is set from the current frame until the next keyframe that changes it,
+and changing it on an interpolated frame makes that frame a keyframe. Polylines and painted points are not interpolated; they appear only
 on the frames they were drawn on.
 
 Each saved object carries `frame` (from 0) and `track_id`:
@@ -28420,13 +28464,11 @@ With `region_type: point`, agreement is reported under `pointing` as the mean
 and median **distance** between the annotators' points, in normalized image
 units — 0 is perfect.
 
-This is not a stylistic choice. A point has no area, so the region measure falls
-back to a distance-derived score compressed into the top of its range: two
-annotators pointing at *opposite corners of the image* still score about 0.86,
-which the page would band as strong agreement in green. A pointing corpus scored
-that way looks near-perfect regardless of what the annotators did. The distance
-has no ceiling to saturate against, and is named a distance so nothing bands it
-as a coefficient.
+A point has no area, so the region measure falls back to a similarity that
+drops to 0 once two points are 5% of the image apart. Every pair further apart
+than that scores the same 0, so the score cannot tell a near miss from a point
+on the wrong object. The distance keeps that difference, and is named a distance
+so nothing bands it as a coefficient.
 
 ---
 
@@ -48224,10 +48266,18 @@ How fast each annotator works, and how often their work is sent back.
   towards nothing.
 - Attention-check and gold items are not work on the data, so they are
   counted apart (**Check items**) and left out of every rate.
-- **By day** (UTC), from when each item was last touched. Saved items with no
-  interaction events, such as imported answers or saves made through the API,
-  are counted under *no events*, and the rates leave them out (a note says how
-  many).
+- **Time per item**: a histogram of active time per item over fixed bins
+  (under 5 s, 5–10 s, up to 10 minutes and over) and the 25th, 50th, 75th and
+  90th percentiles, for the project. Each annotator's row has a small
+  copy of the same histogram, with the 10th to 90th percentile range beside it. The
+  bins are the same for everyone, so an annotator whose bars sit at the left
+  is faster than the others; a block of items under 5 s is worth a look.
+- **By day** (UTC), from when each item was last touched, as a table and, once
+  work has been saved on two or more days, as two charts: items saved per day
+  and items per active hour. Each annotator's row has a line of their items
+  per active hour by day. Saved items with no interaction events, such as
+  imported answers or saves made through the API, are counted under
+  *no events*, and the rates leave them out (a note says how many).
 - With the [review workflow](../agent-evaluation/review_workflow.md) on, each
   annotator also gets **first-pass approval**, the share of their reviewed
   items that reached *done* without being sent back to an earlier review
@@ -48487,10 +48537,14 @@ GET /admin/api/throughput
 
 `annotators` holds one row per annotator: `items`, `qc_items` (attention and
 gold items, left out of the rates), `items_timed`,
-`active_seconds`, `items_per_active_hour`, `median_active_seconds` and
-`by_day`, plus `reviewed_items`, `first_pass_approval` and `rework_rate` when
+`active_seconds`, `items_per_active_hour`, `median_active_seconds`,
+`time_distribution` and `by_day`, plus `reviewed_items`, `first_pass_approval` and `rework_rate` when
 `review_enabled` is true. `project` holds the same totals and the by-day rows
 for everyone. A rate is `null` when there is no timed work to divide by.
+`time_distribution` is `null` with no timed items, otherwise `n`, `p10`,
+`p25`, `p50`, `p75`, `p90`, `max` (seconds) and `bins`, a list of
+`{from, to, count}` with `from` inclusive, `to` exclusive and `null` on the
+last, open-ended bin.
 
 ### Writing Process
 ```
@@ -53745,6 +53799,8 @@ potato snapshot show config.yaml pilot
 potato snapshot diff config.yaml pilot latest
 potato snapshot tag config.yaml 20261019-120000 paper-v1
 potato snapshot verify config.yaml paper-v1
+potato snapshot deposit config.yaml paper-v1 --check
+potato snapshot verify --dir ./downloaded-snapshot
 ```
 
 | Command | What it does |
@@ -53754,7 +53810,8 @@ potato snapshot verify config.yaml paper-v1
 | `show [ref]` | One snapshot's hashes, counts and per-scheme alpha |
 | `diff <old> [new]` | Items and annotators added or removed, answers added, removed or changed, and the change in alpha per scheme |
 | `tag <ref> <name>` | Point a name at a snapshot. A tag can be moved to another snapshot; the snapshot itself never changes |
-| `verify [ref]` | Re-hash the snapshot's files and contents against its manifest |
+| `verify [ref]` | Re-hash the snapshot's files and contents against its manifest. `--dir <folder>` checks a folder holding a snapshot's files instead, such as a copy downloaded from a deposit, and needs no config |
+| `deposit [ref]` | Upload the snapshot's files to Zenodo (see [Depositing a snapshot](#depositing-a-snapshot)) |
 
 A `ref` is a snapshot id, the start of one (`20261019-1205`), a tag, or
 `latest`. `list`, `show` and `diff` take `--json`.
@@ -53795,7 +53852,8 @@ Snapshots are made to be cited and handed on, so the bundle leaves out:
   default `user_config.json` beside the output directory (inside it when
   `output_annotation_dir` ends in `/`).
 - Any file named under a config key that mentions a password, secret, token,
-  credential or API key.
+  credential, API key or private key (`ssl_key`, or a key ending in
+  `key_file`, such as `sp_key_file`).
 - `admin_api_key.txt`.
 
 `manifest.json` lists each file left out, and why, under `omitted`, and
@@ -53844,6 +53902,54 @@ section names it:
 
 If freezing fails, the release still goes out and the failure is reported as
 a warning.
+
+## Depositing a snapshot
+
+`potato snapshot deposit` uploads the snapshot's four files (`manifest.json`,
+`bundle.tar.gz`, `annotations.jsonl`, `items.json`) and a short README to a
+new Zenodo record, so a reader can download the frozen project and check it
+with `potato snapshot verify --dir <folder>`. That re-hashes the files,
+recomputes the content hash and prints it. A passing check only shows that the
+files agree with the manifest beside them, so compare the printed hash with
+the one the paper or dataset card cites. The title, authors, licence and
+keywords come from `dataset_metadata`; the record's version is the snapshot id.
+
+```bash
+export ZENODO_TOKEN=...
+potato snapshot deposit config.yaml paper-v1 --check                    # list, send nothing
+potato snapshot deposit config.yaml paper-v1 --annotator-ids-public     # sandbox draft
+potato snapshot deposit config.yaml paper-v1 --annotator-ids-public --production --publish
+```
+
+The default is the Zenodo sandbox and an unpublished draft; `--production`
+and `--publish` (which mints the DOI) are both needed for a public record.
+Each deposit is recorded in `snapshots/deposits.json`, and `show` lists it.
+Once a snapshot has a published DOI on zenodo.org, the dataset card of a
+release frozen as that snapshot links to it.
+
+The files go out exactly as frozen, because the hash check depends on it.
+`potato publish` works differently: a published dataset maps annotator
+ids to `A1`..`An` and leaves internal fields out, and a deposited snapshot
+does neither. Two checks run before anything is sent:
+
+- **Credentials.** The config and any other YAML, JSON, `.env` or TOML file
+  in the bundle (the data files aside) are read with the same test as the
+  deploy preflight: a key named `api_key`, `token`, `password` and the like,
+  or ending in `_api_key`, `_secret`, `_token` or `_password`, with a literal
+  value of 12 characters or more, or a value shaped like a known provider's
+  key. Every other file in the bundle (a custom layout's HTML or JavaScript,
+  an `.ini`) is searched for values shaped like a provider's key. A PEM
+  private key in any file stops the deposit too, and so does a config file
+  that cannot be parsed or is over 8 MB, since it cannot be checked. None of these can be overridden. Replace a value with
+  `${ENV_VAR}` or move the file out of the project, take a new snapshot, and
+  deposit that one.
+- **Annotator ids.** The deposit lists how many there are (and which look like
+  email addresses) and stops unless you pass `--annotator-ids-public`. The
+  count includes everyone with a saved state in the output directory, since
+  each state goes out in the bundle with its consent and survey answers, even
+  for an annotator who labelled nothing. If the ids must not be public,
+  publish the anonymized dataset with
+  [`potato publish`](../data-export/publishing_datasets.md) instead.
 
 ## Troubleshooting
 
@@ -55298,7 +55404,9 @@ URL: https://potatoannotator.readthedocs.io/en/latest/integrations/fiftyone/
 an external annotation tool and load the labels back. Potato is one of those
 tools. A view sent to Potato can be labeled by several people. Loading it back
 gives each sample one merged label, each person's own labels if you ask for
-them, and a chance-corrected agreement report stored on the dataset.
+them, and an agreement report stored on the dataset. Images and videos both
+work: classifications, boxes, polygons, polylines, keypoints, segmentation
+masks and video tracks, with attributes.
 
 ## Setup
 
@@ -55386,14 +55494,67 @@ your home directory.
 | `detection`, `detections` | Image annotation with the box tool |
 | `polygon`, `polygons` | Image annotation with the polygon tool |
 | `polyline`, `polylines` | Image annotation with the polyline tool |
+| `keypoint`, `keypoints` | With a skeleton for the field (`dataset.skeletons[field]` or `dataset.default_skeleton`): the keypoint-set tool, points in the skeleton's order. Without one: the landmark tool, one point per object |
+| `segmentation` | Image annotation with the brush and eraser, one mask per class in the field's `mask_targets` |
+| `detections` on a video frame field (`frames.<name>`) | Video annotation in tracking mode |
 
-Images only. Video, keypoints, segmentation masks, scalar fields and label
-attributes are not supported yet. `annotate` raises an error for an
-unsupported label type before writing anything.
+On a video dataset, sample-level `classification` and `classifications`
+fields also work, with the video shown above the question; a frame field must
+be `detections`. Scalar fields are not supported. `annotate` raises an error
+for an unsupported label type before writing anything.
 
-If the field already has labels, they are shown to annotators as
+If an image field already has labels, they are shown to annotators as
 pre-annotations to correct. A FiftyOne polyline with several shapes becomes
-one Potato object per shape.
+one Potato object per shape. A keypoint FiftyOne marks missing (NaN) is an
+unlabelled point (visibility 0) in Potato, and comes back as NaN.
+
+### Attributes
+
+Attributes on boxes, polygons, polylines, keypoints and video tracks become a
+panel beside the selected object:
+
+```python
+dataset.annotate("round2", backend="potato", label_field="ground_truth",
+                 label_type="detections", classes=["car", "person"],
+                 attributes={"occluded": {"type": "checkbox"},
+                             "state": {"type": "select", "values": ["parked", "moving"]}})
+```
+
+| FiftyOne attribute type | Potato control |
+|---|---|
+| `select`, `radio` | A choice from `values` |
+| `checkbox` | A checkbox |
+| `text` | A text box |
+
+Existing attribute values are pre-filled. On load each label gets the
+attribute values back as label fields (`detection["state"]`). Masks have no
+attributes. In the project the backend writes, a video track's attribute has
+one value for the whole track, and every frame's detection carries it.
+
+### Masks
+
+The field's `mask_targets` (from `annotate(mask_targets=...)`,
+`dataset.mask_targets[field]` or `dataset.default_mask_targets`) name the
+classes; 0 is background. Existing masks are pre-filled one class at a time.
+On load the classes' masks are combined into one `Segmentation`; where two
+overlap, the class with the higher value in `mask_targets` wins. RGB mask
+targets (`"#rrggbb"` keys) are not supported, and `annotate` raises an error
+for them before writing anything. Instance masks on detections are not
+supported either.
+
+### Video
+
+A `frames.<name>` detections field becomes a tracking task: annotators draw a
+box on a frame, move to a later frame and draw it again, and Potato
+interpolates between the keyframes. Potato reads each video's frame rate from
+its metadata (computed if missing). On load every frame from a track's first
+keyframe to its last gets a detection: interpolated linearly between
+keyframes (held, for a track set to constant), with the track's number as
+`index` and `keyframe=True` on the frames the annotator drew.
+
+Existing tracks on the field are not shown to annotators, and loading adds new
+tracks beside them rather than replacing them; the backend logs a warning
+when the field already has labels.
 
 ## Loading the labels back
 
@@ -55413,6 +55574,15 @@ For each sample with at least one saved answer:
   boxes. A polygon or polyline becomes the matched shape that overlaps the
   others most. If objects were drawn but none was found by a majority, the
   sample keeps its existing labels and counts in `n_ties`.
+- **Keypoints and masks:** the same rule, matched by OKS for keypoint sets,
+  distance for landmarks and IoU for masks; the kept object is the matched one
+  that agrees most with the others.
+- **Attributes:** each attribute takes the most common value among the matched
+  objects.
+- **Video tracks:** tracks are matched across annotators by how much their
+  frame ranges overlap times the IoU of their boxes. A track more than half of
+  the annotators drew is kept: the matched track that agrees most with the
+  others, with the most common class.
 
 With one annotator per sample, the merged label is that person's answer.
 
@@ -55429,7 +55599,8 @@ labels.
 
 With `annotator_fields=True`, each annotator's own labels are written to
 `<label_field>_<username>`, for example `ground_truth_alice`. Use them to look
-at one person's work, or to compare two people in the FiftyOne app.
+at one person's work, or to compare two people in the FiftyOne app. Video
+tracks are not copied this way.
 
 ### The agreement report
 
@@ -55441,10 +55612,13 @@ or more annotators.
   annotator pairs who agreed.
 - **Classifications:** α with the MASI distance, and the raw share of pairs
   who chose the same set.
-- **Boxes, polygons, polylines:** the [geometry agreement](../advanced/geometry_agreement.md)
+- **Boxes, polygons, polylines, keypoints, masks:** the [geometry agreement](../advanced/geometry_agreement.md)
   report, split into whether annotators found the same objects (`detection`),
   gave them the same class (`classification`), and drew them in the same place
   (`localization`).
+- **Video tracks:** `tracks_drawn`, `track_match_rate` (the share of tracks
+  matched by another annotator's track) and `mean_track_similarity` over the
+  matched pairs.
 
 When α is undefined, the report says why instead of giving a bare `None`. That
 happens when every annotator gave the same answer on every shared sample.
@@ -57991,6 +58165,13 @@ Secrets are generated per deployment, injected as environment variables, and
 stored locally in `.potato/secrets.json` at mode 0600. They never enter the
 bundle, which is what keeps them out of a repo-backed target's git history.
 Provider API tokens are never written to disk at all.
+
+A credential written into the config itself does enter the bundle, so
+preflight stops on one (D006): a literal value of 12 characters or more under
+a key such as `api_key`, `token` or `password`, or any key ending in
+`_api_key`, `_secret`, `_token` or `_password` (`admin_api_key`, for one), or
+a value shaped like a known provider's key. Replace it with `${ENV_VAR}` and
+pass `--secret NAME=<value>`.
 
 ## One worker
 

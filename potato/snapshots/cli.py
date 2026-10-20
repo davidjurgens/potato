@@ -46,8 +46,23 @@ def _parser() -> argparse.ArgumentParser:
     tag.add_argument("name")
 
     verify = sub.add_parser("verify", help="re-hash a snapshot against its manifest")
-    verify.add_argument("config")
+    verify.add_argument("config", nargs="?", help="the project's config.yaml (not needed with --dir)")
     verify.add_argument("ref", nargs="?", default="latest")
+    verify.add_argument("--dir", help="a folder holding a snapshot's files, such as a "
+                                      "copy downloaded from a deposit")
+
+    deposit = sub.add_parser("deposit", help="upload a snapshot's files to Zenodo")
+    deposit.add_argument("config")
+    deposit.add_argument("ref", nargs="?", default="latest")
+    deposit.add_argument("--token", help="Zenodo token (or ZENODO_TOKEN)")
+    deposit.add_argument("--production", action="store_true",
+                         help="use zenodo.org instead of the sandbox")
+    deposit.add_argument("--publish", action="store_true",
+                         help="publish and mint a DOI instead of leaving a draft")
+    deposit.add_argument("--annotator-ids-public", action="store_true",
+                         help="the annotator ids may be published as stored")
+    deposit.add_argument("--check", action="store_true",
+                         help="list what would be uploaded and stop")
     return parser
 
 
@@ -68,6 +83,10 @@ def _show(m: dict) -> str:
              f"  potato        {m.get('potato_version')}"]
     if m.get("previous"):
         lines.append(f"  previous      {m['previous']}")
+    for d in m.get("deposits") or []:
+        where = "Zenodo sandbox" if d.get("sandbox") else "Zenodo"
+        state = "published" if d.get("published") else "draft"
+        lines.append(f"  deposited     {where}, {state}, {d.get('doi') or 'no DOI'} {d.get('url', '')}".rstrip())
     for scheme in (m.get("agreement") or {}).get("schemes") or []:
         alpha = scheme.get("alpha")
         lines.append(f"  alpha {scheme.get('name')}: "
@@ -127,10 +146,49 @@ def main(argv: Optional[List[str]] = None) -> int:
             manifest = store.tag_snapshot(args.config, args.ref, args.name)
             print(f"{args.name} -> {manifest['id']}")
             return 0
+        if args.command == "deposit":
+            from potato.snapshots import deposit as dep
+            check = dep.check_snapshot(args.config, args.ref)
+            manifest = check["snapshot"]
+            print(f"Snapshot {manifest['id']} (content hash {manifest['content_hash'][:12]}...)")
+            for f in check["files"]:
+                print(f"  {f['name']:<18} {f['bytes']:>12,} bytes")
+            print(f"  annotator ids: {len(check['annotators'])}"
+                  + (f", {len(check['email_like_annotators'])} look like email addresses"
+                     if check["email_like_annotators"] else ""))
+            reasons = dep.refusals(check, args.annotator_ids_public)
+            for reason in reasons:
+                print(f"refused: {reason}", file=sys.stderr)
+            if reasons:
+                return 1
+            if args.check:
+                print("Nothing sent (--check).")
+                return 0
+            where = "zenodo.org" if args.production else "the Zenodo sandbox"
+            print(f"Depositing to {where} as {'a published record' if args.publish else 'a draft'}...")
+            result = dep.deposit_snapshot(args.config, manifest["id"], token=args.token,
+                                          sandbox=not args.production, publish=args.publish,
+                                          annotator_ids_public=args.annotator_ids_public)
+            print(f"  deposition {result['deposition_id']}: {result['url']}")
+            if result.get("doi"):
+                print(f"  DOI {result['doi']}" + ("" if result["published"] else " (reserved; publish the draft to mint it)"))
+            return 0
         if args.command == "verify":
-            result = store.verify_snapshot(args.config, args.ref)
+            if args.dir:
+                result = store.verify_folder(args.dir)
+            elif args.config:
+                result = store.verify_snapshot(args.config, args.ref)
+            else:
+                print("error: give the project's config, or --dir with a snapshot's files",
+                      file=sys.stderr)
+                return 2
             if result["ok"]:
                 print(f"{result['id']}: OK")
+                # OK means the files agree with the manifest beside them. Which
+                # snapshot that is, only the hash says.
+                print(f"  content hash {result.get('content_hash')}")
+                if args.dir:
+                    print("  Compare it with the hash the paper or dataset card cites.")
                 return 0
             print(f"{result['id']}: FAILED")
             for problem in result["problems"]:
@@ -138,6 +196,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
     except (LookupError, ValueError, FileNotFoundError, FileExistsError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:  # requests' errors are OSErrors: Zenodo refused or was unreachable
+        body = getattr(getattr(exc, "response", None), "text", "") or ""
+        print(f"error: the deposit failed: {exc}" + (f"\n{body[:500]}" if body else ""),
+              file=sys.stderr)
         return 2
     return 2
 

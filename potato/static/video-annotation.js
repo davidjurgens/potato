@@ -435,6 +435,9 @@ class VideoAnnotationManager {
      */
     _onVideoTimeUpdate() {
         this._updateFrameDisplay();
+        if (!this.peaks) {
+            this._updateTimeDisplay();   // Peaks' own timeupdate does it otherwise
+        }
 
         // Update tracking overlay if in tracking mode
         if (this.config.mode === 'tracking' || this.config.mode === 'combined') {
@@ -1224,8 +1227,13 @@ class VideoAnnotationManager {
     }
 
     _updateTimeDisplay(time = null) {
-        const currentTime = time !== null ? time : (this.peaks ? this.peaks.player.getCurrentTime() : 0);
-        const duration = this.peaks ? this.peaks.player.getDuration() : 0;
+        // Peaks.js does not start on a video with no audio track; the readout
+        // then stayed at 0:00 / 0:00. The video element knows both numbers.
+        const video = this.videoEl;
+        const currentTime = time !== null ? time
+            : (this.peaks ? this.peaks.player.getCurrentTime() : (video ? video.currentTime : 0));
+        const duration = this.peaks ? this.peaks.player.getDuration()
+            : (video && isFinite(video.duration) ? video.duration : 0);
 
         const currentTimeEl = this.container.querySelector('.current-time');
         const totalTimeEl = this.container.querySelector('.total-time');

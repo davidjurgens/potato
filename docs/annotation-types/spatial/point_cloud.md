@@ -202,7 +202,9 @@ track. Deleting a keyframe between two others leaves the box interpolated there.
 
 The class and [attributes](../multimedia/object_attributes.md) belong to the
 track: changing them on any frame changes them on every keyframe, without
-adding one. Polylines and painted points are not interpolated; they appear only
+adding one. An attribute marked `per_keyframe: true` is the exception: its
+value is set from the current frame until the next keyframe that changes it,
+and changing it on an interpolated frame makes that frame a keyframe. Polylines and painted points are not interpolated; they appear only
 on the frames they were drawn on.
 
 Each saved object carries `frame` (from 0) and `track_id`:

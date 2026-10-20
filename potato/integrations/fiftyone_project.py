@@ -14,10 +14,23 @@ Answers move in Potato's own shapes, which are close to FiftyOne's:
     classifications  list[str]           class names
     detections       list[client obj]    {"type": "bbox", "coordinates": {x, y, width, height}}
     polylines        list[client obj]    {"type": "polygon" | "polyline", "coordinates": [{x, y}, ...]}
+    keypoints        list[client obj]    {"type": "keypoint_set", "skeleton", "coordinates": [{x, y, v}, ...]}
+                                         with a skeleton; {"type": "landmark", "coordinates": {x, y}} without
+    segmentation     list[client obj]    {"type": "mask", "label", "rle": {counts, size: [h, w]}}, one per class
+    frames.detections (video)
+                     list[track]         video_annotation tracks: {"label", "attributes", "keyframes":
+                                         {frame: {"frame", "time", "bboxNorm": {x, y, width, height}}}}
+
+Any object can carry ``"attributes": {name: value}``.
 
 Client objects use coordinates normalised to [0, 1] with the origin at the top
-left, the same convention as FiftyOne's ``bounding_box`` and polyline points, so
-no conversion through pixel sizes is needed in either direction.
+left, the same convention as FiftyOne's ``bounding_box``, polyline and keypoint
+points, so no conversion through pixel sizes is needed in either direction.
+Masks are in pixels: Potato's run-length encoding, row by row, starting with a
+run of 0s.
+
+Each field's Potato kind (``field_kind``) is decided once, when the project is
+written, and stored in the manifest with the scheme name it was given.
 """
 
 from __future__ import annotations
@@ -29,7 +42,7 @@ import shutil
 import urllib.parse
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 #: FiftyOne label type -> what Potato asks for it.
 LABEL_TYPES = {
@@ -41,8 +54,16 @@ LABEL_TYPES = {
     "polylines": "polyline",
     "polygon": "polygon",
     "polygons": "polygon",
+    # Keypoints become a keypoint_set when the field has a skeleton
+    # (field_kind); without one each point is its own landmark.
+    "keypoint": "landmark",
+    "keypoints": "landmark",
+    "segmentation": "mask",
 }
-GEOMETRY_TOOLS = {"bbox", "polygon", "polyline"}
+GEOMETRY_TOOLS = {"bbox", "polygon", "polyline", "landmark", "keypoint_set", "mask"}
+#: Attribute types FiftyOne may ask for, and the Potato attribute type each becomes.
+ATTRIBUTE_TYPES = {"select": "select", "radio": "select", "checkbox": "bool", "text": "text"}
+VIDEO_KEY = "video_url"
 #: Written beside config.yaml; the download reads it instead of trusting
 #: FiftyOne's copy of the run, so a project moved between machines still loads.
 MANIFEST = "fiftyone_run.json"
@@ -58,20 +79,90 @@ def potato_kind(label_type: str) -> str:
             f"{label_type!r}; supported: {', '.join(sorted(LABEL_TYPES))}")
 
 
-def build_scheme(field: str, label_type: str, classes: List[str]) -> dict:
+def field_kind(info: Dict[str, Any]) -> str:
+    """What Potato asks for one field: its manifest ``kind``, else derived.
+
+    ``info`` is a label_schema entry: ``type``, and optionally ``frame_field``
+    (a ``frames.*`` field of a video dataset) and ``skeleton``.
+    """
+    if info.get("kind"):
+        return info["kind"]
+    label_type = info["type"]
+    if info.get("frame_field"):
+        if label_type in ("detection", "detections"):
+            return "track"
+        raise ValueError(
+            f"Potato's FiftyOne backend annotates video frame fields of type "
+            f"detections only (as tracks), not {label_type!r}. Sample-level "
+            f"classification fields on videos work.")
+    if label_type in ("keypoint", "keypoints") and info.get("skeleton"):
+        return "keypoint_set"
+    return potato_kind(label_type)
+
+
+def scheme_name(field: str) -> str:
+    """A field name usable as a Potato scheme name: ``frames.detections``
+    becomes ``frames__detections`` (a dot would break the page's selectors)."""
+    return field.replace(".", "__")
+
+
+def potato_attributes(attributes: Optional[Dict[str, dict]]) -> List[dict]:
+    """FiftyOne attribute specs as Potato ``attributes`` (image/video schemas)."""
+    out = []
+    for name, spec in (attributes or {}).items():
+        spec = spec or {}
+        kind = ATTRIBUTE_TYPES.get(spec.get("type", "text"))
+        if kind is None:
+            raise ValueError(
+                f"Attribute {name!r} has type {spec.get('type')!r}; Potato's FiftyOne "
+                f"backend supports {', '.join(sorted(ATTRIBUTE_TYPES))}")
+        entry: Dict[str, Any] = {"name": str(name), "type": kind}
+        if kind == "select":
+            values = [str(v) for v in spec.get("values") or []]
+            if not values:
+                raise ValueError(f"Attribute {name!r} is a {spec.get('type')} with no values")
+            entry["options"] = values
+        if spec.get("default") is not None:
+            entry["default"] = (bool(spec["default"]) if kind == "bool" else str(spec["default"]))
+        out.append(entry)
+    return out
+
+
+def build_scheme(field: str, label_type: str, classes: List[str],
+                 info: Optional[Dict[str, Any]] = None) -> dict:
     """One Potato annotation scheme for one FiftyOne label field."""
     if not classes:
         raise ValueError(
             f"Field {field!r} has no classes. Pass classes=[...] to annotate(), "
             f"or annotate a field that already has labels.")
-    kind = potato_kind(label_type)
-    description = field.replace("_", " ").strip().capitalize() or field
+    info = {"type": label_type, **(info or {})}
+    kind = field_kind(info)
+    name = scheme_name(field)
+    description = field.split(".")[-1].replace("_", " ").strip().capitalize() or field
+    attributes = potato_attributes(info.get("attributes"))
     if kind in ("radio", "multiselect"):
-        return {"annotation_type": kind, "name": field,
+        return {"annotation_type": kind, "name": name,
                 "description": description, "labels": [str(c) for c in classes]}
-    return {"annotation_type": "image_annotation", "name": field,
-            "description": description, "source_field": IMAGE_KEY,
-            "tools": [kind], "labels": [{"name": str(c)} for c in classes]}
+    if kind == "track":
+        scheme = {"annotation_type": "video_annotation", "name": name,
+                  "description": description, "source_field": VIDEO_KEY,
+                  "mode": "tracking", "labels": [{"name": str(c)} for c in classes]}
+        if info.get("fps"):
+            scheme["video_fps"] = float(info["fps"])
+        if attributes:
+            scheme["attributes"] = attributes
+        return scheme
+    tools = {"mask": ["brush", "eraser"]}.get(kind, [kind])
+    scheme = {"annotation_type": "image_annotation", "name": name,
+              "description": description, "source_field": IMAGE_KEY,
+              "tools": tools, "labels": [{"name": str(c)} for c in classes]}
+    if kind == "keypoint_set":
+        skeleton = info["skeleton"]
+        scheme["skeletons"] = {name: {"names": [str(n) for n in skeleton["names"]],
+                                      "edges": [list(e) for e in skeleton.get("edges") or []]}}
+    if attributes and kind != "mask":
+        scheme["attributes"] = attributes
+    return scheme
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +200,8 @@ def _common_root(paths: List[str]) -> str:
 def write_project(project_dir: str, samples: List[dict],
                   label_schema: Dict[str, dict], *, task_name: str,
                   annotations_per_item: int = 2, media: str = "copy",
-                  anno_key: str = "", dataset_name: str = "") -> Dict[str, Any]:
+                  anno_key: str = "", dataset_name: str = "",
+                  media_type: str = "image") -> Dict[str, Any]:
     """Write a Potato project for a FiftyOne view.
 
     Args:
@@ -117,7 +209,10 @@ def write_project(project_dir: str, samples: List[dict],
         samples: ``[{"id", "filepath", "existing": {field: answer}}]``, answers
             in the shapes in the module docstring. Existing answers are shown
             as pre-annotations for the annotator to correct.
-        label_schema: ``{field: {"type": label_type, "classes": [...]}}``.
+        label_schema: ``{field: {"type": label_type, "classes": [...]}}``,
+            optionally with ``attributes``, ``skeleton`` (``{names, edges}``),
+            ``mask_targets`` (``{value: class}``), ``frame_field`` and ``fps``.
+        media_type: ``"image"`` or ``"video"``.
         annotations_per_item: how many people should label each sample.
         media: ``"copy"`` copies each image into ``<project>/media``;
             ``"reference"`` serves the images from their folder in place.
@@ -136,21 +231,33 @@ def write_project(project_dir: str, samples: List[dict],
     (project / "media").mkdir(parents=True, exist_ok=True)
     root = _common_root([s["filepath"] for s in samples]) if media == "reference" else None
 
-    schemes = [build_scheme(field, info["type"], list(info.get("classes") or []))
+    if media_type not in ("image", "video"):
+        raise ValueError(f"media_type must be 'image' or 'video', not {media_type!r}")
+    media_key = VIDEO_KEY if media_type == "video" else IMAGE_KEY
+    kinds = {field: field_kind(info) for field, info in label_schema.items()}
+    for field, kind in kinds.items():
+        if (kind == "track") != (media_type == "video" and bool(label_schema[field].get("frame_field"))):
+            raise ValueError(f"Field {field!r} ({kind}) does not fit a {media_type} dataset")
+        if media_type == "video" and kind not in ("track", "radio", "multiselect"):
+            raise ValueError(
+                f"Field {field!r}: on videos Potato annotates frame detections (as "
+                f"tracks) and sample-level classifications, not {label_schema[field]['type']}")
+    schemes = [build_scheme(field, info["type"], list(info.get("classes") or []), info)
                for field, info in label_schema.items()]
     result = ProjectImportResult(source_format="FiftyOne", schemes=schemes,
-                                 text_key=IMAGE_KEY)
-    if not any(s["annotation_type"] == "image_annotation" for s in schemes):
-        # A radio or multiselect question does not show the image by itself.
+                                 text_key=media_key)
+    if not any(s["annotation_type"] in ("image_annotation", "video_annotation") for s in schemes):
+        # A radio or multiselect question does not show the media by itself.
         result.instance_display = {
-            "fields": [{"key": IMAGE_KEY, "type": "image", "label": "Image"}]}
+            "fields": [{"key": media_key, "type": media_type,
+                        "label": media_type.capitalize()}]}
     for sample in samples:
         item = ProjectItem(instance_id=str(sample["id"]), fields={
-            IMAGE_KEY: _media_reference(str(sample["filepath"]), project, media,
+            media_key: _media_reference(str(sample["filepath"]), project, media,
                                         root, str(sample["id"]))})
         for field, answer in (sample.get("existing") or {}).items():
-            if answer not in (None, [], ""):
-                item.predictions[field] = answer
+            if answer not in (None, [], "") and kinds.get(field) != "track":
+                item.predictions[scheme_name(field)] = answer
         result.items.append(item)
 
     extra: Dict[str, Any] = {"max_annotations_per_item": annotations_per_item}
@@ -167,7 +274,11 @@ def write_project(project_dir: str, samples: List[dict],
     manifest = {
         "anno_key": anno_key,
         "dataset": dataset_name,
-        "label_schema": {f: {"type": i["type"], "classes": list(i.get("classes") or [])}
+        "media_type": media_type,
+        "label_schema": {f: {"type": i["type"], "classes": list(i.get("classes") or []),
+                             "kind": kinds[f], "scheme": scheme_name(f),
+                             **{k: i[k] for k in ("attributes", "skeleton", "mask_targets",
+                                                  "frame_field", "fps") if i.get(k)}}
                          for f, i in label_schema.items()},
         "sample_ids": [str(s["id"]) for s in samples],
         "annotations_per_item": annotations_per_item,
@@ -228,6 +339,9 @@ def _answer_from_entries(kind: str, entries: List[Any]) -> Any:
         return names or None
     for label, value in entries:
         if label.get("name") == "_data":
+            if kind == "track":
+                from potato.server_utils.iaa.attribute_agreement import track_objects
+                return track_objects(value)
             return _objects(value)
     return None
 
@@ -249,7 +363,8 @@ def _objects(value: Any) -> Optional[List[dict]]:
 def read_answers(project_dir: str) -> Dict[str, Dict[str, Dict[str, Any]]]:
     """``{field: {sample_id: {annotator: answer}}}`` for every saved answer."""
     manifest = load_manifest(project_dir)
-    kinds = {f: potato_kind(i["type"]) for f, i in manifest["label_schema"].items()}
+    kinds = {f: field_kind(i) for f, i in manifest["label_schema"].items()}
+    schemes = {f: i.get("scheme", f) for f, i in manifest["label_schema"].items()}
     out: Dict[str, Dict[str, Dict[str, Any]]] = {f: {} for f in kinds}
     output = _output_dir(project_dir)
     if not output.is_dir():
@@ -267,9 +382,9 @@ def read_answers(project_dir: str) -> Dict[str, Dict[str, Dict[str, Any]]]:
                         and isinstance(entry[0], dict)):
                     by_schema.setdefault(entry[0].get("schema"), []).append(entry)
             for field, kind in kinds.items():
-                if field not in by_schema:
+                if schemes[field] not in by_schema:
                     continue
-                answer = _answer_from_entries(kind, by_schema[field])
+                answer = _answer_from_entries(kind, by_schema[schemes[field]])
                 if answer is not None:
                     out[field].setdefault(str(iid), {})[user] = answer
     return out
@@ -279,7 +394,8 @@ def read_adjudicated(project_dir: str) -> Dict[str, Dict[str, Any]]:
     """``{field: {sample_id: answer}}`` from the adjudication queue's decisions."""
     import yaml
     manifest = load_manifest(project_dir)
-    kinds = {f: potato_kind(i["type"]) for f, i in manifest["label_schema"].items()}
+    kinds = {f: field_kind(i) for f, i in manifest["label_schema"].items()}
+    fields_by_scheme = {i.get("scheme", f): f for f, i in manifest["label_schema"].items()}
     config = yaml.safe_load((Path(project_dir) / "config.yaml").read_text(encoding="utf-8")) or {}
     subdir = ((config.get("adjudication") or {}).get("output_subdir") or "adjudication")
     path = _output_dir(project_dir) / subdir / "decisions.json"
@@ -292,11 +408,15 @@ def read_adjudicated(project_dir: str) -> Dict[str, Dict[str, Any]]:
         return out
     for decision in decisions:
         iid = str(decision.get("instance_id"))
-        for field, value in (decision.get("label_decisions") or {}).items():
+        for scheme, value in (decision.get("label_decisions") or {}).items():
+            field = fields_by_scheme.get(scheme)
             kind = kinds.get(field)
             if kind is None:
                 continue
-            if kind in GEOMETRY_TOOLS:
+            if kind == "track":
+                from potato.server_utils.iaa.attribute_agreement import track_objects
+                answer = track_objects(value)
+            elif kind in GEOMETRY_TOOLS:
                 answer = _objects(value)
             else:
                 chosen = _chosen(value)
@@ -386,12 +506,14 @@ def merge_geometry(answers: Dict[str, List[dict]],
         members = [(user, answers[user][c["_index"]]) for user, c in sorted(cluster.items())]
         labels = Counter(obj.get("label") for _u, obj in members).most_common()
         label = labels[0][0]
+        attributes = merge_attributes([obj for _u, obj in members])
         first = members[0][1]
         if first.get("type") == "bbox":
             coords = [obj["coordinates"] for _u, obj in members]
             box = {k: sum(c[k] for c in coords) / len(coords)
                    for k in ("x", "y", "width", "height")}
-            merged.append({"type": "bbox", "label": label, "coordinates": box})
+            merged.append({"type": "bbox", "label": label, "coordinates": box,
+                           **({"attributes": attributes} if attributes else {})})
             continue
         canon_members = [cluster[u] for u, _o in members]
         best = max(range(len(members)), key=lambda i: sum(
@@ -399,6 +521,84 @@ def merge_geometry(answers: Dict[str, List[dict]],
             for j, other in enumerate(canon_members) if j != i))
         chosen = dict(members[best][1])
         chosen["label"] = label
+        if attributes:
+            chosen["attributes"] = attributes
+        else:
+            chosen.pop("attributes", None)
+        merged.append(chosen)
+    if not merged and any(answers.values()):
+        return None
+    return merged
+
+
+def merge_attributes(objects: List[dict]) -> Dict[str, Any]:
+    """Each attribute's most common value among one cluster's objects.
+
+    Ties go to the value of the earliest object (annotators in name order).
+    An attribute nobody set is left out.
+    """
+    out: Dict[str, Any] = {}
+    names = []
+    for obj in objects:
+        for name in (obj.get("attributes") or {}):
+            if name not in names:
+                names.append(name)
+    for name in names:
+        values = [(obj.get("attributes") or {}).get(name) for obj in objects]
+        values = [v for v in values if v not in (None, "")]
+        if not values:
+            continue
+        counts = Counter(json.dumps(v, sort_keys=True) for v in values)
+        top = max(counts.values())
+        winner = next(v for v in values if counts[json.dumps(v, sort_keys=True)] == top)
+        out[name] = winner
+    return out
+
+
+def _track_clusters(answers: Dict[str, List[dict]], threshold: float):
+    from potato.server_utils.iaa.attribute_agreement import track_canonical, track_similarity
+    from potato.server_utils.iaa.geometry_agreement import _matched_clusters
+    canon = {}
+    for user, tracks in answers.items():
+        canon[user] = []
+        for index, track in enumerate(tracks or []):
+            c = track_canonical(track)
+            if c is not None:
+                canon[user].append({**c, "_index": index})
+    return _matched_clusters(canon, threshold, similarity=track_similarity), canon
+
+
+def merge_tracks(answers: Dict[str, List[dict]],
+                 threshold: Optional[float] = None) -> Optional[List[dict]]:
+    """Video tracks found by more than half of the annotators.
+
+    Tracks are matched across annotators by ``track_similarity`` (overlap in
+    time times box IoU, the measure the agreement report uses for tracks). A
+    cluster a majority found keeps its member that agrees most with the
+    others, labelled with the cluster's most common class and attributes.
+    ``[]`` when nobody drew a track; None when tracks were drawn and none was
+    found by a majority.
+    """
+    from potato.server_utils.iaa.attribute_agreement import track_similarity
+    from potato.server_utils.iaa.geometry_agreement import DEFAULT_MATCH_THRESHOLD
+    threshold = DEFAULT_MATCH_THRESHOLD if threshold is None else threshold
+    n = len(answers)
+    if n == 0:
+        return []
+    clusters, _canon = _track_clusters(answers, threshold)
+    merged = []
+    for cluster in clusters:
+        if len(cluster) * 2 <= n and n > 1:
+            continue
+        members = [(user, answers[user][c["_index"]], c) for user, c in sorted(cluster.items())]
+        best = max(range(len(members)), key=lambda i: sum(
+            track_similarity(members[i][2], other[2])
+            for j, other in enumerate(members) if j != i))
+        chosen = dict(members[best][1])
+        chosen["label"] = Counter(t.get("label") for _u, t, _c in members).most_common(1)[0][0]
+        attributes = merge_attributes([t for _u, t, _c in members])
+        if attributes:
+            chosen["attributes"] = attributes
         merged.append(chosen)
     if not merged and any(answers.values()):
         return None
@@ -410,7 +610,34 @@ def merge_field(kind: str, answers: Dict[str, Any]) -> Any:
         return merge_classification(answers)
     if kind == "multiselect":
         return merge_classifications(answers)
+    if kind == "track":
+        return merge_tracks(answers)
     return merge_geometry(answers)
+
+
+def track_agreement(shared: Dict[str, Dict[str, List[dict]]],
+                    threshold: Optional[float] = None) -> Dict[str, Any]:
+    """How often annotators drew the same tracks: of every track drawn on a
+    sample with two or more annotators, the share matched by another
+    annotator's track, and the mean ``track_similarity`` of matched pairs."""
+    from potato.server_utils.iaa.attribute_agreement import track_similarity
+    from potato.server_utils.iaa.geometry_agreement import DEFAULT_MATCH_THRESHOLD
+    threshold = DEFAULT_MATCH_THRESHOLD if threshold is None else threshold
+    drawn = matched = 0
+    sims: List[float] = []
+    for per_user in shared.values():
+        clusters, canon = _track_clusters(per_user, threshold)
+        drawn += sum(len(v) for v in canon.values())
+        for cluster in clusters:
+            if len(cluster) >= 2:
+                matched += len(cluster)
+                members = list(cluster.values())
+                sims.extend(track_similarity(a, b) for i, a in enumerate(members)
+                            for b in members[i + 1:])
+    return {"tracks_drawn": drawn,
+            "track_match_rate": (matched / drawn) if drawn else float("nan"),
+            "mean_track_similarity": (sum(sims) / len(sims)) if sims else float("nan"),
+            "match_threshold": threshold}
 
 
 # ---------------------------------------------------------------------------
@@ -440,6 +667,9 @@ def field_agreement(kind: str, by_sample: Dict[str, Dict[str, Any]]) -> Dict[str
         report["note"] = ("No sample has two or more annotators yet, so "
                           "agreement is undefined.")
         return report
+    if kind == "track":
+        report.update(track_agreement(shared))
+        return _clean(report)
     if kind in GEOMETRY_TOOLS:
         from potato.server_utils.iaa.geometry_agreement import geometry_agreement
         result = geometry_agreement(shared)
@@ -486,7 +716,7 @@ def collect(project_dir: str) -> Dict[str, Any]:
     decided = read_adjudicated(project_dir)
     fields: Dict[str, Any] = {}
     for field, info in manifest["label_schema"].items():
-        kind = potato_kind(info["type"])
+        kind = field_kind(info)
         by_sample = answers.get(field, {})
         merged: Dict[str, Any] = {}
         ties: List[str] = []

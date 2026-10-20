@@ -43,6 +43,8 @@ import logging
 import os
 from typing import Dict, List, Optional, Tuple
 
+from potato.server_utils.track_attributes import attributes_at
+
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
@@ -242,9 +244,12 @@ class MOTExporter(BaseExporter):
                     mode = track.get("interpolation") or "linear"
                     cubic += mode == "cubic"
                     label = str(track.get("label") or "").lower()
-                    attrs = track.get("attributes") or {}
-                    conf = 0 if attrs.get("ignore") else 1
+                    # Attributes can change along the track (per_keyframe);
+                    # each row takes the value at its frame.
+                    frame_of = (lambda key, kf, _p=page_fps, _f=fps: _real_frame(key, kf, _p, _f))
                     for frame in range(keyframes[0][0], keyframes[-1][0] + 1):
+                        attrs = attributes_at(track, frame, frame_of)
+                        conf = 0 if attrs.get("ignore") else 1
                         box = _box_between(keyframes, frame, hold=(mode == "constant"))
                         x, y = box["x"] * width, box["y"] * height
                         bw, bh = box["width"] * width, box["height"] * height
@@ -326,14 +331,22 @@ def _normalized_keyframes(track: dict, page_fps: float = 30.0,
     for key, kf in (track.get("keyframes") or {}).items():
         if not isinstance(kf, dict) or not isinstance(kf.get("bboxNorm"), dict):
             continue
-        time = _number(kf.get("time"))
-        try:
-            frame = (round(time * fps) if time is not None
-                     else round(int(kf.get("frame", key)) * fps / page_fps))
-        except (TypeError, ValueError):
+        frame = _real_frame(key, kf, page_fps, fps)
+        if frame is None:
             continue
-        out[int(frame)] = kf["bboxNorm"]
+        out[frame] = kf["bboxNorm"]
     return sorted(out.items(), key=lambda pair: pair[0])
+
+
+def _real_frame(key, kf: dict, page_fps: float = 30.0, fps: float = 30.0):
+    """A keyframe's frame in the video's real frames: from its ``time`` when
+    it has one, else its page frame rescaled from the page's rate."""
+    time = _number(kf.get("time"))
+    try:
+        return int(round(time * fps) if time is not None
+                   else round(int(kf.get("frame", key)) * fps / page_fps))
+    except (TypeError, ValueError):
+        return None
 
 
 def _box_between(keyframes: List[Tuple[int, dict]], frame: int, hold: bool = False) -> dict:

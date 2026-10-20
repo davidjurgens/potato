@@ -996,9 +996,15 @@
             if (!this.attributeDefs || !this.attributeDefs.length || !this.attributePanel
                     || !window.ObjectAttributes) return;
             const obj = this.selectedIndex >= 0 ? this.annotations[this.selectedIndex] : null;
-            const key = obj ? this.selectedIndex + '|' + obj.label : null;
-            if (key === this._attributePanelKey) return;
+            // The frame too: on a sequence the selected object is a new view
+            // object on every frame, and per_keyframe values differ by frame.
+            const key = obj ? this.selectedIndex + '|' + obj.label + '|' + (this.frameIndex || 0) : null;
+            // The object too: deleting a keyframe puts an interpolated object
+            // in the same slot on the same frame, and a panel still bound to
+            // the deleted one edited nothing that was saved.
+            if (key === this._attributePanelKey && obj === this._attributePanelObject) return;
             this._attributePanelKey = key;
+            this._attributePanelObject = obj;
             if (obj && !obj.attributes) obj.attributes = {};
             window.ObjectAttributes.render({
                 panel: this.attributePanel,
@@ -1007,6 +1013,8 @@
                 values: obj ? obj.attributes : {},
                 idPrefix: 'pc-attr-' + (this.config.schema || 'pc'),
                 noun: 'object',
+                frameNote: this.frames
+                    ? `From frame ${this.frameIndex + 1} until the next keyframe that changes it` : '',
                 onChange: () => {
                     // A model's object whose attributes a person changed is
                     // no longer the model's answer, as with the image tool.
@@ -2162,7 +2170,9 @@
             // whether or not toStored had an origin to apply.
             const view = JSON.parse(JSON.stringify(
                 wire.toStored(this.annotations, this.origin)));
-            this.sequenceStore = sequence.mergeView(this.sequenceStore, this.frameIndex, view);
+            this.sequenceStore = sequence.mergeView(
+                this.sequenceStore, this.frameIndex, view,
+                (this.attributeDefs || []).filter((d) => d.per_keyframe).map((d) => d.name));
             view.forEach((obj, i) => {
                 const local = this.annotations[i];
                 local.track_id = obj.track_id;

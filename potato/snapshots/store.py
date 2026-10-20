@@ -48,6 +48,8 @@ def list_snapshots_in(snapshot_root: str) -> List[Dict[str, Any]]:
     if not os.path.isdir(snapshot_root):
         return []
     tags = _tags(snapshot_root)
+    from potato.snapshots.deposit import read_deposits
+    deposits = read_deposits(snapshot_root)
     by_id: Dict[str, List[str]] = {}
     for name, snapshot_id in tags.items():
         by_id.setdefault(snapshot_id, []).append(name)
@@ -58,7 +60,8 @@ def list_snapshots_in(snapshot_root: str) -> List[Dict[str, Any]]:
             continue
         manifest = _manifest(folder)
         if manifest and manifest.get("id") == name:
-            out.append({**manifest, "tags": sorted(by_id.get(name, []))})
+            out.append({**manifest, "tags": sorted(by_id.get(name, [])),
+                        "deposits": deposits.get(name, [])})
     return sorted(out, key=lambda m: (int(m.get("sequence") or 0), m.get("created_at", ""), m["id"]),
                   reverse=True)
 
@@ -125,18 +128,35 @@ def tag_snapshot(config_path: str, ref: str, name: str) -> Dict[str, Any]:
 def verify_snapshot(config_path: str, ref: str) -> Dict[str, Any]:
     """Re-hash a snapshot's files against its manifest.
 
-    Returns ``{"id", "ok", "problems": [...]}``. The content hash is recomputed
+    Returns ``{"id", "ok", "problems": [...], "content_hash"}``. The content
+    hash is recomputed
     from the stored annotation rows and the config and data files inside the
     bundle, so a reader holding only the snapshot folder can confirm it is the
     one a paper cites.
     """
+    manifest = resolve(config_path, ref)
+    return verify_folder(snapshot_folder(config_path, manifest["id"]), manifest)
+
+
+def verify_folder(folder: str, manifest: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Re-hash a folder holding a snapshot's files: one in the project, or a
+    copy downloaded from a deposit (manifest.json, bundle.tar.gz,
+    annotations.jsonl, items.json). The manifest is read from the folder
+    when not given."""
     import tarfile
 
     from potato.snapshots.build import content_hash
 
-    manifest = resolve(config_path, ref)
-    folder = snapshot_folder(config_path, manifest["id"])
+    if manifest is None:
+        manifest = _manifest(folder)
+        if manifest is None:
+            raise FileNotFoundError(f"{folder} has no readable manifest.json")
     problems = []
+    missing = [name for name in ("bundle.tar.gz", "annotations.jsonl", "items.json")
+               if not os.path.isfile(os.path.join(folder, name))]
+    if missing:
+        return {"id": manifest.get("id"), "ok": False,
+                "problems": [f"{name} is missing" for name in missing]}
 
     def sha(path):
         digest = hashlib.sha256()
@@ -168,4 +188,5 @@ def verify_snapshot(config_path: str, ref: str) -> Dict[str, Any]:
                 items = json.load(handle)
             if content_hash(paths, records, items) != manifest.get("content_hash"):
                 problems.append("the config, data and annotations do not hash to content_hash")
-    return {"id": manifest["id"], "ok": not problems, "problems": problems}
+    return {"id": manifest["id"], "ok": not problems, "problems": problems,
+            "content_hash": manifest.get("content_hash")}

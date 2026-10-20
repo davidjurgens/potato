@@ -369,3 +369,22 @@ describe('mask resolution guard', () => {
         warn.mockRestore();
     });
 });
+
+describe('a restored mask with no colour of its own', () => {
+    test('takes its label colour, so two classes do not draw alike', () => {
+        // The FiftyOne backend (and other importers) write color "".
+        const m = makeManager({}, 0, 0);
+        m.config = { labels: [{ name: 'road', color: '#FF6B6B' }, { name: 'sky', color: '#4ECDC4' }] };
+        m._restoreMaskFromEntry({ type: 'mask', label: 'road', color: '', rle: { counts: [0, 2, 2], size: [2, 2] } });
+        m._restoreMaskFromEntry({ type: 'mask', label: 'sky', color: '', rle: { counts: [2, 2], size: [2, 2] } });
+        expect(m.masks.road.color).toBe('#FF6B6B');
+        expect(m.masks.sky.color).toBe('#4ECDC4');
+    });
+
+    test('a colour it does have is kept', () => {
+        const m = makeManager({}, 0, 0);
+        m.config = { labels: [{ name: 'road', color: '#FF6B6B' }] };
+        m._restoreMaskFromEntry({ type: 'mask', label: 'road', color: '#123456', rle: { counts: [0, 4], size: [2, 2] } });
+        expect(m.masks.road.color).toBe('#123456');
+    });
+});

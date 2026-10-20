@@ -171,3 +171,128 @@ class TestConfig:
                                                                 video("b", "combined")]})
         validate_annotation_schemes({"annotation_schemes": [video("a", "tracking"),
                                                             video("b", "segment")]})
+
+
+# ---------------------------------------------------------------------------
+# per_keyframe attributes (D4)
+# ---------------------------------------------------------------------------
+
+PER_KF = normalize_attributes(
+    [{"name": "occlusion", "type": "select", "options": ["none", "partial", "heavy"],
+      "per_keyframe": True}],
+    LABELS, "annotation_schemes[objs]", keyframes=True)
+
+
+def kf_track(start, end, x=0.1, initial="none", changes=None):
+    """A track with keyframes at start, end and each frame in `changes`,
+    where `changes` = {frame: occlusion from then on}."""
+    t = track(start, end, x=x, occlusion=initial)
+    for frame, value in (changes or {}).items():
+        t["keyframes"][str(frame)] = {"frame": frame, "bboxNorm": {"x": x, "y": 0.1, "width": 0.2, "height": 0.2},
+                                      "attributes": {"occlusion": value}}
+    return t
+
+
+class TestPerKeyframe:
+    def test_config_needs_a_scheme_with_keyframes(self):
+        from potato.server_utils.schemas.object_attributes import AttributeConfigError
+        raw = [{"name": "o", "type": "bool", "per_keyframe": True}]
+        assert normalize_attributes(raw, LABELS, "s", keyframes=True)[0]["per_keyframe"] is True
+        with pytest.raises(AttributeConfigError, match="only video tracks and point-cloud sequences"):
+            normalize_attributes(raw, LABELS, "s")
+        with pytest.raises(AttributeConfigError, match="true or false"):
+            normalize_attributes([{"name": "o", "type": "bool", "per_keyframe": "yes"}], LABELS, "s",
+                                 keyframes=True)
+
+    def test_values_hold_from_keyframe_to_keyframe(self):
+        from potato.server_utils.track_attributes import attributes_at, steps, value_at
+        t = kf_track(0, 30, changes={10: "partial", 20: None})
+        assert attributes_at(t, 5) == {"occlusion": "none"}
+        assert attributes_at(t, 10) == {"occlusion": "partial"}
+        assert attributes_at(t, 19) == {"occlusion": "partial"}
+        assert attributes_at(t, 25) == {"occlusion": None}
+        s = steps(t)
+        assert [f for f, _v in s] == [0, 10, 20]
+        assert value_at(s, "occlusion", 15) == "partial"
+
+    def test_alpha_is_over_object_frames(self):
+        """Two annotators, one matched track. a: none, partial from 10.
+        b: none, partial from 20. The units are the frames where either
+        value changes: 0, 10 and 20, with values none/none, partial/none and
+        partial/partial. Six values, three of each. Nominal alpha:
+        Do = (1/6) * 2 = 1/3 (one disagreeing unit, two ordered pairs);
+        De = (2 * 3 * 3) / (6 * 5) = 3/5; alpha = 1 - (1/3)/(3/5) = 4/9."""
+        rows = {"v1": {"a": stored_tracks(kf_track(0, 30, changes={10: "partial"})),
+                       "b": stored_tracks(kf_track(0, 30, changes={20: "partial"}))}}
+        rows = {iid: {u: aa.track_objects(v) for u, v in per.items()} for iid, per in rows.items()}
+        report = aa.attribute_agreement(rows, PER_KF, 0.5, to_canonical=aa.track_canonical,
+                                        similarity=aa.track_similarity,
+                                        attribute_steps=aa.video_track_steps)
+        entry = report["occlusion"]
+        assert entry["unit"] == "object-frame"
+        assert entry["n_objects"] == 3
+        assert entry["percent_agreement"] == pytest.approx(2 / 3)
+        assert entry["alpha"] == pytest.approx(4 / 9)
+
+    def test_the_dispatcher_scores_per_frame(self):
+        from potato.server_utils.iaa.dispatcher import _object_attribute_report
+        scheme = {"annotation_type": "video_annotation", "name": "objs", "mode": "tracking",
+                  "labels": LABELS, "attributes": [
+                      {"name": "occlusion", "type": "select", "options": ["none", "partial", "heavy"],
+                       "per_keyframe": True}]}
+        rows = {"v1": {"a": stored_tracks(kf_track(0, 30, changes={10: "partial"})),
+                       "b": stored_tracks(kf_track(0, 30, changes={20: "partial"}))}}
+        assert _object_attribute_report(scheme, rows)["occlusion"]["n_objects"] == 3
+
+    def test_point_cloud_keyframes_carry_their_own_values(self):
+        def keyframe(frame, value):
+            return {"type": "cuboid_3d", "label": "car", "track_id": "t1", "frame": frame,
+                    "attributes": {"occlusion": value},
+                    "coordinates": {"center": [0, 0, 0], "size": [4, 2, 1.5], "rotation": [0, 0, 0, 1]}}
+        stored = [keyframe(0, "none"), keyframe(5, "heavy")]
+        [obj] = aa.spatial_tracks_with_attributes(stored)
+        assert aa.spatial_track_steps(obj) == [(0, {"occlusion": "none"}), (5, {"occlusion": "heavy"})]
+
+
+    def test_keyframes_that_change_nothing_add_no_units(self):
+        """A point-cloud track stores every keyframe's full attributes; three
+        keyframes with the same value are one unit, not three."""
+        def keyframe(frame, value, user_x=0):
+            return {"type": "cuboid_3d", "label": "car", "track_id": "t1", "frame": frame,
+                    "attributes": {"occlusion": value},
+                    "coordinates": {"center": [user_x, 0, 0], "size": [4, 2, 1.5],
+                                    "rotation": [0, 0, 0, 1]}}
+        rows = {"c1": {"a": aa.spatial_tracks_with_attributes(
+                           [keyframe(0, "none"), keyframe(5, "none"), keyframe(9, "none")]),
+                       "b": aa.spatial_tracks_with_attributes(
+                           [keyframe(0, "none"), keyframe(5, "none"), keyframe(9, "none")])}}
+        from potato.server_utils.iaa.structured import SPATIAL_MATCH
+        report = aa.attribute_agreement(rows, PER_KF, SPATIAL_MATCH,
+                                        to_canonical=aa.spatial_track_canonical,
+                                        similarity=aa.spatial_track_similarity,
+                                        attribute_steps=aa.spatial_track_steps)
+        assert report["occlusion"]["n_objects"] == 1
+
+
+class TestMotPerKeyframe:
+    def test_conf_follows_ignore_frame_by_frame(self, tmp_path):
+        from potato.export.base import ExportContext
+        from potato.export.mot_exporter import MOTExporter
+        t = track(0, 4, ignore=False)
+        for f in (0, 4):
+            t["keyframes"][str(f)]["time"] = f / 10
+        t["keyframes"]["2"] = {"frame": 2, "time": 0.2, "attributes": {"ignore": True},
+                               "bboxNorm": {"x": 0.1, "y": 0.1, "width": 0.2, "height": 0.2}}
+        scheme = {"annotation_type": "video_annotation", "name": "objs", "mode": "tracking",
+                  "labels": LABELS, "video_fps": 10}
+        context = ExportContext(config={"annotation_schemes": [scheme]},
+                                annotations=[{"instance_id": "v1", "user_id": "a",
+                                              "labels": {"objs": stored_tracks(t)}}],
+                                items={"v1": {"width": 100, "height": 100, "fps": 10}},
+                                schemas=[scheme], output_dir=str(tmp_path))
+        result = MOTExporter().export(context, str(tmp_path), {})
+        gt = next(p for p in result.files_written if p.endswith("gt.txt"))
+        rows = [line.split(",") for line in open(gt).read().split()]
+        # Frames 1-5 (1-indexed); ignore from frame index 2 on: conf 1, 1, 0, 0, 0.
+        assert [(int(r[0]), int(r[6])) for r in rows] == [(1, 1), (2, 1), (3, 0), (4, 0), (5, 0)]
+

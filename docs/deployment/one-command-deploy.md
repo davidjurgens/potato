@@ -119,6 +119,13 @@ stored locally in `.potato/secrets.json` at mode 0600. They never enter the
 bundle, which is what keeps them out of a repo-backed target's git history.
 Provider API tokens are never written to disk at all.
 
+A credential written into the config itself does enter the bundle, so
+preflight stops on one (D006): a literal value of 12 characters or more under
+a key such as `api_key`, `token` or `password`, or any key ending in
+`_api_key`, `_secret`, `_token` or `_password` (`admin_api_key`, for one), or
+a value shaped like a known provider's key. Replace it with `${ENV_VAR}` and
+pass `--secret NAME=<value>`.
+
 ## One worker
 
 Every target runs a single application process. Potato holds the item pool, the

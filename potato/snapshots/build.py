@@ -86,7 +86,8 @@ _MAX_REFERENCE_LENGTH = 1024
 
 
 #: A file reached through one of these keys holds secrets, whatever it is called.
-_SECRET_KEY = re.compile(r"password|secret|token|credential|api_key|apikey|user_config_path", re.I)
+_SECRET_KEY = re.compile(r"password|secret|token|credential|api_key|apikey|user_config_path"
+                         r"|key_file|ssl_key|private_key", re.I)
 
 
 def _strings(value: Any, keys: Tuple[str, ...] = ()):
@@ -135,7 +136,8 @@ def project_files(paths: Dict[str, Any],
     snapshots folder, the databases and the API key are left out; those are
     state, not definition. So are credentials: the account roster, and any
     file named under a key that mentions a password, secret, token,
-    credential or API key. Each one left out is appended to ``omitted``.
+    credential, API key or private key (`ssl_key`, `sp_key_file`). Each one
+    left out is appended to ``omitted``.
 
     Returns ``(files, directories, warnings)``: ``files`` as ``(name in the
     bundle, path on disk)`` sorted by name; ``directories`` that the config

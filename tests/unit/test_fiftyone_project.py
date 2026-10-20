@@ -67,8 +67,10 @@ class TestWriteProject:
         assert fp.build_scheme("areas", "polygons", ["lot"])["tools"] == ["polygon"]
 
     def test_unsupported_types_and_missing_classes_are_refused(self):
-        with pytest.raises(ValueError, match="keypoints"):
-            fp.build_scheme("kp", "keypoints", ["nose"])
+        with pytest.raises(ValueError, match="scalar"):
+            fp.build_scheme("score", "scalar", ["a"])
+        with pytest.raises(ValueError, match="frame fields of type detections only"):
+            fp.build_scheme("frames.cls", "classification", ["a"], {"frame_field": True})
         with pytest.raises(ValueError, match="no classes"):
             fp.build_scheme("gt", "detections", [])
 
@@ -205,3 +207,95 @@ class TestAgreement:
         assert report["n_samples_with_two_or_more"] == 2
         assert report["localization"]["sigma"] > 0.5
         assert json.dumps(report)  # no NaN left in the report
+
+
+SKELETON = {"names": ["head", "tail"], "edges": [[0, 1]]}
+
+
+def _track(label, start, end, x=0.1, attrs=None):
+    return {"id": f"t{start}", "label": label, "attributes": attrs or {},
+            "keyframes": {str(f): {"frame": f, "time": f / 10,
+                                   "bboxNorm": {"x": x, "y": 0.2, "width": 0.2, "height": 0.2}}
+                          for f in (start, end)}}
+
+
+class TestRoundTwoKinds:
+    """Keypoints, masks, attributes and video tracks (D3)."""
+
+    def test_schemes_for_each_new_kind(self):
+        kp = fp.build_scheme("pose", "keypoints", ["fish"], {"skeleton": SKELETON})
+        assert (kp["tools"], kp["skeletons"]) == (["keypoint_set"], {"pose": SKELETON})
+        assert fp.build_scheme("pts", "keypoints", ["eye"])["tools"] == ["landmark"]
+        mask = fp.build_scheme("seg", "segmentation", ["road", "sky"])
+        assert mask["tools"] == ["brush", "eraser"] and [l["name"] for l in mask["labels"]] == ["road", "sky"]
+        track = fp.build_scheme("frames.detections", "detections", ["car"],
+                                {"frame_field": True, "fps": 25,
+                                 "attributes": {"occluded": {"type": "checkbox"}}})
+        assert (track["annotation_type"], track["mode"], track["name"], track["video_fps"]) == (
+            "video_annotation", "tracking", "frames__detections", 25.0)
+        assert track["attributes"] == [{"name": "occluded", "type": "bool"}]
+
+    def test_attribute_types_map_and_unknown_ones_are_refused(self):
+        assert fp.potato_attributes({
+            "state": {"type": "select", "values": ["parked", "moving"], "default": "parked"},
+            "note": {"type": "text"}}) == [
+            {"name": "state", "type": "select", "options": ["parked", "moving"], "default": "parked"},
+            {"name": "note", "type": "text"}]
+        with pytest.raises(ValueError, match="occluded"):
+            fp.potato_attributes({"o": {"type": "occluded"}})
+        with pytest.raises(ValueError, match="no values"):
+            fp.potato_attributes({"s": {"type": "select"}})
+
+    def test_a_video_project_and_its_track_answers(self, workdir):
+        project = _project(workdir, {"frames.detections": {
+            "type": "detections", "classes": ["car"], "frame_field": True, "fps": 10}},
+            media_type="video")
+        config = yaml.safe_load(open(os.path.join(project, "config.yaml")))
+        assert config["item_properties"]["text_key"] == "video_url"
+        assert config["annotation_schemes"][0]["name"] == "frames__detections"
+        tracks = [_track("car", 0, 10)]
+        _save(project, "a", {"s0": [("frames__detections", "_data", json.dumps({"tracks": {"t0": tracks[0]}}))]})
+        assert fp.read_answers(project)["frames.detections"] == {"s0": {"a": tracks}}
+
+    def test_tracks_merge_by_majority_with_attributes(self):
+        a = [_track("car", 0, 10, attrs={"occluded": True}), _track("car", 20, 30, x=0.6)]
+        b = [_track("car", 0, 10, x=0.11, attrs={"occluded": True})]
+        c = [_track("truck", 0, 10, x=0.12, attrs={"occluded": False})]
+        merged = fp.merge_tracks({"a": a, "b": b, "c": c})
+        # One track found by all three; the 20-30 track by one of three is dropped.
+        assert len(merged) == 1
+        assert merged[0]["label"] == "car" and merged[0]["attributes"] == {"occluded": True}
+        assert fp.merge_tracks({"a": [_track("car", 0, 10)], "b": [_track("car", 50, 60)]}) is None
+        assert fp.merge_tracks({"a": [], "b": []}) == []
+
+    def test_track_agreement(self):
+        report = fp.track_agreement({"s0": {"a": [_track("car", 0, 10)],
+                                            "b": [_track("car", 0, 10), _track("car", 40, 50)]}})
+        # 3 tracks drawn, 2 of them matched to each other, identical boxes.
+        assert report["tracks_drawn"] == 3
+        assert report["track_match_rate"] == pytest.approx(2 / 3)
+        assert report["mean_track_similarity"] == pytest.approx(1.0)
+
+    def test_box_attributes_merge_by_majority(self):
+        def box(attrs):
+            return {**_box("car", 0.1), "attributes": attrs}
+        merged = fp.merge_geometry({"a": [box({"state": "parked"})], "b": [box({"state": "parked"})],
+                                    "c": [box({"state": "moving"})]})
+        assert merged[0]["attributes"] == {"state": "parked"}
+
+    def test_keypoint_sets_and_masks_merge_and_score(self, workdir):
+        project = _project(workdir, {
+            "pose": {"type": "keypoints", "classes": ["fish"], "skeleton": SKELETON},
+            "seg": {"type": "segmentation", "classes": ["road"], "mask_targets": {"1": "road"}}})
+        pose = {"type": "keypoint_set", "label": "fish", "skeleton": "pose",
+                "coordinates": [{"x": 0.2, "y": 0.2, "v": 2}, {"x": 0.4, "y": 0.3, "v": 2}]}
+        mask = {"type": "mask", "label": "road", "rle": {"counts": [2, 3, 4], "size": [3, 3]}}
+        for user in ("a", "b"):
+            _save(project, user, {"s0": [("pose", "_data", json.dumps([pose])),
+                                         ("seg", "_data", json.dumps([mask]))]})
+        collected = fp.collect(project)
+        assert collected["fields"]["pose"]["merged"]["s0"][0]["coordinates"] == pose["coordinates"]
+        assert collected["fields"]["seg"]["merged"]["s0"][0]["rle"] == mask["rle"]
+        manifest = json.load(open(os.path.join(project, fp.MANIFEST)))
+        assert manifest["label_schema"]["pose"]["kind"] == "keypoint_set"
+        assert manifest["label_schema"]["seg"]["kind"] == "mask"

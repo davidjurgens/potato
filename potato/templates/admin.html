@@ -1796,6 +1796,71 @@
         loadCrowdsourcing();
       }
 
+      // Throughput charts: inline SVG, no chart library. Each chart sits next
+      // to a table holding the same numbers, which is what a screen reader
+      // reads; the SVG carries a one-line summary as its label.
+      // Bin edges are whole seconds or whole minutes: "30s", "2m".
+      const tpEdge = s => s < 60 ? `${s}s` : `${s / 60}m`;
+      const binLabel = b => b.to === null ? `${tpEdge(b.from)}+` : `${tpEdge(b.from)}–${tpEdge(b.to)}`;
+
+      function throughputBars(values, labels, opts) {
+        // opts.axis: tick labels under the bars and the count above each
+        // (when there are few enough to read); always a baseline, so empty
+        // bins still show where they are.
+        const w = opts.width, h = opts.height, bottom = opts.axis ? 18 : 1, top = opts.axis ? 14 : 0;
+        const max = Math.max(1, ...values);
+        const step = w / values.length, bw = Math.max(1, step * 0.72);
+        const labelled = opts.axis && values.length <= 14;
+        const bars = values.map((v, i) => {
+          const bh = v ? Math.max(1, (h - bottom - top) * v / max) : 0;
+          const x = i * step + (step - bw) / 2, y = h - bottom - bh;
+          return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}"
+            rx="1"><title>${escapeHtml(labels[i])}: ${v}</title></rect>${labelled && v
+            ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle">${v}</text>` : ""}`;
+        }).join("");
+        const ticks = opts.axis ? labels.map((l, i) => (values.length <= 12 || i % Math.ceil(values.length / 12) === 0)
+          ? `<text x="${(i * step + step / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(l)}</text>` : "").join("") : "";
+        return `<svg class="tp-chart ${opts.cls || ""}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"
+          role="img" aria-label="${escapeHtml(opts.label)}">${bars}<line class="tp-base" x1="0" x2="${w}"
+          y1="${h - bottom + 0.5}" y2="${h - bottom + 0.5}" />${ticks}</svg>`;
+      }
+
+      function throughputLine(values, opts) {
+        // opts.ticks: day labels under the points, with each value above its
+        // point. The y axis starts at zero, so a flat line means a steady pace.
+        const w = opts.width, h = opts.height, bottom = opts.ticks ? 18 : 3, top = opts.ticks ? 14 : 3;
+        const known = values.map((v, i) => [i, v]).filter(([, v]) => v !== null && v !== undefined);
+        if (known.length < 2) return "";
+        const max = Math.max(...known.map(([, v]) => v)) || 1;
+        const inset = opts.ticks ? 24 : 3;
+        const x = i => inset + i * (w - 2 * inset) / (values.length - 1);
+        const y = v => h - bottom - (h - bottom - top) * v / max;
+        const pts = known.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+        const [li, lv] = known[known.length - 1];
+        const labelled = opts.ticks && values.length <= 14;
+        const marks = labelled ? known.map(([i, v]) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2" fill="currentColor" />
+          <text x="${x(i).toFixed(1)}" y="${(y(v) - 5).toFixed(1)}" text-anchor="middle">${Math.round(v)}</text>`).join("")
+          : `<circle cx="${x(li).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="2.5" fill="currentColor" />`;
+        const ticks = opts.ticks ? opts.ticks.map((l, i) => (values.length <= 12 || i % Math.ceil(values.length / 12) === 0)
+          ? `<text x="${x(i).toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(l)}</text>` : "").join("")
+          + `<line class="tp-base" x1="0" x2="${w}" y1="${h - bottom + 0.5}" y2="${h - bottom + 0.5}" />` : "";
+        return `<svg class="tp-chart tp-line" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"
+          role="img" aria-label="${escapeHtml(opts.label)}"><polyline points="${pts}" fill="none"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />${marks}${ticks}</svg>`;
+      }
+
+      function throughputDistribution(d, who) {
+        if (!d) return "";
+        const labels = d.bins.map(binLabel);
+        return `<figure class="tp-figure">
+          ${throughputBars(d.bins.map(b => b.count), labels, {width: 420, height: 140, axis: true, cls: "tp-hist",
+            label: `Histogram of active time per item for ${who}: median ${d.p50}s, 90% under ${d.p90}s, ${d.n} items`})}
+          <figcaption>Half the items took under ${escapeHtml(formatDuration(Math.round(d.p50)))} of active
+            time; the middle half between ${escapeHtml(formatDuration(Math.round(d.p25)))} and
+            ${escapeHtml(formatDuration(Math.round(d.p75)))}; 90% under ${escapeHtml(formatDuration(Math.round(d.p90)))}
+            (${d.n} timed items).</figcaption></figure>`;
+      }
+
       async function loadThroughput() {
         const body = document.getElementById("throughputBody");
         if (!body) return;
@@ -1815,20 +1880,45 @@
           ].join("")}</dl>`;
           const note = data.note ? `<p style="color: var(--muted-foreground);">${escapeHtml(data.note)}</p>` : "";
           const head = `<tr><th scope="col">Annotator</th><th scope="col">Items</th><th scope="col">Items / active hour</th>
-            <th scope="col">Median time per item</th><th scope="col">Active time</th>${review
+            <th scope="col">Pace by day</th><th scope="col">Median time per item</th>
+            <th scope="col">Time per item</th><th scope="col">Active time</th>${review
               ? '<th scope="col">Reviewed</th><th scope="col">First-pass approval</th><th scope="col">Rework</th>' : ""}</tr>`;
-          const rows = data.annotators.map(a => `<tr><th scope="row">${escapeHtml(a.annotator)}</th>
+          const dated = days => days.filter(d => d.day !== "no events");
+          const rows = data.annotators.map(a => {
+            const ad = dated(a.by_day);
+            const pace = throughputLine(ad.map(d => d.items_per_active_hour), {width: 84, height: 22,
+              label: `Items per active hour by day for ${a.annotator}: ${ad.map(d => `${d.day} ${na(d.items_per_active_hour)}`).join(", ")}`});
+            const td = a.time_distribution;
+            const spread = td ? throughputBars(td.bins.map(b => b.count), td.bins.map(binLabel), {width: 84, height: 22,
+              cls: "tp-mini", label: `Time per item for ${a.annotator}: median ${td.p50}s, 10% under ${td.p10}s, 90% under ${td.p90}s`})
+              + `<small class="tp-range">${td.p10}–${td.p90}s</small>` : "n/a";
+            return `<tr><th scope="row">${escapeHtml(a.annotator)}</th>
             <td>${a.items}</td><td>${na(a.items_per_active_hour)}</td>
+            <td>${pace || '<small class="tp-range">one day</small>'}</td>
             <td>${a.median_active_seconds === null ? "n/a" : a.median_active_seconds + "s"}</td>
+            <td class="tp-cell">${spread}</td>
             <td>${dur(a.active_seconds)}</td>${review
-              ? `<td>${a.reviewed_items}</td><td>${pct(a.first_pass_approval)}</td><td>${pct(a.rework_rate)}</td>` : ""}</tr>`).join("");
+              ? `<td>${a.reviewed_items}</td><td>${pct(a.first_pass_approval)}</td><td>${pct(a.rework_rate)}</td>` : ""}</tr>`;
+          }).join("");
+          const pd = dated(p.by_day);
+          const trend = pd.length >= 2 ? `<div class="tp-trend">
+              <figure class="tp-figure"><figcaption>Items saved per day</figcaption>
+                ${throughputBars(pd.map(d => d.items), pd.map(d => d.day.slice(5)), {width: 420, height: 120, axis: true,
+                  label: `Items saved per day: ${pd.map(d => `${d.day} ${d.items}`).join(", ")}`})}</figure>
+              <figure class="tp-figure"><figcaption>Items per active hour</figcaption>
+                ${throughputLine(pd.map(d => d.items_per_active_hour), {width: 420, height: 120, ticks: pd.map(d => d.day.slice(5)),
+                  label: `Items per active hour by day: ${pd.map(d => `${d.day} ${na(d.items_per_active_hour)}`).join(", ")}`})
+                  || '<p class="tp-range">Fewer than two days with timed items.</p>'}</figure></div>`
+            : '<p class="tp-range">The trend charts appear once work has been saved on two or more days.</p>';
           const days = p.by_day.map(d => `<tr><th scope="row">${escapeHtml(d.day)}</th><td>${d.items}</td>
             <td>${na(d.items_per_active_hour)}</td><td>${d.day === "no events" ? "n/a" : dur(d.active_seconds)}</td></tr>`).join("");
           body.innerHTML = data.annotators.length ? `
             <div class="dashboard-card" style="margin-bottom: 1rem;">${summary}${note}</div>
+            <div class="dashboard-card" style="margin-bottom: 1rem;"><h4 style="margin-top: 0;">Time per item</h4>
+              ${throughputDistribution(p.time_distribution, "all annotators") || '<p class="tp-range">No timed items yet.</p>'}</div>
             <div class="dashboard-card" style="margin-bottom: 1rem;"><h4 style="margin-top: 0;">By annotator</h4>
               <div class="admin-table-container"><table class="admin-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>
-            <div class="dashboard-card"><h4 style="margin-top: 0;">By day (UTC)</h4>
+            <div class="dashboard-card"><h4 style="margin-top: 0;">By day (UTC)</h4>${trend}
               <div class="admin-table-container"><table class="admin-table"><thead><tr><th scope="col">Day</th><th scope="col">Items</th>
                 <th scope="col">Items / active hour</th><th scope="col">Active time</th></tr></thead><tbody>${days}</tbody></table></div></div>`
             : "<p>No annotator has saved an item yet.</p>";
