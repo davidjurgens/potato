@@ -217,3 +217,7 @@ class TestSignOffNits:
         fraction = (build_config_schema()["properties"]["ai_support"]["properties"]
                     ["holdout"]["properties"]["fraction"])
         assert (fraction["minimum"], fraction["maximum"]) == (0, 1)
+
+    def test_an_out_of_range_share_beside_a_yes_is_reported(self):
+        assert seq.truncation_attribute({"truncated": True, "truncation": 1.4}) == (1, None, 1.4)
+        assert _columns(_box(truncated=True, truncation=1.4))[0] == "0.50"

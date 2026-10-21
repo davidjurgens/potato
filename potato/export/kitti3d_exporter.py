@@ -148,8 +148,9 @@ class KITTI3DExporter(BaseExporter):
             values = ", ".join(f"'{v}'" for v in sorted(unknown_truncation))
             warnings.append(
                 f"{sum(unknown_truncation.values())} object(s) have a truncation value that "
-                f"is not none/partly/fully, a number or true/false ({values}); the share "
-                f"of the box outside the image was written instead.")
+                f"is not none/partly/fully, a share from 0 to 1 or true/false ({values}); "
+                f"the object's other truncation attribute was written if it has one, and "
+                f"otherwise the share of the box outside the image.")
         if unknown_occlusion:
             warnings.append(seq.unknown_occlusion_warning(unknown_occlusion))
         if unclipped:

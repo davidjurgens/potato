@@ -182,11 +182,16 @@ def truncation_attribute(attributes: Dict[str, Any]):
     # unset (show_if hides the share then, but does not clear it).
     if ("truncation" in attributes and "truncated" in attributes
             and attributes["truncated"] is not False):
-        shares = [attributes[k] for k in ("truncation", "truncated")
-                  if isinstance(attributes[k], (int, float))
-                  and not isinstance(attributes[k], bool)
-                  and 0.0 <= attributes[k] <= 1.0]
-        shares = [float(v) for v in shares]
+        numeric = [k for k in ("truncation", "truncated")
+                   if isinstance(attributes[k], (int, float))
+                   and not isinstance(attributes[k], bool)]
+        shares = [float(attributes[k]) for k in numeric if 0.0 <= attributes[k] <= 1.0]
+        if numeric and not shares:
+            # A share out of range (1.4) beside truncated: true: the other
+            # attribute is written, and the share is reported, not dropped.
+            rest = {k: v for k, v in attributes.items() if k != numeric[0]}
+            code, fraction, _ = truncation_attribute(rest)
+            return code, fraction, attributes[numeric[0]]
     value = shares[0] if shares else attributes.get("truncated", attributes.get("truncation"))
     if value is None or value == "":
         return None, None, None

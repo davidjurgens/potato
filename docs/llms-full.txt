@@ -15154,8 +15154,10 @@ attributes with these names and values:
 | occluded | `occluded` or `occlusion` | `none`, `partly` (or `partial`), `largely` (or `heavy`), `unknown`; KITTI's own `fully_visible`, `partly_occluded`, `largely_occluded`; a code from 0 to 3; `true`/`false` |
 
 The examples above use these values, so they export as written. Any other value
-is listed in the export's warnings. An occlusion is then written as 3
-(unknown). A truncation is written as 0 by `kitti`, and by `kitti_3d` as the
+is listed in the export's warnings. An unreadable occlusion is written as 3
+(unknown). An unreadable truncation falls back to the object's other truncation
+attribute, so `truncated: true` beside a share of 1.4 writes as partly
+truncated. With no other attribute, `kitti` writes 0 and `kitti_3d` writes the
 share of the box the image edge cuts off. The CVAT, KITTI, MOT, Darwin, VIA and
 COCO importers read them back, and they survive edits, undo and navigation.
 

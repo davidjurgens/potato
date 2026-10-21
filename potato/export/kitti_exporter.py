@@ -109,8 +109,9 @@ class KITTIExporter(BaseExporter):
             values = ", ".join(f"'{v}'" for v in sorted(self._unknown_truncation))
             warnings.append(
                 f"{sum(self._unknown_truncation.values())} box(es) have a truncation "
-                f"value that is not none/partly/fully, a number or true/false "
-                f"({values}); they were written as 0.")
+                f"value that is not none/partly/fully, a share from 0 to 1 or true/false "
+                f"({values}); the box's other truncation attribute was written if it has "
+                f"one, and otherwise 0.")
         if self._unknown_occlusion:
             warnings.append(seq.unknown_occlusion_warning(self._unknown_occlusion))
 
