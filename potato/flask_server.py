@@ -3217,6 +3217,14 @@ def get_current_page_html(config, username):
         and telemetry_client_config["fidelity"] != "off"
     )
 
+    # Authenticity paradata, for the same reason again: leaving the page during
+    # a survey or training item is as informative as during annotation.
+    from potato.server_utils.config_module import (
+        get_authenticity_client_config, get_interaction_tracking_client_config)
+    context['authenticity_client_config'] = get_authenticity_client_config(config)
+    context['interaction_tracking_client_config'] = (
+        get_interaction_tracking_client_config(config))
+
     # Phase pages are rendered from the SAME template as the annotation page, so
     # they need the same asset gating. Without this, `frontend_assets` defaults
     # to {} and neither fabric.js nor image-annotation.js is loaded — which made
@@ -3931,6 +3939,12 @@ def render_page_with_annotations(username: str):
         annotation_telemetry_client_config["enabled"]
         and annotation_telemetry_client_config["fidelity"] != "off"
     )
+    # Authenticity paradata (page-level, every task type) and the switch for the
+    # general interaction tracker. Thresholds stay server-side.
+    from potato.server_utils.config_module import (
+        get_authenticity_client_config, get_interaction_tracking_client_config)
+    authenticity_client_config = get_authenticity_client_config(config)
+    interaction_tracking_client_config = get_interaction_tracking_client_config(config)
     # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
     truth_serum_client_config = None
     if config.get("truth_serum", {}).get("enabled", False):
@@ -4074,6 +4088,8 @@ def render_page_with_annotations(username: str):
         keystroke_client_config=keystroke_client_config,
         annotation_telemetry_enabled=annotation_telemetry_enabled,
         annotation_telemetry_client_config=annotation_telemetry_client_config,
+        authenticity_client_config=authenticity_client_config,
+        interaction_tracking_client_config=interaction_tracking_client_config,
         boundary_client_config=boundary_client_config,
         # Truth Serum (surprisingly-popular scoring)
         truth_serum_enabled=truth_serum_enabled,

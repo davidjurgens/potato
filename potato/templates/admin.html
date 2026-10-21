@@ -331,6 +331,18 @@
             </div>
           </div>
 
+          <!-- Authenticity (page-level paradata on every task type).
+               Hidden entirely unless authenticity is enabled. -->
+          <div class="question-card" id="authenticitySection"
+               style="margin-bottom: 1.5rem; display: none;">
+            <div class="question-header">
+              <h3 class="question-title">{{ ui_lang.admin_section_authenticity|default('Authenticity') }}</h3>
+            </div>
+            <div id="authenticityContent">
+              <!-- Authenticity data will be loaded here -->
+            </div>
+          </div>
+
           <!-- Per-User Behavioral Data -->
           <div class="admin-table-container">
             <table class="admin-table" id="behavioralTable">
@@ -2080,6 +2092,96 @@
         content.innerHTML = html;
       }
 
+      // Authenticity panel: leaving the page, copying the item, external
+      // pastes and automation, per annotator. Same layout and the same
+      // caveat-first rule as the Writing Process panel.
+      function displayAuthenticity(au) {
+        const section = document.getElementById("authenticitySection");
+        const content = document.getElementById("authenticityContent");
+        if (!section || !content) return;
+
+        if (!au || !au.enabled) {
+          section.style.display = "none";
+          return;
+        }
+        section.style.display = "";
+
+        if (au.error) {
+          content.innerHTML = `<p style="color: var(--destructive-text);">${escapeHtml(au.error)}</p>`;
+          return;
+        }
+        if (!au.users || au.users.length === 0) {
+          content.innerHTML = `<p style="color: var(--muted-foreground);">No authenticity data recorded yet.</p>`;
+          return;
+        }
+
+        const s = au.summary || {};
+        const flagTotals = Object.entries(s.flag_totals || {})
+          .sort((a, b) => b[1] - a[1]);
+
+        let html = `
+          <div style="padding: 0.75rem 1rem; margin-bottom: 1rem; border-left: 3px solid var(--primary, #6d5ce7); background: var(--muted, #f4f4f6); border-radius: 4px;">
+            <strong>Read this first.</strong>
+            <div style="margin-top: 0.25rem; color: var(--muted-foreground);">${escapeHtml(au.caveat || "")}</div>
+          </div>
+          <div class="question-stats" style="margin-bottom: 1rem;">
+            <div class="question-stat"><span class="value">${s.total_items || 0}</span><span class="label">Items</span></div>
+            <div class="question-stat"><span class="value">${s.total_users || 0}</span><span class="label">Annotators</span></div>
+            <div class="question-stat"><span class="value">${s.users_with_flags || 0}</span><span class="label">With Any Flag</span></div>
+          </div>`;
+
+        if (flagTotals.length) {
+          html += `<div style="margin-bottom: 1rem;">` +
+            flagTotals.map(([name, n]) =>
+              `<span style="display:inline-block; margin:0 0.4rem 0.4rem 0; padding:0.15rem 0.5rem; border-radius:999px; background: var(--muted, #eee); font-size: 0.85em;">${escapeHtml(name)} &times; ${n}</span>`
+            ).join("") + `</div>`;
+        }
+
+        html += `
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead><tr>
+                <th>User ID</th><th>Items</th><th>No Paradata</th>
+                <th>Left Page</th><th>Time Away</th><th>Item Copies</th>
+                <th>Ext. Pastes</th><th>Automation</th><th>Flags</th><th>Risk</th>
+              </tr></thead>
+              <tbody>`;
+
+        for (const u of au.users) {
+          const flags = Object.entries(u.flag_counts || {})
+            .map(([n, c]) => `${n}×${c}`).join(", ") || "—";
+          const risk = u.authenticity_risk || 0;
+          const colour = risk >= 0.3 ? "var(--destructive-text)" : (risk > 0 ? "var(--warning-text)" : "inherit");
+          const automation = u.webdriver ? "webdriver"
+            : (u.untrusted_events ? `${u.untrusted_events} synthetic` : "—");
+          html += `<tr>
+            <td>${escapeHtml(u.user_id)}</td>
+            <td>${u.items}</td>
+            <td>${u.items_without_paradata}</td>
+            <td>${u.away_events}</td>
+            <td>${(u.away_fraction * 100).toFixed(1)}%</td>
+            <td>${u.item_copy_events}</td>
+            <td>${u.external_paste_events}</td>
+            <td>${escapeHtml(automation)}</td>
+            <td style="font-size: 0.85em;">${escapeHtml(flags)}</td>
+            <td style="color:${colour}; font-weight:600;">${risk.toFixed(3)}</td>
+          </tr>`;
+
+          for (const fi of (u.flagged_items || [])) {
+            const where = fi.phase_page ? "survey / training page" : `instance ${fi.instance_id}`;
+            html += `<tr style="background: var(--muted, #fafafa);">
+              <td colspan="10" style="font-size: 0.85em; padding-left: 2rem; color: var(--muted-foreground);">
+                <strong>${escapeHtml(where)}</strong> &middot;
+                <em>${escapeHtml(fi.level)}</em><br>
+                ${(fi.explanations || []).map(e => escapeHtml(e)).join("<br>")}
+              </td></tr>`;
+          }
+        }
+
+        html += `</tbody></table></div>`;
+        content.innerHTML = html;
+      }
+
       function displayBehavioral(data) {
         const grid = document.getElementById("behavioralGrid");
         const aiContent = document.getElementById("aiUsageContent");
@@ -2087,6 +2189,7 @@
         const tbody = document.getElementById("behavioralTableBody");
 
         displayWritingProcess(data.writing_process);
+        displayAuthenticity(data.authenticity);
 
         // Display summary cards
         const stats = data.aggregate_stats;

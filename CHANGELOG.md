@@ -59,6 +59,25 @@ All notable changes to the Potato annotation platform are documented in this fil
   out as stored with every annotator's saved state, need
   `--annotator-ids-public`. Snapshots now also leave out files named under
   `ssl_key` or a `*key_file` key. A published DOI is cited in the dataset card.
+- **Authenticity paradata on every task type.** `authenticity.enabled`
+  records, per item, when the annotator leaves the page or switches windows,
+  copies the item, pastes text that did not come from the page, squeezes
+  the window beside another, or shows automation signals (`webdriver`,
+  script-generated pointer or key events, clicks with no mouse movement).
+  Counts and durations only: copied and pasted text is compared in the
+  browser and discarded. The server folds each item's views together and
+  raises review/suspect flags (`copy_then_paste`, `copy_then_away`,
+  `automation`, `external_paste`, `item_copied`, `away_from_task`,
+  `split_screen`, `pointer_teleport`), with thresholds kept server-side and
+  overridable under `detection.thresholds`. The admin Behavioral tab gains an
+  Authenticity panel with per-item evidence and an `authenticity_risk`
+  ranking, including items answered with no paradata at all;
+  `export_include_authenticity: true` writes `authenticity.<fmt>`. A notice
+  tells annotators what is recorded unless `disclose_to_annotators: false`.
+  Example: `examples/advanced/authenticity/`.
+- **`interaction_tracking` switch.** The always-on click/focus/scroll tracker
+  can be turned off (`interaction_tracking.enabled: false`, enforced by the
+  server too) or announced (`disclose_to_annotators: true`).
 - **3D medical volumes.** `volume_annotation` opens a DICOM series or a
   NIfTI file in three linked views (axial, coronal, sagittal) with window
   presets and window drag. Annotators paint label masks, draw boxes and

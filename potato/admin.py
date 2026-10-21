@@ -2705,6 +2705,9 @@ class AdminDashboard:
                 # the two scores that already exist.
                 'annotation_process': _unwrap_admin_result(
                     self.get_annotation_process_data()),
+                # Page-level authenticity paradata: its own block and its own
+                # risk score, for the same reason as the two above.
+                'authenticity': _unwrap_admin_result(self.get_authenticity_data()),
             }
 
         except Exception as e:
@@ -2999,6 +3002,147 @@ class AdminDashboard:
                 "resemble the patterns these rules look for. Read the "
                 "per-session evidence — and look at the suggestions themselves "
                 "— before acting."
+            ),
+        }
+
+    #: Weights for authenticity_risk. Dominated by the two signals that are
+    #: hardest to explain innocently -- an automated browser, and copying the
+    #: item out and bringing an answer back. Leaving the page and a narrow
+    #: window have ordinary explanations (a phone call, a small laptop
+    #: arrangement), so they barely move the ranking.
+    AUTHENTICITY_RISK_WEIGHTS = {
+        'automation': 0.30,
+        'copy_then_paste': 0.25,
+        'copy_then_away': 0.20,
+        'external_paste': 0.08,
+        'pointer_teleport': 0.07,
+        'item_copied': 0.04,
+        'away_from_task': 0.03,
+        'split_screen': 0.02,
+        'paradata_missing': 0.01,
+    }
+
+    def get_authenticity_data(self) -> Dict[str, Any]:
+        """Per-annotator authenticity-paradata rollup for the admin dashboard.
+
+        Read from the ``authenticity`` record each item's behavioural data
+        carries (see potato/authenticity.py). ``authenticity_risk`` is the share
+        of a user's items that fired each flag, weighted by
+        :attr:`AUTHENTICITY_RISK_WEIGHTS` -- a ranking of whom to look at first,
+        not evidence. The per-item flags and their numbers are the evidence.
+
+        ``paradata_missing`` counts annotated items with no authenticity record
+        at all. That is what blocked or modified scripts look like, but it is
+        also what every item annotated before the feature was switched on looks
+        like, so read it against when the feature was enabled.
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import get_authenticity_config
+            au = get_authenticity_config(config)
+        except Exception:
+            au = {"enabled": False}
+        if not au.get("enabled"):
+            return {"enabled": False, "reason": "authenticity is not enabled"}
+
+        from potato.interaction_tracking import PHASE_PAGE_SENTINEL
+
+        usm = get_user_state_manager()
+        flag_totals = Counter()
+        users = []
+        for user_id in get_users():
+            user_state = usm.get_user_state(user_id)
+            if not user_state:
+                continue
+            behavioral = user_state.instance_id_to_behavioral_data or {}
+
+            user_flags = Counter()
+            flagged_items = []
+            items = 0
+            totals = Counter()
+            webdriver = False
+            recorded_ids = set()
+            for instance_id, bd in behavioral.items():
+                record = self._behavioral_field(bd, 'authenticity', None) or {}
+                summary = record.get('summary') if isinstance(record, dict) else None
+                if not summary:
+                    continue
+                recorded_ids.add(instance_id)
+                items += 1
+                for key in ('away_events', 'away_ms', 'item_copy_events',
+                            'external_paste_events', 'teleport_clicks',
+                            'untrusted_events', 'elapsed_ms'):
+                    totals[key] += int(summary.get(key) or 0)
+                webdriver = webdriver or bool(summary.get('webdriver'))
+                verdict = record.get('verdict') or {}
+                names = verdict.get('flag_names') or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_items.append({
+                        "instance_id": instance_id,
+                        "phase_page": instance_id == PHASE_PAGE_SENTINEL,
+                        "level": verdict.get('level', 'review'),
+                        "flags": names,
+                        "evidence": {f.get('name'): f.get('evidence')
+                                     for f in verdict.get('flags', [])},
+                        "explanations": [f.get('explanation')
+                                         for f in verdict.get('flags', [])],
+                    })
+
+            try:
+                annotated = set(user_state.get_annotated_instance_ids())
+            except Exception:
+                annotated = set()
+            missing = len(annotated - recorded_ids)
+            if not items and not annotated:
+                continue
+            if missing:
+                user_flags['paradata_missing'] += missing
+                flag_totals['paradata_missing'] += missing
+
+            n = max(1, items + missing)
+            risk = sum(weight * min(1.0, user_flags.get(flag, 0) / n)
+                       for flag, weight in self.AUTHENTICITY_RISK_WEIGHTS.items())
+            elapsed = totals['elapsed_ms']
+            # Most severe first, so the 25 shown are the ones worth reading.
+            flagged_items.sort(key=lambda f: (f['level'] != 'suspect', f['instance_id']))
+            users.append({
+                "user_id": user_id,
+                "items": items,
+                "items_without_paradata": missing,
+                "away_events": totals['away_events'],
+                "away_fraction": round(min(1.0, totals['away_ms'] / elapsed), 4) if elapsed else 0,
+                "item_copy_events": totals['item_copy_events'],
+                "external_paste_events": totals['external_paste_events'],
+                "teleport_clicks": totals['teleport_clicks'],
+                "untrusted_events": totals['untrusted_events'],
+                "webdriver": webdriver,
+                "flag_counts": dict(user_flags),
+                "flagged_items": flagged_items[:25],
+                "authenticity_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["authenticity_risk"])
+        return {
+            "enabled": True,
+            "detection_enabled": au.get("detection", {}).get("enabled", True),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_items": sum(u["items"] for u in users),
+                "users_with_flags": sum(1 for u in users if u["flag_counts"]),
+                "flag_totals": dict(flag_totals),
+            },
+            "caveat": (
+                "Authenticity flags are evidence for human review, not proof of AI "
+                "use. People leave pages for ordinary reasons, copy text to look up "
+                "a word, and work on small screens. Tasks that ask annotators to "
+                "consult outside sources will trip the paste and away rules by "
+                "design. Read the per-item evidence before acting."
             ),
         }
 

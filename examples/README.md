@@ -216,10 +216,10 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 225 examples, generated from the configs themselves.
+All 226 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
-### advanced/ (57)
+### advanced/ (58)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -231,6 +231,7 @@ The `Types` column lists the annotation types each one uses.
 | [`all-phases-example/`](advanced/all-phases-example/) | All the Phases Annotations | `multiselect`, `radio`, `slider`, `span`, `text` |
 | [`annotation-telemetry/`](advanced/annotation-telemetry/) | Annotation telemetry demo | `image_annotation` |
 | [`annotator-progress/`](advanced/annotator-progress/) | Annotator Progress Dashboard Example | `radio` |
+| [`authenticity/`](advanced/authenticity/) | authenticity-paradata | `likert`, `radio` |
 | [`boundary-probing/`](advanced/boundary-probing/) | Boundary Lab — Politeness | `radio` |
 | [`boundary-probing-images/`](advanced/boundary-probing-images/) | Boundary Lab — Scene Setting | `radio` |
 | [`cases-example/`](advanced/cases-example/) | Cases Example | `radio` |

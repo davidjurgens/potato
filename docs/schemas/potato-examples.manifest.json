@@ -1,6 +1,6 @@
 {
   "categories": {
-    "advanced": 57,
+    "advanced": 58,
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 7,
@@ -18,7 +18,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 225,
+  "count": 226,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -206,6 +206,27 @@
       "path": "examples/advanced/annotator-progress/config.yaml",
       "run": "potato start examples/advanced/annotator-progress/config.yaml -p 8000",
       "task_name": "Annotator Progress Dashboard Example"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/authenticity-example.json"
+      ],
+      "description": "Page-level authenticity paradata (page leaves, item copies, external pastes, automation) on a rating task.",
+      "dir": "examples/advanced/authenticity",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "authenticity",
+      "path": "examples/advanced/authenticity/config.yaml",
+      "run": "potato start examples/advanced/authenticity/config.yaml -p 8000",
+      "task_name": "authenticity-paradata"
     },
     {
       "annotation_types": [

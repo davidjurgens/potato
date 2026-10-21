@@ -340,6 +340,11 @@ KNOWN_CONFIG_KEYS = {
     # Off by default: it is much larger than the annotations and carries fine-grained
     # interaction detail not every study wants to distribute.
     "export_include_annotation_changes": None,
+    # Sidecar files of per-item behavioural measurements. Off by default for
+    # the same reason as annotation changes, and because they describe
+    # identifiable annotators.
+    "export_include_typing_dynamics": None,
+    "export_include_authenticity": None,
     "export_annotation_format": None,
     "auto_export_interval": None,
 
@@ -426,6 +431,15 @@ KNOWN_CONFIG_KEYS = {
         "store_events", "idle_ms", "flush_interval_ms",
         "disclose_to_annotators", "disclosure_text", "detection",
     },
+    # Authenticity paradata: page-level, content-blind signals of outsourced or
+    # automated work (leaving the page, copying the item, external pastes,
+    # webdriver) for every task type. Validated by validate_authenticity_config().
+    "authenticity": {
+        "enabled", "flush_interval_ms", "min_away_ms", "track_pointer",
+        "disclose_to_annotators", "disclosure_text", "detection",
+    },
+    # The always-on interaction tracker (clicks, focus, scroll, shortcut keys).
+    "interaction_tracking": {"enabled", "disclose_to_annotators", "disclosure_text"},
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
@@ -2354,6 +2368,193 @@ def get_annotation_telemetry_disclosure_text(config_data: Dict[str, Any]) -> str
     return DEFAULT_TELEMETRY_DISCLOSURE
 
 
+# --------------------------------------------------------------------------
+# Authenticity paradata (page-level; every task type)
+# --------------------------------------------------------------------------
+
+#: Defaults for the ``authenticity`` block. Opt-in, like keystroke logging: it
+#: records behaviour of identifiable annotators.
+AUTHENTICITY_DEFAULTS: Dict[str, Any] = {
+    "enabled": False,
+    "flush_interval_ms": 10000,
+    # Shorter absences are not counted: alt-tabbing past a notification is not
+    # leaving the task.
+    "min_away_ms": 1000,
+    # Pointer movement totals and the teleport-click check. Off removes the
+    # pointermove listener entirely.
+    "track_pointer": True,
+    "disclose_to_annotators": True,
+    "disclosure_text": None,       # None = DEFAULT_AUTHENTICITY_DISCLOSURE below
+    "detection": {
+        "enabled": True,
+        "thresholds": {},
+    },
+}
+
+#: States what is and is not collected, for the same reason as the keystroke
+#: notice: "your activity is recorded" invites the assumption that the copied
+#: and pasted text itself is stored.
+DEFAULT_AUTHENTICITY_DISCLOSURE = (
+    "This task records when you leave this page and whether you copy the item "
+    "or paste text from elsewhere — not what you copy or paste."
+)
+
+INTERACTION_TRACKING_DEFAULTS: Dict[str, Any] = {
+    # On by default because existing projects (and the admin Behavioral tab)
+    # depend on it; a project can now switch it off.
+    "enabled": True,
+    "disclose_to_annotators": False,
+    "disclosure_text": None,
+}
+
+DEFAULT_INTERACTION_TRACKING_DISCLOSURE = (
+    "This task records how you use the page — clicks, scrolling and time spent "
+    "on each item — not what you type."
+)
+
+
+def _validate_disclosure_block(name: str, block: Dict[str, Any],
+                               bool_keys: tuple, int_keys: tuple) -> List[str]:
+    errors = []
+    for key in bool_keys:
+        if key in block and not isinstance(block[key], bool):
+            errors.append(f"{name}.{key} must be true or false")
+    for key in int_keys:
+        v = block.get(key)
+        if key in block and (not isinstance(v, int) or isinstance(v, bool) or v <= 0):
+            errors.append(f"{name}.{key} must be a positive integer")
+    text = block.get("disclosure_text")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        errors.append(
+            f"{name}.disclosure_text must be a non-empty string "
+            "(omit it to use the default notice)")
+    return errors
+
+
+def validate_authenticity_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``authenticity`` and ``interaction_tracking`` blocks.
+
+    See ``docs/advanced/authenticity_paradata.md``.
+    """
+    errors = []
+    au = config_data.get("authenticity")
+    if au is not None:
+        if not isinstance(au, dict):
+            raise ConfigValidationError("authenticity must be a mapping")
+        errors += _validate_disclosure_block(
+            "authenticity", au,
+            ("enabled", "track_pointer", "disclose_to_annotators"),
+            ("flush_interval_ms", "min_away_ms"))
+        detection = au.get("detection")
+        if detection is not None:
+            if not isinstance(detection, dict):
+                errors.append("authenticity.detection must be a mapping")
+            else:
+                if "enabled" in detection and not isinstance(detection["enabled"], bool):
+                    errors.append("authenticity.detection.enabled must be true or false")
+                th = detection.get("thresholds")
+                if th is not None:
+                    from potato.authenticity import DEFAULT_THRESHOLDS
+                    if not isinstance(th, dict):
+                        errors.append(
+                            "authenticity.detection.thresholds must be a mapping "
+                            "of threshold name to number")
+                    else:
+                        for key, value in th.items():
+                            if key not in DEFAULT_THRESHOLDS:
+                                errors.append(
+                                    f"authenticity.detection.thresholds.{key} is not a "
+                                    "known threshold (known: "
+                                    + ", ".join(sorted(DEFAULT_THRESHOLDS)) + ")")
+                            elif (isinstance(value, bool)
+                                  or not isinstance(value, (int, float))):
+                                errors.append(
+                                    f"authenticity.detection.thresholds.{key} "
+                                    "must be a number")
+
+    it = config_data.get("interaction_tracking")
+    if it is not None:
+        if not isinstance(it, dict):
+            raise ConfigValidationError("interaction_tracking must be a mapping")
+        errors += _validate_disclosure_block(
+            "interaction_tracking", it, ("enabled", "disclose_to_annotators"), ())
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid authenticity / interaction_tracking configuration:\n  - "
+            + "\n  - ".join(errors))
+
+    if isinstance(au, dict) and au.get("enabled") \
+            and not au.get("disclose_to_annotators", True):
+        logger.warning(
+            "authenticity.disclose_to_annotators is false. Page-leave, copy and "
+            "paste events are behavioural data about your annotators; check that "
+            "your consent documentation and ethics approval cover collecting "
+            "them silently.")
+
+
+def get_authenticity_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The ``authenticity`` block with defaults filled in; always safe to index."""
+    import copy
+    merged = copy.deepcopy(AUTHENTICITY_DEFAULTS)
+    block = (config_data or {}).get("authenticity")
+    if not isinstance(block, dict):
+        return merged
+    for key, value in block.items():
+        if key == "detection" and isinstance(value, dict):
+            merged["detection"].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_authenticity_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The subset the browser needs.
+
+    Thresholds are withheld, as for keystroke logging: shipping them would tell
+    an annotator exactly how long they may stay away.
+    """
+    au = get_authenticity_config(config_data)
+    return {
+        "enabled": bool(au["enabled"]),
+        "flush_interval_ms": au["flush_interval_ms"],
+        "min_away_ms": au["min_away_ms"],
+        "track_pointer": bool(au["track_pointer"]),
+        "disclosure_text": _disclosure_text(au, DEFAULT_AUTHENTICITY_DISCLOSURE),
+    }
+
+
+def get_interaction_tracking_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The ``interaction_tracking`` block with defaults filled in."""
+    merged = dict(INTERACTION_TRACKING_DEFAULTS)
+    block = (config_data or {}).get("interaction_tracking")
+    if isinstance(block, dict):
+        merged.update(block)
+    return merged
+
+
+def get_interaction_tracking_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    it = get_interaction_tracking_config(config_data)
+    return {
+        "enabled": bool(it["enabled"]),
+        "disclosure_text": _disclosure_text(
+            it, DEFAULT_INTERACTION_TRACKING_DISCLOSURE, default_disclose=False),
+    }
+
+
+def _disclosure_text(block: Dict[str, Any], default_text: str,
+                     default_disclose: bool = True) -> str:
+    """The notice to show, or ``""`` when the feature or its disclosure is off."""
+    if not block.get("enabled"):
+        return ""
+    if not block.get("disclose_to_annotators", default_disclose):
+        return ""
+    custom = block.get("disclosure_text")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    return default_text
+
+
 def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``corpus_map`` block when enabled and warn on quota conflict.
 
@@ -2606,6 +2807,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate annotation telemetry (drawing dynamics) block if present
     validate_annotation_telemetry_config(config_data)
+
+    # Validate authenticity paradata and interaction tracking blocks if present
+    validate_authenticity_config(config_data)
 
     # Validate ui_language (bundled code / _base / inline overrides)
     validate_ui_language_config(config_data)

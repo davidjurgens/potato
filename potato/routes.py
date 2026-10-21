@@ -8990,6 +8990,12 @@ def track_interactions():
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
+    # A page rendered before interaction_tracking was switched off may still
+    # post; the switch is enforced here, not only in the browser.
+    from potato.server_utils.config_module import get_interaction_tracking_config
+    if not get_interaction_tracking_config(config).get("enabled", True):
+        return jsonify({"status": "disabled"})
+
     username = session['username']
     data = request.get_json()
 
@@ -9674,6 +9680,95 @@ def track_annotation_telemetry():
                 "Could not persist user state after telemetry flush: %s", e)
 
     return jsonify({"status": "ok", "sessions_recorded": recorded})
+
+
+@app.route("/api/track_authenticity", methods=["POST"])
+def track_authenticity():
+    """
+    Receive an authenticity-paradata snapshot for one view of an item.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",          # null on phase pages
+        "view_id": "...",              # random per item view, [A-Za-z0-9_-]{1,64}
+        "snapshot": {...},             # running totals; see potato/authenticity.py
+        "tracker_version": 1
+    }
+
+    The snapshot replaces the previous one for the same view, so a retried post
+    cannot double-count. Unknown fields are dropped and values clamped before
+    anything is stored; the verdict is computed here, never on the client.
+    """
+    import time as time_module
+    from potato import authenticity
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id)
+    from potato.server_utils.config_module import get_authenticity_config
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    au_config = get_authenticity_config(config)
+    if not au_config.get("enabled"):
+        return jsonify({"status": "disabled"})
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "No data provided"}), 400
+    view_id = data.get("view_id")
+    if not authenticity.valid_view_id(view_id):
+        return jsonify({"error": "Invalid view_id"}), 400
+    snapshot = authenticity.sanitize_snapshot(data.get("snapshot"))
+    if not snapshot:
+        return jsonify({"error": "Empty snapshot"}), 400
+
+    user_state = get_user_state(session['username'])
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        phase_name, _page = None, None
+
+    instance_id = normalize_instance_id(data.get('instance_id'))
+    bd = get_or_create_behavioral_data(
+        user_state.instance_id_to_behavioral_data, instance_id)
+    if not hasattr(bd, 'authenticity'):
+        return jsonify({"error": "Behavioral data unavailable"}), 500
+
+    detection = au_config.get("detection", {}) or {}
+    bd.authenticity = authenticity.record_view(
+        bd.authenticity, view_id, snapshot,
+        now=time_module.time(),
+        phase=phase_name,
+        page=str(_page) if _page is not None else None,
+        thresholds=dict(detection.get("thresholds") or {}),
+        detection=detection.get("enabled", True),
+    )
+
+    # Same reasoning as track_typing: the annotator may leave without saving
+    # again, and the most informative post (leaving the page) is often the last.
+    try:
+        get_user_state_manager().save_user_state(user_state)
+    except Exception as e:
+        logger.warning("Could not persist user state after authenticity flush: %s", e)
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/admin/api/authenticity", methods=["GET"])
+def admin_api_authenticity():
+    """
+    Per-annotator authenticity rollup (page leaves, item copies, external
+    pastes, automation). Admin-only. ``enabled: False`` when the feature is off.
+    Also available as the ``authenticity`` key of /admin/api/behavioral_analytics.
+    """
+    result = admin_dashboard.get_authenticity_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
 
 
 @app.route("/api/annotation_telemetry/<instance_id>", methods=["GET"])
@@ -11207,6 +11302,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/typing_summary/<instance_id>", "get_typing_summary", get_typing_summary, methods=["GET"])
     app.add_url_rule("/api/track_annotation_telemetry", "track_annotation_telemetry", track_annotation_telemetry, methods=["POST"])
     app.add_url_rule("/api/annotation_telemetry/<instance_id>", "get_annotation_telemetry", get_annotation_telemetry, methods=["GET"])
+    app.add_url_rule("/api/track_authenticity", "track_authenticity", track_authenticity, methods=["POST"])
+    app.add_url_rule("/admin/api/authenticity", "admin_api_authenticity", admin_api_authenticity, methods=["GET"])
 
     # Adjudication routes
     app.add_url_rule("/adjudicate", "adjudicate", adjudicate, methods=["GET"])

@@ -62,7 +62,7 @@ over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 62 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 493 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 495 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -222,6 +222,7 @@ over prose when writing a config or calling the API.
 - [Keystroke Logging](advanced/keystroke_logging.md) - Content-blind typing dynamics on free-text fields
 - [Writing-Process Detection](advanced/writing_process_detection.md) - Tell composed text from transcribed or LLM-pasted text
 - [Keystroke Logging Ethics](advanced/keystroke_logging_ethics.md) - IRB, consent, and participant rights
+- [Authenticity Paradata](advanced/authenticity_paradata.md) - Page leaves, item copies, external pastes and automation on every task type
 - [Annotation History](administration/annotation_history.md) - Tracking annotation changes
 
 ## Data & Output
@@ -4631,6 +4632,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `analytics` |  | object |  | Cost and latency analytics over ingested traces: optional per-model pricing, and the thresholds that raise a regression alert | `pricing`, `thresholds` |
 | `annotation_telemetry` |  | object |  | The drawing-process analogue of keystroke_logging: content-blind telemetry on geometry schemas -- when someone draws, zooms, revises and accepts AI suggestions, never what or where -- and the rubber-stamping screening built on it | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_ms`, `include_schemas`, `store_events` |
 | `annotator_dashboard` |  | boolean or object | `False` | Read-only progress page at /progress. Shows project totals and the requesting annotator's own stats, never another annotator's identity. A bare `true` is accepted as shorthand for `{enabled: true}` | `enabled`, `show_active_annotators`, `show_personal_progress`, `show_project_progress` |
+| `authenticity` |  | object |  | Page-level, content-blind authenticity paradata on every task type: leaving the page, copying the item, pasting text that did not come from the page, a narrowed window, and automation signals. Counts and durations only -- copied and pasted text never leaves the browser | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `flush_interval_ms`, `min_away_ms`, `track_pointer` |
 | `boundary_probing` |  | object |  | Boundary Lab. After a label is chosen, shows counterfactual edits of the item and asks whether they flip it -- which maps the decision boundary and exports as a contrast set | `ai_support`, `debounce_ms`, `enabled`, `include_invariance`, `precomputed_key`, `probes_per_item`, `rationale_on_flip`, `schema`, `sources` |
 | `bws_config` |  | object |  | Best-worst scaling. Builds the tuples annotators compare and scores the results into a ranking. Its presence is what enables BWS | `min_item_appearances`, `num_tuples`, `scoring`, `seed`, `tuple_size` |
 | `category_assignment` |  | object |  | Route items to annotators by the item's category, optionally gated on a qualification the annotator earned in training | `category_key`, `dynamic`, `enabled`, `fallback`, `qualification` |
@@ -4640,6 +4642,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `embeddings` |  | object |  | The project-wide embedder shared by the corpus map, diversity ordering and duplicate detection. `backend` (auto by default), plus `model`, `source_field`, `cache_dir`, `media_root`; anything else is passed through to the backend. A custom backend needs `entrypoint` ('module.path:callable') or `endpoint` (an HTTP URL) |  |
 | `event_template` |  | object |  | Cross-document event registry: admin-defined slots that annotators fill with evidence drawn from many documents | `allow_annotator_create`, `enabled`, `name`, `seed_events`, `slots` |
 | `ibws_config` |  | object |  | Iterative best-worst scaling: re-generates tuples each round, concentrating comparisons where the ranking is still uncertain | `max_rounds`, `scoring_method`, `seed`, `tuple_size`, `tuples_per_item_per_round` |
+| `interaction_tracking` |  | object |  | The general behavioural tracker (clicks, focus, scroll, shortcut keys) that feeds the admin Behavioral tab. On by default | `disclose_to_annotators`, `disclosure_text`, `enabled` |
 | `keystroke_logging` |  | object |  | Content-blind typing dynamics on free-text fields -- when someone pauses, revises or pastes, never which keys -- and the composed/transcribed/pasted detection built on them | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
 | `mace` |  | object |  | MACE competence estimation: infers per-annotator reliability and a predicted label per item from the disagreement pattern alone | `enabled`, `min_annotations_per_item`, `min_items`, `num_iters`, `num_restarts`, `trigger_every_n` |
 | `plugins` |  | array |  | Installed plugins to load, by name. A plugin adds annotation or display types; `potato plugins` lists the installed ones. Plugins run as Python inside the server, so only listed ones load |  |
@@ -4691,7 +4694,9 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `auto_redirect_on_completion` |  | boolean | `False` | Send annotators to the crowd platform's completion URL when they finish, instead of leaving them on the done page |  |
 | `export_annotation_format` |  | array or string | `[]` | Formats the periodic auto-export writes, as a list (a bare string is accepted). Empty means no auto-export |  |
 | `export_include_annotation_changes` |  | boolean | `False` | Write annotation_changes.csv, the timestamped record of every answer revision. Off by default: it is far larger than the annotations and carries interaction detail not every study wants to distribute |  |
+| `export_include_authenticity` |  | boolean | `False` | Write authenticity.csv, the per-item page-leave, copy, paste and automation paradata with its verdict. Off by default for the same reason |  |
 | `export_include_phase_data` |  | boolean | `False` | Include consent, instruction and survey responses in exports. Off by default: survey answers are usually where the PII is |  |
+| `export_include_typing_dynamics` |  | boolean | `False` | Write typing_dynamics.csv, the per-field keystroke features and writing-process verdicts. Off by default: they describe identifiable annotators |  |
 
 ## Media
 
@@ -41377,6 +41382,18 @@ Behavioral data is stored in:
 ### Enabling Behavioral Tracking
 
 Behavioral tracking is enabled by default. No additional configuration is required.
+It can be switched off, or announced to annotators with a notice:
+
+```yaml
+interaction_tracking:
+  enabled: false                # no click/focus/scroll/key stream
+  disclose_to_annotators: true  # show a notice when it is on
+```
+
+!!! note "Signs of AI use or automation on any task type"
+    Leaving the page, copying the item, pasting outside text and automation signals
+    are recorded by a separate opt-in feature. See
+    [Authenticity Paradata](authenticity_paradata.md).
 
 !!! note "Keystroke logging is a separate, opt-in feature"
     Fine-grained typing dynamics on free-text fields — pauses, bursts,
@@ -43112,6 +43129,183 @@ behavioural data about people, and consent documentation should cover it.
 - [Behavioral Tracking](behavioral_tracking.md)
 - [Geometry Agreement](geometry_agreement.md) — agreement catches disagreement;
   this catches agreement that was never actually reached
+
+
+---
+
+<!-- source: docs/advanced/authenticity_paradata.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/authenticity_paradata/
+
+# Authenticity Paradata
+
+Potato can record **page-level, content-blind paradata**: signs that an item was
+answered somewhere other than on the page, or by something other than a person. It
+works on every task type, including Likert scales, radio buttons, spans, rankings and
+media. [Keystroke logging](keystroke_logging.md) only covers free-text fields.
+
+This is the same kind of measurement that survey-paradata tools such as ECSP
+(Embedded Client Side Paradata, University of Göttingen) and crowdsourcing platforms'
+"authenticity checks" collect. The difference is that it is built into the annotation
+page and stored with the annotation.
+
+!!! warning "Evidence for review, not proof"
+    Every signal here has an ordinary explanation. People leave pages to answer the
+    door, copy a phrase to look up a word, and work on small screens. A task that asks
+    annotators to consult outside sources will trip the paste and away rules by design.
+    Read the per-item evidence before acting on a flag, and never reject work on a
+    flag alone.
+
+## What is recorded
+
+For each view of an item (one load of it), the browser keeps running totals and sends
+them to the server about every 10 seconds, and again when the page is hidden or the
+item changes. **No text is ever sent.** Copied and pasted text is compared against
+the page in memory and then discarded.
+
+| Signal | Fields |
+|---|---|
+| Left the page (tab hidden) | `hidden_events`, `hidden_ms` |
+| Window lost focus while visible (another window) | `blur_events`, `blur_ms`, `max_away_ms` |
+| Away in a page the task opened (codebook link) | `linked_away_events`, `linked_away_ms` (excluded from flags) |
+| Copied the item text | `item_copy_events`, `item_copy_chars` |
+| Selected or right-clicked the item text | `item_select_events`, `item_context_menu_events` |
+| Other copies and cuts | `other_copy_events`, `cut_events` |
+| Pastes | `paste_events`, `item_paste_events` (pasting the item back), `external_paste_events`, `external_paste_words`, `max_external_paste_words` |
+| Copy-then-… pairing | `max_away_after_item_copy_ms`, `max_paste_words_after_item_copy` |
+| Window size | `min_window_ratio` (window width ÷ screen width), `large_screen`, `resize_events`, `zoom_changes` |
+| Pointer | `pointer_moves` (sampled), `pointer_distance_px`, `mouse_clicks`, `teleport_clicks` |
+| Automation | `webdriver`, `untrusted_events` (script-generated pointer/key events) |
+| Device | `touch_input` |
+| Time | `elapsed_ms` (client), `server_span_ms` (first to last report, measured by the server) |
+
+A paste counts as **external** only when the text is not part of the item, not
+something the annotator copied on this page, and not already in one of the page's
+text fields.
+
+## Flags
+
+The server merges every view of an item and evaluates these rules. Thresholds live on
+the server and are never sent to the page.
+
+| Flag | Fires when (default) | Severity |
+|---|---|---|
+| `automation` | `navigator.webdriver` is set, or any pointer/key event has `isTrusted = false` | suspect |
+| `copy_then_paste` | Item copied, then ≥ 10 words of external text pasted | suspect |
+| `copy_then_away` | Item copied, then away from the page ≥ 10 s (closed-format items: copy, ask elsewhere, come back, click) | suspect |
+| `external_paste` | ≥ 10 words of external text pasted, without a preceding item copy | review |
+| `item_copied` | ≥ 40 characters of the item copied, with neither of the above | review |
+| `away_from_task` | Left the page ≥ 3 times, or away ≥ 60 s and ≥ 50 % of the time on the item | review |
+| `split_screen` | Window ≤ 60 % of the screen width on a screen ≥ 1200 px, without touch input | review |
+| `pointer_teleport` | ≥ 3 mouse clicks at a new position with no movement in between | review |
+
+The admin rollup adds **`paradata_missing`**: the annotated items that have no
+authenticity record at all. This is what blocked or modified scripts look like. It is
+also what every item annotated *before* the feature was switched on looks like, so
+read it against the date you enabled it.
+
+### Why these rules
+
+- **Copying the item, then pasting outside text** was the core heuristic for LLM use
+  in "A Penny for Your Prompts" (arXiv:2607.00403, 2026). A single copy or paste on
+  its own was not diagnostic: 30.7 % of responses had one. That is why `item_copied`
+  and `external_paste` are only `review`.
+- **Tab switching** was a weak signal on its own in the same study (F1 = .545). It
+  ranks low in the risk score.
+- **Mouse-click counts and completion time** did not separate LLM users from others in
+  that study, so neither is a flag. Pointer data is only used for the teleport check,
+  because a physical mouse cannot change position without emitting movement events.
+- Potato's own scripts only ever synthesize `input`, `change` and `click` events.
+  Script-generated `pointerdown`, `mousedown` or `keydown` events therefore came from
+  something else.
+
+## Configuration
+
+```yaml
+authenticity:
+  enabled: true                # default false
+  min_away_ms: 1000            # shorter absences are not counted
+  flush_interval_ms: 10000
+  track_pointer: true          # false removes the pointermove listener
+  disclose_to_annotators: true # show a notice on every page
+  disclosure_text: null        # null = the default notice
+  detection:
+    enabled: true
+    thresholds:                # any key from the flag table above
+      away_from_task.min_events: 5
+      copy_then_away.min_away_ms: 20000
+
+# Write authenticity.<fmt> beside the annotations on export.
+export_include_authenticity: true
+```
+
+Threshold keys: `copy_then_paste.min_words`, `copy_then_away.min_away_ms`,
+`external_paste.min_words`, `item_copied.min_chars`, `away_from_task.min_events`,
+`away_from_task.min_ms`, `away_from_task.min_fraction`,
+`split_screen.max_window_ratio`, `pointer_teleport.min_clicks`. An unknown key is a
+startup error.
+
+The default notice reads:
+
+> This task records when you leave this page and whether you copy the item or paste
+> text from elsewhere — not what you copy or paste.
+
+The notice is rendered by the server, so it appears even if scripts are blocked.
+
+### The general interaction tracker
+
+The older, always-on [behavioral tracker](behavioral_tracking.md) (clicks, focus,
+scroll, shortcut keys) can now be switched off or announced:
+
+```yaml
+interaction_tracking:
+  enabled: true                 # false: no click/focus/scroll/key stream
+  disclose_to_annotators: false # true shows a notice
+  disclosure_text: null
+```
+
+Switching it off stops the ambient stream on both the page and the server. AI-assistant
+usage and the annotation change trail are still recorded, because they describe where
+the saved answer came from rather than ambient behaviour.
+
+## Where the data goes
+
+- **user_state.json:** `instance_id_to_behavioral_data[<id>].authenticity`, holding
+  `views` (each view's snapshot, with `first_seen`/`last_seen` server timestamps and
+  phase/page), `summary` (the merge) and `verdict`. Survey, consent and training pages
+  share the `__phase_page__` bucket, and each view is stamped with its phase and page.
+- **Admin dashboard:** Behavioral tab, **Authenticity** panel. It shows per-annotator
+  counts, flags, an `authenticity_risk` ranking and the per-item evidence. It is also
+  available as JSON at `GET /admin/api/authenticity` and under the `authenticity` key
+  of `/admin/api/behavioral_analytics`.
+- **Export:** with `export_include_authenticity: true` the tabular exporters write
+  `authenticity.<fmt>`, one row per (user, annotated item), with every field above plus
+  `verdict_level` and `flags`.
+
+`authenticity_risk` weights the share of a user's items that fired each flag:
+automation 0.30, copy_then_paste 0.25, copy_then_away 0.20, external_paste 0.08,
+pointer_teleport 0.07, item_copied 0.04, away_from_task 0.03, split_screen 0.02,
+paradata_missing 0.01. It tells you whom to look at first. It is not a probability.
+
+## Limits
+
+- Everything is measured in the annotator's browser, so a determined annotator can
+  disable or rewrite the script. `paradata_missing` catches the crude version of this.
+  Server-side timing (`server_span_ms`) cannot be inflated by the client.
+- Using a chatbot on a second device (a phone) leaves no trace on the page at all.
+  Combine these signals with [attention checks and gold
+  items](../workflow/quality_control.md) and with clear instructions not to use AI. A
+  plain request reduced AI use substantially in published platform tests.
+- When `text_as_image` is on, the item cannot be copied, so the copy rules never fire.
+  Leaving the page is still recorded.
+- Pointer rules do not apply on touch devices. Those items carry a note in the verdict.
+
+## Ethics and consent
+
+These are behavioural measurements of identifiable people. State in your consent form
+that page-leave, copy and paste *events* are recorded (not their content), keep
+`disclose_to_annotators` on unless your ethics approval covers silent collection, and
+treat the export like any other personal data. The guidance in [Keystroke Logging
+Ethics](keystroke_logging_ethics.md) applies here too.
 
 
 ---
@@ -62671,7 +62865,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **171 top-level config keys**, **62 annotation types**, and
+It currently covers **175 top-level config keys**, **62 annotation types**, and
 **24 display types**.
 
 ### Editor validation
@@ -62721,7 +62915,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **493 paths / 531 operations**, generated by
+An index of Potato's HTTP surface: **495 paths / 533 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:
@@ -62766,7 +62960,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **225 example projects** in the repository, across 17
+A derived index of the **226 example projects** in the repository, across 17
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.

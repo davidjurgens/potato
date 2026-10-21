@@ -1870,6 +1870,62 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Rubber-stamping detection: `enabled`, `calibrate` and `thresholds`",
         type="object", category=FEATURES,
     ),
+    "authenticity": _D(
+        "Page-level, content-blind authenticity paradata on every task type: "
+        "leaving the page, copying the item, pasting text that did not come "
+        "from the page, a narrowed window, and automation signals. Counts and "
+        "durations only -- copied and pasted text never leaves the browser",
+        type="object", category=FEATURES,
+        see_also=("keystroke_logging", "interaction_tracking"),
+    ),
+    "authenticity.enabled": _D(
+        "Record authenticity paradata", type="boolean", default=False,
+        category=FEATURES,
+    ),
+    "authenticity.flush_interval_ms": _D(
+        "How often the browser posts the current item's running totals",
+        type="integer", default=10000, category=FEATURES,
+    ),
+    "authenticity.min_away_ms": _D(
+        "Absences from the page shorter than this are not counted",
+        type="integer", default=1000, category=FEATURES,
+    ),
+    "authenticity.track_pointer": _D(
+        "Record pointer movement totals and clicks that land with no movement "
+        "in between. false removes the pointermove listener",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "authenticity.disclose_to_annotators": _D(
+        "Show the recording notice", type="boolean", default=True, category=FEATURES,
+    ),
+    "authenticity.disclosure_text": _D(
+        "Replace the default notice with your own wording",
+        type="string", category=FEATURES,
+    ),
+    "authenticity.detection": _D(
+        "Server-side flags: `enabled` and `thresholds` (keys such as "
+        "`away_from_task.min_events`, `copy_then_away.min_away_ms`). "
+        "Thresholds are never sent to the browser",
+        type="object", category=FEATURES,
+    ),
+    "interaction_tracking": _D(
+        "The general behavioural tracker (clicks, focus, scroll, shortcut "
+        "keys) that feeds the admin Behavioral tab. On by default",
+        type="object", category=FEATURES, see_also=("authenticity",),
+    ),
+    "interaction_tracking.enabled": _D(
+        "Record the click, focus, scroll and key stream. AI-assistant usage "
+        "and the annotation change trail are recorded either way",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "interaction_tracking.disclose_to_annotators": _D(
+        "Show a notice that page interaction is recorded",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "interaction_tracking.disclosure_text": _D(
+        "Replace the default notice with your own wording",
+        type="string", category=FEATURES,
+    ),
     "annotator_dashboard": _D(
         "Read-only progress page at /progress. Shows project totals and the "
         "requesting annotator's own stats, never another annotator's identity. "
@@ -2879,6 +2935,18 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "export_include_phase_data": _D(
         "Include consent, instruction and survey responses in exports. Off by "
         "default: survey answers are usually where the PII is",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+    "export_include_typing_dynamics": _D(
+        "Write typing_dynamics.csv, the per-field keystroke features and "
+        "writing-process verdicts. Off by default: they describe identifiable "
+        "annotators",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+    "export_include_authenticity": _D(
+        "Write authenticity.csv, the per-item page-leave, copy, paste and "
+        "automation paradata with its verdict. Off by default for the same "
+        "reason",
         type="boolean", default=False, category=ANNOT_FEAT,
     ),
     "export_include_annotation_changes": _D(

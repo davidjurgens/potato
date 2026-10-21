@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Authenticity paradata
+#
+# Page-level, content-blind signals of outsourced or automated work on EVERY
+# task type -- not just free text: leaving the page, copying the item, pasting
+# text from elsewhere, a browser window squeezed beside another, and automation
+# (webdriver, script-generated input, clicks with no mouse movement).
+#
+# Copied and pasted text is compared against the page in the browser and
+# discarded. Only counts, durations and word counts are stored.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/authenticity/config.yaml -p 8000
+#
+# Then open the admin dashboard -> Behavioral tab -> Authenticity.
+# See docs/advanced/authenticity_paradata.md
+
+annotation_task_name: authenticity-paradata
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: csv
+
+data_files:
+  - data/authenticity-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+authenticity:
+  enabled: true
+
+  # Absences shorter than this are not counted as leaving the page.
+  min_away_ms: 1000
+  flush_interval_ms: 10000
+
+  # Pointer movement totals and the "click with no movement" check.
+  track_pointer: true
+
+  # Show annotators a notice of what is recorded. Leave this on unless your
+  # consent documentation covers it another way.
+  disclose_to_annotators: true
+
+  detection:
+    enabled: true
+    # Override any built-in threshold, e.g.
+    # thresholds:
+    #   away_from_task.min_events: 5
+    #   copy_then_away.min_away_ms: 20000
+    thresholds: {}
+
+# Optional: the general interaction tracker (clicks, scroll, focus) is on by
+# default. It can be switched off, or announced to annotators.
+interaction_tracking:
+  enabled: true
+  disclose_to_annotators: false
+
+# Write authenticity.csv next to the annotations on export.
+export_include_authenticity: true
+
+annotation_schemes:
+  - annotation_type: likert
+    name: agreement
+    description: "How much do you agree with this statement?"
+    size: 5
+    min_label: "Strongly disagree"
+    max_label: "Strongly agree"
+    label_requirement:
+      required: true
+
+  - annotation_type: radio
+    name: tone
+    description: "What is the tone of the statement?"
+    labels:
+      - neutral
+      - persuasive
+      - alarmist
+
+base_html_template: default
+header_file: default
+site_dir: default
