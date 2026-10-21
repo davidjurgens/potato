@@ -119,13 +119,41 @@ def dense_frames(objects: Iterable[dict], n_frames: int) -> Dict[int, List[dict]
     return out
 
 
-def _occlusion(attributes: Dict[str, Any]) -> int:
+def occlusion_attribute(attributes: Dict[str, Any]):
+    """``(code, unrecognized)`` from an occluded/occlusion attribute.
+
+    ``code`` is KITTI's 0-3 occlusion code, 0 when the attribute is unset.
+    Names are read with underscores as spaces, so the KITTI 2D importer's
+    ``partly_occluded`` and the docs' ``partial`` both give 1. A value that
+    cannot be read gives 3 (KITTI's "unknown") and comes back as
+    ``unrecognized`` for the caller to report.
+    """
     value = attributes.get("occluded", attributes.get("occlusion"))
+    if value is None or value == "":
+        return 0, None
     if isinstance(value, bool):
-        return 1 if value else 0
+        return (1 if value else 0), None
     if isinstance(value, (int, float)):
-        return int(value)
-    return OCCLUSION_LEVELS.get(str(value).strip().lower(), 0) if value is not None else 0
+        if float(value).is_integer() and 0 <= value <= 3:
+            return int(value), None
+        return 3, value
+    code = OCCLUSION_LEVELS.get(str(value).strip().lower().replace("_", " "))
+    if code is None:
+        return 3, value
+    return code, None
+
+
+def unknown_occlusion_warning(counts: Dict[str, int]) -> str:
+    """The export warning for occlusion values occlusion_attribute could not read."""
+    values = ", ".join(f"'{v}'" for v in sorted(counts))
+    return (f"{sum(counts.values())} object(s) have an occlusion value that is not "
+            f"none/partly/largely/unknown (or fully_visible, partly_occluded, "
+            f"largely_occluded), a code 0-3 or true/false ({values}); they were "
+            f"written as 3 (unknown).")
+
+
+def _occlusion(attributes: Dict[str, Any]) -> int:
+    return occlusion_attribute(attributes)[0]
 
 
 #: Categorical truncation values, as KITTI's tracking codes.
@@ -146,7 +174,20 @@ def truncation_attribute(attributes: Dict[str, Any]):
     the attribute was numeric; both None when unset. ``unrecognized`` is a
     value that could not be read, which the caller reports.
     """
-    value = attributes.get("truncated", attributes.get("truncation"))
+    # A yes/no `truncated` beside a numeric `truncation` share (the
+    # attribute docs' example shows the share only once truncated is set):
+    # the share is the more exact of the two.
+    shares = []
+    # A `truncated: false` wins over a share left behind from before it was
+    # unset (show_if hides the share then, but does not clear it).
+    if ("truncation" in attributes and "truncated" in attributes
+            and attributes["truncated"] is not False):
+        shares = [attributes[k] for k in ("truncation", "truncated")
+                  if isinstance(attributes[k], (int, float))
+                  and not isinstance(attributes[k], bool)
+                  and 0.0 <= attributes[k] <= 1.0]
+        shares = [float(v) for v in shares]
+    value = shares[0] if shares else attributes.get("truncated", attributes.get("truncation"))
     if value is None or value == "":
         return None, None, None
     if isinstance(value, bool):
@@ -154,9 +195,12 @@ def truncation_attribute(attributes: Dict[str, Any]):
     if isinstance(value, int) and value in (0, 1, 2):
         return value, None, None
     if isinstance(value, (int, float)):
-        fraction = max(0.0, min(1.0, float(value)))
+        if not 0.0 <= float(value) <= 1.0:
+            # 1.7 or -0.2 is neither a share nor a code; it used to be clamped.
+            return None, None, value
+        fraction = float(value)
         return (0 if fraction <= 0 else 2 if fraction >= 1 else 1), fraction, None
-    code = TRUNCATION_LEVELS.get(str(value).strip().lower())
+    code = TRUNCATION_LEVELS.get(str(value).strip().lower().replace("_", " "))
     if code is None:
         return None, None, value
     return code, None, None

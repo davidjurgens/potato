@@ -234,7 +234,123 @@
       "description": "Model-backed label suggestions shown alongside each item",
       "properties": {
         "ai_config": {
+          "additionalProperties": true,
           "description": "Everything about the model itself: model, base_url, api_key, max_tokens, temperature, timeout, include. One level deeper than the obvious guess \u2014 ai_support.model is not read",
+          "properties": {
+            "api_base": {
+              "description": "Older spelling of base_url, accepted by the openai_vision endpoint",
+              "type": "string"
+            },
+            "api_key": {
+              "description": "Key for a commercial endpoint. Not needed when base_url points at a self-hosted server; openai and openai_vision also read OPENAI_API_KEY from the environment",
+              "type": "string"
+            },
+            "base_url": {
+              "description": "An OpenAI-compatible server to use instead of the vendor's: vLLM, SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes api_key optional, because self-hosted servers do not have one",
+              "examples": [
+                "http://localhost:8000/v1"
+              ],
+              "type": "string"
+            },
+            "classes": {
+              "description": "Detection classes to keep, by name. Anything else the detector finds is dropped (yolo)",
+              "type": "array"
+            },
+            "confidence_threshold": {
+              "description": "Lowest detection score kept",
+              "type": "number"
+            },
+            "custom_classes": {
+              "description": "Open-vocabulary class names for a detector that accepts them, instead of its trained label set",
+              "type": "array"
+            },
+            "default_video_fps": {
+              "description": "Frame rate assumed when a video does not declare one",
+              "type": "number"
+            },
+            "detail": {
+              "default": "auto",
+              "description": "How much of the image the model is charged for: low, high or auto (openai_vision)",
+              "type": "string"
+            },
+            "device": {
+              "description": "Where a local model runs: cpu, cuda, mps",
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Read by the visual endpoints as a per-endpoint off switch, leaving the rest of ai_support in place",
+              "type": "boolean"
+            },
+            "include": {
+              "additionalProperties": true,
+              "description": "Which schemes get assistants. Off by default: without it every assistant button is absent and the page renders an empty ai-help div",
+              "properties": {
+                "all": {
+                  "default": false,
+                  "description": "Show assistants on every scheme. This is the switch most authors want, and nothing warns when it is missing",
+                  "examples": [
+                    true
+                  ],
+                  "type": "boolean"
+                },
+                "special_include": {
+                  "description": "Per-page, per-scheme assistant list, keyed page number -> annotation id -> list of assistant names. Use instead of include.all to show assistants on some schemes only",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "iou_threshold": {
+              "description": "Overlap above which two detections are treated as the same object",
+              "type": "number"
+            },
+            "json_mode": {
+              "default": true,
+              "description": "Ask the server to constrain output to JSON. Servers without constrained decoding reject it; the endpoint notices and retries without, so this rarely needs setting (openai_vision)",
+              "type": "boolean"
+            },
+            "max_frames": {
+              "description": "Most frames sampled from a video for one request",
+              "type": "integer"
+            },
+            "max_image_size": {
+              "description": "Longest edge, in pixels, an image is downscaled to before it is sent",
+              "type": "integer"
+            },
+            "max_tokens": {
+              "default": 800,
+              "description": "Cap on the reply. The multi-label formats (a rationale or a keyword set for every label) need several hundred; below that the reply is cut off and the assistant renders empty",
+              "examples": [
+                800
+              ],
+              "type": "integer"
+            },
+            "model": {
+              "description": "Model name as the backend spells it",
+              "examples": [
+                "gpt-4o"
+              ],
+              "type": "string"
+            },
+            "temperature": {
+              "default": 0.1,
+              "description": "Sampling temperature, 0 to 2",
+              "type": "number"
+            },
+            "think": {
+              "default": false,
+              "description": "Let a reasoning model emit its thinking block. Off keeps the reply to the answer (vllm)",
+              "type": "boolean"
+            },
+            "timeout": {
+              "description": "Seconds to wait for the model. Left out, each endpoint applies its own: 30 for openai, anthropic, gemini, huggingface, vllm and openrouter, 60 for ollama and the openai/anthropic vision endpoints, 120 for ollama_vision. There is no single default to quote here",
+              "examples": [
+                120
+              ],
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "ai_config_file": {
@@ -262,7 +378,22 @@
         },
         "features": {},
         "holdout": {
+          "additionalProperties": true,
           "description": "A randomized no-assistance comparison group: a share of (annotator, item) pairs see no AI assistance at all, so /admin can report whether the assistance changed the answers",
+          "properties": {
+            "fraction": {
+              "default": 0,
+              "description": "Share of (annotator, item) pairs that get no AI assistance, from 0 to 1",
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "salt": {
+              "default": "",
+              "description": "Changes which pairs are held out. Keep it fixed for the life of a study",
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "image_key": {
@@ -3433,7 +3564,40 @@
           "type": "string"
         },
         "dynamic": {
+          "additionalProperties": true,
           "description": "Probabilistic expertise routing, which learns who is good at what from agreement instead of a fixed qualification. Carries its own `enabled`",
+          "properties": {
+            "agreement_method": {
+              "default": "majority_vote",
+              "description": "How consensus is decided: `majority_vote`, `super_majority` (two thirds) or `unanimous`",
+              "type": "string"
+            },
+            "base_probability": {
+              "default": 0.1,
+              "description": "Floor on the routing probability of any category, so an annotator who scores badly in one is still sent some of it",
+              "type": "number"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Turn expertise routing on. Starts a background worker that scores annotations against consensus",
+              "type": "boolean"
+            },
+            "learning_rate": {
+              "default": 0.1,
+              "description": "How far one agreement or disagreement moves a score, as an exponential moving average. Scores start at the neutral 0.5",
+              "type": "number"
+            },
+            "min_annotations_for_consensus": {
+              "default": 2,
+              "description": "How many annotators must have answered an item before it is used to score anyone. Below this the item is skipped, not counted as agreement",
+              "type": "integer"
+            },
+            "update_interval_seconds": {
+              "default": 60,
+              "description": "Seconds between scoring passes. The default is the difference between routing that responds within a session and routing that does not",
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "enabled": {
@@ -3473,7 +3637,16 @@
       "description": "The shared label set a scheme opts into with a scheme-level `codebook: true`, edited from /codebook and stored per project",
       "properties": {
         "distiller": {
+          "additionalProperties": true,
           "description": "What the distilled, prompt-facing view of the codebook contains: include, include_types, include_doc_sections, scope, procedure, max_chars",
+          "properties": {
+            "include": {},
+            "include_doc_sections": {},
+            "include_types": {},
+            "max_chars": {},
+            "procedure": {},
+            "scope": {}
+          },
           "type": "object"
         },
         "enabled": {
@@ -4105,19 +4278,120 @@
           "type": "boolean"
         },
         "example_selection": {
+          "additionalProperties": true,
           "description": "Which annotations become few-shot examples",
+          "properties": {
+            "max_examples_per_schema": {
+              "default": 10,
+              "description": "Cap on few-shot examples per scheme",
+              "type": "integer"
+            },
+            "min_agreement_threshold": {
+              "default": 0.8,
+              "description": "How much annotators must agree before an item can be an example",
+              "type": "number"
+            },
+            "min_annotators_per_instance": {
+              "default": 2,
+              "description": "How many annotators an item needs before it can be an example. The default of 2 makes the labeler inert on a study with `num_annotators_per_item: 1` -- no item can ever qualify",
+              "type": "integer"
+            },
+            "refresh_interval_seconds": {
+              "default": 300,
+              "description": "How often the example set is rebuilt from new annotations",
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "llm_labeling": {
+          "additionalProperties": true,
           "description": "When and how much the model labels",
+          "properties": {
+            "batch_interval_seconds": {
+              "default": 600,
+              "description": "Minimum wait between batches",
+              "type": "integer"
+            },
+            "batch_size": {
+              "default": 20,
+              "description": "Instances per labeling batch",
+              "type": "integer"
+            },
+            "confidence_threshold": {
+              "default": 0.7,
+              "description": "Predictions below this are not kept",
+              "type": "number"
+            },
+            "max_total_labels": {
+              "description": "Hard cap on how many instances the model may label in total",
+              "type": "integer"
+            },
+            "max_unlabeled_ratio": {
+              "default": 0.5,
+              "description": "Largest share of the unlabeled pool the model may take",
+              "type": "number"
+            },
+            "min_accuracy_threshold": {
+              "default": 0.7,
+              "description": "The accuracy below which labeling pauses",
+              "type": "number"
+            },
+            "pause_on_low_accuracy": {
+              "default": true,
+              "description": "Stop labeling when verification says the model is wrong too often",
+              "type": "boolean"
+            },
+            "trigger_threshold": {
+              "default": 5,
+              "description": "New annotations needed before a batch runs",
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "persistence": {
+          "additionalProperties": true,
           "description": "Where predictions are written",
+          "properties": {
+            "predictions_file": {
+              "default": "icl_predictions.json",
+              "description": "Filename for the stored predictions, under the output directory",
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "verification": {
+          "additionalProperties": true,
           "description": "Blind human checking of the model's labels",
+          "properties": {
+            "assignment_mix_rate": {
+              "default": 0.2,
+              "description": "Share of assignments that are verification items, when they are mixed in",
+              "type": "number"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Route a sample of model labels to annotators",
+              "type": "boolean"
+            },
+            "mix_with_regular_assignments": {
+              "default": true,
+              "description": "Hand verification items out through the normal assignment queue, rather than only on request",
+              "type": "boolean"
+            },
+            "sample_rate": {
+              "default": 0.2,
+              "description": "Share of model-labeled instances sent for checking",
+              "type": "number"
+            },
+            "selection_strategy": {
+              "default": "low_confidence",
+              "description": "Which of them to check: low_confidence or random",
+              "type": "string"
+            }
+          },
           "type": "object"
         }
       },
@@ -4476,7 +4750,22 @@
       "description": "Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet",
       "properties": {
         "budgets": {
+          "additionalProperties": true,
           "description": "Spending limits: `model_usd`, `human_usd` and `human_labels`",
+          "properties": {
+            "human_labels": {
+              "description": "Most human labels the engine may request",
+              "type": "number"
+            },
+            "human_usd": {
+              "description": "Most the engine may spend on crowd work, in US dollars. Required before features.crowd_live_spend can be turned on",
+              "type": "number"
+            },
+            "model_usd": {
+              "description": "Most the engine may spend on model calls, in US dollars",
+              "type": "number"
+            }
+          },
           "type": "object"
         },
         "cascade": {
@@ -4488,11 +4777,67 @@
           "type": "array"
         },
         "crowd": {
+          "additionalProperties": true,
           "description": "Crowd recruitment for the crowd pool. Only Prolific is supported",
+          "properties": {
+            "per_worker_quota": {
+              "default": 20,
+              "description": "Requests one participant is expected to complete",
+              "type": "integer"
+            },
+            "provider": {
+              "default": "prolific",
+              "description": "Crowd provider",
+              "type": "string"
+            },
+            "reward_usd": {
+              "description": "Reward per participant, used to cost places against budgets.human_usd",
+              "type": "number"
+            },
+            "study_id": {
+              "description": "The Prolific study the engine adds places to",
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "distill": {
+          "additionalProperties": true,
           "description": "Distillation settings: `trainer`, `min_labels`, `every`, `include_silver`",
+          "properties": {
+            "every": {
+              "default": 2.0,
+              "description": "Retrain when the label count has grown by this factor",
+              "type": "number"
+            },
+            "image_field": {
+              "description": "The item field holding the image, when it is not the text_key",
+              "type": "string"
+            },
+            "include_silver": {
+              "default": true,
+              "description": "Also train on machine labels a contract certified",
+              "type": "boolean"
+            },
+            "min_labels": {
+              "default": 200,
+              "description": "Train only once this many labels exist",
+              "type": "integer"
+            },
+            "modality": {
+              "default": "auto",
+              "description": "What the distilled model reads: text, image (each item's image file, through CLIP embeddings), or auto (image when most items name an image file)",
+              "examples": [
+                "image"
+              ],
+              "type": "string"
+            },
+            "trainer": {
+              "default": "sklearn-text",
+              "description": "A trainer from potato/training",
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "enabled": {
@@ -4501,19 +4846,155 @@
           "type": "boolean"
         },
         "features": {
+          "additionalProperties": true,
           "description": "Optional parts of the engine: all off by default except drift",
+          "properties": {
+            "crowd_live_spend": {
+              "default": false,
+              "description": "Let the engine add crowd places and spend money, within budgets.human_usd",
+              "type": "boolean"
+            },
+            "crowd_recruit": {
+              "default": false,
+              "description": "Work out how many crowd places open requests need. Without crowd_live_spend this only reports what it would do",
+              "type": "boolean"
+            },
+            "distill": {
+              "default": false,
+              "description": "Train a cheaper model on human and certified labels and add it as the first tier",
+              "type": "boolean"
+            },
+            "drift": {
+              "default": true,
+              "description": "Suspend auto-acceptance when audit labels show accuracy has fallen (set false to only report a breach)",
+              "type": "boolean"
+            },
+            "optimize": {
+              "default": false,
+              "description": "Each planner pass scores every subset of the cascade on dev labels and reports the cheapest that keeps the contracts' coverage; nothing is applied",
+              "type": "boolean"
+            },
+            "payload_capture": {
+              "default": false,
+              "description": "Keep the full prompt and reply of each model call next to the call log. Off by default because it stores item text",
+              "type": "boolean"
+            },
+            "pii_redaction": {
+              "default": false,
+              "description": "Mask personal data in text sent to remote models and record what was masked",
+              "type": "boolean"
+            }
+          },
           "type": "object"
         },
         "humans": {
+          "additionalProperties": true,
           "description": "Who labels for the engine and how their labels are sampled",
+          "properties": {
+            "audit_rate": {
+              "default": 0.02,
+              "description": "Fraction of auto-accepted labels sent back to a human, blind, to watch for drift",
+              "type": "number"
+            },
+            "calibration_rate": {
+              "default": "auto",
+              "description": "Fraction of items drawn at random for blind calibration, or `auto` to let the planner size the sample from the contracts",
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "dev_fraction": {
+              "default": 0.5,
+              "description": "Share of calibration labels used to fit calibrators and choose thresholds. The rest are held out to test the contract",
+              "type": "number"
+            },
+            "distribution_k": {
+              "default": 5,
+              "description": "Human labels per item for a distributional contract",
+              "type": "integer"
+            },
+            "min_calibration_per_class": {
+              "default": 10,
+              "description": "Calibration labels each predicted class needs before a per-class contract is tested",
+              "type": "integer"
+            },
+            "overlap": {
+              "default": 0.0,
+              "description": "Fraction of the calibration sample sent to overlap_k people instead of one, for the human-human baseline and the no_worse_than_human contract",
+              "type": "number"
+            },
+            "overlap_k": {
+              "default": 3,
+              "description": "People per item on the overlap share of the calibration sample. The no_worse_than_human contract needs at least 3",
+              "type": "integer"
+            },
+            "pools": {
+              "default": [
+                "team"
+              ],
+              "description": "Any of team, crowd and solo",
+              "type": "array"
+            },
+            "truth": {
+              "default": "majority",
+              "description": "How several people's labels on one item become the label the contracts test against: majority, or dawid_skene to weight each rater by their estimated reliability. An adjudicated label always wins",
+              "type": "string"
+            },
+            "verify_visibility": {
+              "default": "shown",
+              "description": "Whether the machine label is shown on verify requests (shown or blind). Calibration, certification and audit requests are always blind",
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "redaction": {
+          "additionalProperties": true,
           "description": "PII redaction settings: `categories` to mask",
+          "properties": {
+            "categories": {
+              "description": "What to mask: email, url, ip, card, ssn, phone, handle (default: all)",
+              "type": "array"
+            }
+          },
           "type": "object"
         },
         "runtime": {
+          "additionalProperties": true,
           "description": "How model calls are run",
+          "properties": {
+            "batch_size": {
+              "default": 32,
+              "description": "Items per committed chunk",
+              "type": "integer"
+            },
+            "cache": {
+              "default": true,
+              "description": "Reuse a stored reply when the same source version is asked the same question",
+              "type": "boolean"
+            },
+            "concurrency": {
+              "default": 4,
+              "description": "Concurrent calls per endpoint unless a source sets its own",
+              "type": "integer"
+            },
+            "hold_minutes": {
+              "default": 60,
+              "description": "Minutes a person may hold a request without answering before it goes back to the pool",
+              "type": "number"
+            },
+            "planner_interval": {
+              "default": 30,
+              "description": "Seconds between planner passes in a running server",
+              "type": "number"
+            },
+            "retries": {
+              "default": 2,
+              "description": "Extra attempts for a call that timed out, lost its connection or got a 429 or 5xx. Each attempt is logged",
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "schemas": {
@@ -4532,6 +5013,7 @@
       "description": "How the annotation questions are arranged on the page: a grid, collapsible groups, an explicit order, and responsive breakpoints. Without it every scheme stacks full-width in config order",
       "properties": {
         "breakpoints": {
+          "additionalProperties": true,
           "description": "Viewport widths, in pixels, where the grid reduces",
           "examples": [
             {
@@ -4539,9 +5021,22 @@
               "tablet": 768
             }
           ],
+          "properties": {
+            "mobile": {
+              "default": 480,
+              "description": "Below this width the grid collapses to one column",
+              "type": "integer"
+            },
+            "tablet": {
+              "default": 768,
+              "description": "Below this width column spans are reduced",
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "grid": {
+          "additionalProperties": true,
           "description": "Grid the question forms are laid out in",
           "examples": [
             {
@@ -4549,10 +5044,74 @@
               "gap": "1rem"
             }
           ],
+          "properties": {
+            "align_items": {
+              "default": "start",
+              "description": "Vertical alignment within a row: start, center, end or stretch",
+              "type": "string"
+            },
+            "columns": {
+              "default": 2,
+              "description": "Columns in the form grid, 1 to 6. A scheme spans one unless its own layout.columns says otherwise",
+              "type": "integer"
+            },
+            "gap": {
+              "default": "1rem",
+              "description": "CSS gap between forms, as a string",
+              "examples": [
+                "0.75rem"
+              ],
+              "type": "string"
+            },
+            "row_gap": {
+              "description": "CSS gap between rows, when it should differ from gap",
+              "examples": [
+                "0.75rem"
+              ],
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "groups": {
           "description": "Collapsible titled sections, each holding named schemes. The way to keep a long question list navigable",
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "background_color": {
+                "description": "CSS colour for this group, overriding the alternating default",
+                "examples": [
+                  "#f8f9fc"
+                ],
+                "type": "string"
+              },
+              "collapsed_default": {
+                "description": "Start the group folded. Only sensible for questions most items do not need, since a folded question is one annotators skip",
+                "type": "boolean"
+              },
+              "collapsible": {
+                "description": "Let annotators fold the group away",
+                "type": "boolean"
+              },
+              "description": {
+                "description": "Line of explanation under the group heading",
+                "type": "string"
+              },
+              "id": {
+                "description": "Identifier for the group, unique within layout.groups. Required",
+                "type": "string"
+              },
+              "schemas": {
+                "description": "Names of the annotation schemes this group holds, in the order they should appear. Required, non-empty, and every name must be a real scheme -- an unknown one fails validation",
+                "type": "array"
+              },
+              "title": {
+                "description": "Heading shown on the group",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
           "type": "array"
         },
         "order": {
@@ -4560,7 +5119,40 @@
           "type": "array"
         },
         "styling": {
+          "additionalProperties": true,
           "description": "Colours, padding and alignment for groups and forms",
+          "properties": {
+            "align_items": {
+              "default": "start",
+              "description": "Vertical alignment of forms inside a group: start, center, end or stretch",
+              "type": "string"
+            },
+            "content_align": {
+              "default": "left",
+              "description": "Horizontal alignment of the content inside a form: left, center or right",
+              "type": "string"
+            },
+            "form_padding": {
+              "default": "0.375rem 0.5rem",
+              "description": "CSS padding inside one question form",
+              "type": "string"
+            },
+            "group_background_even": {
+              "default": "#f8f9fc",
+              "description": "Background colour for even-numbered groups",
+              "type": "string"
+            },
+            "group_background_odd": {
+              "default": "#fafafa",
+              "description": "Background colour for odd-numbered groups",
+              "type": "string"
+            },
+            "group_padding": {
+              "default": "0.5rem 0.75rem",
+              "description": "CSS padding inside a group",
+              "type": "string"
+            }
+          },
           "type": "object"
         }
       },
@@ -4888,7 +5480,29 @@
           "type": "object"
         },
         "writeback": {
+          "additionalProperties": true,
           "description": "Publish a run's predictions as prelabels",
+          "properties": {
+            "field": {
+              "default": "predictions",
+              "description": "Item field the prelabels are written to",
+              "type": "string"
+            },
+            "include_unlabeled": {
+              "default": false,
+              "description": "Also predict on, and prelabel, the items nobody has labelled yet (otherwise only the held-out val and test items get predictions)",
+              "type": "boolean"
+            },
+            "min_confidence": {
+              "default": 0.0,
+              "description": "Predictions below this confidence are not published",
+              "type": "number"
+            },
+            "schemas": {
+              "description": "Schemes whose predictions are published",
+              "type": "array"
+            }
+          },
           "type": "object"
         }
       },
@@ -5312,7 +5926,15 @@
           "type": "object"
         },
         "cache": {
+          "additionalProperties": true,
           "description": "Reuse the stored reply for an identical labeling call: enabled (true). Kept in state_dir",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Reuse the stored reply for a labeling call with the same model, temperature, prompt, item and response schema. Turn off to measure run-to-run variation",
+              "type": "boolean"
+            }
+          },
           "type": "object"
         },
         "confidence_routing": {
@@ -5337,7 +5959,31 @@
           "type": "boolean"
         },
         "gold": {
+          "additionalProperties": true,
           "description": "Items with known answers for scoring prompt versions: file (JSON, JSONL, CSV or TSV inside the project), id_key (id), label_key (label), and text_key for items outside the corpus",
+          "properties": {
+            "file": {
+              "description": "Gold-label file inside the project: JSON, JSONL, CSV or TSV",
+              "examples": [
+                "data/gold.jsonl"
+              ],
+              "type": "string"
+            },
+            "id_key": {
+              "default": "id",
+              "description": "Field holding the item id; it matches the corpus's id_key",
+              "type": "string"
+            },
+            "label_key": {
+              "default": "label",
+              "description": "Field holding the known answer",
+              "type": "string"
+            },
+            "text_key": {
+              "description": "Field holding the item text, for gold items that are not in the corpus",
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "instance_selection": {
@@ -5345,7 +5991,24 @@
           "type": "object"
         },
         "jury": {
+          "additionalProperties": true,
           "description": "Several models vote on each item and the plurality label wins: enabled (false), models (two or more), early_stop (true). Not with confidence_routing",
+          "properties": {
+            "early_stop": {
+              "default": true,
+              "description": "Skip the remaining jurors once their votes could not change the winner. Not applied to multiselect",
+              "type": "boolean"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Label each item by a vote of jury.models instead of the first labeling model that answers",
+              "type": "boolean"
+            },
+            "models": {
+              "description": "Two or more endpoints, in the same shape as labeling_models",
+              "type": "array"
+            }
+          },
           "type": "object"
         },
         "labeling_functions": {
@@ -5361,7 +6024,45 @@
           "type": "object"
         },
         "refinement_loop": {
+          "additionalProperties": true,
           "description": "The automatic refine-evaluate-keep cycle over the labeling prompt",
+          "properties": {
+            "auto_apply_suggestions": {
+              "description": "Adopt a winning candidate prompt without asking",
+              "type": "boolean"
+            },
+            "dry_run": {
+              "description": "Score candidates but never adopt one",
+              "type": "boolean"
+            },
+            "enabled": {
+              "description": "Run the refinement cycle",
+              "type": "boolean"
+            },
+            "eval_sample_size": {},
+            "eval_temperature": {},
+            "max_consecutive_failures": {},
+            "max_cycles": {
+              "description": "Cycles before the loop stops",
+              "type": "integer"
+            },
+            "min_improvement": {},
+            "min_val_improvement": {},
+            "min_val_size": {},
+            "num_candidates": {},
+            "patience": {},
+            "prefer_consistent_disagreements": {},
+            "refinement_strategy": {},
+            "require_approval": {
+              "description": "Hold a candidate prompt until it is approved, rather than adopting it",
+              "type": "boolean"
+            },
+            "trigger_interval": {
+              "description": "New human labels between cycles",
+              "type": "integer"
+            },
+            "validation_split_ratio": {}
+          },
           "type": "object"
         },
         "revision_models": {
@@ -5373,7 +6074,28 @@
           "type": "string"
         },
         "suggestions": {
+          "additionalProperties": true,
           "description": "When the annotator sees the LLM's suggestion: display (before_label, after_label or blind_sample), blind_rate (0.2) and minimum_blind_sample (20). Agreement is split into blind and shown, and the handoff to the LLM reads blind agreement once there is enough",
+          "properties": {
+            "blind_rate": {
+              "default": 0.2,
+              "description": "Fraction of items labelled without the suggestion under blind_sample. Which items is fixed per study, so a reload keeps them blind",
+              "type": "number"
+            },
+            "display": {
+              "default": "before_label",
+              "description": "before_label shows the LLM's suggestion before the annotator answers; after_label never does, and a disagreement then opens the resolution page; blind_sample hides it on a blind_rate fraction of items",
+              "examples": [
+                "blind_sample"
+              ],
+              "type": "string"
+            },
+            "minimum_blind_sample": {
+              "default": 20,
+              "description": "Blind comparisons needed before the handoff to the LLM reads blind agreement. Under after_label and blind_sample the handoff waits for them",
+              "type": "integer"
+            }
+          },
           "type": "object"
         },
         "thresholds": {
@@ -5518,7 +6240,71 @@
           "type": "array"
         },
         "writeback": {
+          "additionalProperties": true,
           "description": "Send each ingested trace's merged answers back to Langfuse (as scores) or LangSmith (as feedback), with the annotator count and agreement",
+          "properties": {
+            "langfuse": {
+              "additionalProperties": true,
+              "description": "Langfuse host and the environment variables holding its keys. The host and keys default to a configured langfuse source's",
+              "properties": {
+                "host": {
+                  "default": "https://cloud.langfuse.com",
+                  "description": "Langfuse base URL",
+                  "type": "string"
+                },
+                "public_key_env": {
+                  "default": "LANGFUSE_PUBLIC_KEY",
+                  "description": "Environment variable holding the Langfuse public key",
+                  "type": "string"
+                },
+                "score_configs": {
+                  "default": false,
+                  "description": "Attach a Langfuse score config to each categorical or numeric score, creating it from the scheme's labels if missing. Multiselect and text schemes never get one",
+                  "type": "boolean"
+                },
+                "secret_key_env": {
+                  "default": "LANGFUSE_SECRET_KEY",
+                  "description": "Environment variable holding the Langfuse secret key",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "langsmith": {
+              "additionalProperties": true,
+              "description": "LangSmith API URL and the environment variable holding its key",
+              "properties": {
+                "api_key_env": {
+                  "default": "LANGSMITH_API_KEY",
+                  "description": "Environment variable holding the LangSmith API key",
+                  "type": "string"
+                },
+                "api_url": {
+                  "default": "https://api.smith.langchain.com",
+                  "description": "LangSmith API base URL",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "min_annotators": {
+              "description": "Annotators a trace needs before it is sent. Defaults to the study's per-item cap, or 2 when there is none",
+              "type": "integer"
+            },
+            "score_prefix": {
+              "default": "potato",
+              "description": "Scores are named <score_prefix>.<scheme name>",
+              "type": "string"
+            },
+            "trigger": {
+              "default": "fully_annotated",
+              "description": "When to send: fully_annotated (once min_annotators have answered) or adjudicated (only after an adjudication decision). An adjudication is sent in either mode",
+              "examples": [
+                "adjudicated"
+              ],
+              "type": "string"
+            }
+          },
           "type": "object"
         }
       },

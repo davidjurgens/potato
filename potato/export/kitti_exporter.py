@@ -24,6 +24,7 @@ import logging
 import os
 from typing import List, Optional, Tuple
 
+from . import spatial_sequences as seq
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
@@ -40,9 +41,6 @@ UNSET_DIMENSION = -1.0
 UNSET_LOCATION = -1000.0
 UNSET_ANGLE = -10.0
 
-#: Occlusion names written back as the integer codes KITTI defines.
-OCCLUSION_CODES = {"fully_visible": 0, "partly_occluded": 1,
-                   "largely_occluded": 2, "unknown": 3}
 
 
 class KITTIExporter(BaseExporter):
@@ -73,6 +71,8 @@ class KITTIExporter(BaseExporter):
 
         unsupported = {}
         num_objects = 0
+        self._unknown_truncation = {}
+        self._unknown_occlusion = {}
 
         for instance_id, objects in sorted(by_image.items()):
             item = context.items.get(instance_id, {})
@@ -105,6 +105,15 @@ class KITTIExporter(BaseExporter):
                 f"label format holds boxes only. Export to COCO to keep "
                 f"{obj_type} geometry.")
 
+        if self._unknown_truncation:
+            values = ", ".join(f"'{v}'" for v in sorted(self._unknown_truncation))
+            warnings.append(
+                f"{sum(self._unknown_truncation.values())} box(es) have a truncation "
+                f"value that is not none/partly/fully, a number or true/false "
+                f"({values}); they were written as 0.")
+        if self._unknown_occlusion:
+            warnings.append(seq.unknown_occlusion_warning(self._unknown_occlusion))
+
         # Items nobody marked produce no record at all, so they are
         # absent from the output rather than present and empty.
         _blank = blank_item_warning(context, 'the KITTI export')
@@ -130,11 +139,23 @@ class KITTIExporter(BaseExporter):
         label = (obj.get("label") or "DontCare").replace(" ", "_")
         attrs = obj.get("attributes") or {}
 
-        truncated = self._float(attrs.get("truncated"), 0.0)
-        occluded = attrs.get("occluded")
-        if isinstance(occluded, str):
-            occluded = OCCLUSION_CODES.get(occluded, 3)
-        occluded = int(self._float(occluded, 0))
+        if label == "DontCare":
+            # The devkit writes -1 for both on DontCare rows.
+            truncated, occluded = -1.0, -1
+        else:
+            # The same readers as kitti_3d, so `occlusion: heavy` and
+            # `occluded: partial` (the attribute docs' own examples) are
+            # written as the codes they mean, and an unreadable value is
+            # reported.
+            _code, _fraction, unknown = seq.truncation_attribute(attrs)
+            if unknown is not None:
+                counts = getattr(self, "_unknown_truncation", {})
+                counts[str(unknown)] = counts.get(str(unknown), 0) + 1
+            truncated = seq._truncation(attrs)
+            occluded, unknown = seq.occlusion_attribute(attrs)
+            if unknown is not None:
+                counts = getattr(self, "_unknown_occlusion", {})
+                counts[str(unknown)] = counts.get(str(unknown), 0) + 1
         alpha = self._float(attrs.get("alpha"), UNSET_ANGLE)
 
         dims = attrs.get("dimensions_hwl") or [UNSET_DIMENSION] * 3

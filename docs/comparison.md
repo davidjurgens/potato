@@ -231,7 +231,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
 
-**vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
+**vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
 **vs. Roboflow.** Roboflow is excellent if your goal is a trained model: Smart Polygon, batch auto-labelling with SAM 3 text prompts, Label Assist from your own model, and hosted training and deployment in one loop. Potato does not train detectors or segmenters; it trains scikit-learn classifiers on a study's own labels (over text, sentence or CLIP image embeddings), for prelabels or as the labeling engine's first tier. Choose Potato when the labels themselves are the research output and their reliability has to be defensible.
 
@@ -251,7 +251,7 @@ For digital pathology specifically, **QuPath** (desktop, open source, the field 
 
 Potato annotates PCD, PLY, LAS, KITTI `.bin`, and `.xyz` clouds with 3D cuboids, points, polylines, and per-point segments; octree level-of-detail keeps large scans interactive; calibration data projects cuboids into each camera image so you can verify in 2D while editing in 3D; orthographic slab panels give axis-aligned editing; depth maps can be unprojected into the same viewer. Cuboid rotation is stored as a quaternion, so pitch and roll survive round-trips that a yaw-only field would silently discard, and agreement over cuboids uses exact rotated 3D IoU.
 
-**Segments.ai**, **Kognic**, **Deepen AI**, **Supervisely**, and **Xtreme1/BasicAI** are specialists here, and for production autonomous-driving pipelines they are ahead: sequence and episode workflows with track propagation, radar and multi-LiDAR support, auto-fit cuboid models, per-object attribute ontologies, and (in Deepen's case) a full targetless calibration product. Supervisely and Xtreme1 are both self-hostable, and Supervisely handles far larger clouds. Choose Potato for 3D when you want reliability statistics over spatial labels, or when 3D is one part of a multimodal study.
+**Segments.ai**, **Kognic**, **Deepen AI**, **Supervisely**, and **Xtreme1/BasicAI** are specialists here, and for production autonomous-driving pipelines they are ahead: sequence and episode workflows with track propagation, radar and multi-LiDAR support, auto-fit cuboid models, and (in Deepen's case) a full targetless calibration product. Supervisely and Xtreme1 are both self-hostable, and Supervisely handles far larger clouds. Choose Potato for 3D when you want reliability statistics over spatial labels, or when 3D is one part of a multimodal study.
 
 ### Robotics and Embodied Episodes
 
@@ -421,7 +421,7 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Research annotation with surveys/tracking | **Potato** | Multi-phase workflow, 55 surveys, behavioral tracking, MACE |
 | Crowdsourced annotation (MTurk/Prolific) | **Potato** | Native providers for both, and for seven other recruitment routes |
 | Complex linguistic annotation + knowledge bases | **INCEpTION** | Strongest KB linking, coreference, IAA, curation |
-| Computer vision annotation at volume | **CVAT** | Deepest CV-only tooling, attributes, task management, large community |
+| Computer vision annotation at volume | **CVAT** | Deepest CV-only tooling, task management, large community |
 | Label → train → deploy in one loop | **Roboflow** | Auto Label, hosted training and inference |
 | Image + text multimodal annotation | **Label Studio** | Broadest template-based modality coverage |
 | Autonomous-driving 3D at production scale | **Segments.ai / Kognic / Supervisely** | Sequence workflows, radar, multi-LiDAR, calibration products |

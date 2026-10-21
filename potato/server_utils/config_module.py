@@ -4991,6 +4991,8 @@ _SAML_KEYS = {
     "claim_attributes", "want_assertions_encrypted", "single_logout",
 }
 
+_SAML_IDP_KEYS = {"entity_id", "sso_url", "x509cert", "slo_url"}
+
 
 def _validate_saml_config(auth_config: Dict[str, Any]) -> None:
     """authentication.method: saml -- the library, and where the IdP is."""
@@ -5021,6 +5023,17 @@ def _validate_saml_config(auth_config: Dict[str, Any]) -> None:
         if missing:
             raise ConfigValidationError(
                 f"authentication.saml.idp is missing: {', '.join(missing)}")
+        # A misspelt slo_url would otherwise turn single logout off unseen.
+        unknown_idp = set(idp) - _SAML_IDP_KEYS
+        if unknown_idp:
+            raise ConfigValidationError(
+                f"authentication.saml.idp has unknown keys: {', '.join(sorted(unknown_idp))} "
+                f"(it takes {', '.join(sorted(_SAML_IDP_KEYS))})")
+    if "single_logout" in saml and not isinstance(saml["single_logout"], bool):
+        # "false" or 0 would otherwise leave single logout on.
+        raise ConfigValidationError(
+            f"authentication.saml.single_logout must be true or false, "
+            f"got {saml['single_logout']!r}")
     url = saml.get("idp_metadata_url")
     if url and not str(url).startswith("https://"):
         raise ConfigValidationError(
@@ -8229,6 +8242,25 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     # Validate enabled flag
     if not isinstance(ai_config.get("enabled", False), bool):
         raise ConfigValidationError("ai_support.enabled must be a boolean")
+
+    # The comparison group withholds every assist surface (pre-annotations,
+    # SAM, the labeling engine), not only ai_support's own, so it is checked
+    # whether or not ai_support is enabled. Out-of-range values used to be
+    # clamped: 1.5 or 20 (meaning 20%) withheld AI from everyone, and -0.3 or
+    # "a lot" left no comparison group, all without a word.
+    holdout = ai_config.get("holdout")
+    if holdout is not None:
+        if not isinstance(holdout, dict):
+            raise ConfigValidationError(
+                "ai_support.holdout must be a mapping with fraction (and optionally salt)")
+        if "fraction" in holdout:
+            fraction = holdout["fraction"]
+            if (isinstance(fraction, bool) or not isinstance(fraction, (int, float))
+                    or not 0 <= fraction <= 1):
+                raise ConfigValidationError(
+                    f"ai_support.holdout.fraction must be a number from 0 to 1 (the share "
+                    f"of each annotator's items shown without AI assistance; 0.2 means "
+                    f"20%), got {fraction!r}")
 
     if not ai_config.get("enabled", False):
         return  # Skip validation if not enabled

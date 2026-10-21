@@ -65,6 +65,7 @@ class KITTI3DExporter(BaseExporter):
         n_objects = n_items = 0
         no_box = 0
         unknown_truncation: Dict[str, int] = {}
+        unknown_occlusion: Dict[str, int] = {}
         unclipped: List[str] = []
         options = options or {}
 
@@ -80,6 +81,9 @@ class KITTI3DExporter(BaseExporter):
                     _c, _f, unknown = seq.truncation_attribute(obj.get("attributes") or {})
                     if unknown is not None:
                         unknown_truncation[str(unknown)] = unknown_truncation.get(str(unknown), 0) + 1
+                    _c, unknown = seq.occlusion_attribute(obj.get("attributes") or {})
+                    if unknown is not None:
+                        unknown_occlusion[str(unknown)] = unknown_occlusion.get(str(unknown), 0) + 1
                     if obj.get("type") != "cuboid_3d":
                         kind = str(obj.get("type"))
                         skipped_types[kind] = skipped_types.get(kind, 0) + 1
@@ -146,6 +150,8 @@ class KITTI3DExporter(BaseExporter):
                 f"{sum(unknown_truncation.values())} object(s) have a truncation value that "
                 f"is not none/partly/fully, a number or true/false ({values}); the share "
                 f"of the box outside the image was written instead.")
+        if unknown_occlusion:
+            warnings.append(seq.unknown_occlusion_warning(unknown_occlusion))
         if unclipped:
             warnings.append(
                 f"{len(unclipped)} item(s) have 2D boxes that were not clipped to the image, "

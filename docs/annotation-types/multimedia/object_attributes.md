@@ -29,7 +29,7 @@ annotation_schemes:
       - name: truncated
         type: bool
         default: false
-      - name: truncated_share
+      - name: truncation
         type: number
         min: 0
         max: 1
@@ -121,7 +121,20 @@ Each shape carries an `attributes` object:
 
 The CVAT XML exporter writes them as `<attribute>` elements, KITTI as its
 truncation and occlusion columns, MOT and Darwin as their own fields, and COCO
-as an `attributes` key on each annotation. The CVAT, KITTI, MOT, Darwin, VIA and
+as an `attributes` key on each annotation.
+
+The KITTI exporters (`kitti` and `kitti_3d`) fill those two columns from
+attributes with these names and values:
+
+| Column | Attribute name | Values read |
+|---|---|---|
+| truncated | `truncated` or `truncation` | a share from 0 to 1; `none`, `partly` (or `partial`), `fully` (or `heavy`); `true`/`false`. When both are set, as in the first example, a share in either one is used |
+| occluded | `occluded` or `occlusion` | `none`, `partly` (or `partial`), `largely` (or `heavy`), `unknown`; KITTI's own `fully_visible`, `partly_occluded`, `largely_occluded`; a code from 0 to 3; `true`/`false` |
+
+The examples above use these values, so they export as written. Any other value
+is listed in the export's warnings. An occlusion is then written as 3
+(unknown). A truncation is written as 0 by `kitti`, and by `kitti_3d` as the
+share of the box the image edge cuts off. The CVAT, KITTI, MOT, Darwin, VIA and
 COCO importers read them back, and they survive edits, undo and navigation.
 
 A video track stores its attributes beside its keyframes, and a point-cloud

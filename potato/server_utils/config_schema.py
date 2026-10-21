@@ -95,6 +95,10 @@ def _documented(path: str) -> Dict[str, Any]:
         out["default"] = doc.default
     if doc.example is not None:
         out["examples"] = [doc.example]
+    if doc.minimum is not None:
+        out["minimum"] = doc.minimum
+    if doc.maximum is not None:
+        out["maximum"] = doc.maximum
     return out
 
 
@@ -123,13 +127,25 @@ def _object_schema(
         names = sub_keys
 
     schema = _documented(path) if path else {}
-    schema["type"] = "object"
-    schema["properties"] = {
-        name: _leaf_schema(
-            name, int_fields, bool_fields, f"{path}.{name}" if path else name
-        )
-        for name in sorted(names)
-    }
+    if schema.get("type") != "array":
+        schema["type"] = "object"
+    properties = {}
+    for name in sorted(names):
+        sub_path = f"{path}.{name}" if path else name
+        nested = sub_keys.get(name) if isinstance(sub_keys, dict) else None
+        # A block nested inside a block (ai_support.holdout,
+        # trace_ingestion.writeback.langfuse) used to come out as a bare
+        # {"type": "object"}, so editors offered and checked nothing in it.
+        if nested:
+            properties[name] = _object_schema(nested, int_fields, bool_fields, sub_path)
+        else:
+            properties[name] = _leaf_schema(name, int_fields, bool_fields, sub_path)
+    if schema.get("type") == "array":
+        # A list of blocks (layout.groups): the sub-keys belong to each entry.
+        schema["items"] = {"type": "object", "properties": properties,
+                           "additionalProperties": True}
+        return schema
+    schema["properties"] = properties
     schema["additionalProperties"] = True
     return schema
 

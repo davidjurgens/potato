@@ -50,7 +50,7 @@ annotation_schemes:
         type: bool
         default: false
         description: Cut off by the edge of the image
-      - name: truncated_share
+      - name: truncation
         type: number
         min: 0
         max: 1

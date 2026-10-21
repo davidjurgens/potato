@@ -75,6 +75,8 @@ class ConfigKeyDoc:
             a new key from silently landing in the "Other" bucket.
         example: A short illustrative value.
         see_also: Related dotted paths.
+        minimum, maximum: The inclusive range the server enforces for a
+            number, so an editor flags what `validate` would refuse.
     """
 
     summary: str
@@ -84,6 +86,8 @@ class ConfigKeyDoc:
     category: str = "Other"
     example: Any = None
     see_also: Tuple[str, ...] = field(default_factory=tuple)
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
 
 
 _D = ConfigKeyDoc
@@ -623,7 +627,7 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "ai_support.holdout.fraction": _D(
         "Share of (annotator, item) pairs that get no AI assistance, from 0 to 1",
-        type="number", default=0, category=AI,
+        type="number", default=0, category=AI, minimum=0, maximum=1,
     ),
     "ai_support.holdout.salt": _D(
         "Changes which pairs are held out. Keep it fixed for the life of a study",
