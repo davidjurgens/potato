@@ -154,6 +154,62 @@ class TestAuthenticityEnabled:
         assert users["au_user"]["authenticity_risk"] > 0
         assert body["caveat"]
 
+    def test_ordinary_posts_are_buffered_and_final_ones_written(self, flask_server):
+        # Mouse movement and counters post every few seconds; each write
+        # rewrites the whole user_state.json. Ordinary posts stay in memory
+        # (written at most once a minute); the last post of a view and a post
+        # that changes the flags go to disk straight away.
+        s = _authed_session(flask_server, "au_buffer")
+
+        def on_disk():
+            records, _ = _authenticity_records(self.test_dir, "au_buffer")
+            return records.get("auth_item_01", {}).get("summary", {})
+
+        r = _post(s, flask_server, view_id="vb", snapshot={"elapsed_ms": 1000})
+        assert r.json()["persisted"] is True        # first write for this user
+        r = _post(s, flask_server, view_id="vb", snapshot={"elapsed_ms": 2000})
+        assert r.json()["persisted"] is False
+        assert on_disk()["elapsed_ms"] == 1000
+
+        r = _post(s, flask_server, view_id="vb", snapshot={"elapsed_ms": 3000},
+                  final=True)
+        assert r.json()["persisted"] is True
+        assert on_disk()["elapsed_ms"] == 3000
+
+        r = _post(s, flask_server, view_id="vb", snapshot={
+            "elapsed_ms": 4000, "item_copy_events": 1, "item_copy_chars": 90,
+            "max_paste_words_after_item_copy": 30})
+        assert r.json()["persisted"] is True        # the flags changed
+        assert on_disk()["elapsed_ms"] == 4000
+
+        # The admin rollup reads memory, so a buffered post is visible at once.
+        r = _post(s, flask_server, view_id="vb", snapshot={
+            "elapsed_ms": 5000, "item_copy_events": 1, "item_copy_chars": 90,
+            "max_paste_words_after_item_copy": 30, "hidden_events": 1,
+            "hidden_ms": 2000})
+        assert r.json()["persisted"] is False
+        users = {u["user_id"]: u for u in requests.get(
+            f"{flask_server.base_url}/admin/api/authenticity",
+            headers={"X-API-Key": ADMIN_KEY}).json()["users"]}
+        assert users["au_buffer"]["away_events"] == 1
+
+    def test_unknown_instance_is_refused_during_annotation(self, flask_server):
+        # G4: an id that is not this annotator's item was stored, counted in
+        # the rollup and scored in the behavioral table.
+        s = _authed_session(flask_server, "au_ghost")
+        for bogus in ("no-such-item", "7"):
+            r = _post(s, flask_server, instance_id=bogus,
+                      snapshot={"webdriver": True})
+            assert r.status_code == 403, (bogus, r.text)
+        assert _post(s, flask_server).status_code == 200
+        records, _ = _authenticity_records(self.test_dir, "au_ghost")
+        assert set(records) == {"auth_item_01"}
+        users = {u["user_id"]: u for u in requests.get(
+            f"{flask_server.base_url}/admin/api/authenticity",
+            headers={"X-API-Key": ADMIN_KEY}).json()["users"]}
+        assert users["au_ghost"]["items"] == 1
+        assert "automation" not in users["au_ghost"]["flag_counts"]
+
     def test_admin_rollup_requires_key(self, flask_server):
         r = requests.get(f"{flask_server.base_url}/admin/api/authenticity")
         assert r.status_code in (401, 403)
@@ -192,7 +248,78 @@ class TestAuthenticityDisabled:
         r = s.post(f"{flask_server.base_url}/api/track_interactions",
                    json={"instance_id": "auth_item_01", "events": [
                        {"event_type": "click", "timestamp": 1, "target": "nav:next"}]})
-        assert r.json()["status"] == "disabled"
+        assert r.json()["events_recorded"] == 0
+
+    def test_time_per_item_survives_the_switch(self, flask_server):
+        # Off drops the ambient stream but keeps the timing events, so the
+        # throughput charts (built on BehavioralData.active_time_ms) still
+        # see the time spent on the item.
+        s = _authed_session(flask_server, "au_time")
+        t0 = 1_700_000_000_000
+        events = [
+            {"event_type": "navigation", "target": "instance_load",
+             "timestamp": t0 / 1000, "client_timestamp": t0},
+            {"event_type": "activity", "target": "nav:secret",
+             "metadata": {"key": "q"},
+             "timestamp": (t0 + 20000) / 1000, "client_timestamp": t0 + 20000},
+            {"event_type": "click", "target": "label:agree:yes",
+             "timestamp": (t0 + 25000) / 1000, "client_timestamp": t0 + 25000},
+            {"event_type": "save", "target": "instance:auth_item_01",
+             "timestamp": (t0 + 40000) / 1000, "client_timestamp": t0 + 40000},
+        ]
+        r = s.post(f"{flask_server.base_url}/api/track_interactions",
+                   json={"instance_id": "auth_item_01", "events": events,
+                         "focus_time": {"label:agree:yes": 900}, "scroll_depth": 80})
+        assert r.json()["events_recorded"] == 3
+        r = s.post(f"{flask_server.base_url}/updateinstance",
+                   json={"instance_id": "auth_item_01",
+                         "annotations": {"agree:::yes": "yes"}})
+        assert r.status_code == 200, r.text
+
+        r = requests.get(f"{flask_server.base_url}/admin/api/throughput",
+                         headers={"X-API-Key": ADMIN_KEY})
+        assert r.status_code == 200, r.text
+        row = {a["annotator"]: a for a in r.json()["annotators"]}["au_time"]
+        assert row["active_seconds"] == 40.0
+
+        path = os.path.join(self.test_dir, "output", "au_time", "user_state.json")
+        bd = json.load(open(path, encoding="utf-8"))[
+            "instance_id_to_behavioral_data"]["auth_item_01"]
+        kinds = [e["event_type"] for e in bd["interactions"]]
+        assert kinds == ["navigation", "activity", "save"]
+        activity = bd["interactions"][1]
+        assert activity["target"] == "" and activity["metadata"] == {}
+        assert not bd.get("focus_time_by_element")
+        assert not bd.get("scroll_depth_max")
+
+    def test_behavioral_score_does_not_count_untracked_signals(self, flask_server):
+        # G1: with the ambient stream off, every item looked low-interaction
+        # and no-scroll, and ordinary annotators scored as suspicious.
+        s = _authed_session(flask_server, "au_quiet")
+        t0 = 1_700_000_100_000
+        s.post(f"{flask_server.base_url}/api/track_interactions",
+               json={"instance_id": "auth_item_01", "events": [
+                   {"event_type": "navigation", "target": "instance_load",
+                    "timestamp": t0 / 1000, "client_timestamp": t0},
+                   {"event_type": "save", "target": "instance:auth_item_01",
+                    "timestamp": (t0 + 12000) / 1000, "client_timestamp": t0 + 12000}]})
+        # The page posts the change trail on its own route, which the switch
+        # leaves on.
+        s.post(f"{flask_server.base_url}/api/track_annotation_change",
+               json={"instance_id": "auth_item_01", "schema_name": "agree",
+                     "label_name": "no", "action": "select", "old_value": None,
+                     "new_value": "no", "source": "user"})
+        r = s.post(f"{flask_server.base_url}/updateinstance",
+                   json={"instance_id": "auth_item_01",
+                         "annotations": {"agree:::no": "no"}})
+        assert r.status_code == 200, r.text
+        body = requests.get(f"{flask_server.base_url}/admin/api/behavioral_analytics",
+                            headers={"X-API-Key": ADMIN_KEY}).json()
+        assert body["aggregate_stats"]["interaction_tracking_enabled"] is False
+        row = {u["user_id"]: u for u in body["users"]}["au_quiet"]
+        assert row["low_interaction_rate"] is None
+        assert row["no_scroll_rate"] is None
+        assert row["quality_flag"] == "OK", {k: row[k] for k in ("fast_annotation_rate", "no_change_rate", "suspicion_score", "total_changes", "total_instances")}
 
     def test_admin_rollup_disabled(self, flask_server):
         r = requests.get(f"{flask_server.base_url}/admin/api/authenticity",

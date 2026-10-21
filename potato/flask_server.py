@@ -5427,6 +5427,18 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
                 logger.warning(f"Failed to clean up coding agent sessions: {e}")
         atexit.register(_cleanup_coding_agent_sessions)
 
+    # Authenticity posts are written to disk at most once a minute
+    # (potato/authenticity.py); write what is held in memory when the server
+    # stops. Here, at boot, because SIGTERM handlers need the main thread.
+    try:
+        from potato.server_utils.config_module import get_authenticity_config
+        if get_authenticity_config(config).get("enabled"):
+            from potato.authenticity import install_shutdown_flush
+            install_shutdown_flush(
+                lambda user_id: get_user_state_manager().save_user_state(user_id))
+    except Exception as e:  # noqa: BLE001 - never block boot on this
+        logger.warning("Could not install the authenticity shutdown flush: %s", e)
+
     # Check for trace_ingestion config
     trace_ingestion_config = config.get("trace_ingestion", {})
     if trace_ingestion_config.get("enabled", False):

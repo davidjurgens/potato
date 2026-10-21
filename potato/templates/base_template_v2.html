@@ -740,7 +740,7 @@
     <script type="text/javascript">
         window.interactionTrackingConfig = {{ (interaction_tracking_client_config or {'enabled': true}) | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=4"></script>
     <!-- Authenticity paradata (page-leave, item copy, external paste and
          automation signals on every task type), conditional. Loads after
          interaction_tracker.js because it hooks setInstanceId. -->
@@ -748,7 +748,7 @@
     <script type="text/javascript">
         window.authenticityConfig = {{ authenticity_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='authenticity_tracker.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='authenticity_tracker.js') }}?v=3"></script>
     {% endif %}
     <!-- Keystroke logging / typing dynamics on free-text fields (conditional).
          Loads after interaction_tracker.js because it hooks setInstanceId to

@@ -101,6 +101,8 @@ class AuthenticityTracker {
         this.viewId = this._randomId();
         this.viewStart = Date.now();
         this.itemCopiedAt = null;
+        this.itemCopyChars = 0;
+        this.awayStartedAt = null;
         this.dirty = true;
         const screenW = (window.screen && window.screen.availWidth) || 0;
         this.s = {
@@ -120,6 +122,8 @@ class AuthenticityTracker {
             max_away_ms: 0,
             max_external_paste_words: 0,
             max_away_after_item_copy_ms: 0,
+            // [gap_ms, away_ms, copy_chars] per absence after an item copy.
+            copy_away_pairs: [],
             max_paste_words_after_item_copy: 0,
             webdriver: navigator.webdriver === true,
             touch_input: false,
@@ -141,7 +145,8 @@ class AuthenticityTracker {
                     // belongs to this item.
                     self.currentInstanceId = instanceId;
                 } else {
-                    self.flush(false, true);
+                    // Last post of the outgoing view: ask the server to persist it.
+                    self.flush(false, true, true);
                     self.currentInstanceId = instanceId;
                     self.startView();
                 }
@@ -197,6 +202,11 @@ class AuthenticityTracker {
     }
 
     _beginAway() {
+        // Switching tabs fires blur and then visibilitychange; the absence
+        // began at the first of them.
+        if (this.blurSince === null && this.hiddenSince === null) {
+            this.awayStartedAt = Date.now();
+        }
         // A page the task itself opened (codebook, instructions) is not leaving
         // the task.
         this.awayIsLinked = (Date.now() - this.ownLinkAt) < 3000;
@@ -222,6 +232,23 @@ class AuthenticityTracker {
         if (this.itemCopiedAt !== null) {
             this.s.max_away_after_item_copy_ms =
                 Math.max(this.s.max_away_after_item_copy_ms, durationMs);
+            const started = this.awayStartedAt !== null ? this.awayStartedAt
+                : Date.now() - durationMs;
+            this._recordCopyAway(Math.max(0, started - this.itemCopiedAt),
+                                 durationMs, this.itemCopyChars);
+        }
+    }
+
+    /** Keep the pair; when full, it replaces the shortest absence held. */
+    _recordCopyAway(gapMs, awayMs, copyChars) {
+        const pairs = this.s.copy_away_pairs;
+        const pair = [Math.round(gapMs), Math.round(awayMs), copyChars];
+        if (pairs.length < 20) {
+            pairs.push(pair);
+        } else {
+            let shortest = 0;
+            pairs.forEach((p, i) => { if (p[1] < pairs[shortest][1]) shortest = i; });
+            if (awayMs > pairs[shortest][1]) pairs[shortest] = pair;
         }
     }
 
@@ -284,6 +311,7 @@ class AuthenticityTracker {
             this.bump('item_copy_events');
             this.bump('item_copy_chars', needle.length);
             this.itemCopiedAt = Date.now();
+            this.itemCopyChars = needle.length;
         } else if (!isCut) {
             this.bump('other_copy_events');
         }
@@ -358,7 +386,10 @@ class AuthenticityTracker {
             this.lastMoveCounted = now;
             this.s.pointer_moves += 1;
         }
-        this.dirty = true;
+        // Not marked dirty: movement alone would post (and rewrite the
+        // annotator's saved state) every flush interval for as long as the
+        // mouse moves. The totals ride on the next post that has a reason to
+        // go -- a real event, the 30 s heartbeat, an item change or leaving.
     }
 
     onPointerDown(e) {
@@ -427,8 +458,9 @@ class AuthenticityTracker {
      * Post the current view's snapshot.
      * @param {boolean} isFinal - page is going away; use sendBeacon
      * @param {boolean} force - send even if nothing changed
+     * @param {boolean} endOfView - last post for this view (item change)
      */
-    flush(isFinal, force) {
+    flush(isFinal, force, endOfView) {
         // Annotation pages learn their instance id shortly after load. Until
         // then a post would land in the phase-page bucket, so wait a little;
         // pages that never get an id (consent, surveys) are phase pages.
@@ -445,6 +477,9 @@ class AuthenticityTracker {
             instance_id: this.currentInstanceId,
             view_id: this.viewId,
             snapshot: this.snapshot(),
+            // The server buffers writes of ordinary posts; a final one is
+            // written straight away, since nothing may follow it.
+            final: !!(isFinal || endOfView),
             tracker_version: 1,
         });
         if (this.debugMode) console.log('[AuthenticityTracker] flush', payload);

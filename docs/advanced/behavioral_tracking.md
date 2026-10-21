@@ -204,6 +204,14 @@ interaction_tracking:
   disclose_to_annotators: true  # show a notice when it is on
 ```
 
+With `enabled: false` the page still sends item loads, saves, navigation, and an
+`activity` mark at most every 15 seconds while the annotator is using the page. The
+mark has no target and no detail. Time per item is computed from these events, so the
+Throughput tab, adjudication timings and the dashboard's time columns keep working.
+Focus time and scroll depth are not recorded, so the admin suspicion score leaves out
+the low-interaction and no-scroll rates (they come back as `null`) and
+`aggregate_stats.interaction_tracking_enabled` is `false`.
+
 !!! note "Signs of AI use or automation on any task type"
     Leaving the page, copying the item, pasting outside text and automation signals
     are recorded by a separate opt-in feature. See

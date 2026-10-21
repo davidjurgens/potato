@@ -1914,8 +1914,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="object", category=FEATURES, see_also=("authenticity",),
     ),
     "interaction_tracking.enabled": _D(
-        "Record the click, focus, scroll and key stream. AI-assistant usage "
-        "and the annotation change trail are recorded either way",
+        "Record the click, focus, scroll and key stream. When false, item "
+        "loads, saves, navigation and an activity mark with no target or "
+        "detail are still "
+        "recorded, so time per item (Throughput tab, adjudication, dashboard) "
+        "keeps working. AI-assistant usage and the annotation change trail are "
+        "recorded either way",
         type="boolean", default=True, category=FEATURES,
     ),
     "interaction_tracking.disclose_to_annotators": _D(

@@ -24,6 +24,12 @@ them to the server about every 10 seconds, and again when the page is hidden or 
 item changes. **No text is ever sent.** Copied and pasted text is compared against
 the page in memory and then discarded.
 
+The server updates its in-memory record on every post. It writes `user_state.json`
+for the last post of a view (item change, page hidden), for a post that changes the
+item's flags, and otherwise at most once a minute; the next annotation save also
+writes it, and so does stopping the server (Ctrl-C or SIGTERM). A crash can lose up to
+a minute of paradata, but no annotations.
+
 | Signal | Fields |
 |---|---|
 | Left the page (tab hidden) | `hidden_events`, `hidden_ms` |
@@ -33,7 +39,7 @@ the page in memory and then discarded.
 | Selected or right-clicked the item text | `item_select_events`, `item_context_menu_events` |
 | Other copies and cuts | `other_copy_events`, `cut_events` |
 | Pastes | `paste_events`, `item_paste_events` (pasting the item back), `external_paste_events`, `external_paste_words`, `max_external_paste_words` |
-| Copy-then-… pairing | `max_away_after_item_copy_ms`, `max_paste_words_after_item_copy` |
+| Copy-then-… pairing | `max_away_after_item_copy_ms`, `max_paste_words_after_item_copy`, `copy_away_pairs` (for each absence after an item copy: how soon after the copy it began, how long it lasted, and how many characters the copy held) |
 | Window size | `min_window_ratio` (window width ÷ screen width), `large_screen`, `resize_events`, `zoom_changes` |
 | Pointer | `pointer_moves` (sampled), `pointer_distance_px`, `mouse_clicks`, `teleport_clicks` |
 | Automation | `webdriver`, `untrusted_events` (script-generated pointer/key events) |
@@ -51,14 +57,15 @@ the server and are never sent to the page.
 
 | Flag | Fires when (default) | Severity |
 |---|---|---|
-| `automation` | `navigator.webdriver` is set, or any pointer/key event has `isTrusted = false` | suspect |
+| `automation` | `navigator.webdriver` is set | suspect |
 | `copy_then_paste` | Item copied, then ≥ 10 words of external text pasted | suspect |
-| `copy_then_away` | Item copied, then away from the page ≥ 10 s (closed-format items: copy, ask elsewhere, come back, click) | suspect |
+| `copy_then_away` | ≥ 40 characters of the item copied, then away from the page ≥ 10 s, leaving within 60 s of the copy (closed-format items: copy, ask elsewhere, come back, click) | suspect |
 | `external_paste` | ≥ 10 words of external text pasted, without a preceding item copy | review |
 | `item_copied` | ≥ 40 characters of the item copied, with neither of the above | review |
 | `away_from_task` | Left the page ≥ 3 times, or away ≥ 60 s and ≥ 50 % of the time on the item | review |
 | `split_screen` | Window ≤ 60 % of the screen width on a screen ≥ 1200 px, without touch input | review |
 | `pointer_teleport` | ≥ 3 mouse clicks at a new position with no movement in between | review |
+| `synthetic_input` | ≥ 3 pointer/key events with `isTrusted = false`. Browser extensions (keyboard navigation, accessibility tools) can produce these | review |
 
 The admin rollup adds **`paradata_missing`**: the annotated items that have no
 authenticity record at all. This is what blocked or modified scripts look like. It is
@@ -101,9 +108,11 @@ export_include_authenticity: true
 ```
 
 Threshold keys: `copy_then_paste.min_words`, `copy_then_away.min_away_ms`,
+`copy_then_away.min_copy_chars`, `copy_then_away.max_gap_ms`,
 `external_paste.min_words`, `item_copied.min_chars`, `away_from_task.min_events`,
 `away_from_task.min_ms`, `away_from_task.min_fraction`,
-`split_screen.max_window_ratio`, `pointer_teleport.min_clicks`. An unknown key is a
+`split_screen.max_window_ratio`, `pointer_teleport.min_clicks`,
+`synthetic_input.min_events`. An unknown key is a
 startup error.
 
 The default notice reads:
@@ -127,7 +136,9 @@ interaction_tracking:
 
 Switching it off stops the ambient stream on both the page and the server. AI-assistant
 usage and the annotation change trail are still recorded, because they describe where
-the saved answer came from rather than ambient behaviour.
+the saved answer came from rather than ambient behaviour. Item loads, saves, navigation
+and an `activity` mark with no target or detail are recorded too, so time per item is
+still measured.
 
 ## Where the data goes
 
@@ -135,6 +146,8 @@ the saved answer came from rather than ambient behaviour.
   `views` (each view's snapshot, with `first_seen`/`last_seen` server timestamps and
   phase/page), `summary` (the merge) and `verdict`. Survey, consent and training pages
   share the `__phase_page__` bucket, and each view is stamped with its phase and page.
+  During annotation, a post for an item that is not assigned to the annotator is
+  refused (403); on other pages it goes to the `__phase_page__` bucket.
 - **Admin dashboard:** Behavioral tab, **Authenticity** panel. It shows per-annotator
   counts, flags, an `authenticity_risk` ranking and the per-item evidence. It is also
   available as JSON at `GET /admin/api/authenticity` and under the `authenticity` key
@@ -145,7 +158,7 @@ the saved answer came from rather than ambient behaviour.
 
 `authenticity_risk` weights the share of a user's items that fired each flag:
 automation 0.30, copy_then_paste 0.25, copy_then_away 0.20, external_paste 0.08,
-pointer_teleport 0.07, item_copied 0.04, away_from_task 0.03, split_screen 0.02,
+pointer_teleport 0.07, synthetic_input 0.07, item_copied 0.04, away_from_task 0.03, split_screen 0.02,
 paradata_missing 0.01. It tells you whom to look at first. It is not a probability.
 
 ## Limits

@@ -4594,7 +4594,7 @@
         },
         "enabled": {
           "default": true,
-          "description": "Record the click, focus, scroll and key stream. AI-assistant usage and the annotation change trail are recorded either way",
+          "description": "Record the click, focus, scroll and key stream. When false, item loads, saves, navigation and an activity mark with no target or detail are still recorded, so time per item (Throughput tab, adjudication, dashboard) keeps working. AI-assistant usage and the annotation change trail are recorded either way",
           "type": "boolean"
         }
       },

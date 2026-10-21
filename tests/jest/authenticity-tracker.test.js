@@ -145,6 +145,33 @@ describe("leaving the page", () => {
     expect(t.s.max_away_after_item_copy_ms).toBe(30000);
   });
 
+  test("each absence after an item copy records gap, duration and copy size", () => {
+    const t = loadTracker();
+    selectItemText();
+    t.onCopy({}, false);
+    const chars = t.s.item_copy_chars;
+    now += 4000;
+    t.onWindowBlur();               // tab switch: blur first; the gap is measured from it
+    now += 500;
+    hide(t, true);                  // the duration, as before, from hidden
+    now += 20000;
+    hide(t, false);
+    t.onWindowFocus();
+    now += 1000;
+    t.onWindowBlur();
+    now += 3000;
+    t.onWindowFocus();
+    expect(t.s.copy_away_pairs).toEqual([[4000, 20000, chars], [25500, 3000, chars]]);
+  });
+
+  test("absences before any item copy record no pair", () => {
+    const t = loadTracker();
+    hide(t, true);
+    now += 30000;
+    hide(t, false);
+    expect(t.s.copy_away_pairs).toEqual([]);
+  });
+
   test("a page the task opened itself is linked, not away", () => {
     const t = loadTracker();
     t.onClick({ target: document.getElementById("codebook") });
@@ -248,6 +275,43 @@ describe("views and transport", () => {
     const t = loadTracker();
     t.flush(false, true);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test("pointer movement alone does not trigger a post", () => {
+    const t = loadTracker();
+    window.interactionTracker.setInstanceId("item_1");
+    global.fetch.mockClear();
+    t.dirty = false;
+    t.lastSent = now;
+    for (let i = 0; i < 20; i++) {
+      now += 100;
+      t.onPointerMove({ isTrusted: true, pointerType: "mouse", clientX: i * 10, clientY: 5 });
+    }
+    t.flush(false);
+    expect(global.fetch).not.toHaveBeenCalled();
+    // The totals still ride on the next post.
+    t.flush(false, true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.snapshot.pointer_distance_px).toBeGreaterThan(0);
+  });
+
+  test("the outgoing view's last post and the page-hide post are final; others are not", () => {
+    const t = loadTracker();
+    window.interactionTracker.setInstanceId("item_1");
+    const firstView = t.viewId;
+    t.bump("hidden_events");
+    t.flush(false);
+    window.interactionTracker.setInstanceId("item_2");
+    const bodies = global.fetch.mock.calls.map((c) => JSON.parse(c[1].body));
+    const ordinary = bodies.filter((b) => b.view_id === firstView && !b.final);
+    const last = bodies.filter((b) => b.view_id === firstView).pop();
+    expect(ordinary.length).toBeGreaterThan(0);
+    expect(last.final).toBe(true);
+    expect(bodies.filter((b) => b.view_id === t.viewId).every((b) => b.final === false)).toBe(true);
+
+    t.flush(true);
+    const beacon = navigator.sendBeacon.mock.calls.pop();
+    expect(beacon[0]).toBe("/api/track_authenticity");
   });
 
   test("payload never contains copied or pasted text", () => {

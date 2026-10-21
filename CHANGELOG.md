@@ -68,7 +68,7 @@ All notable changes to the Potato annotation platform are documented in this fil
   browser and discarded. The server folds each item's views together and
   raises review/suspect flags (`copy_then_paste`, `copy_then_away`,
   `automation`, `external_paste`, `item_copied`, `away_from_task`,
-  `split_screen`, `pointer_teleport`), with thresholds kept server-side and
+  `split_screen`, `pointer_teleport`, `synthetic_input`), with thresholds kept server-side and
   overridable under `detection.thresholds`. The admin Behavioral tab gains an
   Authenticity panel with per-item evidence and an `authenticity_risk`
   ranking, including items answered with no paradata at all;
@@ -77,7 +77,10 @@ All notable changes to the Potato annotation platform are documented in this fil
   Example: `examples/advanced/authenticity/`.
 - **`interaction_tracking` switch.** The always-on click/focus/scroll tracker
   can be turned off (`interaction_tracking.enabled: false`, enforced by the
-  server too) or announced (`disclose_to_annotators: true`).
+  server too) or announced (`disclose_to_annotators: true`). When it is off,
+  time per item is still measured from item loads, saves and an `activity`
+  mark with no target or detail, so the throughput and adjudication timings
+  keep working.
 - **3D medical volumes.** `volume_annotation` opens a DICOM series or a
   NIfTI file in three linked views (axial, coronal, sagittal) with window
   presets and window drag. Annotators paint label masks, draw boxes and

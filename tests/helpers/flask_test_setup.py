@@ -51,6 +51,9 @@ def clear_all_global_state():
         # no-rbac) config into the next server.
         ("potato.server_utils.rbac", "clear_rbac_manager"),
         ("potato.server_utils.cohort_schemes", "clear_cohort_scheme_resolver"),
+        # Authenticity write buffer: keyed by username, so a second server's
+        # "user" would otherwise inherit the first one's last-write time.
+        ("potato.authenticity", "clear_persist_throttle"),
     ):
         try:
             import importlib

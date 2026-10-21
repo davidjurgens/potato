@@ -28,9 +28,14 @@ Grounding for the individual rules
 - ``away_from_task``: tab switching is a weak signal on its own (F1 = .545 in
   the same paper), so it is ``review`` only and excludes time spent in pages
   the task itself opened (the codebook link).
-- ``automation``: ``navigator.webdriver`` and pointer/key events the browser
-  marks ``isTrusted = false``. Potato itself never synthesizes those event
-  types, only ``input``/``change``/``click``, which are not counted.
+- ``copy_then_away`` needs the copy to be a real piece of the item (40+
+  characters) and the absence to start soon after it (60 s): copying a word to
+  look it up, then taking a phone call five minutes later, is not the workflow.
+- ``automation``: ``navigator.webdriver``, which a driven browser sets.
+- ``synthetic_input``: pointer/key events the browser marks
+  ``isTrusted = false``. Potato itself never synthesizes those event types, but
+  browser extensions (keyboard navigation, accessibility tools) can, so it is
+  ``review`` and needs several events.
 - ``pointer_teleport``: a real mouse cannot change position without emitting
   pointermove; scripted clicks (CDP, many browser agents) commonly do.
 - ``split_screen``: a browser window much narrower than the screen is the usual
@@ -41,7 +46,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, Iterable, List, Optional
+import threading
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from potato.typing_detect import Flag, Verdict
 
@@ -81,6 +87,16 @@ MIN_FIELDS = ("min_window_ratio",)
 #: True if true in any view.
 BOOL_FIELDS = ("webdriver", "touch_input", "large_screen")
 
+#: One ``[gap_ms, away_ms, copy_chars]`` per absence that began after an item
+#: copy: how long after the copy the annotator left, for how long, and how much
+#: of the item the copy held. Pairs rather than maxima, because whether an
+#: absence counts depends on all three at once and the thresholds stay here.
+PAIR_FIELDS = ("copy_away_pairs",)
+
+#: Pairs kept per view, and per item after merging views.
+MAX_PAIRS_PER_VIEW = 20
+MAX_PAIRS_PER_ITEM = 200
+
 #: Upper bound on any count or duration from the client. Generous (11+ days in
 #: ms) -- it exists to keep a malformed payload from poisoning a sum, not to
 #: second-guess plausible values.
@@ -97,8 +113,12 @@ _VIEW_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 DEFAULT_THRESHOLDS: Dict[str, float] = {
     # Words of external text pasted after the item was copied.
     "copy_then_paste.min_words": 10,
-    # Time away from the page after the item was copied.
+    # Time away from the page after the item was copied...
     "copy_then_away.min_away_ms": 10000,
+    # ...when the copy held at least this much of the item...
+    "copy_then_away.min_copy_chars": 40,
+    # ...and the absence began within this long of the copy.
+    "copy_then_away.max_gap_ms": 60000,
     # Words in the largest external paste (without a preceding item copy).
     "external_paste.min_words": 10,
     # Characters of item text copied.
@@ -112,6 +132,8 @@ DEFAULT_THRESHOLDS: Dict[str, float] = {
     "split_screen.max_window_ratio": 0.6,
     # Mouse clicks at a new position with no pointer movement in between.
     "pointer_teleport.min_clicks": 3,
+    # Script-generated (isTrusted=false) pointer/key events.
+    "synthetic_input.min_events": 3,
 }
 
 
@@ -157,7 +179,28 @@ def sanitize_snapshot(raw: Any) -> Dict[str, Any]:
     for key in BOOL_FIELDS:
         if isinstance(raw.get(key), bool):
             out[key] = raw[key]
+    for key in PAIR_FIELDS:
+        pairs = _sanitize_pairs(raw.get(key), MAX_PAIRS_PER_VIEW)
+        if pairs:
+            out[key] = pairs
     return out
+
+
+def _sanitize_pairs(value: Any, limit: int) -> List[List[int]]:
+    """Up to ``limit`` well-formed ``[gap_ms, away_ms, copy_chars]`` triples."""
+    if not isinstance(value, list):
+        return []
+    pairs = []
+    for entry in value:
+        if not isinstance(entry, (list, tuple)) or len(entry) != 3:
+            continue
+        nums = [_num(v) for v in entry]
+        if any(n is None for n in nums):
+            continue
+        pairs.append([int(min(max(n, 0), _MAX_VALUE)) for n in nums])
+        if len(pairs) >= limit:
+            break
+    return pairs
 
 
 def merge_snapshots(snapshots: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
@@ -165,6 +208,7 @@ def merge_snapshots(snapshots: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     merged: Dict[str, Any] = {k: 0 for k in COUNT_FIELDS + MAX_FIELDS}
     mins: Dict[str, Optional[float]] = {k: None for k in MIN_FIELDS}
     bools: Dict[str, bool] = {k: False for k in BOOL_FIELDS}
+    pairs: List[List[int]] = []
     views = 0
     for snap in snapshots:
         if not isinstance(snap, dict):
@@ -180,8 +224,12 @@ def merge_snapshots(snapshots: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
                 mins[k] = v if mins[k] is None else min(mins[k], v)
         for k in BOOL_FIELDS:
             bools[k] = bools[k] or bool(snap.get(k))
+        pairs.extend(_sanitize_pairs(snap.get("copy_away_pairs"), MAX_PAIRS_PER_VIEW))
     merged.update({k: v for k, v in mins.items() if v is not None})
     merged.update(bools)
+    # Longest absences first, so the cap drops the ones least likely to matter.
+    pairs.sort(key=lambda p: -p[1])
+    merged["copy_away_pairs"] = pairs[:MAX_PAIRS_PER_ITEM]
     merged["views"] = views
     merged["away_ms"] = merged["hidden_ms"] + merged["blur_ms"]
     merged["away_events"] = merged["hidden_events"] + merged["blur_events"]
@@ -197,22 +245,33 @@ def evaluate(summary: Dict[str, Any], *,
     verdict = Verdict()
     flags: List[Flag] = []
 
-    if s.get("webdriver") or (s.get("untrusted_events") or 0) > 0:
+    if s.get("webdriver"):
         flags.append(Flag(
             name="automation",
-            explanation=(
-                "The browser reported automation: "
-                + ("navigator.webdriver was set" if s.get("webdriver") else
-                   f"{s.get('untrusted_events')} pointer/key event(s) were "
-                   "script-generated (isTrusted=false)")
-                + "."),
-            evidence={"webdriver": bool(s.get("webdriver")),
+            explanation=("The browser reported automation: navigator.webdriver "
+                         "was set."),
+            evidence={"webdriver": True,
                       "untrusted_events": s.get("untrusted_events", 0)},
             severity="suspect",
         ))
 
+    untrusted = s.get("untrusted_events", 0) or 0
+    if untrusted >= t("synthetic_input.min_events"):
+        flags.append(Flag(
+            name="synthetic_input",
+            explanation=(
+                f"{untrusted} pointer/key event(s) were script-generated "
+                "(isTrusted=false). A browser extension can produce these, as "
+                "can an automation tool."),
+            evidence={"untrusted_events": untrusted},
+            severity="review",
+        ))
+
+    item_copies = s.get("item_copy_events", 0) or 0
     paste_after_copy = s.get("max_paste_words_after_item_copy", 0) or 0
-    copy_then_paste = paste_after_copy >= t("copy_then_paste.min_words")
+    # Both halves must be present: the paste field alone is one client number.
+    copy_then_paste = (item_copies > 0
+                       and paste_after_copy >= t("copy_then_paste.min_words"))
     if copy_then_paste:
         flags.append(Flag(
             name="copy_then_paste",
@@ -224,18 +283,28 @@ def evaluate(summary: Dict[str, Any], *,
             severity="suspect",
         ))
 
-    away_after_copy = s.get("max_away_after_item_copy_ms", 0) or 0
-    copy_then_away = (not copy_then_paste
-                      and away_after_copy >= t("copy_then_away.min_away_ms"))
+    # One absence that satisfies all three conditions together; separate
+    # maxima could pair a long copy with an unrelated absence much later.
+    matching = [
+        p for p in (s.get("copy_away_pairs") or [])
+        if isinstance(p, (list, tuple)) and len(p) == 3
+        and p[0] <= t("copy_then_away.max_gap_ms")
+        and p[1] >= t("copy_then_away.min_away_ms")
+        and p[2] >= t("copy_then_away.min_copy_chars")]
+    copy_then_away = not copy_then_paste and item_copies > 0 and bool(matching)
     if copy_then_away:
+        gap_ms, away_ms, copy_chars = max(matching, key=lambda p: p[1])
         flags.append(Flag(
             name="copy_then_away",
             explanation=(
-                f"Copied the item text, then left the page for "
-                f"{away_after_copy / 1000:.1f}s before answering."),
-            evidence={"item_copy_events": s.get("item_copy_events", 0),
-                      "item_copy_chars": s.get("item_copy_chars", 0),
-                      "away_after_item_copy_ms": away_after_copy},
+                f"Copied {copy_chars} characters of the item text, left the page "
+                f"{gap_ms / 1000:.1f}s later and stayed away for "
+                f"{away_ms / 1000:.1f}s."),
+            evidence={"item_copy_events": item_copies,
+                      "copy_chars": copy_chars,
+                      "gap_after_copy_ms": gap_ms,
+                      "away_ms": away_ms,
+                      "matching_absences": len(matching)},
             severity="suspect",
         ))
 
@@ -360,3 +429,128 @@ def record_view(store: Dict[str, Any], view_id: str, snapshot: Dict[str, Any],
     else:
         record.pop("verdict", None)
     return record
+
+
+# --------------------------------------------------------------------------
+# Write buffering
+# --------------------------------------------------------------------------
+
+#: Longest an ordinary snapshot stays in memory only. The browser posts every
+#: few seconds while anything changes, and each write rewrites the whole of
+#: user_state.json, so ordinary posts update the in-memory record and reach
+#: disk at most this often (or with the next annotation save, whichever is
+#: first). A crash loses at most this much paradata, never an annotation.
+PERSIST_INTERVAL_S = 60.0
+
+
+class PersistThrottle:
+    """Decides, per annotator, whether an authenticity post is written to disk."""
+
+    def __init__(self) -> None:
+        self._last: Dict[str, float] = {}
+        #: Annotators with a post held in memory and not yet written.
+        self._pending: set = set()
+        self._lock = threading.Lock()
+
+    def should_persist(self, user_id: str, *, now: float, urgent: bool) -> bool:
+        """True if this post should be written now; records the write if so.
+
+        ``urgent`` posts -- the last of a view, or one that changed the item's
+        flags -- are always written: nothing may follow
+        them. The rest are written once :data:`PERSIST_INTERVAL_S` has passed
+        since this annotator's last write; until then they live in memory and
+        go to disk with the next write of any kind.
+        """
+        with self._lock:
+            last = self._last.get(user_id)
+            if not urgent and last is not None and now - last < PERSIST_INTERVAL_S:
+                self._pending.add(user_id)
+                return False
+            self._last[user_id] = now
+            self._pending.discard(user_id)
+            return True
+
+    def take_pending(self) -> List[str]:
+        """The annotators with unwritten posts; clears the set."""
+        with self._lock:
+            pending = sorted(self._pending)
+            self._pending.clear()
+            return pending
+
+    def reset(self) -> None:
+        with self._lock:
+            self._last.clear()
+            self._pending.clear()
+
+
+persist_throttle = PersistThrottle()
+
+
+def clear_persist_throttle() -> None:
+    """Forget every annotator's last write (test harness, between servers)."""
+    persist_throttle.reset()
+
+
+def flag_names(record: Dict[str, Any]) -> List[str]:
+    """The flag names of a stored record's verdict, or ``[]``."""
+    verdict = (record or {}).get("verdict") or {}
+    return list(verdict.get("flag_names") or [])
+
+
+def flush_pending(save: Callable[[str], None]) -> int:
+    """Write every annotator whose last posts are held in memory only.
+
+    ``save`` writes one annotator's state (``UserStateManager.save_user_state``
+    takes a username). Returns how many were written; never raises, because it
+    runs at shutdown.
+    """
+    written = 0
+    for user_id in persist_throttle.take_pending():
+        try:
+            save(user_id)
+            written += 1
+        except Exception as e:  # noqa: BLE001 - shutdown must not raise
+            logger.warning("Could not write buffered authenticity data for %s: %s",
+                           user_id, e)
+    return written
+
+
+_shutdown_flush_installed = False
+
+
+def install_shutdown_flush(save: Callable[[str], None]) -> None:
+    """Write buffered posts when the server stops.
+
+    Registered with atexit, and SIGTERM is turned into a normal exit so atexit
+    runs: Python runs atexit on a normal exit and on Ctrl-C, but not on a
+    SIGTERM it has no handler for, and SIGTERM is what ``systemctl stop``,
+    ``docker stop`` and ``kill`` send. A previous SIGTERM handler is chained,
+    as in coding_agent_runner_manager. Signal handlers can only be installed
+    from the main thread; elsewhere only the atexit hook is registered.
+    """
+    global _shutdown_flush_installed
+    if _shutdown_flush_installed:
+        return
+    _shutdown_flush_installed = True
+
+    import atexit
+    import signal
+
+    atexit.register(flush_pending, save)
+    try:
+        if threading.current_thread() is not threading.main_thread():
+            return
+        previous = signal.getsignal(signal.SIGTERM)
+
+        def _terminate(signum, frame):
+            try:
+                flush_pending(save)
+            finally:
+                if callable(previous) and previous not in (
+                        signal.SIG_DFL, signal.SIG_IGN):
+                    previous(signum, frame)
+            raise SystemExit(128 + signum)
+
+        signal.signal(signal.SIGTERM, _terminate)
+    except (ValueError, OSError, AttributeError) as e:
+        logger.debug("Could not install a SIGTERM handler: %s", e)

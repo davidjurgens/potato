@@ -139,8 +139,32 @@ class TestEvaluate:
         assert v.flag_names == ["automation"]
         assert v.level == "suspect"
 
-    def test_automation_untrusted(self):
-        assert "automation" in flags(untrusted_events=1).flag_names
+    def test_untrusted_events_are_review_not_automation(self):
+        # Extensions can synthesize key and mouse events, so a few untrusted
+        # events are synthetic_input (review); only webdriver is automation
+        # (potato-skill audit 93, G3).
+        assert flags(untrusted_events=2).flag_names == []
+        v = flags(untrusted_events=3)
+        assert v.flag_names == ["synthetic_input"]
+        assert v.level == "review"
+
+    def test_synthetic_input_threshold_is_configurable(self):
+        v = au.evaluate(summary(untrusted_events=1),
+                        thresholds={"synthetic_input.min_events": 1})
+        assert v.flag_names == ["synthetic_input"]
+
+    def test_webdriver_stays_suspect(self):
+        v = flags(webdriver=True)
+        assert v.flag_names == ["automation"]
+        assert v.level == "suspect"
+
+    def test_paste_field_alone_is_not_copy_then_paste(self):
+        # G5: max_paste_words_after_item_copy without an item copy is one
+        # client number, and the explanation would claim a copy that never was.
+        v = flags(max_paste_words_after_item_copy=40, max_external_paste_words=40,
+                  external_paste_events=1)
+        assert "copy_then_paste" not in v.flag_names
+        assert "external_paste" in v.flag_names
 
     def test_copy_then_paste_is_suspect_and_supersedes_lesser_flags(self):
         v = flags(item_copy_events=1, item_copy_chars=300,
@@ -153,10 +177,37 @@ class TestEvaluate:
     def test_copy_then_away(self):
         v = flags(item_copy_events=1, item_copy_chars=300,
                   max_away_after_item_copy_ms=25000, hidden_events=1,
-                  hidden_ms=25000)
+                  hidden_ms=25000, copy_away_pairs=[[3000, 25000, 300]])
         assert "copy_then_away" in v.flag_names
         assert "item_copied" not in v.flag_names
         assert v.level == "suspect"
+        ev = v.flags[0].evidence
+        assert (ev["gap_after_copy_ms"], ev["away_ms"], ev["copy_chars"]) == (3000, 25000, 300)
+
+    def test_copy_then_away_needs_all_three_in_one_absence(self):
+        # G2: a short copy, or an absence long after the copy, is not the
+        # copy-ask-return workflow; and a long copy must not borrow an
+        # unrelated absence's duration.
+        base = dict(item_copy_events=2, item_copy_chars=320,
+                    max_away_after_item_copy_ms=300000)
+        word_lookup = [[2000, 30000, 9]]          # 9 chars: a looked-up word
+        phone_call = [[300000, 300000, 300]]      # left 5 min after copying
+        unrelated = [[1000, 2000, 300], [300000, 30000, 20]]
+        for pairs in (word_lookup, phone_call, unrelated):
+            v = flags(copy_away_pairs=pairs, **base)
+            assert "copy_then_away" not in v.flag_names, pairs
+        assert "copy_then_away" in flags(
+            copy_away_pairs=unrelated + [[5000, 15000, 120]], **base).flag_names
+
+    def test_copy_then_away_needs_an_item_copy(self):
+        assert "copy_then_away" not in flags(
+            copy_away_pairs=[[1000, 30000, 300]]).flag_names
+
+    def test_copy_then_away_window_is_configurable(self):
+        v = au.evaluate(summary(item_copy_events=1, item_copy_chars=300,
+                                copy_away_pairs=[[90000, 30000, 300]]),
+                        thresholds={"copy_then_away.max_gap_ms": 120000})
+        assert "copy_then_away" in v.flag_names
 
     def test_short_away_after_copy_is_only_item_copied(self):
         v = flags(item_copy_events=1, item_copy_chars=300,
@@ -315,3 +366,132 @@ class TestConfig:
         assert "authenticity" not in joined
         assert "interaction_tracking" not in joined
         assert "export_include" not in joined
+
+
+class TestPersistThrottle:
+    """Ordinary posts reach disk at most once per PERSIST_INTERVAL_S; urgent ones always."""
+
+    def _throttle(self):
+        from potato.authenticity import PersistThrottle
+        return PersistThrottle()
+
+    def test_first_post_is_written(self):
+        assert self._throttle().should_persist("u", now=100.0, urgent=False)
+
+    def test_ordinary_posts_inside_the_interval_wait(self):
+        from potato.authenticity import PERSIST_INTERVAL_S
+        t = self._throttle()
+        t.should_persist("u", now=100.0, urgent=False)
+        assert not t.should_persist("u", now=110.0, urgent=False)
+        assert not t.should_persist("u", now=100.0 + PERSIST_INTERVAL_S - 1, urgent=False)
+        assert t.should_persist("u", now=100.0 + PERSIST_INTERVAL_S, urgent=False)
+
+    def test_urgent_posts_are_always_written_and_restart_the_interval(self):
+        t = self._throttle()
+        t.should_persist("u", now=100.0, urgent=False)
+        assert t.should_persist("u", now=100.5, urgent=True)
+        assert t.should_persist("u", now=100.6, urgent=True)
+        assert not t.should_persist("u", now=130.0, urgent=False)
+
+    def test_annotators_are_independent(self):
+        t = self._throttle()
+        t.should_persist("a", now=100.0, urgent=False)
+        assert t.should_persist("b", now=101.0, urgent=False)
+
+    def test_clear_forgets_last_writes(self):
+        from potato import authenticity
+        authenticity.persist_throttle.should_persist("u", now=100.0, urgent=False)
+        authenticity.clear_persist_throttle()
+        assert authenticity.persist_throttle.should_persist("u", now=101.0, urgent=False)
+        authenticity.clear_persist_throttle()
+
+
+class TestFlagNames:
+    def test_reads_verdict_flag_names(self):
+        from potato.authenticity import flag_names
+        assert flag_names({"verdict": {"flag_names": ["item_copied"]}}) == ["item_copied"]
+        assert flag_names({}) == []
+        assert flag_names(None) == []
+
+
+class TestCopyAwayPairs:
+    def test_sanitize_keeps_well_formed_triples_only(self):
+        out = au.sanitize_snapshot({"copy_away_pairs": [
+            [1, 2, 3], [1, 2], "x", [1, "a", 3], [-5, 2e12, True], [4, 5, 6]]})
+        assert out["copy_away_pairs"] == [[1, 2, 3], [4, 5, 6]]
+
+    def test_sanitize_caps_per_view(self):
+        out = au.sanitize_snapshot({"copy_away_pairs": [[1, 2, 3]] * 100})
+        assert len(out["copy_away_pairs"]) == au.MAX_PAIRS_PER_VIEW
+
+    def test_merge_concatenates_views_longest_absence_first(self):
+        merged = au.merge_snapshots([
+            {"copy_away_pairs": [[1, 5000, 50]]},
+            {"copy_away_pairs": [[2, 9000, 60]]}])
+        assert merged["copy_away_pairs"] == [[2, 9000, 60], [1, 5000, 50]]
+
+
+class TestShutdownFlush:
+    def test_flush_writes_only_users_with_held_posts(self):
+        t = au.persist_throttle
+        au.clear_persist_throttle()
+        t.should_persist("held", now=100.0, urgent=False)
+        t.should_persist("held", now=110.0, urgent=False)      # held in memory
+        t.should_persist("written", now=100.0, urgent=False)
+        saved = []
+        assert au.flush_pending(saved.append) == 1
+        assert saved == ["held"]
+        assert au.flush_pending(saved.append) == 0             # cleared
+        au.clear_persist_throttle()
+
+    def test_a_later_write_clears_the_hold(self):
+        au.clear_persist_throttle()
+        t = au.persist_throttle
+        t.should_persist("u", now=100.0, urgent=False)
+        t.should_persist("u", now=110.0, urgent=False)
+        t.should_persist("u", now=111.0, urgent=True)
+        assert au.flush_pending(lambda _u: None) == 0
+        au.clear_persist_throttle()
+
+    def test_flush_survives_a_failing_save(self):
+        au.clear_persist_throttle()
+        t = au.persist_throttle
+        for u in ("a", "b"):
+            t.should_persist(u, now=100.0, urgent=False)
+            t.should_persist(u, now=110.0, urgent=False)
+
+        def save(u):
+            if u == "a":
+                raise OSError("disk full")
+        assert au.flush_pending(save) == 1
+        au.clear_persist_throttle()
+
+
+class TestShutdownFlushOnSigterm:
+    def test_sigterm_writes_held_posts(self):
+        """A held post reaches disk when the process is stopped with SIGTERM (G6)."""
+        import os
+        import subprocess
+        import sys
+        from tests.helpers.test_utils import create_test_directory
+        out_dir = create_test_directory("authenticity_sigterm")
+        marker = os.path.join(out_dir, "saved.txt")
+        if os.path.exists(marker):
+            os.remove(marker)
+        script = (
+            "import os, signal, time\n"
+            "from potato import authenticity as au\n"
+            f"marker = {marker!r}\n"
+            "def save(u):\n"
+            "    open(marker, 'a').write(u + '\\n')\n"
+            "au.install_shutdown_flush(save)\n"
+            "au.persist_throttle.should_persist('alice', now=100.0, urgent=False)\n"
+            "au.persist_throttle.should_persist('alice', now=110.0, urgent=False)\n"
+            "os.kill(os.getpid(), signal.SIGTERM)\n"
+            "time.sleep(5)\n"
+        )
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        proc = subprocess.run([sys.executable, "-c", script], cwd=repo,
+                              capture_output=True, text=True, timeout=60)
+        assert proc.returncode == 128 + 15, proc.stderr
+        assert open(marker).read().split() == ["alice"]   # once, not twice

@@ -42,6 +42,12 @@ def normalize_instance_id(instance_id: Any) -> str:
 #: annotator stopped working. Five minutes leaves room to read a long item.
 IDLE_GAP_CAP_SECONDS = 300.0
 
+#: Event types /api/track_interactions keeps when ``interaction_tracking.enabled``
+#: is false: enough for :meth:`BehavioralData.active_time_ms`, nothing about
+#: what was clicked, focused or typed. ``activity`` is a content-free mark the
+#: browser posts at most every 15 s while the page is in use (interaction_tracker.js).
+TIMING_EVENT_TYPES = frozenset({"navigation", "save", "activity"})
+
 
 @dataclass
 class InteractionEvent:

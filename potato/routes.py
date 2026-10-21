@@ -8990,17 +8990,31 @@ def track_interactions():
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
-    # A page rendered before interaction_tracking was switched off may still
-    # post; the switch is enforced here, not only in the browser.
-    from potato.server_utils.config_module import get_interaction_tracking_config
-    if not get_interaction_tracking_config(config).get("enabled", True):
-        return jsonify({"status": "disabled"})
-
     username = session['username']
     data = request.get_json()
 
     if not data:
         return jsonify({"error": "No data provided"}), 400
+
+    # interaction_tracking.enabled: false is enforced here, not only in the
+    # browser (a page rendered before the switch may still post the full
+    # stream). What survives is what time-per-item needs -- item loads, saves,
+    # navigation and content-free activity marks -- so active_time_ms() and the
+    # throughput, adjudication and dashboard timings built on it stay non-zero.
+    from potato.server_utils.config_module import get_interaction_tracking_config
+    from potato.interaction_tracking import TIMING_EVENT_TYPES
+    tracking_on = get_interaction_tracking_config(config).get("enabled", True)
+    if not tracking_on:
+        kept = []
+        for event in data.get('events') or []:
+            if not isinstance(event, dict) or event.get('event_type') not in TIMING_EVENT_TYPES:
+                continue
+            event = dict(event)
+            if event['event_type'] == 'activity':
+                event['target'] = ''
+                event['metadata'] = {}
+            kept.append(event)
+        data = {'instance_id': data.get('instance_id'), 'events': kept}
 
     # Unnormalized, a phase page's null id created a second behavioral-data
     # bucket keyed "null" beside the real "__phase_page__" one, and the
@@ -9732,16 +9746,34 @@ def track_authenticity():
     except Exception:
         phase_name, _page = None, None
 
+    # Only this annotator's items and the phase-page bucket. Any other id would
+    # be stored, counted and scored in the admin rollups as an item the
+    # annotator worked on (potato-skill audit 93). During annotation that is
+    # refused like /updateinstance refuses it; on other pages (training,
+    # surveys, the moment after the last item) it folds into the phase-page
+    # bucket, which is stamped with the phase and page.
+    from potato.interaction_tracking import PHASE_PAGE_SENTINEL
     instance_id = normalize_instance_id(data.get('instance_id'))
+    if instance_id != PHASE_PAGE_SENTINEL:
+        assigned_ids = user_state.get_assigned_instance_ids()
+        known = (instance_id in assigned_ids if assigned_ids
+                 else get_item_state_manager().has_item(instance_id))
+        if not known:
+            if phase_name == "annotation":
+                return jsonify({"error": "Instance not assigned to user"}), 403
+            instance_id = PHASE_PAGE_SENTINEL
     bd = get_or_create_behavioral_data(
         user_state.instance_id_to_behavioral_data, instance_id)
     if not hasattr(bd, 'authenticity'):
         return jsonify({"error": "Behavioral data unavailable"}), 500
 
     detection = au_config.get("detection", {}) or {}
+    now = time_module.time()
+    previous = bd.authenticity or {}
+    flags_before = authenticity.flag_names(previous)
     bd.authenticity = authenticity.record_view(
-        bd.authenticity, view_id, snapshot,
-        now=time_module.time(),
+        previous, view_id, snapshot,
+        now=now,
         phase=phase_name,
         page=str(_page) if _page is not None else None,
         thresholds=dict(detection.get("thresholds") or {}),
@@ -9750,12 +9782,22 @@ def track_authenticity():
 
     # Same reasoning as track_typing: the annotator may leave without saving
     # again, and the most informative post (leaving the page) is often the last.
-    try:
-        get_user_state_manager().save_user_state(user_state)
-    except Exception as e:
-        logger.warning("Could not persist user state after authenticity flush: %s", e)
+    # But this route is posted every few seconds while anything changes, and a
+    # save rewrites the whole of user_state.json, so ordinary posts stay in
+    # memory and are written at most once a minute (authenticity.py), or with
+    # the next annotation save. The last post of a view (item change, leaving
+    # the page) and one that changes the flags are written straight away.
+    urgent = (data.get("final") is True
+              or authenticity.flag_names(bd.authenticity) != flags_before)
+    persisted = authenticity.persist_throttle.should_persist(
+        session['username'], now=now, urgent=urgent)
+    if persisted:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning("Could not persist user state after authenticity flush: %s", e)
 
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "persisted": persisted})
 
 
 @app.route("/admin/api/authenticity", methods=["GET"])

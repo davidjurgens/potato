@@ -2474,6 +2474,14 @@ class AdminDashboard:
             users_with_low_interaction = 0
             users_with_no_changes = 0
 
+            # With interaction_tracking.enabled: false the log holds only item
+            # loads, saves and activity marks, and scroll depth is not
+            # recorded. Low interaction and no-scroll would then score every
+            # annotator as suspicious for ordinary work, so they are unknown
+            # and drop out of the score like any other unmeasured rate.
+            from potato.server_utils.config_module import get_interaction_tracking_config
+            ambient_tracked = get_interaction_tracking_config(config).get("enabled", True)
+
             for user_id in users:
                 user_state = usm.get_user_state(user_id)
                 if not user_state:
@@ -2600,10 +2608,13 @@ class AdminDashboard:
                     fast_rate = (user_fast_count / len(user_times)) if user_times else None
                     # Over the instances that had an interaction log; with
                     # none it is unknown and drops out like fast_rate.
+                    if not ambient_tracked:
+                        user_low_interaction_count = 0
+                        user_no_scroll_count = 0
                     low_interaction_rate = ((user_low_interaction_count / user_logged_instances)
-                                            if user_logged_instances else None)
+                                            if user_logged_instances and ambient_tracked else None)
                     no_scroll_rate = ((user_no_scroll_count / user_logged_instances)
-                                      if user_logged_instances else None)
+                                      if user_logged_instances and ambient_tracked else None)
                     no_change_rate = user_no_change_count / total_instances
                     parts = [(fast_rate, 0.3), (low_interaction_rate, 0.35),
                              (no_scroll_rate, 0.2), (no_change_rate, 0.15)]
@@ -2656,6 +2667,10 @@ class AdminDashboard:
                 # How many instances the interaction total is over. 0 means
                 # interactions were not recorded, not that nobody clicked.
                 'instances_with_interaction_log': instances_with_interaction_log,
+                # False: clicks, focus and scroll were not recorded
+                # (interaction_tracking.enabled: false), so the per-user
+                # low-interaction and no-scroll rates are None.
+                'interaction_tracking_enabled': ambient_tracked,
                 'total_changes': total_changes,
                 'total_ai_requests': total_ai_requests,
             }
@@ -3016,6 +3031,7 @@ class AdminDashboard:
         'copy_then_away': 0.20,
         'external_paste': 0.08,
         'pointer_teleport': 0.07,
+        'synthetic_input': 0.07,
         'item_copied': 0.04,
         'away_from_task': 0.03,
         'split_screen': 0.02,
