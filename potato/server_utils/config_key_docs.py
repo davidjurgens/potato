@@ -241,7 +241,8 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "serve_raw_medical_files": _D(
         "Let /media/ hand out DICOM and NIfTI files as-is. Off by default: "
         "their headers carry patient information that volume_annotation's "
-        "display_tags filter withholds",
+        "display_tags filter withholds. When on, they are served without "
+        "sign-in like other /media/ files",
         type="boolean", default=False, category=MEDIA,
         see_also=("media_directory",),
     ),

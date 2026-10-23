@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,17 @@ WINDOW_PARAMS = ("window_min", "window_max", "gamma", "page")
 #: split that has bitten module-level state before.
 _registered_config: dict = {}
 
+
+
+_ABS_PATH = re.compile(r"(?<![\w.])/(?:[^\s'\":,;()\[\]]+/)+([^\s'\":,;()\[\]]+)")
+
+
+def _public_error(exc) -> str:
+    """An error message fit for the browser: absolute server paths become
+    their file name. A library error ("File /srv/data/ct/01.nii.gz is not a
+    gzip file") otherwise shows the annotator where the server keeps its
+    data (audit 95, V2)."""
+    return _ABS_PATH.sub(lambda m: m.group(1), str(exc))
 
 def _config() -> dict:
     return _registered_config
@@ -116,7 +128,7 @@ def media_proxy(filepath: str):
                 except ImageTranscodeError as exc:
                     # 415: the file is fine, we cannot render it. A 500 would
                     # suggest a bug and hide the actionable message.
-                    return jsonify({"error": str(exc)}), 415
+                    return jsonify({"error": _public_error(exc)}), 415
                 cache.prune()
         response = send_file(str(target), mimetype="image/webp")
         # Derived from an immutable (path, size, mtime, params) cache key, same
@@ -132,7 +144,7 @@ def media_proxy(filepath: str):
                 try:
                     transcode_video(str(source), str(target))
                 except VideoTranscodeError as exc:
-                    return jsonify({"error": str(exc)}), 415
+                    return jsonify({"error": _public_error(exc)}), 415
                 cache.prune()
         response = send_file(str(target), mimetype="video/webm")
         # Immutable cache key, as above.
@@ -174,7 +186,7 @@ def media_info(filepath: str):
     try:
         return jsonify({"kind": "image", **describe_image(resolved)})
     except ImageTranscodeError as exc:
-        return jsonify({"error": str(exc)}), 415
+        return jsonify({"error": _public_error(exc)}), 415
 
 
 def _tile_spec(filepath: str, args):
@@ -222,7 +234,7 @@ def _tile_spec(filepath: str, args):
     except TileError as exc:
         # 415, not 500: the request is well formed and the *source* cannot be
         # tiled, and the message names what to do about it.
-        return None, None, None, 0, (jsonify({"error": str(exc)}), 415)
+        return None, None, None, 0, (jsonify({"error": _public_error(exc)}), 415)
     return resolved, spec, settings, page, None
 
 
@@ -272,7 +284,7 @@ def tile_image(filepath: str, level: int, column: int, row: int):
                              int(column), int(row), page=page,
                              max_pixels=settings["max_pixels"])
     except TileError as exc:
-        return jsonify({"error": str(exc)}), 415
+        return jsonify({"error": _public_error(exc)}), 415
 
     response = send_file(str(path))
     # A tile is derived from an immutable (path, size, mtime) key, so it can be
@@ -322,7 +334,7 @@ def iiif_image(filepath: str, region: str, size: str, rotation: str,
             quality or "default", "png" if fmt == "png" else "jpg", page=page,
             max_pixels=settings["max_pixels"])
     except TileError as exc:
-        return jsonify({"error": str(exc)}), 415
+        return jsonify({"error": _public_error(exc)}), 415
 
     response = Response(payload, mimetype=mimetype)
     response.headers["Cache-Control"] = "public, max-age=604800"
@@ -417,7 +429,7 @@ def point_cloud(filepath: str):
             except PointCloudError as exc:
                 # 415, not 500: the file is fine, we cannot read it, and the
                 # message names the conversion command to run.
-                return jsonify({"error": str(exc)}), 415
+                return jsonify({"error": _public_error(exc)}), 415
             target.write_bytes(to_wire(cloud))
             cache.prune()
 
@@ -460,7 +472,7 @@ def depth_map(filepath: str):
     except DepthError as exc:
         # 415, not 500: the file is fine and we cannot read it. The message
         # names the dependency or the conversion command.
-        return jsonify({"error": str(exc)}), 415
+        return jsonify({"error": _public_error(exc)}), 415
 
     if request.args.get("info") in ("1", "true", "yes"):
         return jsonify({"kind": "depth", **describe(depth)})
@@ -496,7 +508,7 @@ def depth_map(filepath: str):
                 target.write_bytes(to_png(depth, window, colormap,
                                           invert=invert))
             except DepthError as exc:
-                return jsonify({"error": str(exc)}), 415
+                return jsonify({"error": _public_error(exc)}), 415
             cache.prune()
     return send_file(str(target), mimetype="image/png")
 
@@ -532,7 +544,7 @@ def _depth_pointcloud(depth, request):
             else 500_000,
             frame=frame)
     except DepthError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return jsonify({"error": _public_error(exc)}), 400
 
     return Response(cloud_to_wire(cloud, extra={"from_depth": True}),
                     mimetype="application/octet-stream")
@@ -589,7 +601,7 @@ def _point_cloud_lod(source: Path, request):
                 tree = build_octree(cloud, grid=grid, max_level=max_level,
                                     min_points=min_points)
             except PointCloudError as exc:
-                return jsonify({"error": str(exc)}), 415
+                return jsonify({"error": _public_error(exc)}), 415
             target.write_bytes(to_octree_bytes(tree))
             cache.prune()
 
@@ -599,7 +611,7 @@ def _point_cloud_lod(source: Path, request):
             return Response(blob, mimetype="application/octet-stream")
         return jsonify(manifest_for_client(read_manifest(target)))
     except PointCloudError as exc:
-        return jsonify({"error": str(exc)}), 404
+        return jsonify({"error": _public_error(exc)}), 404
 
 
 def _volume_schema(name):
@@ -625,7 +637,7 @@ def _open_volume(filepath):
     try:
         return load_volume(resolved), None
     except VolumeError as exc:
-        return None, (jsonify({"error": str(exc)}), 415)
+        return None, (jsonify({"error": _public_error(exc)}), 415)
 
 
 def volume(filepath: str):
@@ -669,7 +681,7 @@ def volume(filepath: str):
                          default["center"] if center is None else center,
                          default["width"] if width is None or width <= 0 else width)
     except VolumeError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return jsonify({"error": _public_error(exc)}), 400
     response = Response(png, mimetype="image/png")
     response.headers["Cache-Control"] = "private, max-age=3600"
     return response

@@ -19,6 +19,7 @@
         <h1 class="grid-title">{{ title }}</h1>
         <span class="grid-progress">{{ n_annotated }} annotated</span>
         <a class="grid-switch" href="{{ url_for('annotate') }}">One at a time</a>
+        {% include '_theme_toggle.html' %}
         <span class="grid-user">{{ username }}</span>
     </div>
 </header>

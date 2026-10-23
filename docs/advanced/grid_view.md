@@ -29,9 +29,13 @@ grid_view:
 The scheme must be a top-level `radio`, `multiselect` or `triage`. For a triage
 scheme the grid's buttons are the scheme's own labels and keys (Keep, Discard
 and Unsure on 1, 2 and 3 unless the scheme sets others), and a decision made in
-the grid shows on the normal page as if it had been made there. A study with other
-schemes as well can still use the grid for this one; the others are answered on
-the normal page.
+the grid shows on the normal page as if it had been made there.
+
+An item labelled in the grid counts as done, and the annotator is not sent back to
+it, so other schemes in the study are answered only on items the annotator opens on
+the normal page. Those schemes must be optional; the validator refuses grid_view
+beside another required scheme, which would otherwise end the study with that
+scheme unanswered on every grid item.
 
 ## Using it
 

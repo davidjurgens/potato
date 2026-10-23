@@ -3020,6 +3020,21 @@ def validate_grid_view_config(config_data: Dict[str, Any]) -> None:
     size = grid.get("page_size", 24)
     if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= 200:
         raise ConfigValidationError("grid_view.page_size must be a whole number from 1 to 200")
+    # An item labelled in the grid counts as done, and the annotator never
+    # sees it on the normal page again, so a second *required* scheme would
+    # end the study with that scheme unanswered on every grid item.
+    def _scheme_is_required(s):  # mirrors flask_server._scheme_is_required
+        lr = s.get("label_requirement", {})
+        return (s.get("required") is True or lr is True
+                or (isinstance(lr, dict) and lr.get("required") is True))
+    required_others = [n for n, s in schemes.items()
+                       if n != name and s.get("annotation_type") != "pure_display"
+                       and _scheme_is_required(s)]
+    if required_others:
+        raise ConfigValidationError(
+            f"grid_view labels only '{name}', and an item labelled in the grid counts as "
+            f"done, so the required scheme(s) {', '.join(map(str, required_others))} would "
+            "never be asked. Make them optional, or drop grid_view for this study.")
 
 
 def validate_scheme_keys(config_data: Dict[str, Any],
@@ -4383,6 +4398,65 @@ def _validate_segment_schemes(segment_schemes, path):
         validate_single_annotation_scheme(checked, sub_path)
 
 
+def _validate_volume_annotation(scheme: Dict[str, Any], path: str) -> None:
+    """The generator turns these into an error card on every page; report
+    them where `potato validate` can (audit 95, V1)."""
+    from potato.server_utils.schemas import volume_annotation as vol
+    try:
+        vol._labels(scheme.get("labels"))
+        presets = vol._window_presets(scheme.get("window_presets"))
+    except ValueError as e:
+        raise ConfigValidationError(f"{path}: {e}")
+    for key, valid in (("tools", vol.VALID_TOOLS), ("views", vol.VIEWS)):
+        value = scheme.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, list) or not value:
+            raise ConfigValidationError(f"{path}.{key} must be a non-empty list of: {', '.join(valid)}")
+        bad = [v for v in value if v not in valid]
+        if bad:
+            raise ConfigValidationError(
+                f"{path}.{key} has {', '.join(map(str, bad))}; valid: {', '.join(valid)}")
+    if "brush_size" in scheme:
+        size = scheme["brush_size"]
+        if isinstance(size, bool) or not isinstance(size, (int, float)) or size <= 0:
+            raise ConfigValidationError(f"{path}.brush_size must be a positive number of voxels")
+    for key in ("display_tags", "allow_identifying_tags"):
+        value = scheme.get(key)
+        if value is not None and not (isinstance(value, list) and all(isinstance(t, str) for t in value)):
+            raise ConfigValidationError(f"{path}.{key} must be a list of DICOM attribute names")
+    window = scheme.get("default_window")
+    if window is not None:
+        from potato.media.volumes import PRESETS
+        known = {p["name"] for p in presets} | {name for group in PRESETS.values()
+                                                 for name, _c, _w in group}
+        if window not in known:
+            raise ConfigValidationError(
+                f"{path}.default_window '{window}' is not a window preset "
+                f"({', '.join(sorted(known))})")
+
+
+def _plugin_hint(type_name: Any) -> str:
+    """For an unknown annotation type, point at an installed plugin.
+
+    Plugin types exist only once the plugin is loaded, so a config that uses
+    one without listing it got the built-in list and nothing about the
+    plugin to add.
+    """
+    try:
+        from potato import plugins
+        installed = sorted(plugins.discover())
+    except Exception:
+        return ""
+    if not installed:
+        return ""
+    if type_name in installed:
+        return (f". '{type_name}' is the name of an installed plugin: add "
+                f"`plugins: [{type_name}]` to the config to use its types")
+    return (f". If '{type_name}' comes from a plugin, list it under `plugins:`; "
+            f"installed plugins: {', '.join(installed)}")
+
+
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:
     """
     Validate a single annotation scheme.
@@ -4406,7 +4480,12 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     from potato.server_utils.schemas.registry import schema_registry
     valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
-        raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
+        raise ConfigValidationError(
+            f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}"
+            + _plugin_hint(scheme['annotation_type']))
+
+    if scheme['annotation_type'] == 'volume_annotation':
+        _validate_volume_annotation(scheme, path)
 
     if scheme['annotation_type'] == 'cloze':
         # The generator turns a bad cloze into an error card on the page; say

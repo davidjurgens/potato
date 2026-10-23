@@ -42,13 +42,15 @@ NIfTI plus an RTSTRUCT:
 
 | Key | Default | Description |
 |---|---|---|
+| `name` | required | Scheme name |
+| `description` | required | The question shown above the viewer |
 | `labels` | required | Names, or `{name, color, key_value}` |
 | `source_field` | `volume` | Item field holding the volume path |
 | `tools` | all | Any of `navigate`, `brush`, `eraser`, `box`, `polygon` (`navigate` is always added) |
 | `views` | all three | Any of `axial`, `coronal`, `sagittal` |
-| `default_window` | first preset | Name of the window preset to start in |
+| `default_window` | first preset | Name of the window preset to start in: one of `window_presets`, or a built-in CT preset (Soft tissue, Lung, Bone, Brain) |
 | `window_presets` | none | Extra presets, `{name, center, width}`, listed first. A NIfTI file has no modality header, so CT or MR presets for NIfTI data come from here |
-| `brush_size` | `2` | Starting brush radius, in voxels of the finest axis |
+| `brush_size` | `2` | Starting brush radius, in voxels of the finest axis; a positive number |
 | `prefill_rtstruct_field` | none | Item field naming an RTSTRUCT whose ROIs become the starting masks |
 | `display_tags` | none | DICOM header keywords shown under the views |
 | `allow_identifying_tags` | none | Identifying keywords from `display_tags` that may be shown (see below) |
@@ -67,8 +69,10 @@ The raw files are not served: `/media/` refuses DICOM files (recognised by
 content, with or without a `.dcm` suffix) and NIfTI files, signed in or not,
 so the header cannot be downloaded around the filter. Set
 `serve_raw_medical_files: true` at the top level of the config to allow
-downloads. The slice images and the volume description need a signed-in
-user.
+downloads. Like every other file under `/media/`, the raw files are then
+served without sign-in, to anyone who has the URL, so turn it on only for
+de-identified data. The slice images and the volume description need a
+signed-in user.
 
 Three things the filter cannot cover:
 
@@ -133,8 +137,11 @@ orthogonal grid, not true axial, coronal and sagittal planes.
   are matched to labels by name (case-insensitive); unmatched ROIs are
   listed in the status line. Contours on planes that do not fall on a slice
   are skipped with a warning in the server log. The prefilled masks are
-  shown at once and saved with the annotator's first save, so opening an
-  item does not count as answering it.
+  shown at once and saved with the annotator's first save. Opening an item
+  saves nothing, but pressing Next is a save: an annotator who moves on
+  without editing accepts the starting contours as their answer, and they are
+  stored and exported as that annotator's masks. To measure how much
+  annotators change the contours, compare each export with the RTSTRUCT.
 
 ## What is stored
 

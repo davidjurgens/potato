@@ -296,3 +296,21 @@ class TestFollowUps:
         finally:
             server.stop()
             cleanup_test_directory(test_dir)
+
+
+class TestTheme:
+    """Audit 95, G2: the grid page had no theme toggle under ui.theme: auto,
+    and a forced theme never reached it (the page was rendered without
+    ui_theme)."""
+
+    @pytest.mark.parametrize("mode,toggle,scheme_color", [
+        ("auto", True, "light"), ("dark", False, "dark"), ("light", False, "light")])
+    def test_grid_follows_ui_theme(self, request, mode, toggle, scheme_color):
+        server, test_dir = _server(f"grid_theme_{mode}", ITEMS, {
+            "grid_view": {"enabled": True, "scheme": "sentiment"},
+            "ui": {"theme": mode}})
+        request.addfinalizer(lambda: (server.stop(), cleanup_test_directory(test_dir)))
+        _, html = _grid(server, _login(server, f"theme_{mode}"))
+        soup = BeautifulSoup(html, "html.parser")
+        assert bool(soup.select("[data-theme-toggle]")) is toggle
+        assert soup.find("meta", attrs={"name": "color-scheme"})["content"] == scheme_color

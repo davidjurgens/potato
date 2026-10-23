@@ -2402,7 +2402,15 @@ def annotate_grid():
         tiles=tiles,
         n_annotated=len(annotated),
         username=username,
+        # ui.theme: a forced light/dark theme applies here too, and in auto
+        # mode the page carries the same toggle as the annotation page.
+        ui_theme=_grid_ui_theme(),
     )
+
+
+def _grid_ui_theme():
+    from potato.server_utils.theme import resolve_ui_theme
+    return resolve_ui_theme(config)
 
 
 def _review_scope(username, user_state):
