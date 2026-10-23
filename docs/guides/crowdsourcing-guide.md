@@ -1,11 +1,11 @@
 # Crowdsourcing Guide
 
-Running annotation tasks on Prolific, Amazon MTurk, and the other crowdsourcing platforms.
+Running annotation tasks on Prolific, CloudResearch Connect, SONA and other crowdsourcing platforms. Amazon MTurk closed on September 30, 2026; its guide remains for archived studies.
 
 ## Platform Setup
 
-- **[Crowdsourcing Guide](../deployment/crowdsourcing.md)** - General setup for Prolific and MTurk integration
-- **[MTurk Integration](../deployment/mturk_integration.md)** - Detailed Amazon MTurk HIT setup, payment, and management
+- **[Crowdsourcing Guide](../deployment/crowdsourcing.md)** - General setup for crowd providers, including Prolific
+- **[MTurk Integration](../deployment/mturk_integration.md)** - How the closed MTurk integration worked, for archived studies
 
 ## Authentication for Crowd Workers
 
@@ -14,7 +14,7 @@ For crowdsourcing, you typically want low-friction authentication:
 - **[Passwordless Login](../auth-users/passwordless_login.md)** - Workers access tasks without passwords (recommended for most crowd tasks)
 - **[SSO Authentication](../auth-users/sso_authentication.md)** - Institutional SSO for studies requiring verified identity
 
-Platform-specific authentication (Prolific IDs, MTurk Worker IDs) is handled automatically when using the crowdsourcing integration.
+Platform-specific authentication (Prolific IDs, Connect participant IDs, SONA codes) is handled automatically when using the crowdsourcing integration.
 
 ## Quality Assurance for Crowd Tasks
 

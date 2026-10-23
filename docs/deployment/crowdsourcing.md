@@ -16,8 +16,8 @@ You should then be able to access the annotation page via `your_ip_address:the_p
 
 ## Crowd Providers
 
-Potato connects to recruitment platforms through **crowd providers**. Prolific and
-MTurk have dedicated providers; any other panel that passes a participant ID in
+Potato connects to recruitment platforms through **crowd providers**. Prolific,
+CloudResearch Connect and SONA have dedicated providers; any other panel that passes a participant ID in
 the URL and accepts a completion code (Besample, Positly, User Interviews,
 Testable Minds, Cint, ...) can be configured with the `generic` provider — no
 code required:
@@ -28,7 +28,7 @@ login:
   url_argument: response_id        # must match id_param below
 
 crowdsourcing:
-  provider: generic                # generic | prolific | mturk
+  provider: generic                # generic | prolific | connect | sona | ...
   generic:
     platform_label: "Besample"     # shown on the done-page return button
     id_param: response_id          # URL parameter carrying the participant ID
@@ -282,6 +282,11 @@ surveyflow:
 ---
 
 ## Amazon Mechanical Turk Integration
+
+!!! warning "MTurk closed permanently on September 30, 2026"
+    No HITs can be created or completed. This section describes how the
+    integration worked, for archived studies; new studies need another
+    provider. See [Choosing a Crowdsourcing Platform](crowdsourcing-platforms.md).
 
 [Amazon Mechanical Turk (MTurk)](https://www.mturk.com/) is a popular crowdsourcing marketplace for human intelligence tasks. Potato provides full integration with MTurk through:
 

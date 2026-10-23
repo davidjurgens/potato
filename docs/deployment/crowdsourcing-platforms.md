@@ -1,9 +1,11 @@
 # Choosing a Crowdsourcing Platform
 
-Amazon Mechanical Turk **closed to new requesters on July 30, 2026**. Existing MTurk
-requester accounts continue to work (see the [MTurk guide](mturk_integration.md)), but
-new projects need a different recruitment platform. This page surveys the platforms
-that work with Potato's deployment model and how to connect them.
+Amazon Mechanical Turk **closed permanently on September 30, 2026**. HITs can no
+longer be created or completed, so every study needs a different recruitment
+platform. Potato still loads an MTurk config, so an archived study's server starts
+and its annotations export (see the [MTurk guide](mturk_integration.md)). This page
+surveys the platforms that work with Potato's deployment model and how to connect
+them.
 
 _Survey last verified: July 2026._
 
@@ -44,8 +46,9 @@ pause/resume, assignment reclaim for returned participants).
 - **Model:** "Project Link" external URL; passes `participantId` (plus optional
   `assignmentId`, `projectId`); completion via fixed code or completion redirect.
 - **API:** REST API at `connect-api.cloudresearch.com` (API key).
-- **Potato support:** works today via `url_direct` login with
-  `url_argument: participantId` and a `completion_code`. Deeper integration is planned.
+- **Potato support:** the `connect` crowd provider
+  ([Connect integration](connect_integration.md)): `participantId` login and a
+  completion code or redirect. Connect's REST API is not used yet.
 
 ### SONA Systems (university subject pools)
 
@@ -54,8 +57,9 @@ pause/resume, assignment reclaim for returned participants).
 - **Model:** put `%SURVEY_CODE%` in the study URL (SONA substitutes a unique
   per-participant code); grant credit via a client-side completion URL or a
   server-side `WebstudyCredit` API call.
-- **Potato support:** works today via `url_direct` login with
-  `url_argument: <your param name>`; automatic server-side credit granting is planned.
+- **Potato support:** the `sona` crowd provider ([SONA integration](sona_integration.md))
+  grants credit server-side through `WebstudyCredit` when the participant finishes,
+  falling back to the client-side credit link if that call fails.
 
 ### Besample
 
@@ -99,9 +103,9 @@ return URLs).
 These either shut down their open crowd, have no self-serve access, or run tasks
 only inside their own tools:
 
-- **Amazon SageMaker Ground Truth** — its "public workforce" *is* MTurk, so it dies
-  with MTurk for new customers; remaining workforces are private/vendor and tasks
-  run in Ground Truth's own templates.
+- **Amazon SageMaker Ground Truth** — its "public workforce" was MTurk, which closed
+  on September 30, 2026; remaining workforces are private/vendor and tasks run in
+  Ground Truth's own templates.
 - **Toloka** — exited the open-crowd business (contributors moved to its Mindrift
   expert platform); no self-serve task posting.
 - **Appen/CrowdGen, Scale AI/Outlier, Surge AI, iMerit** — enterprise, sales-led
@@ -118,6 +122,10 @@ URLs pasted into the contract chat, with admin work reports for invoicing.
 
 ## Migration checklist from MTurk
 
+An MTurk study cannot recruit anyone until it moves to another platform. The
+annotation config, training, attention checks and gold standards stay as they are;
+only the login and completion settings change.
+
 1. Pick a platform above (Prolific or Connect for vetted general populations;
    SONA for university pools; Besample for non-Western populations).
 2. Change `login.url_argument` from `workerId` to the new platform's parameter.
@@ -132,5 +140,5 @@ URLs pasted into the contract chat, with admin work reports for invoicing.
 
 - [Crowdsourcing setup guide](crowdsourcing.md)
 - [Prolific integration](prolific_integration.md)
-- [MTurk integration (frozen)](mturk_integration.md)
+- [MTurk integration (closed September 30, 2026)](mturk_integration.md)
 - [Quality control](../workflow/quality_control.md)

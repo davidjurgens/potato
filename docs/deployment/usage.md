@@ -145,5 +145,5 @@ See [Migration CLI](../tools/migration_cli.md) for details.
 - [Configuration Guide](../configuration/configuration.md) - Complete configuration reference
 - [Schemas and Templates](../annotation-types/schemas_and_templates.md) - All annotation types
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards
-- [Crowdsourcing](crowdsourcing.md) - MTurk and Prolific integration
+- [Crowdsourcing](crowdsourcing.md) - Prolific, Connect, SONA and other crowd providers
 - [Admin Dashboard](../administration/admin_dashboard.md) - Monitoring and management

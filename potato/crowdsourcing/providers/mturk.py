@@ -2,8 +2,10 @@
 Mechanical Turk provider: workerId arrival, HIT preview mode, and the
 POST-form submit back to turkSubmitTo.
 
-MTurk closed to new requesters on 2026-07-30; this provider is maintained
-for existing requester accounts (see docs/deployment/mturk_integration.md).
+Amazon Mechanical Turk closed permanently on 2026-09-30: no HITs can be
+created and no worker can reach a study through it. The provider remains so an
+archived MTurk study's config still loads, its server starts, and its
+annotations export (see docs/deployment/mturk_integration.md).
 """
 
 from potato.crowdsourcing.base import (

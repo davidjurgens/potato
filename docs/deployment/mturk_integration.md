@@ -1,16 +1,20 @@
 # Amazon Mechanical Turk Integration Guide
 
-!!! warning "MTurk is closed to new customers (July 30, 2026)"
-    Amazon Mechanical Turk **closed to new requesters on July 30, 2026** and is in
-    maintenance mode: existing requester accounts continue to work, but AWS is not
-    adding features and has announced no timeline for the service beyond that.
-    Potato's MTurk integration is **maintained but frozen** — it will keep working
-    for existing requesters, and no new MTurk features will be added.
+!!! warning "MTurk closed permanently on September 30, 2026"
+    Amazon Mechanical Turk **closed on September 30, 2026**. HITs can no longer be
+    created or completed, and the requester sites return HTTP 410. No worker can
+    reach a Potato study through MTurk.
 
-    If you are starting a new project, use [Prolific](prolific_integration.md) or
-    another platform from the [crowdsourcing platform guide](crowdsourcing-platforms.md).
-    CloudResearch is also sunsetting its MTurk Toolkit (end of 2026) in favor of
-    [Connect](crowdsourcing-platforms.md#cloudresearch-connect).
+    Potato still loads an MTurk config, so an archived study's server starts and
+    its annotations export. To run the study again, replace the `workerId` login
+    with another provider's `crowdsourcing` block; the annotation config,
+    training, attention checks and gold standards stay as they are. See the
+    [crowdsourcing platform guide](crowdsourcing-platforms.md), including
+    [Prolific](prolific_integration.md) and
+    [CloudResearch Connect](crowdsourcing-platforms.md#cloudresearch-connect).
+
+    The rest of this page describes how the integration worked, for reading
+    archived studies.
 
 Deploying a Potato annotation task on Amazon Mechanical Turk (MTurk), end to end.
 

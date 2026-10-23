@@ -42,7 +42,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Getting Started Guide](guides/getting-started.md) - First-time setup and your first annotation project
 - [Administrator Guide](guides/admin-guide.md) - Managing annotators, quality control, and monitoring
 - [Developer Guide](guides/developer-guide.md) - Extending Potato, API integration, and custom schemas
-- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and MTurk (for other platforms, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
+- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and other platforms (for the full list, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
 - [Agent Evaluation Guide](guides/agent-evaluation-guide.md) - Evaluating AI agents, coding agents, and web agents
 - [AI-Assisted Annotation Guide](guides/ai-assisted-annotation-guide.md) - Using LLMs, active learning, and Solo Mode
 
@@ -61,8 +61,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 62 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 495 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 63 annotation types and 24 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 502 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -104,6 +104,7 @@ over prose when writing a config or calling the API.
 - [Extractive QA](annotation-types/text/extractive_qa.md) - SQuAD-style answer span highlighting
 - [Rubric Evaluation](annotation-types/measurement/rubric_eval.md) - Multi-criteria rubric grid for LLM evaluation
 - [Text Edit / Post-Edit](annotation-types/text/text_edit.md) - Inline text editing with diff tracking
+- [Cloze](annotation-types/text/cloze.md) - Fill-in-the-blank passages scored against a server-side answer key
 - [Error Span (MQM)](annotation-types/text/error_span.md) - Error annotation with typed severity and quality scoring
 - [Card Sorting](annotation-types/structured/card_sort.md) - Drag-and-drop grouping of items into categories
 - [Conjoint Analysis](annotation-types/comparison/conjoint.md) - Discrete choice between multi-attribute profiles
@@ -137,6 +138,9 @@ over prose when writing a config or calling the API.
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
 - [Category Assignment](advanced/category_assignment.md) - Category-based item assignment
 - [Surveyflow](workflow/surveyflow.md) - Pre/post annotation surveys
+- **[Experiment Flow](workflow/experiment_flow.md)** - Between-subjects conditions, page branching and screen-outs, counterbalanced page order, randomized question order
+- **[jsPsych Phase](workflow/jspsych_phase.md)** - Run a jsPsych timeline as one page of a Potato study, with its data stored and exported
+- **[Timed Trials](workflow/timed_trials.md)** - Fixation, stimulus duration, deadlines and key-to-label reaction times on annotation items
 - [Annotation Filtering](workflow/annotation_filtering.md) - Filter data based on prior annotations
 - [Survey Instruments](advanced/survey_instruments.md) - 55 pre-built validated psychological instruments
 - **[QDA Mode](advanced/qda.md)** - Qualitative data analysis workspace: composes codebook + memos + cases + search with single-coder defaults
@@ -209,9 +213,9 @@ over prose when writing a config or calling the API.
 
 ## Crowdsourcing
 
-- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Configuring a crowd provider; nine ship, including Prolific and MTurk
+- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Configuring a crowd provider; nine ship, including Prolific, Connect and SONA
 - [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md) - Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker and others compared
-- [MTurk Integration](deployment/mturk_integration.md) - Detailed Amazon MTurk setup guide
+- [MTurk Integration](deployment/mturk_integration.md) - How the MTurk integration worked (MTurk closed September 30, 2026)
 
 ## Administration
 
@@ -310,7 +314,7 @@ over prose when writing a config or calling the API.
 | Set up SSO/OAuth login | [SSO Authentication](auth-users/sso_authentication.md) |
 | Reset a user's password | [Password Management](auth-users/password_management.md) |
 | Use a database for user storage | [Password Management](auth-users/password_management.md#database-authentication-backend) |
-| Configure for MTurk | [MTurk Integration](deployment/mturk_integration.md) |
+| Move a study off MTurk | [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md#migration-checklist-from-mturk) |
 | Configure for Prolific | [Crowdsourcing Guide](deployment/crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](administration/admin_dashboard.md) |
 | Add AI suggestions | [AI Support](ai-intelligence/ai_support.md) |
@@ -720,9 +724,10 @@ OpenTelemetry exporter is also available.
 ## Does Potato support crowdsourcing (MTurk, Prolific)?
 
 Yes. Potato ships nine [crowd providers](deployment/crowdsourcing.md): Prolific,
-MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for
-hired experts, a generic provider for any panel that passes a participant ID in
-the URL, and the legacy `url_direct` login. Quality control, training phases and
+CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired
+experts, a generic provider for any panel that passes a participant ID in the
+URL, the legacy `url_direct` login, and MTurk. MTurk closed on September 30,
+2026, so its provider only keeps archived studies loading and exporting. Quality control, training phases and
 inter-annotator agreement do not depend on the provider. See
 [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md).
 
@@ -749,7 +754,7 @@ detectors or segmenters, and it does not serve models. See
 
 ## What annotation types does Potato support?
 
-62 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
+63 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
 best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).
@@ -924,10 +929,10 @@ Most of the tools below are very good at what they were built for, and several b
 | Role-based access control (RBAC) | Yes | Enterprise | Yes | - | - | - | - | - |
 | Per-cohort schema assignment | Yes | Enterprise | - | - | - | - | - | - |
 | Handles 50k+ items | Yes | Yes | Yes | Yes | Yes | - | - | Yes |
-| Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
+| Crowdsourcing (Prolific, Connect, SONA and six more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 35 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 36 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -979,7 +984,7 @@ Most annotation platforms report agreement as raw IoU, exact match, or percent a
 
 ### Breadth of Annotation Types
 
-Potato has 62 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
+Potato has 63 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
 
 ### AI and LLM Integration
 
@@ -1005,7 +1010,7 @@ Potato is designed for research annotation studies with built-in support for:
 - **Adjudication**: dedicated interface for resolving inter-annotator disagreements
 - **55 validated survey instruments** (BFI-10, PHQ-9, GAD-7, PANAS, SWLS, and more) for post-study evaluation
 - **Behavioral tracking**: keystroke, mouse, and timing data for annotator behavior analysis
-- **Crowdsourcing**: nine crowd providers: Prolific, MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, and the legacy `url_direct` login
+- **Crowdsourcing**: nine crowd providers: Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, the legacy `url_direct` login, and MTurk for archived studies (MTurk closed on September 30, 2026)
 
 ### Data Source Flexibility
 
@@ -1013,7 +1018,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 35 formats and import from 23 (16 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 36 formats and import from 23 (16 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -1111,7 +1116,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 36 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -1301,7 +1306,9 @@ AWS-integrated annotation with built-in active learning and workforce management
 | General NLP annotation with AI assistance | **Potato** | Broadest AI assistance modes, YAML config, research features |
 | Single annotator + LLM collaboration | **Potato** (Solo Mode) | A structured progressive-autonomy workflow; MEGAnno+ is the closest, LLM-first |
 | Research annotation with surveys/tracking | **Potato** | Multi-phase workflow, 55 surveys, behavioral tracking, MACE |
-| Crowdsourced annotation (MTurk/Prolific) | **Potato** | Native providers for both, and for seven other recruitment routes |
+| Reaction-time paradigms, eye tracking, frame-locked stimuli | **jsPsych**, PsychoPy/Pavlovia, Gorilla | Built for trial-level timing; Potato can run a jsPsych timeline as one phase of a study |
+| Judgment or survey experiments with conditions and screeners | **Potato** | Between-subjects conditions, page branching, screen-outs, counterbalancing, timed trials, Prolific and SONA |
+| Crowdsourced annotation (Prolific, Connect, SONA) | **Potato** | Native providers for each, and for other recruitment routes |
 | Complex linguistic annotation + knowledge bases | **INCEpTION** | Strongest KB linking, coreference, IAA, curation |
 | Computer vision annotation at volume | **CVAT** | Deepest CV-only tooling, task management, large community |
 | Label → train → deploy in one loop | **Roboflow** | Auto Label, hosted training and inference |
@@ -1330,9 +1337,9 @@ AWS-integrated annotation with built-in active learning and workforce management
 
 | Feature Category | Potato |
 |-----------------|:---:|
-| Annotation schemas | 62 |
+| Annotation schemas | 63 |
 | Display types | 24 |
-| Export formats | 35 |
+| Export formats | 36 |
 | Import formats (16 CV, 5 text, 2 whole-project) | 23 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |
@@ -1422,7 +1429,7 @@ See [Configuration Reference](../configuration/configuration.md) for all options
 
 ## Choosing an Annotation Type
 
-Potato has 62 annotation types. Start with the decision guide:
+Potato has 63 annotation types. Start with the decision guide:
 
 - **[Choosing the Right Annotation Type](../annotation-types/choosing_annotation_types.md)** - Interactive decision tree
 - **[Schema Gallery](../annotation-types/schemas_and_templates.md)** - Visual gallery of all types with examples
@@ -1453,7 +1460,7 @@ After annotation, export in multiple formats:
 - [Developer Guide](developer-guide.md) - Extending Potato and API integration
 - [AI-Assisted Annotation Guide](ai-assisted-annotation-guide.md) - Speed up annotation with LLMs
 - [Agent Evaluation Guide](agent-evaluation-guide.md) - Evaluate AI agent systems
-- [Crowdsourcing Guide](crowdsourcing-guide.md) - Run tasks on Prolific and MTurk
+- [Crowdsourcing Guide](crowdsourcing-guide.md) - Run tasks on Prolific, CloudResearch Connect, SONA and other platforms
 
 
 ---
@@ -2188,12 +2195,12 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/crowdsourcing-guide
 
 # Crowdsourcing Guide
 
-Running annotation tasks on Prolific, Amazon MTurk, and the other crowdsourcing platforms.
+Running annotation tasks on Prolific, CloudResearch Connect, SONA and other crowdsourcing platforms. Amazon MTurk closed on September 30, 2026; its guide remains for archived studies.
 
 ## Platform Setup
 
-- **[Crowdsourcing Guide](../deployment/crowdsourcing.md)** - General setup for Prolific and MTurk integration
-- **[MTurk Integration](../deployment/mturk_integration.md)** - Detailed Amazon MTurk HIT setup, payment, and management
+- **[Crowdsourcing Guide](../deployment/crowdsourcing.md)** - General setup for crowd providers, including Prolific
+- **[MTurk Integration](../deployment/mturk_integration.md)** - How the closed MTurk integration worked, for archived studies
 
 ## Authentication for Crowd Workers
 
@@ -2202,7 +2209,7 @@ For crowdsourcing, you typically want low-friction authentication:
 - **[Passwordless Login](../auth-users/passwordless_login.md)** - Workers access tasks without passwords (recommended for most crowd tasks)
 - **[SSO Authentication](../auth-users/sso_authentication.md)** - Institutional SSO for studies requiring verified identity
 
-Platform-specific authentication (Prolific IDs, MTurk Worker IDs) is handled automatically when using the crowdsourcing integration.
+Platform-specific authentication (Prolific IDs, Connect participant IDs, SONA codes) is handled automatically when using the crowdsourcing integration.
 
 ## Quality Assurance for Crowd Tasks
 
@@ -3262,6 +3269,127 @@ Each is reported in the import's output and in the project README:
 - [Bringing a Project Into Potato](migrating-into-potato.md)
 - [Coming from Label Studio](coming-from-label-studio.md)
 - [Inter-Annotator Agreement](../workflow/quality_control.md)
+
+
+---
+
+<!-- source: docs/guides/coming-from-jspsych.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/guides/coming-from-jspsych/
+
+# Coming from jsPsych
+
+[jsPsych](https://www.jspsych.org/) is a JavaScript library for behavioral
+experiments in the browser. Potato is a server for annotation and survey
+studies. The two overlap: both show participants stimuli, collect responses,
+randomize, branch, and send people back to Prolific or SONA with a completion
+code. This page maps jsPsych concepts to Potato configuration, says where
+Potato is the better fit and where jsPsych is, and shows how to run a jsPsych
+task inside a Potato study when you need both.
+
+## When to use which
+
+Use **jsPsych** when the task is the experiment: millisecond-level stimulus
+control, reaction-time paradigms (Stroop, flanker, IAT, visual search), eye
+tracking, audio with precise onsets, or custom canvas drawing.
+
+Use **Potato** when the study is mostly judgments on items: labeling,
+rating, ranking, span marking, pairwise comparison, surveys, with assignment of
+items to participants, quality control, inter-annotator agreement, and an
+admin dashboard. Potato also runs the parts around a task: consent,
+screeners, instructions, training with feedback, post-study surveys, and the
+crowdsourcing hand-off.
+
+Use **both** when a study needs a timed task and annotation or surveys: put
+the jsPsych timeline in a [`type: jspsych` phase](../workflow/jspsych_phase.md)
+and let Potato handle everything else. The jsPsych data is stored per
+participant and exported with the rest.
+
+## Concept map
+
+| jsPsych | Potato | Notes |
+|---|---|---|
+| Timeline | `phases.order` | Consent, prestudy, instructions, training, annotation, poststudy. Several pages per phase |
+| Trial | A phase page, or one annotation item | Items come from `data_files`, not from the config |
+| Timeline variables | Fields in the data file | Each item is a row; `instance_display` chooses which fields to show |
+| `conditional_function` on a timeline | Page `show_when` | [Experiment flow](../workflow/experiment_flow.md). Same grammar as question-level `display_logic` |
+| Conditional display of one question | `display_logic` | [Conditional logic](../configuration/conditional_logic.md) |
+| End the experiment early (`abortExperiment`) | Page `exit_when` | Screen-out with a message, or the platform's screen-out code |
+| `loop_function` | `training.failure_action: repeat_training` | Only the training phase loops |
+| `randomize_order`, `sample` | `assignment_strategy: random`; `randomize_questions` on a survey page | Item order is seeded per participant |
+| Shuffled response options | `randomize_order` on a scheme | [Presentation order](../advanced/presentation_order.md). The order shown is recorded |
+| `jsPsych.randomization.factorial`, condition assignment | `conditions` | Balanced, random or round-robin assignment to cells; `condition.<factor>` in rules |
+| Counterbalanced block order, Latin square | `phases.counterbalance` with `method: latin_square` | Balanced (Williams) squares |
+| `survey-likert`, `survey-multi-choice`, `survey-multi-select`, `survey-text` | `likert`, `radio`, `multiselect`, `text` schemes | Plus 55 [validated instruments](../advanced/survey_instruments.md) by name |
+| `html-slider-response` | `slider`, `vas` | |
+| `maxdiff` | `bws` (best-worst scaling) | With scoring |
+| `free-sort` | `card_sort` | Closed or open sorting |
+| `cloze` | `cloze` | [Cloze](../annotation-types/text/cloze.md). The answer key stays on the server |
+| `same-different-*` | `pairwise` | Without timed sequential presentation |
+| `*-keyboard-response` with `trial_duration` | `trial_timing` | [Timed trials](../workflow/timed_trials.md): fixation, stimulus duration, deadline, key-to-label RT |
+| `instructions`, `external-html` | `type: instructions` pages, HTML files | |
+| `jsPsych.data` interaction data (blur, focus) | `authenticity` paradata | Page leaves, copies, external pastes, automation signals |
+| Mouse-tracking extension | Pointer totals in `authenticity` | Totals only, not x/y trajectories |
+| Writing process | `keystroke_logging` | Content-blind keystroke timing on free-text fields |
+| Prolific URL variables, completion redirect | `login.type: url_direct` (or `prolific`) and `completion_code` | Completion and screen-out codes; `login.type: prolific` adds API monitoring |
+| SONA | `crowdsourcing.sona` | Automatic credit |
+| `jsPsych.data.get().csv()` | `python -m potato.export` | 36 formats, including CSV, JSONL and Parquet. The CSV/TSV export adds `participants` and `trials` tables |
+| JATOS, Pavlovia, Cognition.run | `potato deploy`, Hugging Face Spaces | Potato is the server |
+| `simulation` mode | `python -m potato.simulator` | Simulated annotators against a running server |
+
+## What Potato does not do
+
+- Frame-locked stimulus presentation on canvas, audio scheduled with Web
+  Audio, or anything else that needs code on the trial. Use a jsPsych phase.
+- Eye tracking (WebGazer), webcam recording, and mouse trajectories.
+- Fullscreen across items. Each Potato item is a page load, and browsers leave
+  fullscreen on navigation. A jsPsych phase can hold fullscreen for its whole
+  timeline.
+- General loops and branches inside the item queue. Branching is per page
+  (`show_when`), per question (`display_logic`) and per training attempt.
+
+## A study with both
+
+```yaml
+conditions:
+  factors:
+    feedback: [none, immediate]
+
+phases:
+  order: [consent, screener, stroop, annotation, debrief]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  screener:
+    type: prestudy
+    file: surveys/screener.json
+    exit_when:
+      show_when:
+        - {schema: colour_vision, operator: equals, value: "Yes"}
+      message: This study needs normal colour vision.
+  stroop:
+    type: jspsych
+    timeline: tasks/stroop.js
+    plugins: [instructions, html-keyboard-response]
+  debrief:
+    type: poststudy
+    file: surveys/debrief.json
+    randomize_questions: true
+
+login:
+  type: url_direct
+  url_argument: PROLIFIC_PID
+completion_code: "C1ABCDEF"
+```
+
+The complete version is in `examples/advanced/jspsych-stroop/`.
+
+## Related
+
+- [Experiment flow](../workflow/experiment_flow.md)
+- [jsPsych phase](../workflow/jspsych_phase.md)
+- [Timed trials](../workflow/timed_trials.md)
+- [Multi-phase workflows](../workflow/surveyflow.md)
+- [Crowdsourcing guide](crowdsourcing-guide.md)
 
 
 ---
@@ -4650,6 +4778,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `psychometrics` |  | object |  | Live IRT. Fits item difficulty and annotator ability as labels arrive, so labels carry error bars and confident items can stop early | `confidence_threshold`, `cost_per_judgment`, `discrimination_flag_threshold`, `enabled`, `include_machine_annotators`, `min_annotators_per_item`, `min_observations`, `refit_interval`, `schema` |
 | `rooms` |  | object |  | Multiplayer rooms at /rooms: live norming sessions, adjudication huddles and shadowing over a shared event log | `enabled`, `max_members`, `persist_votes`, `poll_interval_ms`, `schema`, `who_can_create` |
 | `thinkaloud` |  | object |  | Think-aloud mode: local speech-to-text over spoken rationales, plus rule-based detection of spoken label phrases | `chunk_seconds`, `enabled`, `fillers`, `language`, `model`, `require_spoken_label`, `schema`, `stems`, `stt` |
+| `trial_timing` |  | object |  | Run each annotation item as a timed trial: fixation, stimulus duration, response deadline and keys mapped to labels, with the reaction time measured from the frame the stimulus appeared. For frame-critical or auditory paradigms use a `type: jspsych` phase | `disable_back_navigation`, `enabled`, `fixation_ms`, `fixation_symbol`, `item_overrides`, `iti_ms`, `response`, `show_response_options`, `stimulus_duration_ms`, `trial_duration_ms` |
 | `truth_serum` |  | object |  | Surprisingly-popular scoring. Each annotator also predicts how many others will pick the same label, and an answer that beats its own predicted popularity wins over the majority | `enabled`, `min_annotators`, `question`, `schema` |
 
 ## UI & Layout
@@ -4775,7 +4904,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
 | `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
-| `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `groups` |
+| `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `group_by_condition`, `groups` |
+| `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `max_per_cell` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
 | `max_annotations_per_item` |  | integer | `-1` | Cap on how many annotators may label one item. -1 means unlimited |  |
 | `max_annotations_per_user` |  | integer | `-1` | Cap on how many dataset items one annotator may receive. Left unset, the cap is the number of items loaded, so every annotator is offered the whole corpus; -1 is explicit unlimited, which is what a dynamic data source needs for items added after boot to be assignable. Injected attention checks and gold items do not count against it |  |
@@ -4800,6 +4930,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `audio_annotation` | (none beyond name/description) | `mode`, `labels`, `segment_schemes`, `min_segments`, `max_segments`, `zoom_enabled`, `playback_rate_control`, `waveform`, `spectrogram`, `spectrogram_options`, `source_field` | Audio segmentation and annotation with waveform visualization | `examples/audio/audio-annotation/config.yaml` |
 | `bws` | (none beyond name/description) | `best_description`, `worst_description`, `tuple_size`, `sequential_key_binding`, `label_requirement` | Best-Worst Scaling: select the best and worst item from a set | `examples/classification/iterative-bws/config.yaml` |
 | `card_sort` | (none beyond name/description) | `mode`, `groups`, `items_field`, `allow_empty_groups`, `allow_multiple` | Drag-and-drop card sorting into predefined or user-created groups | `examples/classification/card-sort/config.yaml` |
+| `cloze` | (none beyond name/description) | `text`, `source_field`, `answer_field`, `scoring`, `input_width`, `label_requirement` | Fill-in-the-blank passage, scored against an answer key kept on the server | `examples/classification/cloze-test/config.yaml` |
 | `code_review` | (none beyond name/description) | `comment_categories`, `verdict_options`, `file_rating_dimensions` | GitHub PR-style code review with inline comments and file ratings | `examples/agent-traces/coding-agent-review/config.yaml` |
 | `confidence` | (none beyond name/description) | `target_schema`, `scale_type`, `scale_points`, `labels`, `min_value`, `max_value`, `step`, `left_label`, `right_label` | Confidence rating meta-annotation for any primary annotation | `examples/classification/confidence-calibrated/config.yaml` |
 | `conjoint` | (none beyond name/description) | `profiles_per_set`, `attributes`, `show_none_option`, `profiles_field` | Discrete choice conjoint analysis with side-by-side profile comparison | `examples/classification/conjoint/config.yaml` |
@@ -7449,6 +7580,23 @@ display_logic:
   logic: all                     # Optional: 'all' (AND) or 'any' (OR)
 ```
 
+### Conditions as references
+
+With a [`conditions`](../workflow/experiment_flow.md#conditions) block, a rule
+can test the participant's assigned level of a factor as
+`condition.<factor>`:
+
+```yaml
+display_logic:
+  show_when:
+    - schema: condition.feedback
+      operator: equals
+      value: immediate
+```
+
+The same grammar gates whole phase pages with `show_when` and ends the study
+with `exit_when`; see [Experiment Flow](../workflow/experiment_flow.md).
+
 ### Supported Operators
 
 #### Value Comparison
@@ -8297,6 +8445,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `audio_annotation` | Audio segmentation and annotation with waveform visualization | [below](#10-audio-annotation-audio_annotation) | `examples/audio/audio-annotation/` |
 | `bws` | Best-Worst Scaling: select the best and worst item from a set | [below](#31-best-worst-scaling-bws) | `examples/classification/iterative-bws/` |
 | `card_sort` | Drag-and-drop card sorting into predefined or user-created groups | [below](#21-card-sorting-card_sort) | `examples/classification/card-sort/` |
+| `cloze` | Fill-in-the-blank passage, fixed or per item; the answer key stays on the server and scores the export | [cloze](text/cloze.md) | `examples/classification/cloze-test/` |
 | `code_review` | GitHub PR-style code review with inline comments and file ratings | [below](#24-code-review-code_review) | `examples/agent-traces/coding-agent-review/` |
 | `confidence` | Confidence rating meta-annotation for any primary annotation | [below](#33-confidence-rating-confidence) | `examples/classification/confidence-calibrated/` |
 | `conjoint` | Discrete choice conjoint analysis with side-by-side profile comparison | [below](#22-conjoint-analysis-conjoint) | `examples/classification/conjoint/` |
@@ -9568,7 +9717,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/choosing_
 
 # Choosing the Right Annotation Type
 
-Potato has 62 annotation schema types, spanning NLP research, LLM evaluation, survey methodology, and crowdsourcing. Picking the right one is the subject of this page.
+Potato has 63 annotation schema types, spanning NLP research, LLM evaluation, survey methodology, and crowdsourcing. Picking the right one is the subject of this page.
 
 ## Decision Flowchart
 
@@ -14048,6 +14197,101 @@ python potato/flask_server.py start examples/classification/text-edit/config.yam
 - [Text (Free Text)](../schemas_and_templates.md) — Simple text input without diff tracking
 - [Error Span](error_span.md) — Mark errors without editing the text
 - [Choosing Annotation Types](../choosing_annotation_types.md)
+
+
+---
+
+<!-- source: docs/annotation-types/text/cloze.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/cloze/
+
+# Cloze (Fill in the Blank)
+
+A `cloze` scheme shows a passage with blanks the annotator types into. Use it
+for cloze and C-tests of language proficiency, comprehension checks,
+predictability norming, or checking what a reader recalls from an item.
+
+The answer key stays on the server. It is used to score the export and is
+never sent to the browser.
+
+## One passage
+
+```yaml
+annotation_schemes:
+  - annotation_type: cloze
+    name: proficiency
+    description: Fill in each blank with one word.
+    text: "The library opens at nine and [[closes|shuts]] at six."
+    scoring: case_insensitive
+    label_requirement:
+      required: true
+```
+
+Each `[[...]]` is a blank. The text inside is the accepted answer; separate
+alternatives with `|`. `[[]]` is a blank with no key, which is recorded but
+not scored.
+
+A fixed passage suits a survey page, such as a proficiency screener in the
+prestudy phase.
+
+## A passage per item
+
+```yaml
+annotation_schemes:
+  - annotation_type: cloze
+    name: completion
+    description: Fill in each blank with one word.
+    source_field: passage
+    answer_field: answers
+```
+
+```json
+{"id": "p1", "text": "Passage 1",
+ "passage": "Rain is expected [[]] the afternoon, so bring an [[]].",
+ "answers": [["in", "during"], "umbrella"]}
+```
+
+`source_field` names the item field with the passage, blanks written as
+`[[]]`. `answer_field` names a field holding a list with one entry per blank,
+each a string (with `|` between alternatives) or a list. For a one-blank item
+a plain string works too. Entries beyond the number of blanks are ignored,
+with a warning in the server log. The answer field is removed from the page
+and from the item APIs, and text typed inside `[[...]]` in an item passage is
+blanked before the item reaches the page, so a key put there by mistake is
+not shown either.
+
+## Options
+
+| Key | Default | Meaning |
+|---|---|---|
+| `text` | | One passage for every item. Use this or `source_field` |
+| `source_field` | | Item field holding each item's passage |
+| `answer_field` | | Item field holding each item's key (with `source_field` only) |
+| `scoring` | `case_insensitive` | `exact`, `case_insensitive`, or `normalized` (also ignores accents and punctuation) |
+| `input_width` | `10` | Width of each blank, in characters |
+| `label_requirement` | | `required: true` requires text in every blank, checked on the page and on the server |
+
+## Data
+
+Each blank is stored as a label of the scheme, `blank_1`, `blank_2`, ..., with
+the typed text as its value. The CSV/TSV export adds, for each keyed blank,
+`<scheme>.blank_<n>_correct` (1 or 0), and `<scheme>.score` and
+`<scheme>.scored_blanks` for the item. A passage left blank scores 0.
+
+Cloze answers on survey pages are exported with the other phase answers
+(`export_include_phase_data: true`) and are not scored there.
+
+## Example
+
+```bash
+python potato/flask_server.py start examples/classification/cloze-test/config.yaml -p 8000
+```
+
+## Related
+
+- [Text annotation](text_annotation.md)
+- [Text edit](text_edit.md)
+- [Multi-phase workflows](../../workflow/surveyflow.md)
+- [Coming from jsPsych](../../guides/coming-from-jspsych.md)
 
 
 ---
@@ -21812,6 +22056,12 @@ Potato's workflow consists of the following phases (in order):
 
 Users automatically progress through enabled phases in this order.
 
+Pages can be skipped by earlier answers (`show_when`), end the study for a
+participant (`exit_when`), be counterbalanced, or randomize their questions.
+Participants can be assigned to between-subjects conditions. See
+[Experiment Flow](experiment_flow.md). A page can also run a jsPsych timeline;
+see [jsPsych Phase](jspsych_phase.md).
+
 ## Back Navigation
 
 By default, the **Back button is hidden** when there is no previous page to navigate to. This means:
@@ -22227,9 +22477,614 @@ ui_configuration:
 ## Related Documentation
 
 - [Conditional Logic](../configuration/conditional_logic.md) - Show/hide survey questions based on prior answers
+- [Experiment Flow](experiment_flow.md) - Page branching, screen-outs, conditions, counterbalancing
+- [jsPsych Phase](jspsych_phase.md) - Run a jsPsych timeline as a phase page
 - [Training Phase](training_phase.md) - Configure qualification training with feedback
 - [Category-Based Assignment](../advanced/category_assignment.md) - Assign tasks based on training performance
 - [Configuration](../configuration/configuration.md) - Full configuration reference
+
+
+---
+
+<!-- source: docs/workflow/experiment_flow.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/workflow/experiment_flow/
+
+# Experiment Flow
+
+Five settings cover the design side of an experiment:
+
+| Setting | What it does |
+|---|---|
+| `conditions` | Assigns each participant to one cell of a design |
+| `show_when` on a phase page | Skips the page unless a condition holds |
+| `exit_when` on a phase page | Ends the study for the participant (a screener) |
+| `phases.counterbalance` | Orders a group of pages per participant, at random or by Latin square |
+| `randomize_questions` on a survey page | Orders that page's questions per participant |
+
+Everything a participant was assigned or shown is recorded, and the CSV/TSV
+export writes it to `participants.csv`.
+
+## Conditions
+
+```yaml
+conditions:
+  factors:
+    feedback: [none, immediate]
+    font: [serif, sans]
+  assignment: balanced        # balanced | random | round_robin
+  balance_on: assigned        # assigned | completed
+  max_per_cell: 40            # optional
+```
+
+Two factors with two levels each give four cells. A participant is assigned a
+cell the first time the server sees them and keeps it.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `factors` | required | Factor name to a list of at least two levels |
+| `assignment` | `balanced` | `balanced` picks the cell with the fewest participants (ties broken at random per participant); `random` draws a cell, seeded per participant; `round_robin` cycles through cells in arrival order |
+| `balance_on` | `assigned` | `completed` counts only participants who reached the end without being screened out, so dropouts are replaced |
+| `max_per_cell` | none | A full cell is skipped. When every cell is full, the least-filled one is used and a warning is logged |
+| `cells` | full factorial | An explicit list of cells, a subset of the factorial, each with an optional `weight` |
+
+Weighted cells:
+
+```yaml
+conditions:
+  factors:
+    prime: [none, positive, negative]
+  cells:
+    - {prime: none, weight: 2}
+    - {prime: positive}
+    - {prime: negative}
+```
+
+Quote level names YAML would read as booleans (`"yes"`, `"no"`, `"on"`,
+`"off"`). `potato validate` and the server report an unquoted one as an error.
+
+### Testing a condition in rules
+
+Rules address a factor as `condition.<factor>`, in page `show_when`, page
+`exit_when`, and question `display_logic`. A value compared with a factor
+must be one of its levels; a typo would otherwise hide the page or question
+from everyone, so the validator reports it.
+
+```yaml
+- name: feedback_rating
+  annotation_type: likert
+  description: How useful was the feedback?
+  size: 5
+  display_logic:
+    show_when:
+      - {schema: condition.feedback, operator: equals, value: immediate}
+```
+
+A question hidden by its condition is not required, on the page or on the
+server.
+
+To give each cell its own items, name batch groups after a factor's levels:
+
+```yaml
+conditions:
+  factors:
+    list: [list_a, list_b]
+assignment_strategy: batch
+batch_assignment:
+  auto_assign_annotators: true
+  group_by_condition: list
+  groups:
+    - {name: list_a, data_file: data/list_a.jsonl}
+    - {name: list_b, data_file: data/list_b.jsonl}
+```
+
+Item IDs must be unique across all data files, including the files of
+different groups. The server will not start when two lists share an ID, so a
+stimulus that appears in both lists needs a distinct ID in each (for example
+`h1_a` and `h1_b`).
+
+A [`type: jspsych`](jspsych_phase.md) timeline receives the conditions as
+`potato.conditions`, and its trial data gets a `condition_<factor>` column.
+
+## Skipping pages: `show_when`
+
+```yaml
+phases:
+  order: [screener, smoking_followup, general, annotation]
+  screener:
+    type: prestudy
+    file: surveys/screener.json
+  smoking_followup:
+    type: prestudy
+    file: surveys/smoking.json
+    show_when:
+      - {schema: smoker, operator: equals, value: "Yes"}
+  general:
+    type: prestudy
+    file: surveys/general.json
+```
+
+The grammar is the one question-level
+[display_logic](../configuration/conditional_logic.md) uses: a list of
+conditions with `schema`, `operator` and `value`, combined with `logic: all`
+(default) or `logic: any`, and the same 16 operators. A rule can test any
+question asked on an earlier page, in any phase, and any `condition.<factor>`.
+
+The rule is checked when the participant leaves the page before it. A hidden
+page is passed over in both directions: Next skips it, and Previous does not
+land on it. Each skip is recorded.
+
+The server will not start with a rule that names a question no page asks, or
+one asked on the same page or later (it could only ever be unanswered). The
+annotation phase itself cannot be skipped.
+
+## Ending the study: `exit_when`
+
+```yaml
+screener:
+  type: prestudy
+  file: surveys/screener.json
+  exit_when:
+    show_when:
+      - {schema: age, operator: lt, value: 18}
+    message: This study is for adults only. Thank you for your time.
+```
+
+Checked when the participant submits the page. When it holds, the
+participant goes to the end of the study:
+
+- Without a crowdsourcing provider they see `message`.
+- With one (Prolific, SONA, Connect and so on) they get the platform's
+  screen-out outcome, never the completion code.
+
+`exit_when` can test questions on its own page. It is supported on consent,
+prestudy, instructions and poststudy pages.
+
+A screened-out participant stays at the end of the study: Previous does not
+take them back, even with `allow_phase_back_navigation`, and the server
+stores nothing more they send. Answers they gave before the screen-out remain
+in `user_state.json`; the screen-out is in `participants.csv`, not in
+`annotations.csv`.
+
+## Counterbalanced page order
+
+```yaml
+phases:
+  order: [intro, block_a, block_b, block_c, annotation]
+  # ...block definitions...
+  counterbalance:
+    - pages: [block_a, block_b, block_c]
+      method: latin_square        # or random
+```
+
+The pages keep the slots they hold in `order`; each participant gets their own
+arrangement of them.
+
+- `random`: a permutation seeded on the participant, so it is the same after a
+  reload or a restart.
+- `latin_square`: rows of a balanced (Williams) Latin square, taken in
+  arrival order. With `conditions` configured, the order of arrival counts
+  within each cell, so every condition works through the whole square and
+  page order is balanced inside each condition rather than confounded with
+  it. For an odd number of pages the square has twice as many rows. The
+  counters are rebuilt from saved states when the server restarts.
+
+All pages in a group must have the same phase type. Pages of different types
+are never next to each other in a study, so they cannot trade places.
+
+## Question order on a survey page
+
+```yaml
+big_five:
+  type: poststudy
+  instrument: tipi
+  randomize_questions:
+    pin_last: [comments]       # or: randomize_questions: true
+```
+
+Each participant sees the page's questions in their own order, seeded on the
+participant and the page and recorded the first time the page is shown.
+`pin_first` and `pin_last` keep named questions at the ends. Pages laid out
+with `layout.groups` are left as they are.
+
+Option order within a question is a separate setting,
+[`randomize_order`](../advanced/presentation_order.md).
+
+## The flow record
+
+`user_state.json` holds a `flow_record` for each participant:
+
+| Key | Content |
+|---|---|
+| `conditions`, `condition_cell`, `condition_ordinal` | The assigned cell and study-wide arrival number |
+| `cell_ordinal` | Arrival number within the cell; picks the Latin-square row when conditions are configured |
+| `latin_ordinal` | Arrival number for Latin-square rows when no conditions are configured |
+| `page_orders` | Each counterbalanced group's order |
+| `question_orders` | Each randomized page's question order |
+| `skipped_pages` | Pages passed over by `show_when` |
+| `screened_out` | The page and time of a screen-out |
+| `jspsych` | Status, attempts, page loads and trial count of each jsPsych page |
+
+The CSV and TSV exports write one row per participant to
+`participants.csv` (or `.tsv`). With a `feedback` factor its header is:
+
+```text
+user_id,condition_feedback,condition_ordinal,cell_ordinal,latin_ordinal,final_phase,screened_out,screened_out_page,skipped_pages,page_orders,question_orders,jspsych_runs
+```
+
+`skipped_pages` is `|`-separated; the last three columns are JSON.
+
+The MySQL backend does not store the flow record; a server using it logs a
+warning when these features are configured.
+
+## Example
+
+`examples/advanced/jspsych-stroop/` uses `conditions`, `exit_when`, a jsPsych
+phase and `randomize_questions`:
+
+```bash
+python potato/flask_server.py start examples/advanced/jspsych-stroop/config.yaml -p 8000
+```
+
+## Related
+
+- [Multi-phase workflows](surveyflow.md)
+- [Conditional logic](../configuration/conditional_logic.md)
+- [jsPsych phase](jspsych_phase.md)
+- [Timed trials](timed_trials.md)
+- [Presentation order](../advanced/presentation_order.md)
+- [Coming from jsPsych](../guides/coming-from-jspsych.md)
+
+
+---
+
+<!-- source: docs/workflow/jspsych_phase.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/workflow/jspsych_phase/
+
+# jsPsych Phase
+
+A `type: jspsych` phase runs a [jsPsych](https://www.jspsych.org/) timeline as
+one page of a Potato study. Potato serves the page, passes the participant's
+id and condition to the timeline, stores the data jsPsych collects, and moves
+the participant on when the timeline ends. Consent, surveys, annotation,
+Prolific or SONA, and the export stay in Potato.
+
+Potato ships jsPsych 8.3.0 and 15 of its plugins, so a study works offline and
+on servers with no internet access.
+
+## Configuration
+
+```yaml
+phases:
+  order: [consent, stroop, annotation, debrief]
+  stroop:
+    type: jspsych
+    timeline: tasks/stroop.js
+    plugins: [instructions, html-keyboard-response]
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `timeline` | required | A `.js` file in the task directory that defines `window.potatoTimeline` |
+| `plugins` | `[]` | Plugins to load, from the list below |
+| `extra_scripts` | `[]` | More `.js` files from the task directory, such as plugins Potato does not ship, loaded after `plugins` and before the timeline |
+| `assets_dir` | none | A folder of stimuli the timeline can load (images, audio, video, text, CSS, fonts) |
+| `expose_answers` | `[]` | Survey questions from earlier pages whose answers the timeline receives. Each must be asked on an earlier page; answers arrive as strings, numbers included (`"30"`) |
+| `save` | `on_finish` | `incremental` also stores each trial as it finishes, so a closed tab keeps the trials done so far |
+| `allow_rerun` | `false` | Whether returning to a finished page runs the task again |
+| `max_data_mb` | `10` | Largest run the server accepts |
+| `slot` | inferred | `prestudy` before the annotation phase, `poststudy` after it. An explicit slot that contradicts the page's place in `order` wins, and a warning is logged |
+| `csp.extra_sources` | `[]` | `https://` origins the page may load fonts, images or scripts from |
+
+A jsPsych page also takes `show_when` and `exit_when` like any phase page
+([Experiment flow](experiment_flow.md)), and can be counterbalanced against
+other pages of its slot. Its `exit_when` is checked when the timeline
+finishes, so the run's data is already stored for a participant it screens
+out; put a screener on its own page before the task to exclude people before
+they do it.
+
+### Shipped plugins
+
+`html-keyboard-response`, `html-button-response`, `html-slider-response`,
+`image-keyboard-response`, `image-button-response`, `audio-keyboard-response`,
+`audio-button-response`, `video-keyboard-response`, `instructions`, `preload`,
+`fullscreen`, `survey-likert`, `survey-text`, `survey-multi-choice`,
+`call-function`.
+
+Other plugins, including ones from `jspsych-contrib`, go in `extra_scripts`
+as browser builds (the `index.browser.min.js` file of the npm package).
+
+## The timeline file
+
+```javascript
+window.potatoTimeline = function (jsPsych, potato) {
+    var trial = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '<p style="font-size:48px">RED</p>',
+        choices: ['r', 'g', 'b']
+    };
+    return [trial];
+};
+```
+
+`window.potatoTimeline` is a timeline array, or a function that returns one.
+Potato calls the function with the jsPsych instance it created and a `potato`
+object:
+
+| Property | Content |
+|---|---|
+| `potato.participant` | The Potato username (Prolific id, SONA id and so on) |
+| `potato.conditions` | `{factor: level}` from `conditions` |
+| `potato.answers` | `{question: answer}` for the questions in `expose_answers` |
+| `potato.attempt` | 1 on the first run; higher once a reload follows a run that had sent data |
+| `potato.asset(path)` | The URL of a file in `assets_dir` |
+| `potato.finish()` | End the task now and save what was collected |
+
+Do not call `initJsPsych` yourself, and do not set `on_finish` on the
+experiment; Potato owns both. Trial-level `on_finish` and the rest of the
+jsPsych API work as usual.
+
+Every trial gets `potato_user`, `potato_page`, `potato_run_id`,
+`potato_attempt` and one `condition_<factor>` column per factor.
+
+### Stimuli
+
+```javascript
+{
+    type: jsPsychImageKeyboardResponse,
+    stimulus: potato.asset('faces/f01.png')
+}
+```
+
+Preload stimuli with the `preload` plugin, as in any jsPsych experiment.
+
+## When the timeline ends
+
+The page sends the data to the server, shows "Saving your responses", and
+goes to the next page once the server has stored it. If the save fails it
+retries, then shows a Try again button; the participant is not moved on
+without their data.
+
+There is no other way off the page: until the run is stored, the server
+rejects a post of the phase form and the annotation page's Next.
+
+A reload starts the timeline over. jsPsych cannot resume mid-timeline. A run
+that has sent no data is reused, and its attempt number does not change: with
+the default `save: on_finish`, trials done before a reload are lost and leave
+no trace except the page's `page_loads` count in `participants.csv`. With
+`save: incremental`, a run that has sent data is kept as incomplete, and a
+reload starts a new attempt. Opening the task in a second tab is a reload; the
+first tab's run can no longer finish.
+
+A timeline that is not an array, or is empty, shows the participant a
+message instead of a blank page.
+
+## Data and export
+
+Runs are stored in the project database (`project.sqlite` in the task
+directory), not in `user_state.json`. The `jspsych` export format writes:
+
+| File | Content |
+|---|---|
+| `jspsych_runs.csv` | One row per run: participant, page, attempt, status, trial count, conditions |
+| `jspsych_trials.csv` | One row per trial, with every column jsPsych recorded. Nested values are JSON |
+| `jspsych_interaction.csv` | jsPsych's blur, focus and fullscreen events, when any were recorded |
+| `jspsych_raw/<user>/<page>-<run>.json` | Each run's data as jsPsych produced it |
+
+```bash
+python -m potato.export --config config.yaml --format jspsych --output ./export/
+```
+
+Runs that did not finish have status `started` or `partial`.
+
+## Security
+
+The timeline is code you wrote, and it runs on the Potato server's origin
+with the participant's session, the same trust as a custom HTML instructions
+page. It is served with a Content-Security-Policy that allows scripts,
+styles, media and network requests only from the Potato server (plus any
+`csp.extra_sources`), and network requests only to the Potato server. A
+stimulus that shows participant text (for example from `expose_answers`)
+cannot load or send to anything else, but you should still escape such text
+before putting it in HTML.
+
+Every file the page names must be inside the task directory. The asset route
+serves only the file types listed above, never `.js` or `.html` from
+`assets_dir`, and serves each with a sandboxing CSP of its own, so an SVG
+opened directly runs no script. `csp.extra_sources` takes single `https://`
+origins; wildcards are refused.
+
+## Timing
+
+jsPsych's own timing applies. Its timing-accuracy page reports that response
+times measured in JavaScript tend to be 10–40 ms longer than in lab software,
+with similar variance. Potato adds nothing to the trial loop, because the
+page runs jsPsych alone, without Potato's annotation scripts.
+
+## Example
+
+```bash
+python potato/flask_server.py start examples/advanced/jspsych-stroop/config.yaml -p 8000
+```
+
+A Stroop task between a screener and a word-rating task, with feedback shown
+to half of the participants (`conditions`).
+
+## Related
+
+- [Coming from jsPsych](../guides/coming-from-jspsych.md)
+- [Experiment flow](experiment_flow.md)
+- [Timed trials](timed_trials.md)
+- [Multi-phase workflows](surveyflow.md)
+
+
+---
+
+<!-- source: docs/workflow/timed_trials.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/workflow/timed_trials/
+
+# Timed Trials
+
+`trial_timing` runs each annotation item as a timed trial: an optional
+fixation cross, the stimulus for a set time, a response window with a
+deadline, and keys mapped to labels. The reaction time is measured in the
+browser from the frame the stimulus appeared.
+
+Use it for speeded judgments on Potato's own items: lexical decision,
+grammaticality or plausibility judgments under time pressure, rapid image
+categorization. For frame-critical presentation, auditory onsets, or
+paradigms that need code on each trial, use a
+[jsPsych phase](jspsych_phase.md).
+
+## Configuration
+
+```yaml
+annotation_schemes:
+  - annotation_type: radio
+    name: decision
+    description: Is this a word?
+    labels: [word, nonword]
+    label_requirement:
+      required: true
+
+trial_timing:
+  enabled: true
+  fixation_ms: 500
+  stimulus_duration_ms: 200       # omit: the stimulus stays up until the response
+  trial_duration_ms: 2000         # omit: no deadline
+  iti_ms: 500
+  response:
+    schema: decision
+    keys: {f: word, j: nonword}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Turn timed trials on |
+| `fixation_ms` | `0` | Fixation cross before each stimulus. `0` for none |
+| `fixation_symbol` | `+` | What the fixation shows |
+| `stimulus_duration_ms` | none | Hide the stimulus after this many ms |
+| `trial_duration_ms` | none | Deadline from onset. A trial that runs out is a timeout and the next item starts |
+| `iti_ms` | `0` | Minimum blank time between a response and the next fixation. Loading the next page counts toward it |
+| `response.schema` | required | A `radio` or `likert` scheme that records the answer |
+| `response.keys` | | Key to label. One character, or `space`. Quote `y` and `n` |
+| `response.allow_mouse` | `false` | Also accept a click on an option |
+| `show_response_options` | `allow_mouse` | Show the scheme's options during the trial |
+| `item_overrides` | none | Per-item timing from item fields, e.g. `{stimulus_duration_ms: soa_ms}`. `0` in the field means no limit |
+| `disable_back_navigation` | `true` | Hide Previous, so no stimulus is shown twice |
+
+## Trial sequence
+
+1. A blank interval, until `iti_ms` has passed since the last response.
+2. The fixation cross, for `fixation_ms`.
+3. The item. A line under it lists the keys, e.g. `F = word    J = nonword`.
+4. A mapped key selects that label, saves, and moves to the next item. Other
+   keys do nothing. A mapped key pressed before the stimulus is counted as an
+   early press and ignored.
+5. At the deadline the item is recorded as a timeout and the next item starts.
+
+The keyboard shortcuts of the normal annotation page (arrow keys, number
+keys) are off while a trial runs.
+
+## Trial record
+
+Each item gets a trial record, stored in `user_state.json` next to the labels
+and written to `trials.csv` (or `.tsv`) by the CSV/TSV export:
+
+| Field | Meaning |
+|---|---|
+| `outcome` | `response` or `timeout` |
+| `key`, `label` | The key pressed and the label it selected |
+| `rt_ms` | Reaction time from stimulus onset |
+| `intended_*` | The configured fixation, stimulus, deadline and ITI for this item |
+| `fixation_ms_actual`, `stimulus_ms_actual`, `iti_actual_ms` | What the browser delivered |
+| `frame_ms` | The display's frame interval, measured during the trial |
+| `timer_resolution_ms` | The smallest step of the browser's clock |
+| `early_keys` | Mapped keys pressed before the stimulus |
+| `reloads` | Times the page was reloaded during this trial |
+| `tab_hidden` | The participant switched away during the trial |
+| `server_elapsed_ms` | Time between the server sending the page and receiving the record |
+| `flags` | The server's checks (below) |
+
+A timed-out item has no label, so `trials.csv` is the complete record of a
+timed task; the main annotation export lists answered items only.
+
+## Server checks
+
+The browser reports the record; the server compares it with its own clock,
+using the item's own timing when `item_overrides` set it, and with the
+configuration:
+
+- `rt_exceeds_server_elapsed`: the reaction time is longer than the item was
+  out.
+- `timeout_too_early`: a timeout arrived before the deadline could have
+  passed.
+- `timeout_without_deadline`: a timeout on an item that has no deadline.
+- `not_served`: the server has no record of handing the item over, for
+  example after a restart, so it cannot check the timing.
+- `key_not_mapped`, `label_mismatch`, `label_not_in_scheme`: the key is not in
+  `response.keys`, does not map to the label reported, or the label is not one
+  of the scheme's.
+- `label_not_saved`: the record's label is not the answer the same save
+  stored.
+- `tab_hidden`: the tab was hidden during the trial.
+
+A timeout lets the participant move on without an answer only when it has
+none of `timeout_too_early`, `timeout_without_deadline` and `not_served`.
+Otherwise the item stays unanswered and required.
+
+## Timeouts, quotas and attention checks
+
+A timed-out item is finished for the participant: it counts toward their
+progress, and they are not shown it again. It is not an annotation of the
+item, so it does not count toward `max_annotations_per_item`, and other
+participants can still be assigned the item. The progress badge shows a
+timed-out item as not labeled.
+
+A trial that runs out on an attention check is not graded as a failure; it
+is in `trials.csv` as a timeout. A speeded task produces timeouts from
+attentive participants, and blocking them for it would remove people for
+the deadline rather than for inattention.
+
+## Precision
+
+The stimulus is revealed inside a `requestAnimationFrame` callback, and onset
+is the timestamp of the next frame, the first one drawn with the stimulus.
+The reaction time is the key event's timestamp minus that onset. Both use
+the browser's high-resolution clock.
+
+- Onset is known to the frame: about 17 ms at 60 Hz, 8 ms at 120 Hz.
+- Keyboards and displays add latency the browser cannot see, commonly 5–30 ms
+  and different on every machine.
+- Browsers that coarsen timers for privacy (Firefox with
+  `privacy.resistFingerprinting`, Tor Browser) round to tens of
+  milliseconds. `timer_resolution_ms` shows this per participant.
+- Each item is a page load, so fullscreen cannot be held across items.
+
+Compare reaction times within participants, or model them with a participant
+term. For millisecond-level work, or audio, use a jsPsych phase.
+
+## Limits
+
+- Phones and tablets are sent to the touch interface (`pocket`), which does
+  not run timed trials. The server logs a warning when both are on.
+- The response scheme must be `radio` or `likert`, and it must be the only
+  question on the annotation page (display-only schemes are allowed). A
+  second question cannot be answered while a trial owns the keyboard, so the
+  validator reports it as an error; ask follow-up questions on a poststudy page.
+- The MySQL backend does not store trial records.
+
+## Example
+
+```bash
+python potato/flask_server.py start examples/advanced/timed-trials-lexical-decision/config.yaml -p 8000
+```
+
+## Related
+
+- [jsPsych phase](jspsych_phase.md)
+- [Experiment flow](experiment_flow.md)
+- [Behavioral tracking](../advanced/behavioral_tracking.md)
+- [Coming from jsPsych](../guides/coming-from-jspsych.md)
 
 
 ---
@@ -41022,6 +41877,7 @@ position_of(order, chosen_label)   # 0 means they picked the first option
 - [Agreement Over Time](agreement_drift.md) — the other way an agreement number
   can be confidently wrong
 - [Behavioral Tracking](behavioral_tracking.md) — where the order is stored
+- [Experiment Flow](../workflow/experiment_flow.md) — the order of questions on a survey page (`randomize_questions`) and of whole pages (`phases.counterbalance`)
 - [Judge Calibration](../ai-intelligence/judge_calibration.md)
 
 
@@ -51221,6 +52077,22 @@ Export annotations as tab-separated values. Same structure as CSV but with tab d
 python -m potato.export --config config.yaml --format tsv --output ./export/
 ```
 
+CSV and TSV exports also write `participants.csv` (conditions, page and
+question orders, skipped pages, screen-outs) when the study uses
+[experiment flow](../workflow/experiment_flow.md) features, and `trials.csv`
+(one row per timed trial, including timeouts) when
+[`trial_timing`](../workflow/timed_trials.md) is on.
+
+### jsPsych (jspsych)
+
+Trial data from [`type: jspsych` phases](../workflow/jspsych_phase.md):
+`jspsych_runs.csv`, `jspsych_trials.csv` (one row per trial, every column
+jsPsych recorded), `jspsych_interaction.csv`, and each run's raw JSON.
+
+```bash
+python -m potato.export --config config.yaml --format jspsych --output ./export/
+```
+
 ### KITTI 3D (kitti_3d)
 
 3D boxes from `spatial_annotation` schemes, in KITTI's camera frame: one
@@ -51751,9 +52623,10 @@ layer model. Rather than write a plausible guess into a file you would upload to
 a paid platform, masks are traced to polygons and the loss is reported.
 
 Potato also exports `csv`, `tsv`, `jsonl`, `parquet`, `huggingface`, several
-NLP formats, `adjudication` and `labeling_engine` (the labeling engine's
-resolved labels and quality certificate); those carry annotations generically
-rather than as CV geometry.
+NLP formats, `adjudication`, `labeling_engine` (the labeling engine's
+resolved labels and quality certificate) and `jspsych` (trial data from
+embedded jsPsych timelines); those carry annotations generically rather than
+as CV geometry.
 
 ## What survives a round trip
 
@@ -56279,7 +57152,7 @@ See [Migration CLI](../tools/migration_cli.md) for details.
 - [Configuration Guide](../configuration/configuration.md) - Complete configuration reference
 - [Schemas and Templates](../annotation-types/schemas_and_templates.md) - All annotation types
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards
-- [Crowdsourcing](crowdsourcing.md) - MTurk and Prolific integration
+- [Crowdsourcing](crowdsourcing.md) - Prolific, Connect, SONA and other crowd providers
 - [Admin Dashboard](../administration/admin_dashboard.md) - Monitoring and management
 
 
@@ -56306,8 +57179,8 @@ You should then be able to access the annotation page via `your_ip_address:the_p
 
 ## Crowd Providers
 
-Potato connects to recruitment platforms through **crowd providers**. Prolific and
-MTurk have dedicated providers; any other panel that passes a participant ID in
+Potato connects to recruitment platforms through **crowd providers**. Prolific,
+CloudResearch Connect and SONA have dedicated providers; any other panel that passes a participant ID in
 the URL and accepts a completion code (Besample, Positly, User Interviews,
 Testable Minds, Cint, ...) can be configured with the `generic` provider — no
 code required:
@@ -56318,7 +57191,7 @@ login:
   url_argument: response_id        # must match id_param below
 
 crowdsourcing:
-  provider: generic                # generic | prolific | mturk
+  provider: generic                # generic | prolific | connect | sona | ...
   generic:
     platform_label: "Besample"     # shown on the done-page return button
     id_param: response_id          # URL parameter carrying the participant ID
@@ -56572,6 +57445,11 @@ surveyflow:
 ---
 
 ## Amazon Mechanical Turk Integration
+
+!!! warning "MTurk closed permanently on September 30, 2026"
+    No HITs can be created or completed. This section describes how the
+    integration worked, for archived studies; new studies need another
+    provider. See [Choosing a Crowdsourcing Platform](crowdsourcing-platforms.md).
 
 [Amazon Mechanical Turk (MTurk)](https://www.mturk.com/) is a popular crowdsourcing marketplace for human intelligence tasks. Potato provides full integration with MTurk through:
 
@@ -56906,10 +57784,12 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/crowdsourcing-p
 
 # Choosing a Crowdsourcing Platform
 
-Amazon Mechanical Turk **closed to new requesters on July 30, 2026**. Existing MTurk
-requester accounts continue to work (see the [MTurk guide](mturk_integration.md)), but
-new projects need a different recruitment platform. This page surveys the platforms
-that work with Potato's deployment model and how to connect them.
+Amazon Mechanical Turk **closed permanently on September 30, 2026**. HITs can no
+longer be created or completed, so every study needs a different recruitment
+platform. Potato still loads an MTurk config, so an archived study's server starts
+and its annotations export (see the [MTurk guide](mturk_integration.md)). This page
+surveys the platforms that work with Potato's deployment model and how to connect
+them.
 
 _Survey last verified: July 2026._
 
@@ -56950,8 +57830,9 @@ pause/resume, assignment reclaim for returned participants).
 - **Model:** "Project Link" external URL; passes `participantId` (plus optional
   `assignmentId`, `projectId`); completion via fixed code or completion redirect.
 - **API:** REST API at `connect-api.cloudresearch.com` (API key).
-- **Potato support:** works today via `url_direct` login with
-  `url_argument: participantId` and a `completion_code`. Deeper integration is planned.
+- **Potato support:** the `connect` crowd provider
+  ([Connect integration](connect_integration.md)): `participantId` login and a
+  completion code or redirect. Connect's REST API is not used yet.
 
 ### SONA Systems (university subject pools)
 
@@ -56960,8 +57841,9 @@ pause/resume, assignment reclaim for returned participants).
 - **Model:** put `%SURVEY_CODE%` in the study URL (SONA substitutes a unique
   per-participant code); grant credit via a client-side completion URL or a
   server-side `WebstudyCredit` API call.
-- **Potato support:** works today via `url_direct` login with
-  `url_argument: <your param name>`; automatic server-side credit granting is planned.
+- **Potato support:** the `sona` crowd provider ([SONA integration](sona_integration.md))
+  grants credit server-side through `WebstudyCredit` when the participant finishes,
+  falling back to the client-side credit link if that call fails.
 
 ### Besample
 
@@ -57005,9 +57887,9 @@ return URLs).
 These either shut down their open crowd, have no self-serve access, or run tasks
 only inside their own tools:
 
-- **Amazon SageMaker Ground Truth** — its "public workforce" *is* MTurk, so it dies
-  with MTurk for new customers; remaining workforces are private/vendor and tasks
-  run in Ground Truth's own templates.
+- **Amazon SageMaker Ground Truth** — its "public workforce" was MTurk, which closed
+  on September 30, 2026; remaining workforces are private/vendor and tasks run in
+  Ground Truth's own templates.
 - **Toloka** — exited the open-crowd business (contributors moved to its Mindrift
   expert platform); no self-serve task posting.
 - **Appen/CrowdGen, Scale AI/Outlier, Surge AI, iMerit** — enterprise, sales-led
@@ -57024,6 +57906,10 @@ URLs pasted into the contract chat, with admin work reports for invoicing.
 
 ## Migration checklist from MTurk
 
+An MTurk study cannot recruit anyone until it moves to another platform. The
+annotation config, training, attention checks and gold standards stay as they are;
+only the login and completion settings change.
+
 1. Pick a platform above (Prolific or Connect for vetted general populations;
    SONA for university pools; Besample for non-Western populations).
 2. Change `login.url_argument` from `workerId` to the new platform's parameter.
@@ -57038,7 +57924,7 @@ URLs pasted into the contract chat, with admin work reports for invoicing.
 
 - [Crowdsourcing setup guide](crowdsourcing.md)
 - [Prolific integration](prolific_integration.md)
-- [MTurk integration (frozen)](mturk_integration.md)
+- [MTurk integration (closed September 30, 2026)](mturk_integration.md)
 - [Quality control](../workflow/quality_control.md)
 
 
@@ -57639,17 +58525,21 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/mturk_integrati
 
 # Amazon Mechanical Turk Integration Guide
 
-!!! warning "MTurk is closed to new customers (July 30, 2026)"
-    Amazon Mechanical Turk **closed to new requesters on July 30, 2026** and is in
-    maintenance mode: existing requester accounts continue to work, but AWS is not
-    adding features and has announced no timeline for the service beyond that.
-    Potato's MTurk integration is **maintained but frozen** — it will keep working
-    for existing requesters, and no new MTurk features will be added.
+!!! warning "MTurk closed permanently on September 30, 2026"
+    Amazon Mechanical Turk **closed on September 30, 2026**. HITs can no longer be
+    created or completed, and the requester sites return HTTP 410. No worker can
+    reach a Potato study through MTurk.
 
-    If you are starting a new project, use [Prolific](prolific_integration.md) or
-    another platform from the [crowdsourcing platform guide](crowdsourcing-platforms.md).
-    CloudResearch is also sunsetting its MTurk Toolkit (end of 2026) in favor of
-    [Connect](crowdsourcing-platforms.md#cloudresearch-connect).
+    Potato still loads an MTurk config, so an archived study's server starts and
+    its annotations export. To run the study again, replace the `workerId` login
+    with another provider's `crowdsourcing` block; the annotation config,
+    training, attention checks and gold standards stay as they are. See the
+    [crowdsourcing platform guide](crowdsourcing-platforms.md), including
+    [Prolific](prolific_integration.md) and
+    [CloudResearch Connect](crowdsourcing-platforms.md#cloudresearch-connect).
+
+    The rest of this page describes how the integration worked, for reading
+    archived studies.
 
 Deploying a Potato annotation task on Amazon Mechanical Turk (MTurk), end to end.
 
@@ -62886,7 +63776,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **175 top-level config keys**, **62 annotation types**, and
+It currently covers **177 top-level config keys**, **63 annotation types**, and
 **24 display types**.
 
 ### Editor validation
@@ -62936,7 +63826,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **495 paths / 533 operations**, generated by
+An index of Potato's HTTP surface: **502 paths / 540 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:
@@ -62981,7 +63871,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **226 example projects** in the repository, across 17
+A derived index of the **229 example projects** in the repository, across 17
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.
