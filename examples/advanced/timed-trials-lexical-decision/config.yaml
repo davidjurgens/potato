@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Lexical decision with timed trials: a fixation cross, then a letter string;
+# press F for a word and J for a non-word within two seconds. Each item's
+# reaction time is measured in the browser from the frame the string appeared.
+#
+# Items come in a random order per participant. Trials that run out are
+# recorded as timeouts and the next item starts.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/timed-trials-lexical-decision/config.yaml -p 8000
+
+annotation_task_name: Lexical decision (timed trials)
+task_dir: .
+output_annotation_dir: annotation_output/timed-trials-lexical-decision/
+data_files:
+  - data/timed-trials-lexical-decision.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+assignment_strategy: random
+
+annotation_schemes:
+  - annotation_type: radio
+    name: decision
+    description: Is this a word?
+    labels: [word, nonword]
+    label_requirement:
+      required: true
+
+trial_timing:
+  enabled: true
+  fixation_ms: 500
+  trial_duration_ms: 2000
+  iti_ms: 500
+  response:
+    schema: decision
+    keys: {f: word, j: nonword}

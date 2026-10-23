@@ -1154,6 +1154,10 @@ class ItemStateManager:
         self.batch_auto_assign_annotators = bool(
             self.batch_assignment_config.get('auto_assign_annotators', False)
         )
+        # A `conditions` factor whose levels name the auto-groups: each
+        # participant gets the group of their assigned level, so a condition
+        # can carry its own stimulus set.
+        self.batch_group_by_condition = self.batch_assignment_config.get('group_by_condition')
         self.batch_user_to_instance_ids: Dict[str, List[str]] = defaultdict(list)
         self.batch_auto_groups: List[Dict[str, object]] = []
         self.batch_auto_user_to_group: Dict[str, int] = {}
@@ -1344,6 +1348,21 @@ class ItemStateManager:
                 index = self.batch_auto_user_to_group[user_id]
                 return index, self.batch_auto_groups[index], False
 
+            if self.batch_group_by_condition:
+                routed = self._condition_group_index(user_id)
+                if routed is not None:
+                    group = self.batch_auto_groups[routed]
+                    max_annotators = group.get('max_annotators')
+                    if (max_annotators is not None and
+                            len(self.batch_auto_group_to_users[routed]) >= int(max_annotators)):
+                        return None
+                    newly_pinned = False
+                    if persist:
+                        self.batch_auto_user_to_group[user_id] = routed
+                        self.batch_auto_group_to_users[routed].add(user_id)
+                        newly_pinned = True
+                    return routed, group, newly_pinned
+
             available = []
             for index, group in enumerate(self.batch_auto_groups):
                 assigned_count = len(self.batch_auto_group_to_users[index])
@@ -1362,6 +1381,24 @@ class ItemStateManager:
                 self.batch_auto_group_to_users[index].add(user_id)
                 newly_pinned = True
             return index, group, newly_pinned
+
+    def _condition_group_index(self, user_id: str) -> Optional[int]:
+        """The auto-group named after this participant's condition level, or
+        None when they have no condition (a machine rater, or no `conditions`)."""
+        try:
+            from potato.user_state_management import get_user_state_manager
+            usm = get_user_state_manager()
+            user_state = usm.get_user_state(user_id)
+            conditions = usm.ensure_conditions(user_state) or {}
+        except Exception:
+            return None
+        level = conditions.get(self.batch_group_by_condition)
+        if level is None:
+            return None
+        for index, group in enumerate(self.batch_auto_groups):
+            if str(group.get('name')) == str(level):
+                return index
+        return None
 
     def _rollback_auto_batch_pin(self, user_id: str, group_index: int) -> None:
         """Undo a pin created this pass when it yielded no assignable items.

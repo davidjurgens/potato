@@ -214,7 +214,7 @@ KNOWN_CONFIG_KEYS = {
         },
     },
     "batch_assignment": {
-        "groups", "annotator_key", "auto_assign_annotators",
+        "groups", "annotator_key", "auto_assign_annotators", "group_by_condition",
     },
     "diversity_ordering": {
         "enabled", "model_name", "num_clusters", "items_per_cluster",
@@ -440,6 +440,14 @@ KNOWN_CONFIG_KEYS = {
     },
     # The always-on interaction tracker (clicks, focus, scroll, shortcut keys).
     "interaction_tracking": {"enabled", "disclose_to_annotators", "disclosure_text"},
+    # Between-subjects conditions for experiment designs. Validated by
+    # experiment_conditions.validate_conditions_config().
+    "conditions": {"factors", "assignment", "balance_on", "max_per_cell", "cells"},
+    # Timed trials on the annotation page. Validated by
+    # potato.trial_timing.validate_trial_timing_config().
+    "trial_timing": {"enabled", "fixation_ms", "fixation_symbol", "stimulus_duration_ms",
+                     "trial_duration_ms", "iti_ms", "response", "item_overrides",
+                     "disable_back_navigation", "show_response_options"},
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
@@ -801,8 +809,57 @@ def normalize_config_before_validation(
         logger.debug(f"Resolved task_dir to: {task_dir}")
 
     _apply_require_fully_annotated(config_data)
+    _normalize_jspsych_phases(config_data)
 
     return config_data
+
+
+def _normalize_jspsych_phases(config_data: Dict[str, Any]) -> None:
+    """Give each `type: jspsych` phase a survey slot to run in.
+
+    The phase sequence has one slot per phase type, and a jsPsych task sits
+    either before the annotation phase (prestudy) or after it (poststudy).
+    The entry keeps `_kind: jspsych` so the loader and renderer know what it
+    is; everything else -- ordering, `show_when`, counterbalancing,
+    `--debug-phase` -- treats it as an ordinary survey page.
+    """
+    from potato.server_utils.phase_flow import phases_dict
+    phases = config_data.get("phases")
+    if not phases:
+        return
+    entries = phases_dict(config_data)
+    if isinstance(phases, dict) and isinstance(phases.get("order"), list):
+        order = list(phases["order"])
+    else:
+        order = list(entries)
+
+    def _is_annotation(name):
+        if name == "annotation":
+            return True
+        entry = entries.get(name) or {}
+        return str(entry.get("type", "")).lower() == "annotation"
+
+    first_annotation = next((i for i, n in enumerate(order) if _is_annotation(n)), None)
+    for name, entry in entries.items():
+        if str(entry.get("type", "")).lower() != "jspsych":
+            continue
+        slot = entry.get("slot")
+        pos = order.index(name) if name in order else None
+        inferred = ("poststudy" if (first_annotation is not None and pos is not None
+                                    and pos > first_annotation) else "prestudy")
+        if slot is None:
+            slot = inferred
+        elif slot != inferred:
+            logger.warning(
+                "phases.%s: slot is '%s', but its place in phases.order is %s the "
+                "annotation phase. The page runs with the other %s pages, not where "
+                "the order lists it.", name, slot,
+                "after" if inferred == "poststudy" else "before", slot)
+        if slot not in ("prestudy", "poststudy"):
+            raise ConfigValidationError(
+                f"phases.{name}.slot must be 'prestudy' or 'poststudy', not '{slot}'")
+        entry["_kind"] = "jspsych"
+        entry["type"] = slot
 
 
 def _scheme_is_required_for_test(scheme: Dict[str, Any]) -> bool:
@@ -2725,6 +2782,33 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Warn about phases named in the order that no block defines
     validate_phase_order(config_data)
 
+    # Between-subjects conditions, and every condition.<factor> reference
+    from potato.server_utils.experiment_conditions import (
+        validate_conditions_config, validate_condition_references)
+    validate_conditions_config(config_data)
+    validate_condition_references(config_data)
+    from potato.server_utils.experiment_conditions import validate_group_by_condition
+    validate_group_by_condition(config_data)
+
+    # Page-level show_when / exit_when and phases.counterbalance
+    validate_phase_flow_config(config_data)
+
+    # Timed trials on the annotation page
+    from potato.trial_timing import validate_trial_timing_config
+    validate_trial_timing_config(config_data)
+
+    # Embedded jsPsych phase pages (after normalization gave them a slot)
+    from potato.jspsych.phase import validate_jspsych_config
+    validate_jspsych_config(config_data)
+
+    # Page rules that name questions in phase files. The server checks these
+    # at boot; doing it here too means `potato validate` fails on them.
+    validate_phase_flow_files(config_data, config_file_dir)
+
+    # The files a jsPsych page names (timeline, extra scripts, assets).
+    from potato.jspsych.phase import validate_jspsych_files
+    validate_jspsych_files(config_data, config_file_dir)
+
     # Warn about quota / batch-group keys that will never be read
     warn_unreachable_quota_keys(config_data)
     warn_batch_groups_need_the_batch_strategy(config_data)
@@ -2835,7 +2919,7 @@ def _phase_file_schemes(config_data: Dict[str, Any],
 
     phases = config_data.get("phases") if isinstance(config_data, dict) else None
     if isinstance(phases, dict):
-        items = [(n, p) for n, p in phases.items() if n != "order"]
+        items = [(n, p) for n, p in phases.items() if n not in ("order", "counterbalance")]
     elif isinstance(phases, list):
         items = [(p.get("name", f"#{i}") if isinstance(p, dict) else f"#{i}", p)
                  for i, p in enumerate(phases)]
@@ -3399,7 +3483,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         else:
             # Dictionary format
             for phase_name, phase in phases.items():
-                if phase_name == 'order':
+                if phase_name in ('order', 'counterbalance'):
                     continue
                 # Phases can have annotation_schemes, file, type, instrument, or instruments
                 if 'annotation_schemes' in phase:
@@ -4323,6 +4407,23 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
+
+    if scheme['annotation_type'] == 'cloze':
+        # The generator turns a bad cloze into an error card on the page; say
+        # so here instead, where `potato validate` can report it.
+        from potato.server_utils.schemas.cloze import BLANK, SCORING_MODES
+        has_text, has_source = bool(scheme.get('text')), bool(scheme.get('source_field'))
+        if has_text == has_source:
+            raise ConfigValidationError(
+                f"{path}: a cloze scheme needs exactly one of `text` (one passage) or "
+                "`source_field` (a passage per item)")
+        if has_text and not (isinstance(scheme['text'], str) and BLANK.search(scheme['text'])):
+            raise ConfigValidationError(f"{path}.text must contain at least one [[blank]]")
+        if scheme.get('answer_field') and not has_source:
+            raise ConfigValidationError(f"{path}.answer_field only applies with source_field")
+        if scheme.get('scoring', 'case_insensitive') not in SCORING_MODES:
+            raise ConfigValidationError(
+                f"{path}.scoring must be one of {', '.join(SCORING_MODES)}")
 
     # Per-object attributes on video tracks and point-cloud objects; the image
     # type checks its own below, beside its tools.
@@ -5674,6 +5775,261 @@ def validate_phase_order(config_data: Dict[str, Any]) -> None:
             "second annotator.",
             len(annotation_phases), ", ".join(annotation_phases),
         )
+
+
+def _phase_flow_rule_errors(spec: Any, where: str, factors: Dict[str, Any]) -> None:
+    """Refuse a malformed `show_when` list (the display_logic grammar)."""
+    from potato.server_utils.display_logic import DisplayLogicRule
+    from potato.server_utils.phase_flow import CONDITION_PREFIX
+    show_when = spec.get("show_when") if isinstance(spec, dict) else None
+    if not isinstance(show_when, list) or not show_when:
+        raise ConfigValidationError(
+            f"{where}.show_when must be a non-empty list of conditions "
+            "(schema, operator, value), the same form display_logic uses")
+    for i, cond in enumerate(show_when):
+        if not isinstance(cond, dict) or not cond.get("schema") or not cond.get("operator"):
+            raise ConfigValidationError(
+                f"{where}.show_when[{i}] needs 'schema' and 'operator'")
+        schema = str(cond["schema"])
+        if schema.startswith(CONDITION_PREFIX):
+            factor = schema[len(CONDITION_PREFIX):]
+            if factor not in factors:
+                declared = ", ".join(sorted(factors)) or "none declared"
+                raise ConfigValidationError(
+                    f"{where}.show_when[{i}] refers to '{schema}', but "
+                    f"conditions.factors has no factor '{factor}' ({declared})")
+            from potato.server_utils.experiment_conditions import check_condition_value
+            check_condition_value(f"{where}.show_when[{i}]", cond, factors)
+    try:
+        DisplayLogicRule.from_dict({"show_when": show_when,
+                                    "logic": spec.get("logic", "all")})
+    except (ValueError, KeyError, TypeError) as e:
+        raise ConfigValidationError(f"{where}: {e}")
+
+
+def validate_phase_flow_config(config_data: Dict[str, Any]) -> None:
+    """Check page-level `show_when`, `exit_when` and `phases.counterbalance`.
+
+    The rules are checked for shape here. Whether the questions they name
+    exist is checked at boot, once the phase files are loaded (see
+    `validate_phase_flow_references`).
+    """
+    from potato.server_utils.phase_flow import (
+        COUNTERBALANCE_METHODS, phases_dict)
+    phases = config_data.get("phases")
+    if not phases:
+        return
+    factors = ((config_data.get("conditions") or {}).get("factors") or {}) \
+        if isinstance(config_data.get("conditions"), dict) else {}
+    if not isinstance(factors, dict):
+        factors = {}
+    entries = phases_dict(config_data)
+
+    for name, entry in entries.items():
+        where = f"phases.{name}"
+        ptype = str(entry.get("type") or name).lower()
+        if "show_when" in entry:
+            if ptype == "annotation" or name == "annotation":
+                raise ConfigValidationError(
+                    f"{where}.show_when: the annotation phase cannot be skipped "
+                    "with show_when. Gate the pages around it instead.")
+            _phase_flow_rule_errors(entry, where, factors)
+            if entry.get("logic", "all") not in ("all", "any"):
+                raise ConfigValidationError(f"{where}.logic must be 'all' or 'any'")
+        if "exit_when" in entry:
+            spec = entry["exit_when"]
+            if not isinstance(spec, dict):
+                raise ConfigValidationError(
+                    f"{where}.exit_when must be a mapping with 'show_when' and "
+                    "an optional 'message'")
+            if ptype in ("annotation", "training"):
+                raise ConfigValidationError(
+                    f"{where}.exit_when is only supported on consent, prestudy, "
+                    "instructions and poststudy pages")
+            _phase_flow_rule_errors(spec, f"{where}.exit_when", factors)
+            if "message" in spec and not isinstance(spec["message"], str):
+                raise ConfigValidationError(f"{where}.exit_when.message must be a string")
+            unknown = set(spec) - {"show_when", "logic", "message"}
+            if unknown:
+                raise ConfigValidationError(
+                    f"{where}.exit_when has unknown key(s): {', '.join(sorted(unknown))}")
+
+        if "randomize_questions" in entry:
+            spec = entry["randomize_questions"]
+            if isinstance(spec, dict):
+                unknown = set(spec) - {"pin_first", "pin_last"}
+                if unknown:
+                    raise ConfigValidationError(
+                        f"{where}.randomize_questions has unknown key(s): "
+                        f"{', '.join(sorted(unknown))}")
+                for key in ("pin_first", "pin_last"):
+                    if key in spec and not (isinstance(spec[key], list) and
+                                            all(isinstance(x, str) for x in spec[key])):
+                        raise ConfigValidationError(
+                            f"{where}.randomize_questions.{key} must be a list of question names")
+            elif not isinstance(spec, bool):
+                raise ConfigValidationError(
+                    f"{where}.randomize_questions must be true/false or "
+                    "{pin_first: [...], pin_last: [...]}")
+            if spec and ptype in ("annotation", "training"):
+                raise ConfigValidationError(
+                    f"{where}.randomize_questions applies to survey pages only")
+
+    groups = phases.get("counterbalance") if isinstance(phases, dict) else None
+    if groups is None:
+        return
+    if not isinstance(groups, list):
+        raise ConfigValidationError(
+            "phases.counterbalance must be a list of {pages: [...], method: ...}")
+    order = phases.get("order") if isinstance(phases.get("order"), list) else list(entries)
+    seen_pages = set()
+    for i, group in enumerate(groups):
+        where = f"phases.counterbalance[{i}]"
+        if not isinstance(group, dict):
+            raise ConfigValidationError(f"{where} must be a mapping")
+        pages = group.get("pages")
+        if not isinstance(pages, list) or len(pages) < 2:
+            raise ConfigValidationError(f"{where}.pages must list at least two phase pages")
+        method = group.get("method", "random")
+        if method not in COUNTERBALANCE_METHODS:
+            raise ConfigValidationError(
+                f"{where}.method must be one of {', '.join(COUNTERBALANCE_METHODS)}, "
+                f"not '{method}'")
+        unknown = set(group) - {"pages", "method"}
+        if unknown:
+            raise ConfigValidationError(
+                f"{where} has unknown key(s): {', '.join(sorted(unknown))}")
+        types = set()
+        for page in pages:
+            if page not in entries:
+                raise ConfigValidationError(f"{where}.pages names '{page}', which no phase defines")
+            if page not in order:
+                raise ConfigValidationError(f"{where}.pages names '{page}', which is not in phases.order")
+            if page in seen_pages:
+                raise ConfigValidationError(f"{where}.pages: '{page}' is already in another group")
+            seen_pages.add(page)
+            types.add(str(entries[page].get("type") or page).lower())
+        if len(types) > 1:
+            raise ConfigValidationError(
+                f"{where}.pages mixes phase types ({', '.join(sorted(types))}). Pages "
+                "of different types never sit next to each other in the study, so only "
+                "pages of one type can be counterbalanced against each other.")
+        if types & {"annotation", "training"}:
+            raise ConfigValidationError(
+                f"{where}: annotation and training pages cannot be counterbalanced")
+
+
+def phase_page_schemes(config_data: Dict[str, Any],
+                       config_file_dir: Optional[str] = None) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+    """``{page: [question schemes]}`` read the way the server reads them, or
+    None when a file cannot be found here (the server, which looks in more
+    places, reports that)."""
+    from potato.server_utils.phase_files import load_phase_schemes, resolve_phase_file
+    from potato.server_utils.phase_flow import phases_dict
+    pages: Dict[str, List[Dict[str, Any]]] = {}
+    for name, entry in phases_dict(config_data).items():
+        kind = str(entry.get("type") or name).lower()
+        if kind in ("training", "annotation") or entry.get("_kind") == "jspsych":
+            continue
+        schemes: List[Dict[str, Any]] = []
+        if isinstance(entry.get("annotation_schemes"), list):
+            schemes.extend(s for s in entry["annotation_schemes"] if isinstance(s, dict))
+        ids = [entry["instrument"]] if entry.get("instrument") else list(entry.get("instruments") or [])
+        if ids:
+            try:
+                from potato.survey_instruments import get_instrument_questions
+                for inst in ids:
+                    schemes.extend(get_instrument_questions(inst))
+            except Exception:
+                return None
+        filename = entry.get("file")
+        if isinstance(filename, str) and filename.lower().endswith((".json", ".jsonl", ".yaml", ".yml")):
+            path = resolve_phase_file(filename, config_file_dir)
+            if path is None:
+                return None
+            try:
+                schemes.extend(s for s in load_phase_schemes(path) if isinstance(s, dict))
+            except Exception:
+                return None
+        pages[name] = schemes
+    return pages
+
+
+def validate_phase_flow_files(config_data: Dict[str, Any],
+                              config_file_dir: Optional[str] = None) -> None:
+    from potato.server_utils.phase_flow import has_flow_rules, phases_dict
+    needs = has_flow_rules(config_data) or any(
+        e.get("expose_answers") for e in phases_dict(config_data).values())
+    if not needs:
+        return
+    pages = phase_page_schemes(config_data, config_file_dir)
+    if pages is None:
+        return
+    validate_phase_flow_references(config_data, pages)
+    from potato.server_utils.experiment_conditions import validate_condition_references
+    validate_condition_references(config_data, [s for v in pages.values() for s in v])
+
+
+def validate_phase_flow_references(config_data: Dict[str, Any],
+                                   page_schemes: Dict[str, List[Dict[str, Any]]]) -> None:
+    """At boot, once phase files are loaded: every question a page rule
+    names must be asked somewhere, and before the page that tests it.
+
+    A `show_when` that tests a question asked on that page or later can only
+    ever see it unanswered, so the page is always skipped; that is refused.
+    """
+    from potato.server_utils.phase_flow import CONDITION_PREFIX, phases_dict
+    entries = phases_dict(config_data)
+    phases = config_data.get("phases")
+    order = (phases.get("order") if isinstance(phases, dict) and
+             isinstance(phases.get("order"), list) else list(entries))
+    position = {}
+    for idx, name in enumerate(order):
+        for scheme in page_schemes.get(name, []):
+            if isinstance(scheme, dict) and scheme.get("name"):
+                position.setdefault(scheme["name"], idx)
+    for name, entry in entries.items():
+        if entry.get("expose_answers"):
+            page_idx = order.index(name) if name in order else len(order)
+            for q in entry["expose_answers"]:
+                if q not in position:
+                    raise ConfigValidationError(
+                        f"phases.{name}.expose_answers names '{q}', which no phase page asks")
+                if position[q] >= page_idx:
+                    raise ConfigValidationError(
+                        f"phases.{name}.expose_answers names '{q}', which is asked on a "
+                        "later page; the timeline would always receive it empty")
+        spec = entry.get("randomize_questions")
+        if isinstance(spec, dict):
+            asked = {s.get("name") for s in page_schemes.get(name, []) if isinstance(s, dict)}
+            for key in ("pin_first", "pin_last"):
+                for q in spec.get(key) or []:
+                    if q not in asked:
+                        raise ConfigValidationError(
+                            f"phases.{name}.randomize_questions.{key} names '{q}', "
+                            "which is not a question on that page")
+        if name not in order:
+            continue
+        page_idx = order.index(name)
+        for key, spec, strict in (("show_when", entry, True),
+                                  ("exit_when", entry.get("exit_when"), False)):
+            if key not in entry or not isinstance(spec, dict):
+                continue
+            for cond in spec.get("show_when") or []:
+                schema = str(cond.get("schema", ""))
+                if schema.startswith(CONDITION_PREFIX):
+                    continue
+                if schema not in position:
+                    raise ConfigValidationError(
+                        f"phases.{name}.{key} refers to question '{schema}', which "
+                        "no phase page asks. Page rules read survey answers and "
+                        "conditions; per-item annotations are not visible to them")
+                asked = position[schema]
+                if (strict and asked >= page_idx) or (not strict and asked > page_idx):
+                    where = "on this page or later" if strict else "after this page"
+                    raise ConfigValidationError(
+                        f"phases.{name}.{key} tests '{schema}', which is asked {where}; "
+                        "it can only ever be unanswered when the rule is checked")
 
 
 def validate_quality_control_config(config_data: Dict[str, Any]) -> None:

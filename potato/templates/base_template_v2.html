@@ -31,7 +31,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=40">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=41">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=4">
@@ -218,9 +218,12 @@
 
     <!-- Project-level base CSS (injected from base_css config option) -->
     {{ PROJECT_BASE_CSS | safe }}
+    {% if trial_timing_client_config %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='trial-timing.css') }}?v=1">
+    {% endif %}
 </head>
 
-<body>
+<body{% if trial_timing_client_config %} class="potato-trial potato-trial-pending"{% endif %}>
     <!-- Header navigation bar -->
     <nav class="potato-navbar" role="navigation">
         <div class="navbar-inner">
@@ -737,6 +740,11 @@
     <!-- Load annotation JavaScript -->
     {# Always loaded -- other trackers and annotation.js call into it -- but it
        records nothing when interaction_tracking.enabled is false. #}
+    {% if potato_conditions %}
+    <script type="text/javascript">
+        window.potatoConditions = {{ potato_conditions | tojson }};
+    </script>
+    {% endif %}
     <script type="text/javascript">
         window.interactionTrackingConfig = {{ (interaction_tracking_client_config or {'enabled': true}) | tojson }};
     </script>
@@ -779,12 +787,20 @@
     <script src="{{ url_for('static', filename='span-touch.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=6"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
-    <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='display-logic.js') }}?v=5"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=47"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=48"></script>
+    {% if trial_timing_client_config %}
+    <!-- Timed trials: fixation, stimulus duration, deadline, key-to-label RT.
+         After annotation.js, whose navigation and save it drives. -->
+    <script type="text/javascript">
+        window.potatoTrialTiming = {{ trial_timing_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='trial-timing.js') }}?v=1"></script>
+    {% endif %}
     {# Plugins load after annotation.js so they can use its functions. #}
     {% for href in (plugin_assets | default({})).get('styles', []) %}
     <link rel="stylesheet" href="{{ url_prefix }}{{ href }}">

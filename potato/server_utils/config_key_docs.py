@@ -500,6 +500,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Split items into named groups and assign whole batches",
         type="object", category=ASSIGN,
     ),
+    "batch_assignment.group_by_condition": _D(
+        "A `conditions` factor whose levels name the auto-assigned groups. Each "
+        "participant gets the group of their assigned level, so each condition "
+        "can carry its own items",
+        type="string", category=ASSIGN, see_also=("conditions",),
+    ),
     "random_seed": _D(
         "Seed for assignment shuffling, so an ordering can be reproduced",
         type="integer", category=ASSIGN,
@@ -1869,6 +1875,86 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "annotation_telemetry.detection": _D(
         "Rubber-stamping detection: `enabled`, `calibrate` and `thresholds`",
         type="object", category=FEATURES,
+    ),
+    "conditions": _D(
+        "Between-subjects conditions. Each participant is assigned one cell "
+        "(one level of every factor) on arrival and keeps it. Page `show_when` "
+        "rules and question `display_logic` can test `condition.<factor>`",
+        type="object", category=ASSIGN, see_also=("phases",),
+    ),
+    "conditions.factors": _D(
+        "Factor name to list of levels, e.g. `{feedback: [none, immediate]}`. "
+        "Several factors form a full factorial design unless `cells` lists a subset",
+        type="object", category=ASSIGN,
+    ),
+    "conditions.assignment": _D(
+        "How a cell is chosen: `balanced` (fewest participants, by weight), "
+        "`random` (seeded per participant) or `round_robin` (arrival order)",
+        type="string", default="balanced", category=ASSIGN,
+    ),
+    "conditions.balance_on": _D(
+        "What `balanced` counts: everyone `assigned`, or only participants who "
+        "`completed` without being screened out, so dropouts are replaced",
+        type="string", default="assigned", category=ASSIGN,
+    ),
+    "conditions.max_per_cell": _D(
+        "Skip a cell once it has this many participants. When every cell is "
+        "full, the least-filled one is still assigned and a warning is logged",
+        type="integer", category=ASSIGN, minimum=1,
+    ),
+    "conditions.cells": _D(
+        "Explicit cells (a subset of the full factorial), each a mapping of "
+        "factor to level with an optional `weight`",
+        type="array", category=ASSIGN,
+    ),
+    "trial_timing": _D(
+        "Run each annotation item as a timed trial: fixation, stimulus "
+        "duration, response deadline and keys mapped to labels, with the "
+        "reaction time measured from the frame the stimulus appeared. For "
+        "frame-critical or auditory paradigms use a `type: jspsych` phase",
+        type="object", category=FEATURES, see_also=("phases",),
+    ),
+    "trial_timing.enabled": _D(
+        "Turn timed trials on", type="boolean", default=False, category=FEATURES,
+    ),
+    "trial_timing.fixation_ms": _D(
+        "Fixation cross before each stimulus, in ms. 0 for none",
+        type="integer", default=0, category=FEATURES, minimum=0,
+    ),
+    "trial_timing.fixation_symbol": _D(
+        "What the fixation shows", type="string", default="+", category=FEATURES,
+    ),
+    "trial_timing.stimulus_duration_ms": _D(
+        "Hide the stimulus after this many ms. Omit to keep it up until the response",
+        type="integer", category=FEATURES, minimum=1,
+    ),
+    "trial_timing.trial_duration_ms": _D(
+        "Response deadline in ms from onset. A trial that runs out is recorded "
+        "as a timeout and the item advances with no answer. Omit for no deadline",
+        type="integer", category=FEATURES, minimum=1,
+    ),
+    "trial_timing.iti_ms": _D(
+        "Minimum blank interval between one response and the next fixation, in ms. "
+        "Page loading counts toward it",
+        type="integer", default=0, category=FEATURES, minimum=0,
+    ),
+    "trial_timing.response": _D(
+        "`schema` (a radio or likert scheme), `keys` (key to label, e.g. "
+        "`{f: word, j: nonword}`) and `allow_mouse`",
+        type="object", category=FEATURES,
+    ),
+    "trial_timing.item_overrides": _D(
+        "Per-item timing read from item fields, e.g. `{stimulus_duration_ms: soa_ms}`",
+        type="object", category=FEATURES,
+    ),
+    "trial_timing.disable_back_navigation": _D(
+        "Hide Previous during a timed task, so no stimulus is shown twice",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "trial_timing.show_response_options": _D(
+        "Show the scheme's options during the trial. Defaults to true only "
+        "when `response.allow_mouse` is on",
+        type="boolean", category=FEATURES,
     ),
     "authenticity": _D(
         "Page-level, content-blind authenticity paradata on every task type: "

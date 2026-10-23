@@ -541,11 +541,33 @@ class UserStateManager:
             self._mysql_user_state_cls = MysqlUserState
             self.use_database = True
             logger.info("Initialized MySQL database backend")
+            # The experiment-design record (conditions, page orders, skips,
+            # screen-outs, jsPsych run summaries) and timed-trial records are
+            # kept on the file backend only, like presentation_order.
+            from potato.server_utils.phase_flow import has_flow_rules
+            if (config.get("conditions") or has_flow_rules(config)
+                    or (config.get("trial_timing") or {}).get("enabled")):
+                logger.warning(
+                    "database.type is mysql: condition assignments, page orders, "
+                    "screen-outs and timed-trial records are not stored in MySQL "
+                    "and are lost on restart. Use the file backend for experiment designs.")
 
         self.logger = logging.getLogger(__name__)
         # setting to debug
         self.logger.setLevel(logging.DEBUG)
         logging.basicConfig()
+
+        # Arrival counter for Latin-square page orders in a study without
+        # conditions (with conditions, the within-cell number is used).
+        self._latin_lock = threading.Lock()
+        self._latin_next = 0
+
+        # Between-subjects conditions. Owned here, not as a module singleton,
+        # so a new config gets a new assigner.
+        self.condition_assigner = None
+        if config.get("conditions"):
+            from potato.server_utils.experiment_conditions import ConditionAssigner
+            self.condition_assigner = ConditionAssigner(config)
 
         # Auto-export configuration
         export_formats = config.get("export_annotation_format", [])
@@ -705,7 +727,21 @@ class UserStateManager:
             logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
             logger.debug(f"=== ADD USER END ===")
 
-            return user_state
+        self.ensure_conditions(user_state)
+        return user_state
+
+    def ensure_conditions(self, user_state) -> Optional[dict]:
+        '''Assign the participant a condition cell if a `conditions` block
+        is configured and they have none yet. Returns their conditions.'''
+        assigner = getattr(self, "condition_assigner", None)
+        if assigner is None or user_state is None:
+            return None
+        # A declared machine rater is not a participant in the design.
+        from potato.annotator_origin import is_machine
+        if is_machine(user_state):
+            return None
+        users = self.get_all_users() if assigner.balance_on == "completed" else None
+        return assigner.ensure(user_state, users)
 
     def _apply_single_select_schemas(self, user_state: UserState) -> None:
         """Tell a user state which schemas may hold at most one label (GH #167).
@@ -834,11 +870,46 @@ class UserStateManager:
         return user_id in self.user_to_annotation_state
 
     def advance_phase(self, user_id: str) -> None:
-        '''Moves the user to the next page in the current phase or the next phase'''
+        '''Moves the user to the next page in the current phase or the next phase.
+
+        This is the one place a participant leaves a phase page, so it is
+        where `exit_when` (screen-out) is checked and where pages hidden by
+        `show_when` are recorded as skipped. See server_utils/phase_flow.py.
+        '''
+        from potato.server_utils import phase_flow
         user_state = self.get_user_state(user_id)
-        old_phase, _ = user_state.get_current_phase_and_page()
-        phase, page = self.get_next_user_phase_page(user_id)
+        # A participant loaded from disk never went through add_user.
+        self.ensure_conditions(user_state)
+        old_phase, old_page = user_state.get_current_phase_and_page()
+
+        exit_spec = None
+        skipped = []
+        if old_page and old_phase not in (UserPhase.ANNOTATION, UserPhase.DONE,
+                                          UserPhase.LOGIN):
+            exit_spec = phase_flow.should_exit(self.config, user_state, old_page)
+
+        if exit_spec:
+            phase_flow.record_screen_out(user_state, old_page, exit_spec)
+            try:
+                user_state.set_prestudy_status(False)
+            except AttributeError:
+                user_state.prestudy_passed = False
+            logger.info("User %s screened out on page '%s'", user_id, old_page)
+            phase, page = UserPhase.DONE, None
+        else:
+            phase, page, skipped = self._next_flow_step(user_state)
+            for skipped_phase, skipped_page in skipped:
+                phase_flow.record_skip(user_state, skipped_phase, skipped_page)
         user_state.advance_to_phase(phase, page)
+
+        # A skip or screen-out is part of the study record, and most callers
+        # redirect without saving, so it would otherwise only reach disk on
+        # the participant's next answer -- never, for a screen-out.
+        if exit_spec or skipped:
+            try:
+                self.save_user_state(user_state)
+            except Exception as e:
+                logger.warning("Could not save flow record for %s: %s", user_id, e)
 
         # Emit webhook if phase changed
         if phase != old_phase:
@@ -925,55 +996,124 @@ class UserStateManager:
         self._configured_phase_index_cache = {phase: i for i, phase in enumerate(configured)}
         return list(configured)
 
-    def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
-        '''Returns the name and filename of next the page for the user, either
-           in the current phase or next phase. This method handles the
-           case of where there are multiple pages within the same phase type'''
+    def pages_for_user(self, user_state, phase: UserPhase) -> tuple[str, ...]:
+        '''The phase's pages in the order this participant sees them.
+
+        The configured order, with any `phases.counterbalance` groups
+        permuted for this participant. Pages hidden by `show_when` are still
+        listed; visibility is decided when the participant moves.
+        '''
+        from potato.server_utils.phase_flow import apply_counterbalance, uses_latin_square
+        if uses_latin_square(self.config):
+            self.ensure_latin_ordinal(user_state)
+        return apply_counterbalance(self.config, user_state, phase,
+                                    self._get_phase_pages(phase))
+
+    def ensure_latin_ordinal(self, user_state) -> None:
+        """Give the participant an arrival number for Latin-square rows.
+
+        With conditions configured, the condition assigner's within-cell
+        number does this job. Without them, a study-wide counter does, rebuilt
+        from saved states at boot (rebuild_latin_counter).
+        """
+        from potato.server_utils.phase_flow import flow_record
+        rec = flow_record(user_state)
+        if getattr(self, "condition_assigner", None) is not None:
+            self.ensure_conditions(user_state)
+            if isinstance(rec.get("cell_ordinal"), int):
+                return
+        if isinstance(rec.get("latin_ordinal"), int):
+            return
+        if not hasattr(self, "_latin_lock"):
+            self._latin_lock = threading.Lock()
+            self._latin_next = 0
+        with self._latin_lock:
+            if not isinstance(rec.get("latin_ordinal"), int):
+                rec["latin_ordinal"] = self._latin_next
+                self._latin_next += 1
+
+    def rebuild_latin_counter(self) -> None:
+        from potato.server_utils.phase_flow import flow_record
+        top = -1
+        for us in self.get_all_users():
+            value = flow_record(us).get("latin_ordinal")
+            if isinstance(value, int):
+                top = max(top, value)
+        self._latin_next = top + 1
+
+    def _flow_steps(self, user_state) -> list[tuple[UserPhase, Optional[str]]]:
+        '''Every (phase, page) step of the study for this participant, in order.
+
+        ANNOTATION is one step with no page: the annotate route owns it.
+        '''
+        steps = []
+        for phase in self._get_configured_phase_sequence():
+            if phase == UserPhase.ANNOTATION:
+                steps.append((phase, None))
+                continue
+            pages = self.pages_for_user(user_state, phase)
+            if pages:
+                steps.extend((phase, p) for p in pages)
+            else:
+                steps.append((phase, None))
+        return steps
+
+    @staticmethod
+    def _locate_step(steps, phase, page) -> Optional[tuple[int, int]]:
+        '''(first, last) step indices for the participant's position.
+
+        An exact (phase, page) match gives (i, i). A phase that is in the
+        sequence but whose page is not (None, or a page removed from the
+        config) gives the span of that phase's steps, so moving forward goes
+        to the next phase and moving back goes to the previous one, as before.
+        '''
+        for i, (ph, pg) in enumerate(steps):
+            if ph == phase and (ph == UserPhase.ANNOTATION or pg == page):
+                return i, i
+        indices = [i for i, (ph, _) in enumerate(steps) if ph == phase]
+        if indices:
+            return indices[0], indices[-1]
+        return None
+
+    def _step_visible(self, user_state, step, answers) -> bool:
+        from potato.server_utils.phase_flow import page_visible
+        phase, page = step
+        if phase == UserPhase.ANNOTATION or page is None:
+            return True
+        return page_visible(self.config, user_state, page, answers)
+
+    def _next_flow_step(self, user_state):
+        '''(phase, page, skipped) for the next visible step after the current one.'''
+        from potato.server_utils.phase_flow import collect_flow_answers, has_flow_rules
         self._ensure_phase_caches()
-
-        # Get the current user's state
-        user_state = self.get_user_state(user_id)
-
-        # Get the current of their phase
         cur_phase, cur_page = user_state.get_current_phase_and_page()
         if cur_phase == UserPhase.DONE:
-            return UserPhase.DONE, None
+            return UserPhase.DONE, None, []
 
-        pages_for_cur_phase = self._get_phase_pages(cur_phase)
-        if len(pages_for_cur_phase) > 1 and cur_page is not None:
-            cur_page_index = self._phase_page_index_cache.get(cur_phase, {}).get(cur_page)
-            if cur_page_index is not None and cur_page_index < len(pages_for_cur_phase) - 1:
-                return cur_phase, pages_for_cur_phase[cur_page_index + 1]
+        steps = self._flow_steps(user_state)
+        located = self._locate_step(steps, cur_phase, cur_page)
+        start = 0 if located is None else located[1] + 1
 
-        # If there are no more pages in this phase, return the next phase.
-        config_phases = self._get_configured_phase_sequence()
+        answers = (collect_flow_answers(self.config, user_state)
+                   if has_flow_rules(self.config) else {})
+        skipped = []
+        for step in steps[start:]:
+            if self._step_visible(user_state, step, answers):
+                return step[0], step[1], skipped
+            skipped.append(step)
+        return UserPhase.DONE, None, skipped
 
-        cur_phase_index = self._configured_phase_index_cache.get(cur_phase)
-        if cur_phase_index is not None:
-            if cur_phase_index < len(config_phases) - 1:
-                next_phase = config_phases[cur_phase_index + 1]
-                # ANNOTATION phase is handled by the annotate route
-                # and doesn't have entries in phase_type_to_name_to_page
-                if next_phase == UserPhase.ANNOTATION:
-                    return next_phase, None
-                # Use the first page in the next phase
-                next_pages = self._get_phase_pages(next_phase)
-                return next_phase, next_pages[0] if next_pages else None
-        else:
-            # Current phase not in config_phases (e.g., LOGIN).
-            # Advance to the first config phase.
-            if config_phases:
-                first_phase = config_phases[0]
-                if first_phase == UserPhase.ANNOTATION:
-                    return first_phase, None
-                first_pages = self._get_phase_pages(first_phase)
-                return first_phase, first_pages[0] if first_pages else None
-
-        return UserPhase.DONE, None
+    def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
+        '''Returns the next page for the user, either in the current phase or
+           a later one. Pages whose `show_when` does not hold are passed over.'''
+        phase, page, _ = self._next_flow_step(self.get_user_state(user_id))
+        return phase, page
 
     def get_prev_user_phase_page(self, user_id: str) -> tuple[UserPhase, str]:
-        '''Returns the previous page for the user, either in the current phase
-           or the previous configured phase.'''
+        '''Returns the previous visible page for the user, either in the
+           current phase or an earlier one. Hidden pages are passed over, so
+           Previous never lands on a page the participant was never shown.'''
+        from potato.server_utils.phase_flow import collect_flow_answers, has_flow_rules
         self._ensure_phase_caches()
 
         user_state = self.get_user_state(user_id)
@@ -982,32 +1122,28 @@ class UserStateManager:
         if cur_phase == UserPhase.LOGIN:
             return UserPhase.LOGIN, None
 
+        # A screened-out participant stays out: Previous from the end of the
+        # study must not walk them back to the pages they were excluded from.
+        from potato.server_utils.phase_flow import screened_out
+        if cur_phase == UserPhase.DONE and screened_out(user_state):
+            return UserPhase.DONE, None
+
+        steps = self._flow_steps(user_state)
         if cur_phase == UserPhase.DONE:
-            config_phases = self._get_configured_phase_sequence()
-            if config_phases:
-                prev_phase = config_phases[-1]
-                if prev_phase == UserPhase.ANNOTATION:
-                    return prev_phase, None
-                prev_pages = self._get_phase_pages(prev_phase)
-                return prev_phase, prev_pages[-1] if prev_pages else None
+            end = len(steps)
+        else:
+            located = self._locate_step(steps, cur_phase, cur_page)
+            if located is None:
+                return cur_phase, cur_page
+            end = located[0]
+
+        answers = (collect_flow_answers(self.config, user_state)
+                   if has_flow_rules(self.config) else {})
+        for step in reversed(steps[:end]):
+            if self._step_visible(user_state, step, answers):
+                return step
+        if cur_phase == UserPhase.DONE:
             return UserPhase.LOGIN, None
-
-        if cur_phase != UserPhase.ANNOTATION and cur_phase in self.phase_type_to_name_to_page:
-            pages_for_cur_phase = self._get_phase_pages(cur_phase)
-            cur_page_index = self._phase_page_index_cache.get(cur_phase, {}).get(cur_page)
-            if len(pages_for_cur_phase) > 1 and cur_page_index is not None and cur_page_index > 0:
-                return cur_phase, pages_for_cur_phase[cur_page_index - 1]
-
-        config_phases = self._get_configured_phase_sequence()
-        cur_phase_index = self._configured_phase_index_cache.get(cur_phase)
-        if cur_phase_index is not None:
-            if cur_phase_index > 0:
-                prev_phase = config_phases[cur_phase_index - 1]
-                if prev_phase == UserPhase.ANNOTATION:
-                    return prev_phase, None
-                prev_pages = self._get_phase_pages(prev_phase)
-                return prev_phase, prev_pages[-1] if prev_pages else None
-
         return cur_phase, cur_page
 
     def can_user_go_back(self, user_id: str) -> bool:
@@ -1606,6 +1742,11 @@ class UserState:
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
+        # Experiment-flow record, timed-trial records and prestudy status.
+        d['flow_record'] = getattr(self, 'flow_record', {})
+        d['instance_id_to_trial'] = getattr(self, 'instance_id_to_trial', {})
+        d['prestudy_passed'] = getattr(self, 'prestudy_passed', None)
+
         # Whether this participant is a person, and if not, which machine.
         # Absent means human, so a state written before this field existed
         # loads as one. See potato/annotator_origin.py.
@@ -1762,6 +1903,11 @@ class UserState:
 
         # Restore crowdsourcing platform metadata if present
         user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
+        # Absent in states written before experiment flow existed.
+        user_state.flow_record = j.get('flow_record', {}) or {}
+        user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
+        user_state.prestudy_passed = j.get('prestudy_passed')
 
         # Restore the rater's origin if present. An absent key is a person.
         user_state.origin = j.get('origin', {}) or {}
@@ -2086,6 +2232,22 @@ class InMemoryUserState(UserState):
         # study/session IDs) so annotation output can be joined with the
         # platform's submission records.
         self.crowd_metadata = {}
+
+        # Study-design record for experiment flow: the between-subjects
+        # condition this participant was assigned, the page and question
+        # orders they were shown, the pages a `show_when` skipped, a
+        # screen-out, and a summary of each embedded jsPsych run. One place
+        # so the participants export has a single source. See
+        # potato/server_utils/phase_flow.py.
+        self.flow_record = {}
+
+        # Timed-trial records (trial_timing), keyed by instance id. Kept
+        # beside the labels because a timed-out trial has no label at all.
+        self.instance_id_to_trial = {}
+
+        # Prestudy pass/fail. None until something decides it (a screen-out
+        # sets False). Read by get_prestudy_status().
+        self.prestudy_passed = None
 
         # Whether this participant is a person, and if not, which machine and
         # which version of it. Empty means human. Stamped from the
@@ -2742,7 +2904,42 @@ class InMemoryUserState(UserState):
         return set(self.instance_id_to_label_to_value.keys()) \
                     | set(self.instance_id_to_span_to_value.keys()) \
                     | set(self.instance_id_to_link_to_value.keys()) \
+                    | set(self.instance_id_to_event_to_value.keys()) \
+                    | self._timed_out_instance_ids()
+
+    def get_labeled_instance_ids(self) -> set[str]:
+        """Items this user left an answer on, not counting timed-out trials.
+
+        `get_annotated_instance_ids` answers "is this user done with the
+        item", which a timed-out trial is. This answers "did the item get an
+        annotation", which is what the item side counts toward
+        `max_annotations_per_item`: a participant who lets every trial run out
+        must not use up the items for everyone else.
+        """
+        return set(self.instance_id_to_label_to_value.keys()) \
+                    | set(self.instance_id_to_span_to_value.keys()) \
+                    | set(self.instance_id_to_link_to_value.keys()) \
                     | set(self.instance_id_to_event_to_value.keys())
+
+    def has_labeled(self, instance_id: str) -> bool:
+        """See get_labeled_instance_ids."""
+        return instance_id in self.instance_id_to_label_to_value \
+            or instance_id in self.instance_id_to_span_to_value \
+            or instance_id in self.instance_id_to_link_to_value \
+            or instance_id in self.instance_id_to_event_to_value
+
+    def _timed_out_instance_ids(self) -> set[str]:
+        """Items whose timed trial ran out with no answer (trial_timing).
+
+        Such an item has no label, and without this it would count as never
+        done: the progress counter would stall and the annotator would never
+        reach the end of the task. Empty unless trial_timing is on.
+        """
+        trials = getattr(self, 'instance_id_to_trial', None)
+        if not trials:
+            return set()
+        from potato.trial_timing import excuses_required_answer
+        return {iid for iid, rec in trials.items() if excuses_required_answer(rec)}
 
     def get_annotation_count(self) -> int:
         '''Returns the total number of instances annotated by this user.'''
@@ -2783,7 +2980,9 @@ class InMemoryUserState(UserState):
         return instance_id in self.instance_id_to_label_to_value \
             or instance_id in self.instance_id_to_span_to_value \
             or instance_id in self.instance_id_to_link_to_value \
-            or instance_id in self.instance_id_to_event_to_value
+            or instance_id in self.instance_id_to_event_to_value \
+            or (bool(getattr(self, 'instance_id_to_trial', None))
+                and instance_id in self._timed_out_instance_ids())
 
     def clear_all_annotations(self) -> None:
         '''Clears all annotations for this user'''
@@ -2792,6 +2991,8 @@ class InMemoryUserState(UserState):
         self.instance_id_to_link_to_value.clear()
         self.instance_id_to_event_to_value.clear()
         self.instance_id_to_behavioral_data.clear()
+        if isinstance(getattr(self, 'instance_id_to_trial', None), dict):
+            self.instance_id_to_trial.clear()
         self.ai_hints.clear()
 
     def clear_instance_annotations(self, instance_id: str) -> None:
@@ -2801,6 +3002,8 @@ class InMemoryUserState(UserState):
         self.instance_id_to_link_to_value.pop(instance_id, None)
         self.instance_id_to_event_to_value.pop(instance_id, None)
         self.instance_id_to_behavioral_data.pop(instance_id, None)
+        if isinstance(getattr(self, 'instance_id_to_trial', None), dict):
+            self.instance_id_to_trial.pop(instance_id, None)
         self.ai_hints.pop(instance_id, None)
 
     def has_remaining_assignments(self) -> bool:
@@ -3242,6 +3445,11 @@ class InMemoryUserState(UserState):
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
+        # Experiment-flow record, timed-trial records and prestudy status.
+        d['flow_record'] = getattr(self, 'flow_record', {})
+        d['instance_id_to_trial'] = getattr(self, 'instance_id_to_trial', {})
+        d['prestudy_passed'] = getattr(self, 'prestudy_passed', None)
+
         # Whether this participant is a person, and if not, which machine.
         # Absent means human, so a state written before this field existed
         # loads as one. See potato/annotator_origin.py.
@@ -3460,6 +3668,11 @@ class InMemoryUserState(UserState):
 
         # Restore crowdsourcing platform metadata if present
         user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
+        # Absent in states written before experiment flow existed.
+        user_state.flow_record = j.get('flow_record', {}) or {}
+        user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
+        user_state.prestudy_passed = j.get('prestudy_passed')
 
         # Restore the rater's origin if present. An absent key is a person.
         user_state.origin = j.get('origin', {}) or {}

@@ -119,9 +119,10 @@ layer model. Rather than write a plausible guess into a file you would upload to
 a paid platform, masks are traced to polygons and the loss is reported.
 
 Potato also exports `csv`, `tsv`, `jsonl`, `parquet`, `huggingface`, several
-NLP formats, `adjudication` and `labeling_engine` (the labeling engine's
-resolved labels and quality certificate); those carry annotations generically
-rather than as CV geometry.
+NLP formats, `adjudication`, `labeling_engine` (the labeling engine's
+resolved labels and quality certificate) and `jspsych` (trial data from
+embedded jsPsych timelines); those carry annotations generically rather than
+as CV geometry.
 
 ## What survives a round trip
 

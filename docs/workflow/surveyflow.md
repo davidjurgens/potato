@@ -17,6 +17,12 @@ Potato's workflow consists of the following phases (in order):
 
 Users automatically progress through enabled phases in this order.
 
+Pages can be skipped by earlier answers (`show_when`), end the study for a
+participant (`exit_when`), be counterbalanced, or randomize their questions.
+Participants can be assigned to between-subjects conditions. See
+[Experiment Flow](experiment_flow.md). A page can also run a jsPsych timeline;
+see [jsPsych Phase](jspsych_phase.md).
+
 ## Back Navigation
 
 By default, the **Back button is hidden** when there is no previous page to navigate to. This means:
@@ -432,6 +438,8 @@ ui_configuration:
 ## Related Documentation
 
 - [Conditional Logic](../configuration/conditional_logic.md) - Show/hide survey questions based on prior answers
+- [Experiment Flow](experiment_flow.md) - Page branching, screen-outs, conditions, counterbalancing
+- [jsPsych Phase](jspsych_phase.md) - Run a jsPsych timeline as a phase page
 - [Training Phase](training_phase.md) - Configure qualification training with feedback
 - [Category-Based Assignment](../advanced/category_assignment.md) - Assign tasks based on training performance
 - [Configuration](../configuration/configuration.md) - Full configuration reference

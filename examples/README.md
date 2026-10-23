@@ -216,10 +216,10 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 226 examples, generated from the configs themselves.
+All 229 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
-### advanced/ (58)
+### advanced/ (60)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -250,6 +250,7 @@ The `Types` column lists the annotation types each one uses.
 | [`heterogeneous-coverage/`](advanced/heterogeneous-coverage/) | Heterogeneous Coverage Example | `radio`, `span` |
 | [`hotkey-review/`](advanced/hotkey-review/) | Hotkey Trace Review | `radio` |
 | [`html-annotation/`](advanced/html-annotation/) | Simple HTML as Input Example | `multiselect` |
+| [`jspsych-stroop/`](advanced/jspsych-stroop/) | jsPsych Stroop with word ratings | `radio` |
 | [`keystroke-calibration/`](advanced/keystroke-calibration/) | keystroke-calibration | `text` |
 | [`keystroke-logging/`](advanced/keystroke-logging/) | keystroke-logging | `radio`, `text` |
 | [`kwargs-example/`](advanced/kwargs-example/) | Example for using kwargs | `likert` |
@@ -278,6 +279,7 @@ The `Types` column lists the annotation types each one uses.
 | [`spreadsheet-annotation/`](advanced/spreadsheet-annotation/) | Data Quality Annotation | `multiselect`, `text` |
 | [`surveyflow-conditional-logic/`](advanced/surveyflow-conditional-logic/) | SurveyFlow Conditional Logic | `radio` |
 | [`think-aloud/`](advanced/think-aloud/) | Think-Aloud — Politeness | `radio` |
+| [`timed-trials-lexical-decision/`](advanced/timed-trials-lexical-decision/) | Lexical decision (timed trials) | `radio` |
 | [`triage/`](advanced/triage/) | Simple Triage Example | `triage` |
 | [`truth-serum/`](advanced/truth-serum/) | Truth Serum — Sarcasm | `radio` |
 | [`url-data/`](advanced/url-data/) | URL Data Source Demo | `radio` |
@@ -376,7 +378,7 @@ The `Types` column lists the annotation types each one uses.
 | [`tiered-annotation/`](audio/tiered-annotation/) | Tiered Annotation Example | `tiered_annotation` |
 | [`transcript-formats/`](audio/transcript-formats/) | Transcript Formats | `radio`, `span` |
 
-### classification/ (31)
+### classification/ (32)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -385,6 +387,7 @@ The `Types` column lists the annotation types each one uses.
 | [`check-box/`](classification/check-box/) | Simple Check Box Example | `multiselect` |
 | [`check-box-dynamic-labels/`](classification/check-box-dynamic-labels/) | Simple Check Box Dynamic Labels Example | `multiselect` |
 | [`check-box-with-free-response/`](classification/check-box-with-free-response/) | Simple Check Box With Free Response Example | `multiselect` |
+| [`cloze-test/`](classification/cloze-test/) | Cloze test | `cloze` |
 | [`confidence-calibrated/`](classification/confidence-calibrated/) | Confidence-Calibrated Sentiment Annotation | `confidence`, `radio` |
 | [`conjoint/`](classification/conjoint/) | AI Assistant Preference Study | `conjoint` |
 | [`constant-sum/`](classification/constant-sum/) | Constant-Sum Topic Relevance Allocation | `constant_sum` |

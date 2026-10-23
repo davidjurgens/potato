@@ -167,6 +167,8 @@ class TestBuiltinExportersRegistered:
             "adjudication",
             # The labeling engine's resolved labels and certificate.
             "labeling_engine",
+            # Trial data from embedded jsPsych timelines (project SQLite).
+            "jspsych",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}
@@ -250,6 +252,8 @@ class TestTheFormatListIsPinned:
         # agent evaluation and behaviour
         "agent_eval", "coding_eval", "episode_jsonl",
         "trajectory_correction", "annotation_telemetry", "keystrokes",
+        # behavioral experiments
+        "jspsych",
         # adjudication outcome
         "adjudication",
         # labeling engine deliverable

@@ -155,8 +155,15 @@ class DisplayLogicManager {
         // nested {schema: {label: value}} shape as currentAnnotations. They form
         // the base layer; answers on the CURRENT page override them.
         let result = {};
+        // The participant's between-subjects condition is the lowest layer,
+        // addressed as condition.<factor> (server: phase_flow.CONDITION_PREFIX).
+        if (typeof window !== 'undefined' && window.potatoConditions) {
+            for (const [factor, level] of Object.entries(window.potatoConditions)) {
+                result['condition.' + factor] = level;
+            }
+        }
         if (typeof window !== 'undefined' && window.priorPhaseAnswersRaw) {
-            result = this.transformRawAnnotations(window.priorPhaseAnswersRaw);
+            Object.assign(result, this.transformRawAnnotations(window.priorPhaseAnswersRaw));
         }
 
         // Current-page answers (set by annotation.js)

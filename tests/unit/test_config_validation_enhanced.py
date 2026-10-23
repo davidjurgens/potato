@@ -121,6 +121,9 @@ class TestRegistryDrivenValidation:
                 scheme["groups"] = ["Group1", "Group2"]
             if type_name == "conjoint" and "attributes" not in scheme and "profiles_field" not in scheme:
                 scheme["attributes"] = [{"name": "price", "levels": ["$10", "$20"]}]
+            # A cloze needs one passage source: `text` or `source_field`.
+            if type_name == "cloze" and "text" not in scheme and "source_field" not in scheme:
+                scheme["text"] = "The [[cat]] sat."
 
             # Should not raise
             validate_single_annotation_scheme(scheme, f"test_scheme[{type_name}]")

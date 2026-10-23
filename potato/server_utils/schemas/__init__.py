@@ -8,6 +8,7 @@ from .select import generate_select_layout
 from .span import generate_span_layout, render_span_annotations, get_spans_for_field
 from .span_link import generate_span_link_layout
 from .textbox import generate_textbox_layout
+from .cloze import generate_cloze_layout
 from .slider import generate_slider_layout
 from .video import generate_video_layout
 from .image_annotation import generate_image_annotation_layout

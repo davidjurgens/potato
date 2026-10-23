@@ -24,7 +24,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Getting Started Guide](guides/getting-started.md) - First-time setup and your first annotation project
 - [Administrator Guide](guides/admin-guide.md) - Managing annotators, quality control, and monitoring
 - [Developer Guide](guides/developer-guide.md) - Extending Potato, API integration, and custom schemas
-- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and MTurk (for other platforms, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
+- [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and other platforms (for the full list, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
 - [Agent Evaluation Guide](guides/agent-evaluation-guide.md) - Evaluating AI agents, coding agents, and web agents
 - [AI-Assisted Annotation Guide](guides/ai-assisted-annotation-guide.md) - Using LLMs, active learning, and Solo Mode
 
@@ -43,8 +43,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 62 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 495 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 63 annotation types and 24 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 502 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -86,6 +86,7 @@ over prose when writing a config or calling the API.
 - [Extractive QA](annotation-types/text/extractive_qa.md) - SQuAD-style answer span highlighting
 - [Rubric Evaluation](annotation-types/measurement/rubric_eval.md) - Multi-criteria rubric grid for LLM evaluation
 - [Text Edit / Post-Edit](annotation-types/text/text_edit.md) - Inline text editing with diff tracking
+- [Cloze](annotation-types/text/cloze.md) - Fill-in-the-blank passages scored against a server-side answer key
 - [Error Span (MQM)](annotation-types/text/error_span.md) - Error annotation with typed severity and quality scoring
 - [Card Sorting](annotation-types/structured/card_sort.md) - Drag-and-drop grouping of items into categories
 - [Conjoint Analysis](annotation-types/comparison/conjoint.md) - Discrete choice between multi-attribute profiles
@@ -119,6 +120,9 @@ over prose when writing a config or calling the API.
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
 - [Category Assignment](advanced/category_assignment.md) - Category-based item assignment
 - [Surveyflow](workflow/surveyflow.md) - Pre/post annotation surveys
+- **[Experiment Flow](workflow/experiment_flow.md)** - Between-subjects conditions, page branching and screen-outs, counterbalanced page order, randomized question order
+- **[jsPsych Phase](workflow/jspsych_phase.md)** - Run a jsPsych timeline as one page of a Potato study, with its data stored and exported
+- **[Timed Trials](workflow/timed_trials.md)** - Fixation, stimulus duration, deadlines and key-to-label reaction times on annotation items
 - [Annotation Filtering](workflow/annotation_filtering.md) - Filter data based on prior annotations
 - [Survey Instruments](advanced/survey_instruments.md) - 55 pre-built validated psychological instruments
 - **[QDA Mode](advanced/qda.md)** - Qualitative data analysis workspace: composes codebook + memos + cases + search with single-coder defaults
@@ -191,9 +195,9 @@ over prose when writing a config or calling the API.
 
 ## Crowdsourcing
 
-- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Configuring a crowd provider; nine ship, including Prolific and MTurk
+- [Crowdsourcing Guide](deployment/crowdsourcing.md) - Configuring a crowd provider; nine ship, including Prolific, Connect and SONA
 - [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md) - Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker and others compared
-- [MTurk Integration](deployment/mturk_integration.md) - Detailed Amazon MTurk setup guide
+- [MTurk Integration](deployment/mturk_integration.md) - How the MTurk integration worked (MTurk closed September 30, 2026)
 
 ## Administration
 
@@ -292,7 +296,7 @@ over prose when writing a config or calling the API.
 | Set up SSO/OAuth login | [SSO Authentication](auth-users/sso_authentication.md) |
 | Reset a user's password | [Password Management](auth-users/password_management.md) |
 | Use a database for user storage | [Password Management](auth-users/password_management.md#database-authentication-backend) |
-| Configure for MTurk | [MTurk Integration](deployment/mturk_integration.md) |
+| Move a study off MTurk | [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md#migration-checklist-from-mturk) |
 | Configure for Prolific | [Crowdsourcing Guide](deployment/crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](administration/admin_dashboard.md) |
 | Add AI suggestions | [AI Support](ai-intelligence/ai_support.md) |

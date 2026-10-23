@@ -46,6 +46,23 @@ display_logic:
   logic: all                     # Optional: 'all' (AND) or 'any' (OR)
 ```
 
+### Conditions as references
+
+With a [`conditions`](../workflow/experiment_flow.md#conditions) block, a rule
+can test the participant's assigned level of a factor as
+`condition.<factor>`:
+
+```yaml
+display_logic:
+  show_when:
+    - schema: condition.feedback
+      operator: equals
+      value: immediate
+```
+
+The same grammar gates whole phase pages with `show_when` and ends the study
+with `exit_when`; see [Experiment Flow](../workflow/experiment_flow.md).
+
 ### Supported Operators
 
 #### Value Comparison

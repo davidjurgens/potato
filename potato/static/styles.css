@@ -7988,3 +7988,26 @@ body > .container-fluid {
 :root[data-theme="dark"] .potato-alert-success { color: var(--success-text); }
 /* Bootstrap's dark kbd is a light chip; text here inherits light page text. */
 :root[data-theme="dark"] kbd { background-color: var(--muted); color: var(--foreground); }
+
+/* Cloze (fill-in-the-blank): blanks sit on the text line. */
+.cloze-passage {
+    line-height: 2.2;
+    margin: 0.25rem 0 0;
+}
+.cloze-passage .cloze-blank {
+    display: inline-block;
+    height: 1.8em;
+    padding: 0 0.4em;
+    margin: 0 0.15em;
+    font: inherit;
+    line-height: 1.8em;
+    vertical-align: baseline;
+    border: 1px solid var(--border, #d4d4d8);
+    border-radius: 0.375rem;
+    background: var(--background, #fff);
+    color: inherit;
+}
+.cloze-passage .cloze-blank:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: 1px;
+}

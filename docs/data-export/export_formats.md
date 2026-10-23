@@ -598,6 +598,22 @@ Export annotations as tab-separated values. Same structure as CSV but with tab d
 python -m potato.export --config config.yaml --format tsv --output ./export/
 ```
 
+CSV and TSV exports also write `participants.csv` (conditions, page and
+question orders, skipped pages, screen-outs) when the study uses
+[experiment flow](../workflow/experiment_flow.md) features, and `trials.csv`
+(one row per timed trial, including timeouts) when
+[`trial_timing`](../workflow/timed_trials.md) is on.
+
+### jsPsych (jspsych)
+
+Trial data from [`type: jspsych` phases](../workflow/jspsych_phase.md):
+`jspsych_runs.csv`, `jspsych_trials.csv` (one row per trial, every column
+jsPsych recorded), `jspsych_interaction.csv`, and each run's raw JSON.
+
+```bash
+python -m potato.export --config config.yaml --format jspsych --output ./export/
+```
+
 ### KITTI 3D (kitti_3d)
 
 3D boxes from `spatial_annotation` schemes, in KITTI's camera frame: one

@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "3b2acc272b1792d9",
-    "version": "47"
+    "sha256": "bf7d3c0cc7b3af66",
+    "version": "48"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -148,8 +148,8 @@
     "version": "1"
   },
   "display-logic.js": {
-    "sha256": "ee799fe5bb0cbb1c",
-    "version": "4"
+    "sha256": "61faa26de6e354cb",
+    "version": "5"
   },
   "document-bbox.css": {
     "sha256": "d8710e81e67457ae",
@@ -400,8 +400,8 @@
     "version": "2"
   },
   "styles.css": {
-    "sha256": "3ddebf5bb28e85a7",
-    "version": "40"
+    "sha256": "a7bcdc4526f5aba7",
+    "version": "41"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",
@@ -422,6 +422,14 @@
   "triage.js": {
     "sha256": "c2b0c1c31603b8ca",
     "version": "2"
+  },
+  "trial-timing.css": {
+    "sha256": "34597e034cb58d96",
+    "version": "1"
+  },
+  "trial-timing.js": {
+    "sha256": "df48e69db348a21d",
+    "version": "1"
   },
   "truth-serum.js": {
     "sha256": "9795b4dd43262680",

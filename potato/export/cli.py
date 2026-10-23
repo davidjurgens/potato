@@ -349,7 +349,11 @@ def load_phase_responses_from_output_dir(
                 for s in display_logic_schemes
                 if isinstance(s, dict) and s.get("name")
             }
-            flat = {}
+            # The assigned condition (condition.<factor>), lowest layer.
+            flat = {
+                "condition." + str(f): v
+                for f, v in ((user_state.get("flow_record") or {}).get("conditions") or {}).items()
+            }
             for _phase, _pages in phase_data.items():
                 flat.update(flatten_phase_annotations(
                     _pages, schema_types=dl_types,

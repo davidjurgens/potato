@@ -42,10 +42,10 @@ Most of the tools below are very good at what they were built for, and several b
 | Role-based access control (RBAC) | Yes | Enterprise | Yes | - | - | - | - | - |
 | Per-cohort schema assignment | Yes | Enterprise | - | - | - | - | - | - |
 | Handles 50k+ items | Yes | Yes | Yes | Yes | Yes | - | - | Yes |
-| Crowdsourcing (Prolific, MTurk and seven more) | Yes | - | - | - | - | - | - | - |
+| Crowdsourcing (Prolific, Connect, SONA and six more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 35 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 36 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -97,7 +97,7 @@ Most annotation platforms report agreement as raw IoU, exact match, or percent a
 
 ### Breadth of Annotation Types
 
-Potato has 62 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
+Potato has 63 annotation schemas and 24 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
 
 ### AI and LLM Integration
 
@@ -123,7 +123,7 @@ Potato is designed for research annotation studies with built-in support for:
 - **Adjudication**: dedicated interface for resolving inter-annotator disagreements
 - **55 validated survey instruments** (BFI-10, PHQ-9, GAD-7, PANAS, SWLS, and more) for post-study evaluation
 - **Behavioral tracking**: keystroke, mouse, and timing data for annotator behavior analysis
-- **Crowdsourcing**: nine crowd providers: Prolific, MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, and the legacy `url_direct` login
+- **Crowdsourcing**: nine crowd providers: Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, the legacy `url_direct` login, and MTurk for archived studies (MTurk closed on September 30, 2026)
 
 ### Data Source Flexibility
 
@@ -131,7 +131,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 35 formats and import from 23 (16 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 36 formats and import from 23 (16 computer-vision formats, 5 text formats, and whole Label Studio and Argilla projects with their annotators and model suggestions). Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`), which also exports. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -229,7 +229,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 35 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 36 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -419,7 +419,9 @@ AWS-integrated annotation with built-in active learning and workforce management
 | General NLP annotation with AI assistance | **Potato** | Broadest AI assistance modes, YAML config, research features |
 | Single annotator + LLM collaboration | **Potato** (Solo Mode) | A structured progressive-autonomy workflow; MEGAnno+ is the closest, LLM-first |
 | Research annotation with surveys/tracking | **Potato** | Multi-phase workflow, 55 surveys, behavioral tracking, MACE |
-| Crowdsourced annotation (MTurk/Prolific) | **Potato** | Native providers for both, and for seven other recruitment routes |
+| Reaction-time paradigms, eye tracking, frame-locked stimuli | **jsPsych**, PsychoPy/Pavlovia, Gorilla | Built for trial-level timing; Potato can run a jsPsych timeline as one phase of a study |
+| Judgment or survey experiments with conditions and screeners | **Potato** | Between-subjects conditions, page branching, screen-outs, counterbalancing, timed trials, Prolific and SONA |
+| Crowdsourced annotation (Prolific, Connect, SONA) | **Potato** | Native providers for each, and for other recruitment routes |
 | Complex linguistic annotation + knowledge bases | **INCEpTION** | Strongest KB linking, coreference, IAA, curation |
 | Computer vision annotation at volume | **CVAT** | Deepest CV-only tooling, task management, large community |
 | Label → train → deploy in one loop | **Roboflow** | Auto Label, hosted training and inference |
@@ -448,9 +450,9 @@ AWS-integrated annotation with built-in active learning and workforce management
 
 | Feature Category | Potato |
 |-----------------|:---:|
-| Annotation schemas | 62 |
+| Annotation schemas | 63 |
 | Display types | 24 |
-| Export formats | 35 |
+| Export formats | 36 |
 | Import formats (16 CV, 5 text, 2 whole-project) | 23 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |

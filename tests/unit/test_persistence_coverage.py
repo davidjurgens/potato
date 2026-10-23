@@ -66,6 +66,7 @@ PERSISTENCE_TEST_MAP = {
     "extractive_qa": "tests/selenium/test_extractive_qa_ui.py",
     "rubric_eval": "tests/selenium/test_rubric_eval_ui.py",
     "text_edit": "tests/selenium/test_text_edit_ui.py",
+    "cloze": "tests/selenium/test_cloze_ui.py",
     "error_span": "tests/selenium/test_error_span_ui.py",
     "card_sort": "tests/selenium/test_card_sort_ui.py",
     "conjoint": "tests/selenium/test_conjoint_ui.py",

@@ -196,7 +196,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Multi-annotator** | Multiple annotators per item with overlap control and agreement metrics |
 | **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/administration/admin_dashboard.md)) |
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
-| **Crowdsourcing** | Nine crowd providers: Prolific, MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, and the legacy `url_direct` login ([docs](docs/deployment/crowdsourcing.md), [choosing a platform](docs/deployment/crowdsourcing-platforms.md)) |
+| **Crowdsourcing** | Nine crowd providers: Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, the legacy `url_direct` login, and MTurk for archived studies (MTurk closed on September 30, 2026) ([docs](docs/deployment/crowdsourcing.md), [choosing a platform](docs/deployment/crowdsourcing-platforms.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
 | **Multiplayer Rooms** | Live shared sessions: norming (blind vote → reveal → discuss, with blind vs. post-discussion α), huddle (walk current disagreements together), and shadow (trainees watch the host annotate) ([docs](docs/advanced/multiplayer_rooms.md)) |
 | **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
@@ -324,8 +324,8 @@ curated by hand:
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 175 config keys, 62 annotation types, 24 display types — validates a `config.yaml` before the server runs |
-| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 495 HTTP paths, with per-operation auth and config gating |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 177 config keys, 63 annotation types, 24 display types — validates a `config.yaml` before the server runs |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 502 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`
 modeline, so editors validate it live. See

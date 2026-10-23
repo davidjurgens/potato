@@ -1,11 +1,11 @@
 {
   "categories": {
-    "advanced": 58,
+    "advanced": 60,
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 7,
     "audio": 8,
-    "classification": 31,
+    "classification": 32,
     "conversation": 4,
     "crowdsourcing": 6,
     "custom-layouts": 6,
@@ -18,7 +18,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 226,
+  "count": 229,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -631,6 +631,28 @@
       "path": "examples/advanced/html-annotation/config.yaml",
       "run": "potato start examples/advanced/html-annotation/config.yaml -p 8000",
       "task_name": "Simple HTML as Input Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/jspsych-stroop.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/jspsych-stroop",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "jspsych-stroop",
+      "path": "examples/advanced/jspsych-stroop/config.yaml",
+      "run": "potato start examples/advanced/jspsych-stroop/config.yaml -p 8000",
+      "task_name": "jsPsych Stroop with word ratings"
     },
     {
       "annotation_types": [
@@ -1252,6 +1274,26 @@
       "path": "examples/advanced/think-aloud/config.yaml",
       "run": "potato start examples/advanced/think-aloud/config.yaml -p 8000",
       "task_name": "Think-Aloud \u2014 Politeness"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/timed-trials-lexical-decision.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/timed-trials-lexical-decision",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "timed-trials-lexical-decision",
+      "path": "examples/advanced/timed-trials-lexical-decision/config.yaml",
+      "run": "potato start examples/advanced/timed-trials-lexical-decision/config.yaml -p 8000",
+      "task_name": "Lexical decision (timed trials)"
     },
     {
       "annotation_types": [
@@ -3190,6 +3232,26 @@
       "path": "examples/classification/check-box/config.yaml",
       "run": "potato start examples/classification/check-box/config.yaml -p 8000",
       "task_name": "Simple Check Box Example"
+    },
+    {
+      "annotation_types": [
+        "cloze"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/cloze-test.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/cloze-test",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "cloze-test",
+      "path": "examples/classification/cloze-test/config.yaml",
+      "run": "potato start examples/classification/cloze-test/config.yaml -p 8000",
+      "task_name": "Cloze test"
     },
     {
       "annotation_types": [

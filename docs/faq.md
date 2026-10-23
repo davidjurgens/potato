@@ -71,9 +71,10 @@ OpenTelemetry exporter is also available.
 ## Does Potato support crowdsourcing (MTurk, Prolific)?
 
 Yes. Potato ships nine [crowd providers](deployment/crowdsourcing.md): Prolific,
-MTurk, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for
-hired experts, a generic provider for any panel that passes a participant ID in
-the URL, and the legacy `url_direct` login. Quality control, training phases and
+CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired
+experts, a generic provider for any panel that passes a participant ID in the
+URL, the legacy `url_direct` login, and MTurk. MTurk closed on September 30,
+2026, so its provider only keeps archived studies loading and exporting. Quality control, training phases and
 inter-annotator agreement do not depend on the provider. See
 [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md).
 
@@ -100,7 +101,7 @@ detectors or segmenters, and it does not serve models. See
 
 ## What annotation types does Potato support?
 
-62 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
+63 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
 best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).

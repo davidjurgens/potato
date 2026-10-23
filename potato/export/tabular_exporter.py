@@ -127,7 +127,32 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
         row[f"{schema_name}._room_id"] = prov.get("room_id", "")
         row[f"{schema_name}._room"] = json.dumps(prov)
 
+    # Cloze answers scored against the key in the config, which never went to
+    # the browser: one 0/1 column per keyed blank and a total.
+    if context is not None:
+        _add_cloze_scores(row, ann, context)
+
     return row
+
+
+def _add_cloze_scores(row, ann, context) -> None:
+    schemes = [s for s in (context.schemas or (context.config or {}).get("annotation_schemes") or [])
+               if isinstance(s, dict) and s.get("annotation_type") == "cloze"]
+    if not schemes:
+        return
+    from potato.server_utils.schemas.cloze import score_responses
+    labels = ann.get("labels") or {}
+    for scheme in schemes:
+        given = labels.get(scheme.get("name"))
+        if not isinstance(given, dict):
+            # Left blank: scored as 0 rather than as a missing column.
+            given = {}
+        item = (context.items or {}).get(ann.get("instance_id")) if scheme.get("source_field") else None
+        scored = score_responses(scheme, {k: v for k, v in given.items()}, item)
+        if not scored:
+            continue
+        for key, value in scored.items():
+            row[f"{scheme['name']}.{key}"] = value
 
 
 def _ambiguity_warning(ambiguities: List[str], method_note: bool = True) -> Optional[str]:
@@ -148,6 +173,17 @@ def _ambiguity_warning(ambiguities: List[str], method_note: bool = True) -> Opti
     return msg
 
 
+def _can_export_tabular(context: ExportContext) -> Tuple[bool, str]:
+    """Item annotations, or a design record for the participants/trials
+    sidecars (a study whose participants left no item labels still has one)."""
+    if context.annotations:
+        return True, ""
+    from .experiment_sidecars import has_design_records
+    if has_design_records(context):
+        return True, ""
+    return False, "No annotations to export"
+
+
 class CSVExporter(BaseExporter):
     """Export annotations to CSV format."""
 
@@ -156,9 +192,7 @@ class CSVExporter(BaseExporter):
     file_extensions = [".csv"]
 
     def can_export(self, context: ExportContext) -> Tuple[bool, str]:
-        if not context.annotations:
-            return False, "No annotations to export"
-        return True, ""
+        return _can_export_tabular(context)
 
     def export(self, context: ExportContext, output_path: str,
                options: Optional[dict] = None) -> ExportResult:
@@ -173,9 +207,7 @@ class TSVExporter(BaseExporter):
     file_extensions = [".tsv"]
 
     def can_export(self, context: ExportContext) -> Tuple[bool, str]:
-        if not context.annotations:
-            return False, "No annotations to export"
-        return True, ""
+        return _can_export_tabular(context)
 
     def export(self, context: ExportContext, output_path: str,
                options: Optional[dict] = None) -> ExportResult:
@@ -544,10 +576,19 @@ def _write_delimited(context: ExportContext, output_path: str,
             for ann in context.annotations]
 
     if not rows:
+        # No item annotations, but a study can still have a design record: a
+        # jsPsych-only study, or one where every participant was screened out
+        # or timed out. Those sidecars do not depend on the rows.
+        from .experiment_sidecars import write_participants, write_trials
+        files = []
+        for writer in (write_participants, write_trials):
+            sidecar = writer(context, output_path, fmt_name, delimiter)
+            if sidecar:
+                files.append(sidecar)
         return ExportResult(
             success=True,
             format_name=fmt_name,
-            files_written=[out_file],
+            files_written=files or [out_file],
             stats={"num_records": 0},
         )
 
@@ -580,8 +621,26 @@ def _write_delimited(context: ExportContext, output_path: str,
     authenticity_file = _write_authenticity(context, output_path, fmt_name, delimiter)
     if authenticity_file:
         files_written.append(authenticity_file)
+    # Experiment designs: who was in which condition and what they were
+    # shown (participants), and the timed-trial records (trials).
+    from .experiment_sidecars import write_participants, write_trials
+    for writer in (write_participants, write_trials):
+        sidecar = writer(context, output_path, fmt_name, delimiter)
+        if sidecar:
+            files_written.append(sidecar)
 
     warnings = []
+    # Cloze keys whose length does not match the passage's blanks: scored
+    # only up to the blank count, which the person exporting should know.
+    from potato.server_utils.schemas.cloze import key_mismatches
+    for _scheme in (context.schemas or []):
+        if isinstance(_scheme, dict) and _scheme.get("annotation_type") == "cloze":
+            _bad = key_mismatches(_scheme, context.items or {})
+            if _bad:
+                warnings.append(
+                    f"cloze '{_scheme.get('name')}': {len(_bad)} item(s) have an answer key "
+                    f"whose length differs from the passage's blanks ({', '.join(_bad[:5])}"
+                    f"{', ...' if len(_bad) > 5 else ''}); only the blanks were scored")
     excl = _phase_exclusion_warning(context)
     if excl:
         warnings.append(excl)

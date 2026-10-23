@@ -339,6 +339,10 @@ class BehavioralData:
     scroll_depth_max: float = 0.0
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
     presentation_order: Dict[str, List[str]] = field(default_factory=dict)
+    # Timed-trial record (trial_timing). The authoritative copy is
+    # user_state.instance_id_to_trial; this mirror travels with the item's
+    # other behavioural data into exports.
+    trial: Dict[str, Any] = field(default_factory=dict)
     chat_history: List[ChatMessage] = field(default_factory=list)
     typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -383,6 +387,7 @@ class BehavioralData:
             'scroll_depth_max': self.scroll_depth_max,
             'keyword_highlights_shown': self.keyword_highlights_shown,
             'presentation_order': self.presentation_order,
+            'trial': self.trial,
             'chat_history': [
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.chat_history
@@ -435,6 +440,7 @@ class BehavioralData:
         bd.scroll_depth_max = data.get('scroll_depth_max', 0.0)
         bd.keyword_highlights_shown = data.get('keyword_highlights_shown', [])
         bd.presentation_order = data.get('presentation_order', {}) or {}
+        bd.trial = data.get('trial', {}) or {}
 
         # Reconstruct chat history
         chat_history = data.get('chat_history', [])

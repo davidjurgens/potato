@@ -187,6 +187,35 @@ ASSETS = [
 ]
 
 
+
+def _jspsych_assets():
+    """jsPsych core and plugins, from the table the server validates against."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from potato.jspsych.vendored import (CORE, PLUGINS, VENDOR_SUBDIR)
+    assets = []
+    for fname, (npm_path, sha) in CORE.items():
+        assets.append(Asset(
+            name=f"jspsych {fname}",
+            url=f"https://cdn.jsdelivr.net/npm/{npm_path}",
+            path=f"{VENDOR_SUBDIR}/{fname}",
+            sri=f"sha256-{sha}",
+            used_by="jspsych_phase.html (type: jspsych phases)",
+            notes="SHA-256 as published by jsDelivr's package API.",
+        ))
+    for name, (version, _global, sha) in PLUGINS.items():
+        assets.append(Asset(
+            name=f"jspsych plugin-{name}",
+            url=f"https://cdn.jsdelivr.net/npm/@jspsych/plugin-{name}@{version}/dist/index.browser.min.js",
+            path=f"{VENDOR_SUBDIR}/plugins/plugin-{name}.js",
+            sri=f"sha256-{sha}",
+            used_by="jspsych_phase.html (type: jspsych phases)",
+        ))
+    return assets
+
+
+ASSETS += _jspsych_assets()
+
+
 def sri_of(data: bytes, algorithm: str) -> str:
     digest = hashlib.new(algorithm, data).digest()
     return f"{algorithm}-{base64.b64encode(digest).decode()}"

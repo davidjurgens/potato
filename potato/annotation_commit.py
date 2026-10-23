@@ -33,7 +33,10 @@ def finish_annotation_write(user_state, instance_id: str, username: str,
 
     ism = get_item_state_manager()
     try:
-        if register_always or user_state.has_annotated(instance_id):
+        # Labels only: a timed-out trial finishes the item for this user but
+        # leaves no annotation, so it does not count toward the item's quota.
+        has_labeled = getattr(user_state, "has_labeled", user_state.has_annotated)
+        if register_always or has_labeled(instance_id):
             ism.register_annotator(instance_id, username)
         else:
             ism.unregister_annotator(instance_id, username)

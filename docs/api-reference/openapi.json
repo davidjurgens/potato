@@ -5293,6 +5293,46 @@
         ]
       }
     },
+    "/api/jspsych/finish": {
+      "post": {
+        "operationId": "post_jspsych_finish",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The whole run's data. Marks the page complete and moves the participant on.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/jspsych/trial": {
+      "post": {
+        "operationId": "post_jspsych_trial",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Store one trial as it finishes (``save: incremental``).",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/api/keyword_highlights/{instance_id}": {
       "get": {
         "operationId": "get_get_keyword_highlights",
@@ -9141,6 +9181,169 @@
         "x-potato-auth": [
           "inline:session_username",
           "inline:debug_only"
+        ]
+      }
+    },
+    "/jspsych/{page}/assets/": {
+      "get": {
+        "operationId": "get_jspsych_asset_root",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/jspsych/{page}/assets/{path}": {
+      "get": {
+        "operationId": "get_jspsych_asset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/jspsych/{page}/continue": {
+      "post": {
+        "operationId": "post_jspsych_continue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Leave a completed jsPsych page (reached again by back navigation).",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/jspsych/{page}/script/{idx}.js": {
+      "get": {
+        "operationId": "get_jspsych_extra_script",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "idx",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/jspsych/{page}/timeline.js": {
+      "get": {
+        "operationId": "get_jspsych_timeline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },

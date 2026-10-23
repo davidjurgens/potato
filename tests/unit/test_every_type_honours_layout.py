@@ -46,6 +46,7 @@ PROBE_EXTRAS = {
     "likert": {"size": 3},
     "multirate": {"options": ["x", "y"]},
     "card_sort": {"groups": ["g1", "g2"]},
+    "cloze": {"text": "The [[cat]] sat on the [[mat]]."},
     "conjoint": {"attributes": [{"name": "a", "levels": ["1", "2"]}]},
     "error_span": {"error_types": [{"name": "typo", "description": "d"}]},
     "hierarchical_multiselect": {"taxonomy": {"a": ["b"]}},

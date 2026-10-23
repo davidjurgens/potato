@@ -55,6 +55,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `audio_annotation` | Audio segmentation and annotation with waveform visualization | [below](#10-audio-annotation-audio_annotation) | `examples/audio/audio-annotation/` |
 | `bws` | Best-Worst Scaling: select the best and worst item from a set | [below](#31-best-worst-scaling-bws) | `examples/classification/iterative-bws/` |
 | `card_sort` | Drag-and-drop card sorting into predefined or user-created groups | [below](#21-card-sorting-card_sort) | `examples/classification/card-sort/` |
+| `cloze` | Fill-in-the-blank passage, fixed or per item; the answer key stays on the server and scores the export | [cloze](text/cloze.md) | `examples/classification/cloze-test/` |
 | `code_review` | GitHub PR-style code review with inline comments and file ratings | [below](#24-code-review-code_review) | `examples/agent-traces/coding-agent-review/` |
 | `confidence` | Confidence rating meta-annotation for any primary annotation | [below](#33-confidence-rating-confidence) | `examples/classification/confidence-calibrated/` |
 | `conjoint` | Discrete choice conjoint analysis with side-by-side profile comparison | [below](#22-conjoint-analysis-conjoint) | `examples/classification/conjoint/` |

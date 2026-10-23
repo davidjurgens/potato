@@ -141,6 +141,7 @@ def _register_builtin_exporters():
     from .quotation_report_exporter import QuotationReportExporter
     from .convokit_exporter import ConvoKitExporter
     from .keystroke_exporter import KeystrokeExporter
+    from .jspsych_exporter import JsPsychExporter
     from .annotation_telemetry_exporter import AnnotationTelemetryExporter
     from .episode_exporter import EpisodeJsonlExporter
     from .adjudication_exporter import AdjudicationExporter
@@ -194,6 +195,8 @@ def _register_builtin_exporters():
         # Reads the project SQLite database rather than user_state.json; falls
         # back to JSONL when pyarrow is absent, so it has no hard dependency.
         KeystrokeExporter(),
+        # Trial data from embedded jsPsych timelines, also from the SQLite store.
+        JsPsychExporter(),
         AnnotationTelemetryExporter(),
         # The adjudicated label is the deliverable of an adjudicated
         # workflow, and no other format here carried it: csv, jsonl and

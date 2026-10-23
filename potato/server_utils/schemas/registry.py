@@ -374,6 +374,7 @@ def _register_builtin_schemas():
     from .extractive_qa import generate_extractive_qa_layout
     from .rubric_eval import generate_rubric_eval_layout
     from .text_edit import generate_text_edit_layout
+    from .cloze import generate_cloze_layout
     from .error_span import generate_error_span_layout
     from .card_sort import generate_card_sort_layout
     from .conjoint import generate_conjoint_layout
@@ -439,6 +440,15 @@ def _register_builtin_schemas():
             optional_fields=["label_requirement", "placeholder", "rows", "labels", "multiline", "textarea", "cols", "min_chars", "show_char_count", "collapsible", "target_schema", "display_config", "allow_paste"],
             supports_keybindings=False,
             description="Free-form text input"
+        ),
+        SchemaDefinition(
+            name="cloze",
+            generator=generate_cloze_layout,
+            required_fields=["name", "description"],
+            optional_fields=["text", "source_field", "answer_field", "scoring",
+                             "input_width", "label_requirement"],
+            supports_keybindings=False,
+            description="Fill-in-the-blank passage, scored against an answer key kept on the server"
         ),
         SchemaDefinition(
             name="number",

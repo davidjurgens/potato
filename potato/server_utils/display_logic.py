@@ -355,6 +355,12 @@ class DisplayLogicValidator:
 
         for i, condition in enumerate(show_when):
             ref_schema = condition.get("schema")
+            # `condition.<factor>` addresses the participant's assigned
+            # between-subjects condition, not a question; the factor is
+            # checked against conditions.factors by
+            # experiment_conditions.validate_condition_references.
+            if ref_schema and str(ref_schema).startswith("condition."):
+                continue
             if ref_schema and ref_schema not in self.schema_names:
                 errors.append(
                     f"Schema '{schema_name}', condition {i+1}: references unknown schema '{ref_schema}'"

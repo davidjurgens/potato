@@ -925,6 +925,10 @@
                 "description": "Drag-and-drop card sorting into predefined or user-created groups"
               },
               {
+                "const": "cloze",
+                "description": "Fill-in-the-blank passage, scored against an answer key kept on the server"
+              },
+              {
                 "const": "code_review",
                 "description": "GitHub PR-style code review with inline comments and file ratings"
               },
@@ -1154,6 +1158,7 @@
               }
             ]
           },
+          "answer_field": {},
           "arrangement": {},
           "attributes": {},
           "audio_key": {},
@@ -1235,6 +1240,7 @@
           "image_key": {},
           "inline_with_trace": {},
           "input_type": {},
+          "input_width": {},
           "instance_masks": {},
           "intervention_field": {},
           "intervention_time_field": {},
@@ -1339,6 +1345,7 @@
           "scale_labels": {},
           "scale_points": {},
           "scale_type": {},
+          "scoring": {},
           "screenshot_key": {},
           "segment_schemes": {},
           "segmentation": {},
@@ -1385,6 +1392,7 @@
           "taxonomy_preset": {},
           "team_dimensions": {},
           "template_name": {},
+          "text": {},
           "text_key": {},
           "text_prompt": {},
           "textarea": {},
@@ -1535,6 +1543,21 @@
             "name": "topic_groups"
           },
           "source": "examples/classification/card-sort/config.yaml"
+        },
+        "cloze": {
+          "scheme": {
+            "annotation_type": "cloze",
+            "answer_field": "answers",
+            "description": "Fill in each blank with one word.",
+            "input_width": 10,
+            "label_requirement": {
+              "required": true
+            },
+            "name": "completion",
+            "scoring": "case_insensitive",
+            "source_field": "passage"
+          },
+          "source": "examples/classification/cloze-test/config.yaml"
         },
         "code_review": {
           "scheme": {
@@ -3451,6 +3474,10 @@
       "properties": {
         "annotator_key": {},
         "auto_assign_annotators": {},
+        "group_by_condition": {
+          "description": "A `conditions` factor whose levels name the auto-assigned groups. Each participant gets the group of their assigned level, so each condition can carry its own items",
+          "type": "string"
+        },
         "groups": {}
       },
       "type": "object"
@@ -3718,6 +3745,36 @@
     "completion_code": {
       "description": "Code shown when an annotator finishes, for crowdsourcing payout",
       "type": "string"
+    },
+    "conditions": {
+      "additionalProperties": true,
+      "description": "Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>`",
+      "properties": {
+        "assignment": {
+          "default": "balanced",
+          "description": "How a cell is chosen: `balanced` (fewest participants, by weight), `random` (seeded per participant) or `round_robin` (arrival order)",
+          "type": "string"
+        },
+        "balance_on": {
+          "default": "assigned",
+          "description": "What `balanced` counts: everyone `assigned`, or only participants who `completed` without being screened out, so dropouts are replaced",
+          "type": "string"
+        },
+        "cells": {
+          "description": "Explicit cells (a subset of the full factorial), each a mapping of factor to level with an optional `weight`",
+          "type": "array"
+        },
+        "factors": {
+          "description": "Factor name to list of levels, e.g. `{feedback: [none, immediate]}`. Several factors form a full factorial design unless `cells` lists a subset",
+          "type": "object"
+        },
+        "max_per_cell": {
+          "description": "Skip a cell once it has this many participants. When every cell is full, the least-filled one is still assigned and a warning is logged",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "config_file": {
       "description": "Path to the config file being run. Written by the loader from the command line, not something to set yourself; task_dir falls back to its directory",
@@ -6434,6 +6491,62 @@
             "score"
           ],
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "trial_timing": {
+      "additionalProperties": true,
+      "description": "Run each annotation item as a timed trial: fixation, stimulus duration, response deadline and keys mapped to labels, with the reaction time measured from the frame the stimulus appeared. For frame-critical or auditory paradigms use a `type: jspsych` phase",
+      "properties": {
+        "disable_back_navigation": {
+          "default": true,
+          "description": "Hide Previous during a timed task, so no stimulus is shown twice",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Turn timed trials on",
+          "type": "boolean"
+        },
+        "fixation_ms": {
+          "default": 0,
+          "description": "Fixation cross before each stimulus, in ms. 0 for none",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fixation_symbol": {
+          "default": "+",
+          "description": "What the fixation shows",
+          "type": "string"
+        },
+        "item_overrides": {
+          "description": "Per-item timing read from item fields, e.g. `{stimulus_duration_ms: soa_ms}`",
+          "type": "object"
+        },
+        "iti_ms": {
+          "default": 0,
+          "description": "Minimum blank interval between one response and the next fixation, in ms. Page loading counts toward it",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "response": {
+          "description": "`schema` (a radio or likert scheme), `keys` (key to label, e.g. `{f: word, j: nonword}`) and `allow_mouse`",
+          "type": "object"
+        },
+        "show_response_options": {
+          "description": "Show the scheme's options during the trial. Defaults to true only when `response.allow_mouse` is on",
+          "type": "boolean"
+        },
+        "stimulus_duration_ms": {
+          "description": "Hide the stimulus after this many ms. Omit to keep it up until the response",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "trial_duration_ms": {
+          "description": "Response deadline in ms from onset. A trial that runs out is recorded as a timeout and the item advances with no answer. Omit for no deadline",
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "type": "object"

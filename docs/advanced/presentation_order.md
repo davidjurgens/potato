@@ -165,4 +165,5 @@ position_of(order, chosen_label)   # 0 means they picked the first option
 - [Agreement Over Time](agreement_drift.md) — the other way an agreement number
   can be confidently wrong
 - [Behavioral Tracking](behavioral_tracking.md) — where the order is stored
+- [Experiment Flow](../workflow/experiment_flow.md) — the order of questions on a survey page (`randomize_questions`) and of whole pages (`phases.counterbalance`)
 - [Judge Calibration](../ai-intelligence/judge_calibration.md)

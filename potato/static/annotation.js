@@ -808,6 +808,10 @@ function setupEventListeners() {
 
     // Keyboard navigation and shortcuts
     document.addEventListener('keydown', function (e) {
+        // A running timed trial owns the keyboard (trial-timing.js).
+        if (window.potatoTrial && window.potatoTrial.ownsKeys) {
+            return;
+        }
         // Only block navigation when in text input fields (not radio/checkbox)
         const inputType = e.target.getAttribute('type');
         const isTextInput = e.target.tagName === 'TEXTAREA' ||
@@ -831,6 +835,10 @@ function setupEventListeners() {
 
     // Keyboard shortcuts for checkboxes and radio buttons (matches base_template.html behavior)
     document.addEventListener('keyup', function (e) {
+        // A running timed trial owns the keyboard; its keys are not shortcuts.
+        if (window.potatoTrial && window.potatoTrial.ownsKeys) {
+            return;
+        }
         // Don't handle when in text input fields (but allow radio/checkbox)
         const activeElement = document.activeElement;
         const activeId = activeElement.id;
@@ -1223,6 +1231,13 @@ async function loadCurrentInstance() {
         showError(true, error.message);
     } finally {
         setLoading(false);
+        // For code that runs once the item is on screen and its saved answers
+        // are restored (the timed-trial layer starts its clock here).
+        setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('potato:instance-ready', {
+                detail: { instanceId: currentInstance ? currentInstance.id : null }
+            }));
+        }, 0);
     }
 }
 
@@ -1757,7 +1772,10 @@ async function saveAnnotations({ background = false } = {}) {
                 cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
                 span_annotations: spanAnnotations,
                 client_timestamp: new Date().toISOString(),
-                response_time_seconds: currentInstanceResponseSeconds()
+                response_time_seconds: currentInstanceResponseSeconds(),
+                // The finished timed trial, if any (trial-timing.js).
+                trial: (window.potatoTrial && typeof window.potatoTrial.record === 'function')
+                    ? (window.potatoTrial.record() || undefined) : undefined
             })
         });
 
@@ -2017,7 +2035,10 @@ async function handleNavigationResponseError(response) {
     showNotification('Navigation failed. Please try again.', 'error');
 }
 
-async function navigateToNext() {
+async function navigateToNext(options = {}) {
+    // `bypassRequired`: a timed trial that ran out moves on with no answer.
+    // The server checks the trial record before it lets that through.
+    const bypassRequired = !!(options && options.bypassRequired);
     debugLog('[DEEP DEBUG NAV] navigateToNext - ENTRY POINT');
     deepDebugState.navigationCalls++;
 
@@ -2033,7 +2054,7 @@ async function navigateToNext() {
 
     // Client-side required field validation
     hasAttemptedForwardValidation = true;
-    if (!validateRequiredFields({ showErrors: true })) {
+    if (!bypassRequired && !validateRequiredFields({ showErrors: true })) {
         debugLog('[NAV] navigateToNext - blocked by client-side validation');
         return;
     }

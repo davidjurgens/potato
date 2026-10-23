@@ -1,0 +1,38 @@
+/* Timed trials (trial-timing.js). The page arrives with the stimulus hidden
+   (body.potato-trial-pending) so it never flashes before the fixation; it is
+   hidden with visibility, not display, so revealing it does not reflow. */
+.potato-trial-pending .instance-area,
+.potato-trial-stimulus-off .instance-area {
+    visibility: hidden;
+}
+.potato-trial-hide-responses #annotation-forms {
+    visibility: hidden;
+}
+.potato-trial-keys-only #next-btn {
+    visibility: hidden;
+}
+.potato-trial .instance-area {
+    position: relative;
+    min-height: 6rem;
+}
+.potato-trial-fixation {
+    display: none;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    line-height: 1;
+    /* Shown while its parent, the stimulus area, is hidden. */
+    visibility: visible;
+}
+.potato-trial-fixating .potato-trial-fixation {
+    display: flex;
+}
+.potato-trial-keys {
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--muted-foreground, #555);
+    white-space: pre;
+    margin: 0.5rem 0 1rem;
+}

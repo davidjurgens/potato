@@ -45,7 +45,7 @@ See [Configuration Reference](../configuration/configuration.md) for all options
 
 ## Choosing an Annotation Type
 
-Potato has 62 annotation types. Start with the decision guide:
+Potato has 63 annotation types. Start with the decision guide:
 
 - **[Choosing the Right Annotation Type](../annotation-types/choosing_annotation_types.md)** - Interactive decision tree
 - **[Schema Gallery](../annotation-types/schemas_and_templates.md)** - Visual gallery of all types with examples
@@ -76,4 +76,4 @@ After annotation, export in multiple formats:
 - [Developer Guide](developer-guide.md) - Extending Potato and API integration
 - [AI-Assisted Annotation Guide](ai-assisted-annotation-guide.md) - Speed up annotation with LLMs
 - [Agent Evaluation Guide](agent-evaluation-guide.md) - Evaluate AI agent systems
-- [Crowdsourcing Guide](crowdsourcing-guide.md) - Run tasks on Prolific and MTurk
+- [Crowdsourcing Guide](crowdsourcing-guide.md) - Run tasks on Prolific, CloudResearch Connect, SONA and other platforms

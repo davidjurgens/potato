@@ -226,6 +226,15 @@ def _unmet_required_labels(user_state) -> list:
 def _refuse_unmet_phase_page(username, user_state):
     """The response that keeps a participant on a page with an unmet
     required answer, or None when the page may be left."""
+    # A jsPsych page is left only by its own finish call, once the run's data
+    # is stored. Without this a bare POST to /prestudy, or a leaked
+    # next_instance, would skip the task.
+    from potato.jspsych.phase import is_complete, jspsych_pages
+    _page = user_state.get_current_phase_and_page()[1]
+    if _page in jspsych_pages(config) and not is_complete(user_state, _page):
+        logger.warning("%s tried to leave jsPsych page %s before finishing it",
+                       username, _page)
+        return get_current_page_html(config, username), 400
     unmet = _unmet_required_labels(user_state)
     if not unmet:
         return None
@@ -2676,7 +2685,12 @@ def annotate():
         try:
             from potato.quality_control import get_quality_control_manager
             qc_manager = get_quality_control_manager()
-            if qc_manager is not None and current_id:
+            # A timed trial that ran out (trial_timing) is not a skip: the
+            # participant had no time left to answer. It is not graded, and
+            # stays visible as a timeout in trials.csv.
+            from potato.trial_timing import excuses_required_answer as _timed_out
+            _trial = (getattr(user_state, "instance_id_to_trial", None) or {}).get(str(current_id))
+            if qc_manager is not None and current_id and not _timed_out(_trial):
                 skipped = qc_manager.record_skipped_attention_check(username, current_id)
                 if skipped is not None:
                     logger.warning("%s moved past attention check %s without answering",
@@ -6510,6 +6524,8 @@ def get_current_instance():
         raw_data = strip_holdout_fields(config, strip_machine_fields(
             text_to_image.record_for_annotator(config, current_instance.get_data()),
             username, instance_id), username, instance_id)
+        from potato.server_utils.schemas.cloze import strip_answer_fields
+        raw_data = strip_answer_fields(config, raw_data)
 
         return jsonify({
             "instance_id": instance_id,
@@ -6562,6 +6578,8 @@ def get_instance_data():
         raw_data = strip_holdout_fields(config, strip_machine_fields(
             text_to_image.record_for_annotator(config, current_instance.get_data()),
             username, current_instance.get_id()), username, current_instance.get_id())
+        from potato.server_utils.schemas.cloze import strip_answer_fields
+        raw_data = strip_answer_fields(config, raw_data)
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)
@@ -6822,6 +6840,13 @@ def update_instance():
         # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
         # They should be routed by the current user phase instead of assignment checks.
         is_phase_page_update = instance_id == "__phase_page__"
+
+        # A participant an exit_when screened out has left the study; nothing
+        # they post afterwards is stored.
+        from potato.server_utils.phase_flow import screened_out as _screened_out
+        if _screened_out(user_state):
+            return jsonify({"status": "error",
+                            "message": "You have left this study."}), 403
 
         # A user already blocked by attention checks stores no more annotations.
         # The save that crosses the threshold is still taken and answered with
@@ -7402,6 +7427,45 @@ def update_instance():
 
         # A grid save carries the item's share of the page's active time; the
         # item has no interaction events of its own (see grid-view.js).
+        # A timed trial's record (trial_timing): checked against the server's
+        # own clock, kept beside the labels, mirrored onto behavioural data.
+        trial_payload = request.json.get("trial")
+        if isinstance(trial_payload, dict) and not is_phase_page_update:
+            from potato import trial_timing as _tt
+            # The item's own data, so item_overrides (a per-item deadline,
+            # say) are the timing the record is checked against.
+            _tt_item = None
+            try:
+                _tt_ism = get_item_state_manager()
+                if _tt_ism.has_item(instance_id):
+                    _tt_item = _tt_ism.get_item(instance_id).get_data()
+            except Exception:
+                _tt_item = None
+            _tt_cfg = _tt.client_config(config, _tt_item)
+            if _tt_cfg is not None:
+                _rec, _flags = _tt.validate_record(
+                    trial_payload, _tt.served_at(user_state, instance_id), _tt_cfg)
+                if _rec is not None:
+                    # The label the record claims must be the one this save stores.
+                    if _rec.get("outcome") == "response" and _rec.get("label") is not None:
+                        _schema = _tt_cfg.get("schema")
+                        _saved = set()
+                        for _k, _v in (request.json.get("annotations") or {}).items():
+                            _parts = str(_k).replace(":::", ":").split(":", 1)
+                            if len(_parts) == 2 and _parts[0] == _schema and _v not in (None, "", False):
+                                _saved.add(_parts[1])
+                        if _rec["label"] not in _saved:
+                            _rec["flags"].append("label_not_saved")
+                            _flags = _rec["flags"]
+                    _tt.store_record(user_state, instance_id, _rec)
+                    if _flags:
+                        logger.info("Trial record for %s on %s flagged: %s",
+                                    username, instance_id, _flags)
+                    from potato.interaction_tracking import get_or_create_behavioral_data
+                    _bd = get_or_create_behavioral_data(
+                        user_state.instance_id_to_behavioral_data, instance_id)
+                    _bd.trial = _rec
+
         grid_timing = request.json.get("grid_timing")
         if (isinstance(grid_timing, dict) and request.json.get("source_view") == "grid"
                 and (config.get("grid_view") or {}).get("enabled")
@@ -7458,10 +7522,17 @@ def update_instance():
                         "uses.", username, claimed_seconds, instance_id,
                         response_time)
 
-            # Check if this is an attention check
-            attention_result = qc_manager.validate_attention_response(
-                username, instance_id, all_annotations, response_time
-            )
+            # Check if this is an attention check. A timed trial that ran out
+            # (trial_timing) carries no answer to grade: it is neither a pass
+            # nor a failure, and stays visible as a timeout in trials.csv.
+            from potato.trial_timing import excuses_required_answer as _timed_out
+            _trial_rec = (getattr(user_state, "instance_id_to_trial", None) or {}).get(str(instance_id))
+            if _timed_out(_trial_rec):
+                attention_result = None
+            else:
+                attention_result = qc_manager.validate_attention_response(
+                    username, instance_id, all_annotations, response_time
+                )
 
             if attention_result is not None:
                 qc_result = {"type": "attention_check", **attention_result}
@@ -8000,6 +8071,12 @@ def done():
     training_state = user_state.get_training_state()
     training_failed = training_state is not None and training_state.is_failed()
 
+    # A participant an `exit_when` screened out did not complete the study
+    # either. Same handling as failing training: the platform's screen-out
+    # code with a provider, the author's message without one.
+    from potato.server_utils.phase_flow import screened_out as _screened_out
+    screen_out = _screened_out(user_state)
+
     # Outside a crowd platform there is no code to hand out, so a blocked
     # user is told why the task ended rather than shown the completion page.
     if provider is None and _qc_blocked(username):
@@ -8008,6 +8085,18 @@ def done():
             "error.html",
             message=_qc_manager().qc_config.attention_block_message,
             url_prefix=request.script_root), 403
+
+    if screen_out and provider is None:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning(f"Could not flush user state before screen-out page: {e}")
+        return render_template(
+            "screened_out.html",
+            message=(screen_out.get("message")
+                     or "You are not eligible for this study. Thank you for your time."),
+            annotation_task_name=config.get("annotation_task_name",
+                                            "Annotation Platform"))
 
     if training_failed and provider is None:
         logger.info(
@@ -8062,7 +8151,7 @@ def done():
         # failure/screen-out completion code instead of the success code
         # Failing the training gate is a screen-out: the platform's
         # screen-out code, never the success code.
-        outcome = (CompletionOutcome.SCREENED_OUT if training_failed
+        outcome = (CompletionOutcome.SCREENED_OUT if (training_failed or screen_out)
                    else CompletionOutcome.COMPLETED)
         try:
             from potato.quality_control import get_quality_control_manager
@@ -9945,6 +10034,12 @@ def get_annotation_schemas():
                     continue
                 schema_info.setdefault(key, value)
 
+            # A cloze passage carries its answer key inline; participants can
+            # call this route, so the key is masked.
+            if schema_type == 'cloze' and isinstance(schema_info.get('text'), str):
+                from potato.server_utils.schemas.cloze import public_text
+                schema_info['text'] = public_text(schema_info['text'])
+
             return schema_info
 
         # If dict (new style), iterate items
@@ -11144,6 +11239,13 @@ def configure_routes(flask_app, app_config):
         register_rollout_routes(app, config)
     except Exception as e:
         logger.warning("Could not register rollout routes: %s", e)
+    # Embedded jsPsych timelines (`type: jspsych` phase pages). No optional
+    # dependency; the vendored jsPsych build is static.
+    try:
+        from potato.jspsych.routes import register_jspsych_routes
+        register_jspsych_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register jsPsych routes: %s", e)
     # Grounding evaluation: the current item's referring expressions.
     try:
         from potato.grounding.routes import register_grounding_routes

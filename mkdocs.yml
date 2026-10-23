@@ -21,6 +21,7 @@ nav:
         - Bringing a Project Into Potato: guides/migrating-into-potato.md
         - Coming from Label Studio: guides/coming-from-label-studio.md
         - Coming from Argilla: guides/coming-from-argilla.md
+        - Coming from jsPsych: guides/coming-from-jspsych.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Configuration Reference: configuration/config_reference.md
@@ -53,6 +54,7 @@ nav:
             - Span Linking: annotation-types/text/span_linking.md
             - Error Span: annotation-types/text/error_span.md
             - Text Edit: annotation-types/text/text_edit.md
+            - Cloze (Fill in the Blank): annotation-types/text/cloze.md
             - Event Annotation: annotation-types/text/event_annotation.md
             - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
@@ -92,6 +94,9 @@ nav:
             - Card Sorting: annotation-types/structured/card_sort.md
     - Workflow Phases:
         - Multi-Phase Workflows: workflow/surveyflow.md
+        - Experiment Flow: workflow/experiment_flow.md
+        - jsPsych Phase: workflow/jspsych_phase.md
+        - Timed Trials: workflow/timed_trials.md
         - Guidelines and Codebooks: workflow/annotation_guidelines.md
         - Training Phase: workflow/training_phase.md
         - Quality Control: workflow/quality_control.md

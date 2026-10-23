@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }}</title>
+    {% include '_theme_head.html' %}
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="potato-page-center">
+    <main class="potato-page-card" style="text-align: center;" id="jspsych-already-done">
+        <div class="potato-page-icon potato-page-icon-success">
+            <i class="fas fa-check" aria-hidden="true"></i>
+        </div>
+        <h1 class="potato-page-title">You have already completed this task</h1>
+        <p class="potato-page-subtitle">Your responses were saved. Continue to the next part of the study.</p>
+        <form method="post" action="{{ continue_url }}">
+            <button type="submit" class="shadcn-button" id="jspsych-continue">Continue</button>
+        </form>
+    </main>
+</body>
+</html>

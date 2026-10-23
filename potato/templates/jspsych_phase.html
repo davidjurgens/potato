@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename=core_css) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='jspsych-bridge.css') }}?v=1">
+</head>
+<body>
+    <!-- The timeline is author code from the task directory, loaded as a
+         file and never rendered through Jinja. The page's CSP allows scripts
+         only from this server, so nothing here is inline. -->
+    <div id="jspsych-target"></div>
+    <div id="potato-jspsych-status" role="status" aria-live="polite" hidden>
+        <p id="potato-jspsych-status-text"></p>
+        <button type="button" id="potato-jspsych-retry" hidden>Try again</button>
+    </div>
+    <script type="application/json" id="potato-jspsych-config">{{ client_config | tojson }}</script>
+    <script src="{{ url_for('static', filename=core_js) }}"></script>
+    {% for path in plugin_paths %}
+    <script src="{{ url_for('static', filename=path) }}"></script>
+    {% endfor %}
+    <script src="{{ url_for('static', filename='jspsych-bridge.js') }}?v=2"></script>
+    {% for src in extra_script_urls %}
+    <script src="{{ src }}"></script>
+    {% endfor %}
+    <script src="{{ timeline_url }}"></script>
+</body>
+</html>

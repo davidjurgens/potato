@@ -726,7 +726,12 @@ def load_instance_data(config: dict):
 
                 # Check for duplicate IDs
                 if ism.has_item(instance_id):
-                    raise ValueError(f"Duplicate instance ID '{instance_id}' found at item {item_no+1}")
+                    raise ValueError(
+                        f"Duplicate instance ID '{instance_id}' found at item {item_no+1} "
+                        f"in {data_fname}. Item IDs must be unique across every data "
+                        f"file, including the files of different batch groups or "
+                        f"conditions; give the same stimulus a distinct ID in each list "
+                        f"(for example 'h1_a' and 'h1_b').")
 
                 # Validate text key exists if required
                 if text_key not in item:
@@ -1200,7 +1205,11 @@ def load_user_data(config: dict):
             # Every kind of answer makes the user an annotator of the item:
             # an item with only span links or events counted nobody, and the
             # per-item cap was exceeded after a restart.
-            for instance_id in user_state.get_annotated_instance_ids():
+            # Labels only: timed-out trials do not make the user an annotator
+            # of the item (see UserState.get_labeled_instance_ids).
+            _labeled = getattr(user_state, "get_labeled_instance_ids",
+                               user_state.get_annotated_instance_ids)
+            for instance_id in _labeled():
                 if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
             # Rebuild the per-item assignee index too. It backs the per-item
@@ -1225,6 +1234,12 @@ def load_user_data(config: dict):
     # against accurate per-group counts after a restart. No-op unless
     # batch_assignment.auto_assign_annotators is enabled.
     ism.rebuild_auto_batch_pins_from_users(user_id_to_instance_ids)
+
+    # Recount condition cells so new participants keep balancing after a restart.
+    if getattr(usm, "condition_assigner", None) is not None:
+        usm.condition_assigner.rebuild_from_users(usm.get_all_users())
+    if hasattr(usm, "rebuild_latin_counter"):
+        usm.rebuild_latin_counter()
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
     _warn_on_orphaned_schemes(config, usm)
@@ -2334,7 +2349,7 @@ def load_phase_data(config: dict) -> None:
         if "order" in phases:
             phase_order = phases["order"]
         else:
-            phase_order = [k for k in phases.keys() if k != "order"]
+            phase_order = [k for k in phases.keys() if k not in ("order", "counterbalance")]
         phases_dict = phases
 
     logger.debug(f"[PHASE LOAD] phases: {phases}")
@@ -2372,6 +2387,16 @@ def load_phase_data(config: dict) -> None:
                 continue
 
             phase = phases_dict[phase_name]
+
+            # An embedded jsPsych timeline: no questions, its own page.
+            from potato.jspsych.phase import is_jspsych_entry, register_jspsych_page, TEMPLATE
+            if is_jspsych_entry(phase):
+                register_jspsych_page(config, phase_name, phase,
+                                      lambda p: get_abs_or_rel_path(p, config))
+                get_user_state_manager().add_phase(
+                    UserPhase.fromstr(phase["type"]), phase_name, TEMPLATE)
+                logger.debug(f"Registered jsPsych phase {phase_name} as {phase['type']}")
+                continue
 
             # Handle new format with annotation_schemes directly in phase
             if "annotation_schemes" in phase:
@@ -2625,6 +2650,15 @@ def load_phase_data(config: dict) -> None:
             raise ConfigValidationError(
                 f"Invalid SurveyFlow display_logic: {dl_err}"
             )
+
+    # Page-level show_when / exit_when must name questions asked on an
+    # earlier page. Checked here because the questions live in phase files.
+    from potato.server_utils.experiment_conditions import validate_condition_references
+    validate_condition_references(config, _all_phase_schemes_for_dl)
+    from potato.server_utils.phase_flow import has_flow_rules
+    if has_flow_rules(config):
+        from potato.server_utils.config_module import validate_phase_flow_references
+        validate_phase_flow_references(config, config.get('_phase_page_schemes') or {})
 
     # Stash SurveyFlow question schemes so downstream consumers (e.g. auto-export
     # server-side hidden-answer exclusion) can reach display_logic definitions,
@@ -3134,6 +3168,22 @@ def progress_counts(username):
     return finished_count, total_count
 
 
+def _render_conditions(usm, user_state):
+    """The participant's conditions for the page, assigning a cell if needed.
+
+    Never fails a render: a manager without a condition assigner (or a test
+    double without the method) simply has none to show.
+    """
+    ensure = getattr(usm, "ensure_conditions", None)
+    if ensure is None:
+        return None
+    try:
+        return ensure(user_state)
+    except Exception as e:
+        logger.warning("Could not assign conditions for rendering: %s", e)
+        return None
+
+
 def get_current_page_html(config, username):
     """
     Returns the HTML for the current page that the user is on.
@@ -3148,6 +3198,10 @@ def get_current_page_html(config, username):
 
     usm = get_user_state_manager()
     html_fname = usm.get_phase_html_fname(phase, page)
+
+    from potato.jspsych.phase import jspsych_pages, render_jspsych_page
+    if page in jspsych_pages(config):
+        return render_jspsych_page(config, username, user_state, phase, page)
 
     try:
         _phase_finished, _phase_total = progress_counts(username)
@@ -3224,6 +3278,13 @@ def get_current_page_html(config, username):
     context['authenticity_client_config'] = get_authenticity_client_config(config)
     context['interaction_tracking_client_config'] = (
         get_interaction_tracking_client_config(config))
+
+    # The participant's between-subjects condition, so a question's
+    # display_logic can test condition.<factor> in the browser too.
+    context['potato_conditions'] = _render_conditions(usm, user_state)
+    # Timed trials run on annotation items only; phase pages say so
+    # explicitly rather than inheriting the template default.
+    context['trial_timing_client_config'] = None
 
     # Phase pages are rendered from the SAME template as the annotation page, so
     # they need the same asset gating. Without this, `frontend_assets` defaults
@@ -3323,6 +3384,12 @@ def get_current_page_html(config, username):
                                 del other["selected"]
                         options[0]["selected"] = "selected"
 
+    # Per-participant question order (phases.<page>.randomize_questions).
+    from potato.server_utils.question_order import apply_question_order
+    _q_order, _q_new = apply_question_order(config, user_state, page, soup)
+    if _q_new:
+        usm.save_user_state(user_state)
+
     # Cross-page conditional display_logic: expose answers from OTHER phase
     # pages so a question can be shown/hidden based on an answer given on an
     # earlier SurveyFlow page (e.g. a poststudy question gated on a prestudy
@@ -3402,6 +3469,20 @@ def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) 
     schema_name = scheme.get("name", "")
 
     label_annotations = user_state.instance_id_to_label_to_value.get(instance_id, {})
+
+    # A required cloze needs every blank, as the page requires; one filled
+    # blank (or whitespace) posted directly is not an answer.
+    if scheme.get("annotation_type") == "cloze":
+        from potato.server_utils.schemas.cloze import all_blanks_filled
+        given = {k.get_name(): v for k, v in label_annotations.items()
+                 if hasattr(k, "get_schema") and k.get_schema() == schema_name}
+        item_data = None
+        if scheme.get("source_field"):
+            try:
+                item_data = get_item_state_manager().get_item(instance_id).get_data()
+            except Exception:
+                item_data = None
+        return all_blanks_filled(scheme, given, item_data)
     for label_key, value in label_annotations.items():
         if hasattr(label_key, "get_schema") and label_key.get_schema() == schema_name:
             if value:
@@ -3441,7 +3522,12 @@ def _flat_annotations_for_instance(user_state, instance_id: str) -> dict:
         for s in (config.get("annotation_schemes", []) or [])
         if isinstance(s, dict) and s.get("name")
     }
-    return collapse_answers(entries, schema_types)
+    # The assigned condition is the lowest layer, as in the browser, so a
+    # scheme gated on condition.<factor> is required in the cell that shows it.
+    from potato.server_utils.phase_flow import CONDITION_PREFIX, conditions_for
+    flat = {CONDITION_PREFIX + f: v for f, v in conditions_for(user_state).items()}
+    flat.update(collapse_answers(entries, schema_types))
+    return flat
 
 
 def _hidden_scheme_names(user_state, instance_id: str) -> set:
@@ -3474,6 +3560,12 @@ def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> l
     `display_logic` plus `required` is the natural way to write a gated
     follow-up, which is why this has to work rather than be documented around.
     """
+    # A timed trial that ran out (trial_timing) has no answer by design.
+    trials = getattr(user_state, "instance_id_to_trial", None)
+    if trials:
+        from potato.trial_timing import excuses_required_answer
+        if excuses_required_answer(trials.get(str(instance_id))):
+            return []
     hidden = _hidden_scheme_names(user_state, instance_id)
     unsatisfied = []
     for scheme in config.get("annotation_schemes", []):
@@ -3562,8 +3654,15 @@ def _annotation_sidebar_flags(cfg) -> dict:
 def _strip_machine_fields(record, username, instance_id):
     from potato.assist_holdout import strip_holdout_fields
     from potato.labeling_engine.integration.hooks import strip_machine_fields
-    return strip_holdout_fields(config, strip_machine_fields(record, username, instance_id),
-                                username, instance_id)
+    record = strip_holdout_fields(config, strip_machine_fields(record, username, instance_id),
+                                  username, instance_id)
+    return _strip_cloze_answers(record)
+
+
+def _strip_cloze_answers(record):
+    """Drop item fields that hold cloze answer keys (never sent to the page)."""
+    from potato.server_utils.schemas.cloze import strip_answer_fields
+    return strip_answer_fields(config, record)
 
 
 def render_page_with_annotations(username: str):
@@ -3703,7 +3802,7 @@ def render_page_with_annotations(username: str):
     # error_span, card_sort, conjoint) that need fields beyond text_key
     if item_data and isinstance(item_data, dict):
         var_elems["instance_data"] = {
-            k: v for k, v in item_data.items()
+            k: v for k, v in _strip_cloze_answers(item_data).items()
             if isinstance(v, (str, int, float, bool, list))
         }
         # Pairwise candidates come from the item's own data and are laid out by
@@ -3831,7 +3930,9 @@ def render_page_with_annotations(username: str):
 
     # Determine annotation status for the status badge (three-state)
     annotation_status = "unlabeled"
-    if user_state.has_annotated(instance_id):
+    # Labels only: a timed trial that ran out left no label on the item.
+    _has_labeled = getattr(user_state, "has_labeled", user_state.has_annotated)
+    if _has_labeled(instance_id):
         unsatisfied = _instance_meets_required_annotation_rules(user_state, instance_id)
         annotation_status = "labeled" if not unsatisfied else "in_progress"
     instance_has_annotations = (annotation_status != "unlabeled")
@@ -3945,6 +4046,16 @@ def render_page_with_annotations(username: str):
         get_authenticity_client_config, get_interaction_tracking_client_config)
     authenticity_client_config = get_authenticity_client_config(config)
     interaction_tracking_client_config = get_interaction_tracking_client_config(config)
+    # The participant's between-subjects condition (display_logic can test it).
+    potato_conditions = _render_conditions(get_user_state_manager(),
+                                           get_user_state_manager().get_user_state(username))
+    # Timed trials (trial_timing): this item's timing, and when it was served.
+    from potato import trial_timing as _trial_timing
+    trial_timing_client_config = None
+    if is_annotation_page:
+        trial_timing_client_config = _trial_timing.client_config(config, item.get_data())
+        if trial_timing_client_config is not None:
+            _trial_timing.record_served(user_state, instance_id)
     # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
     truth_serum_client_config = None
     if config.get("truth_serum", {}).get("enabled", False):
@@ -4090,6 +4201,7 @@ def render_page_with_annotations(username: str):
         annotation_telemetry_client_config=annotation_telemetry_client_config,
         authenticity_client_config=authenticity_client_config,
         interaction_tracking_client_config=interaction_tracking_client_config,
+        potato_conditions=potato_conditions,
         boundary_client_config=boundary_client_config,
         # Truth Serum (surprisingly-popular scoring)
         truth_serum_enabled=truth_serum_enabled,
@@ -4115,7 +4227,10 @@ def render_page_with_annotations(username: str):
         # IBWS round info (for round banner)
         ibws_round_info=ibws_round_info,
         # Hide back button when on first instance with no previous phase
-        can_go_back=get_user_state_manager().can_user_go_back(username),
+        can_go_back=(get_user_state_manager().can_user_go_back(username)
+                     and not (trial_timing_client_config is not None
+                              and _trial_timing.back_navigation_disabled(config))),
+        trial_timing_client_config=trial_timing_client_config,
         # Hide jump-to-ID navigation controls when disabled
         jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
         # Hotkey review mode (auto-advance when all required schemas complete)
@@ -4130,6 +4245,11 @@ def render_page_with_annotations(username: str):
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
     soup = BeautifulSoup(rendered_html, "html.parser")
+
+    # Item-driven cloze passages become real inputs before the restore below.
+    if soup.find(attrs={"data-cloze-source": True}) is not None:
+        from potato.server_utils.schemas.cloze import fill_item_passages
+        fill_item_passages(soup, config, item.get_data())
 
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
