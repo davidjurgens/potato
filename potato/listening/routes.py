@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import wave
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def listening_audio(schema: str, instance_id: str, slot: str):
         try:
             from potato.listening.anchors import anchor_path
             path = anchor_path(_config.get("task_dir") or ".", ref_path, int(source["anchor_hz"]))
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, wave.Error) as e:
             logger.error("Could not make the %s Hz anchor from %s: %s",
                          source["anchor_hz"], source["of"], e)
             abort(500)

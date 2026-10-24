@@ -151,7 +151,7 @@ and trapping clips inside the rating session. In Potato:
   listening environment;
 - training: a [training phase](../../workflow/training_phase.md) with gold
   answers;
-- trapping clips: [attention checks](../../advanced/quality_control.md) whose
+- trapping clips: [attention checks](../../workflow/quality_control.md) whose
   expected answer is the category the clip announces.
 
 Microsoft's P.808 toolkit ships its clips under several licenses; Potato

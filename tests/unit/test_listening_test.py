@@ -161,3 +161,18 @@ def test_malformed_items_are_named():
     assert "hidden_reference" in problems and "clash" in problems and " ok" not in problems
     abx = {"name": "x", "method": "abx"}
     assert "needs 2" in " ".join(item_problems(abx, [("one", {"stimuli": {"a": "/m/a.wav"}})]))
+
+
+def test_anchors_need_a_wav_reference():
+    """potato-skill, 2.12.0 pack notes (P4): a FLAC reference with anchors
+    validated and booted, then both anchor slots answered 500."""
+    from potato.listening.checks import item_problems
+    scheme = {"name": "q", "method": "mushra", "anchors": [3500, 7000]}
+    stimuli = {"low": "/media/low.wav"}
+    flac = [("x1", {"reference": "/media/ref.flac", "stimuli": stimuli})]
+    wav = [("x2", {"reference": "/media/ref.WAV", "stimuli": stimuli})]
+    problems = " ".join(item_problems(scheme, flac))
+    assert "not a .wav file" in problems and "x1" in problems
+    assert item_problems(scheme, wav) == []
+    # Without anchors any format the browser plays is fine.
+    assert item_problems({"name": "q", "method": "mushra"}, flac) == []

@@ -119,6 +119,9 @@ class CheckContext:
     workers: int = 1
     #: Names passed with `deploy up --secret` or `--env`; they reach the host.
     provided_env: frozenset = frozenset()
+    #: `deploy up --hf-oauth`: the provider writes Sign in with Hugging Face
+    #: into the bundled config, so enrolment is not open on the host.
+    hf_oauth: bool = False
 
 
 # Values that look like a credential someone pasted into a config.
@@ -326,7 +329,7 @@ def _check_open_registration(ctx: CheckContext) -> List[Finding]:
     auth = ctx.config.get("authentication") or {}
     method = auth.get("method", auth.get("type", "in_memory"))
 
-    if method == "oauth":
+    if method == "oauth" or ctx.hf_oauth:
         return []
     if not allow_all:
         return []
@@ -570,7 +573,7 @@ def run_preflight(config_path: str, *, provider: str = "local",
                   public: bool = True, ephemeral_fs: bool = False,
                   workers: int = 1,
                   backup_configured: bool = False,
-                  provided_env=()) -> PreflightReport:
+                  provided_env=(), hf_oauth: bool = False) -> PreflightReport:
     """Validate and assess a config for deployment. Changes nothing on disk."""
     from potato.validate_cli import validate_config_file
 
@@ -608,7 +611,7 @@ def run_preflight(config_path: str, *, provider: str = "local",
     ctx = CheckContext(config=config, config_path=config_path, provider=provider,
                        public=public, ephemeral_fs=ephemeral_fs,
                        backup_configured=backup_configured, workers=workers,
-                       provided_env=frozenset(provided_env))
+                       provided_env=frozenset(provided_env), hf_oauth=hf_oauth)
     for check_func in _CHECKS:
         try:
             report.findings.extend(check_func(ctx) or [])

@@ -173,15 +173,27 @@ def _ambiguity_warning(ambiguities: List[str], method_note: bool = True) -> Opti
     return msg
 
 
+def _phase_only_gate(context: ExportContext) -> Tuple[bool, str]:
+    """For a study with no item labels: its survey answers are exportable when
+    export_include_phase_data is on; otherwise say how to turn them on."""
+    if _should_include_phase_data(context):
+        return True, ""
+    if context.phase_responses:
+        return False, (f"No item annotations to export, and {len(context.phase_responses)} "
+                       "survey/phase answer(s) are left out: set "
+                       "'export_include_phase_data: true' in the config to export them")
+    return False, "No annotations to export"
+
+
 def _can_export_tabular(context: ExportContext) -> Tuple[bool, str]:
-    """Item annotations, or a design record for the participants/trials
-    sidecars (a study whose participants left no item labels still has one)."""
+    """Item annotations, a design record for the participants/trials sidecars,
+    or survey answers (a survey-only study has no item labels at all)."""
     if context.annotations:
         return True, ""
     from .experiment_sidecars import has_design_records
     if has_design_records(context):
         return True, ""
-    return False, "No annotations to export"
+    return _phase_only_gate(context)
 
 
 class CSVExporter(BaseExporter):
@@ -223,7 +235,7 @@ class JSONLExporter(BaseExporter):
 
     def can_export(self, context: ExportContext) -> Tuple[bool, str]:
         if not context.annotations:
-            return False, "No annotations to export"
+            return _phase_only_gate(context)
         return True, ""
 
     def export(self, context: ExportContext, output_path: str,
@@ -232,7 +244,9 @@ class JSONLExporter(BaseExporter):
         out_file = os.path.join(output_path, "annotations.jsonl")
 
         with_origin = origin_in_use(context.annotations)
-        with open(out_file, "w", encoding="utf-8") as f:
+        # A survey-only study has no item rows: write only the phase file.
+        with (open(out_file, "w", encoding="utf-8") if context.annotations
+              else open(os.devnull, "w")) as f:
             for ann in context.annotations:
                 record = {
                     "instance_id": ann.get("instance_id", ""),
@@ -253,7 +267,7 @@ class JSONLExporter(BaseExporter):
                 })
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-        files_written = [out_file]
+        files_written = [out_file] if context.annotations else []
         phase_file = _write_phase_jsonl(context, output_path)
         if phase_file:
             files_written.append(phase_file)

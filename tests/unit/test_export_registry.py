@@ -230,6 +230,35 @@ class TestPhaseResponseExport:
         assert any("phase/survey responses" in w for w in result.warnings)
 
 
+class TestSurveyOnlyExport:
+    """potato-skill, 2.12.0 pack notes (P3): a survey-only study (phase answers,
+    no item labels, no conditions or trials) got "No annotations to export"
+    from csv, tsv and jsonl, although the release notes said csv/tsv wrote it."""
+
+    def _ctx(self, include_flag, output_dir):
+        return ExportContext(
+            config=({"export_include_phase_data": True} if include_flag else {}),
+            annotations=[], items={}, schemas=[], output_dir=output_dir,
+            phase_responses=[
+                {"user_id": "u1", "phase": "prestudy", "page": "p",
+                 "schema": "tipi_1", "label_name": "4", "value": "4"}],
+        )
+
+    @pytest.mark.parametrize("fmt", ["csv", "tsv", "jsonl"])
+    def test_phase_answers_export_with_the_flag(self, tmp_path, fmt):
+        out = str(tmp_path / fmt)
+        result = export_registry.export(fmt, self._ctx(True, out), out)
+        assert result.success, result.errors
+        assert os.path.exists(os.path.join(out, f"phase_responses.{fmt}"))
+        assert not os.path.exists(os.path.join(out, f"annotations.{fmt}"))
+
+    @pytest.mark.parametrize("fmt", ["csv", "tsv", "jsonl"])
+    def test_without_the_flag_the_refusal_names_it(self, tmp_path, fmt):
+        out = str(tmp_path / f"{fmt}_noflag")
+        ok, reason = export_registry.get(fmt).can_export(self._ctx(False, out))
+        assert not ok and "export_include_phase_data" in reason
+
+
 class TestTheFormatListIsPinned:
     """Adding or removing an export format is a documented, deliberate change.
 

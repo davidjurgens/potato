@@ -2940,6 +2940,13 @@ function handleInputChange(element) {
             }
             debugLog(`Removed annotation: ${schema}.${labelName}`);
 
+            // Unticking changes the answer too: a question gated by
+            // count_gt 1, or by count_equals 0, has to update now. This branch
+            // returns before the evaluation below, so it was never re-run.
+            if (displayLogicManager) {
+                displayLogicManager.evaluateForSchema(schema);
+            }
+
             // Track annotation deselection
             if (window.interactionTracker) {
                 window.interactionTracker.trackAnnotationChange(schema, labelName, 'deselect', oldValue, null, 'user');

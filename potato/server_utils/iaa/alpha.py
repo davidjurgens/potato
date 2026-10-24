@@ -173,6 +173,12 @@ def krippendorff_alpha(
                 metric_fn=dist,
             )
         )
+    except ZeroDivisionError:
+        # Every value the same: no expected disagreement, so alpha is
+        # undefined. A bootstrap hits this on many resamples of a small study;
+        # it is not a failure worth a warning each time.
+        logger.debug("krippendorff_alpha undefined: no variation in the values")
+        return float("nan")
     except Exception as exc:  # pragma: no cover
         logger.warning("krippendorff_alpha failed: %s", exc)
         return float("nan")

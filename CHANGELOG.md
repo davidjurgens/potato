@@ -746,9 +746,11 @@ pip install --upgrade potato-annotation
   1. It now keeps the step's decimals, and snaps to steps counted from
   `min_value`.
 - **A survey-only study exported no phase answers.** With no item
-  annotations the CSV/TSV export skipped phase answers and listed a file it
-  never wrote. It now writes phase answers, authenticity, participants and
-  trials, and says that `annotations.<fmt>` was not written.
+  annotations, CSV, TSV and JSONL refused to export or listed a file they
+  never wrote. With `export_include_phase_data: true` they now write the
+  phase answers (CSV and TSV also authenticity, participants and trials)
+  and say that `annotations.<fmt>` was not written; without the key, the
+  error message names it.
 - **Imported dropdown answers were dropped.** `select` answers in a project
   written by `potato import` are now saved, and an importer's media files are
   copied into the new project.
@@ -775,8 +777,11 @@ pip install --upgrade potato-annotation
   LimeSurvey importers use it to refuse XML entity expansion.
 - Annotator pages follow the browser's light or dark setting (`ui.theme`
   defaults to `auto`); `ui.theme: light` keeps them light.
-- In the browser, `equals` against a multiselect answer no longer matches a
-  single selected option (use `contains`). On the server, `matches` on an
+- In the browser, `equals` against a multiselect with two or more options
+  ticked is now false, as on the server (it compared the comma-joined text,
+  so `equals: "a,b"` matched); with one option ticked it still matches that
+  option in both. Use `contains` to test whether an option is ticked. On the
+  server, `matches` on an
   unanswered question is now false, as it already was in the browser. In
   both, `length_*` on a multiselect counts options instead of characters.
 - `potato import` without `-f` tries the survey importers first. A COCO file

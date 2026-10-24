@@ -76,3 +76,22 @@ def test_hierarchical_multiselect_is_scored_as_sets():
     assert row["level"] == "masi" and row["units"] == "3"
     # Order inside the stored value does not matter: i2 agrees.
     assert float(row["percent_agreement"]) == pytest.approx(200 / 3, abs=0.01)
+
+
+def test_degenerate_resamples_are_counted_not_logged(caplog):
+    """potato-skill, 2.12.0 pack notes (P5): a 3-item study logged about 300
+    "krippendorff_alpha failed: float division by zero" warnings, one per
+    resample whose values happened to be all the same."""
+    import logging
+    out = create_test_directory("reliability_degenerate")
+    anns = []
+    for i, t in enumerate(["a", "a", "b"]):
+        anns.append(_ann("x", f"i{i}", t, 1))
+        anns.append(_ann("y", f"i{i}", t if i else "b", 1))
+    ctx = ExportContext(config={}, annotations=anns, items={}, schemas=SCHEMES[:1], output_dir=out)
+    with caplog.at_level(logging.WARNING):
+        res = ReliabilityExporter().export(ctx, out, {"bootstrap": 300})
+    assert res.success
+    assert not [r for r in caplog.records if "krippendorff_alpha failed" in r.getMessage()]
+    assert len(res.warnings) == 1 and "undefined (no variation)" in res.warnings[0]
+    assert "bootstrap resamples" in open(os.path.join(out, "reliability.md")).read()

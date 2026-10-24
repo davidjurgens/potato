@@ -100,6 +100,7 @@ class ReliabilityExporter(BaseExporter):
         seed = int(options.get("seed", 20261023))
         os.makedirs(output_path, exist_ok=True)
         out_rows = []
+        undefined_notes = []
         for scheme in self._schemes(context):
             name, level = scheme["name"], LEVELS[scheme["annotation_type"]]
             by_unit: Dict[str, Dict[str, Any]] = defaultdict(dict)
@@ -128,6 +129,10 @@ class ReliabilityExporter(BaseExporter):
                     a = _alpha(rows, level)
                     if not math.isnan(a):
                         draws.append(a)
+                if len(draws) < reps:
+                    undefined_notes.append(
+                        f"{name}: alpha was undefined (no variation) in {reps - len(draws)} of "
+                        f"{reps} bootstrap resamples; the interval uses the other {len(draws)}")
                 if draws:
                     draws.sort()
                     low = draws[int(0.025 * (len(draws) - 1))]
@@ -151,5 +156,8 @@ class ReliabilityExporter(BaseExporter):
                 f.write(f"| {r['schema']} | {r['level']} | {r['alpha']} | {ci} | "
                         f"{r['percent_agreement']} | {r['units']} | {r['coders']} |\n")
             f.write(f"\nIntervals: percentile bootstrap over units, {reps} resamples.\n")
+            for note in undefined_notes:
+                f.write(f"\n{note}.\n")
         return ExportResult(success=True, format_name=self.format_name,
-                            files_written=[csv_path, md_path], stats={"num_schemes": len(out_rows)})
+                            files_written=[csv_path, md_path], warnings=undefined_notes,
+                            stats={"num_schemes": len(out_rows)})

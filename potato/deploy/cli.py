@@ -352,7 +352,10 @@ def cmd_up(args) -> int:
                            backup_configured=backup.enabled or (
                                provider_name == "huggingface" and not args.demo),
                            provided_env=[item.split("=", 1)[0] for item in
-                                         (args.secret or []) + (args.env or [])])
+                                         (args.secret or []) + (args.env or [])],
+                           hf_oauth=provider_name == "huggingface" and bool(
+                               getattr(args, "hf_oauth", False)
+                               or getattr(args, "hf_oauth_org", None)))
     _echo(render_report(report))
     _echo("")
 

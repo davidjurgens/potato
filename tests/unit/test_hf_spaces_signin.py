@@ -185,6 +185,19 @@ class TestDeploy:
             sink = yaml.safe_load(handle)["backup"]["sinks"][0]
         assert sink["type"] == "huggingface" and sink["responses"] is True
 
+    @pytest.mark.parametrize("flags, warned", [([], True), (["--hf-oauth"], False),
+                                               (["--hf-oauth-org", "lab"], False)])
+    def test_the_dry_run_knows_hf_oauth_closes_sign_in(self, capsys, monkeypatch, flags, warned):
+        """potato-skill, 2.12.0 pack notes (P7): --hf-oauth --dry-run still
+        warned D003 (anyone can register), though the bundled config signs in
+        with Hugging Face."""
+        from potato.deploy.cli import main
+        monkeypatch.setenv("HF_TOKEN", "")
+        config = os.path.join(os.path.dirname(__file__), "..", "..", "examples",
+                              "classification", "single-choice", "config.yaml")
+        main(["up", config, "--provider", "huggingface", "--dry-run"] + flags)
+        assert ("[D003]" in capsys.readouterr().out) is warned
+
     def test_the_flag_is_refused_on_other_providers(self, capsys):
         from potato.deploy.cli import main
         code = main(["up", "config.yaml", "--provider", "render", "--hf-oauth"])

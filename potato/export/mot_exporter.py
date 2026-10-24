@@ -191,6 +191,16 @@ class MOTExporter(BaseExporter):
             if _blank:
                 warnings.append(_blank)
 
+        if not files_written:
+            # Every sequence was skipped (a remote video with no known size,
+            # tracks without boxes): say so instead of "Export successful".
+            return ExportResult(
+                success=False,
+                format_name=self.format_name,
+                errors=["Nothing was written."] + warnings,
+                stats={"num_images": len(by_image), "num_annotations": 0,
+                       "num_sequences": 0},
+            )
         return ExportResult(
             success=True,
             format_name=self.format_name,

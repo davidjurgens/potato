@@ -26,8 +26,17 @@ def item_problems(scheme: Dict, items: Iterable) -> List[str]:
             continue
         stimuli = _stimuli(scheme, data)
         reasons = []
-        if method in NEEDS_REFERENCE and not _reference(scheme, data):
+        reference = _reference(scheme, data)
+        if method in NEEDS_REFERENCE and not reference:
             reasons.append(f"no reference (field '{scheme.get('reference_field', 'reference')}')")
+        # Anchors are low-passed from the reference with the standard library's
+        # wave module, which reads PCM WAV only: a FLAC or MP3 reference booted
+        # and then answered 500 for every anchor slot.
+        if (method == "mushra" and scheme.get("anchors") and isinstance(reference, str)
+                and not reference.split("?", 1)[0].lower().endswith(".wav")):
+            reasons.append("a reference that is not a .wav file, but anchors are made from "
+                           "a PCM WAV reference (convert it, or remove anchors and add the "
+                           "anchors as stimuli)")
         if len(stimuli) < MIN_STIMULI.get(method, 1):
             reasons.append(f"{len(stimuli)} stimuli, needs {MIN_STIMULI.get(method, 1)}")
         taken = [c for c in stimuli if c == HIDDEN_REFERENCE or c.startswith(ANCHOR_PREFIX)]

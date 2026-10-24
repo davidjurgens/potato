@@ -254,7 +254,10 @@ class TestVideoTracksToMot:
         result = export_registry.export("mot", self.context(tmp_path, [self.track("t")]),
                                         str(tmp_path / "out"))
         assert result.files_written == []
-        assert any("pixel size is unknown" in w for w in result.warnings)
+        # Nothing written is a failure, not "Export successful" (potato-skill,
+        # 2.12.0 pack notes P6: a remote video URL wrote 0 files).
+        assert not result.success
+        assert any("pixel size is unknown" in e for e in result.errors)
 
     def test_the_item_size_is_used(self, tmp_path):
         from potato.export.registry import export_registry
