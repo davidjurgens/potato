@@ -1,0 +1,66 @@
+[
+  {
+    "id": "tile_a",
+    "text": "Tile A: outline each land-cover area you can see. One suggested area is drawn already; check it.",
+    "map": {
+      "image": "/media/tile_a.png",
+      "extent": [
+        -30.1,
+        -38.5313,
+        -30.04,
+        -38.5
+      ]
+    },
+    "suggested": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  -30.073625,
+                  -38.520247
+                ],
+                [
+                  -30.073625,
+                  -38.525627
+                ],
+                [
+                  -30.0625,
+                  -38.525627
+                ],
+                [
+                  -30.0625,
+                  -38.520247
+                ],
+                [
+                  -30.073625,
+                  -38.520247
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "label": "Built-up"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "tile_b",
+    "text": "Tile B: outline each land-cover area you can see.",
+    "map": {
+      "image": "/media/tile_b.png",
+      "extent": [
+        -30.04,
+        -38.5313,
+        -29.98,
+        -38.5
+      ]
+    }
+  }
+]

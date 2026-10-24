@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Self-paced reading (moving window)
+#
+# Each sentence starts as dashes. Space reveals the next region and hides the
+# one before it; the time between presses is that region's reading time.
+# Regions are marked with "|" in the data. A sentence with a question in its
+# `question` field is followed by a yes/no comprehension question (F = yes,
+# J = no); one without ends after its last region.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/self-paced-reading/config.yaml -p 8000
+#
+# Reading times are in the trials export (one row per sentence) and the
+# regions export (one row per region):
+#   python -m potato.export --config examples/advanced/self-paced-reading/config.yaml --format csv --output out/
+
+annotation_task_name: "Self-paced reading"
+
+data_files:
+  - data/sentences.jsonl
+
+item_properties:
+  id_key: id
+  text_key: sentence
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+
+assignment_strategy: fixed_order
+
+trial_timing:
+  enabled: true
+  fixation_ms: 400
+  iti_ms: 500
+  presentation:
+    mode: moving_window
+    field: sentence
+    region_separator: "|"
+    advance_key: space
+    question_field: question
+  response:
+    schema: comprehension
+    keys: {f: "Yes", j: "No"}
+
+annotation_schemes:
+  - annotation_type: radio
+    name: comprehension
+    description: "Answer the question"
+    labels: ["Yes", "No"]
+    label_requirement:
+      required: true

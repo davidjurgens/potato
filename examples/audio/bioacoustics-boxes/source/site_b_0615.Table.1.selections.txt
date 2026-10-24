@@ -1,0 +1,7 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	Call Type
+1	Waveform 1	1	0.8000	1.3000	1400.0	3600.0	upsweep
+1	Spectrogram 1	1	0.8000	1.3000	1400.0	3600.0	upsweep
+2	Waveform 1	1	2.2000	2.9000	7900.0	8100.0	whistle
+2	Spectrogram 1	1	2.2000	2.9000	7900.0	8100.0	whistle
+3	Waveform 1	1	4.0000	4.6000	4400.0	4950.0	whistle
+3	Spectrogram 1	1	4.0000	4.6000	4400.0	4950.0	whistle

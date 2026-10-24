@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Link out to a task on another server, and come back.
+#
+# The `game` page sends the participant to an oTree room with their Potato
+# id as the participant label and Potato's return address. oTree's last page
+# should send them to that address with their payoff:
+#   {return_url}&payoff=<payoff>
+# Coming back stores the payoff, which the follow-up page tests.
+# The participant can read and edit the return link, so the payoff is
+# self-reported. To trust it, set return_secret and have the other server
+# sign the return (docs/workflow/runtime_phases.md, "Signed returns").
+#
+# Replace the oTree URL with your own server before running:
+#   python potato/flask_server.py start examples/advanced/external-task/config.yaml -p 8000
+
+annotation_task_name: "Group game and ratings"
+
+data_files:
+  - data/statements.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+
+phases:
+  order: [game, annotation]
+  game:
+    type: external
+    url: "https://otree.example.org/room/public_goods/?participant_label={participant}&potato_return={return_url}"
+    return_params: [payoff]
+    description: "The first part is a short game with three other participants. It opens on another site and brings you back here when it ends."
+    button_text: "Start the game"
+  annotation:
+    type: annotation
+
+annotation_schemes:
+  - annotation_type: likert
+    name: fairness
+    description: "How fair is this statement?"
+    size: 5
+    min_label: "Very unfair"
+    max_label: "Very fair"

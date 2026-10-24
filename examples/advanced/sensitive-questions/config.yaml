@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Sensitive questions: a list experiment, randomized response, and an
+# endorsement vignette whose wording depends on the participant's condition.
+#
+# - list_group decides who sees the sensitive statement in the list
+#   experiment (the control group's page does not contain it);
+# - endorser fills {condition.endorser} in the vignette;
+# - the two randomized-response questions use a private randomizer, so no
+#   single answer reveals anything.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/sensitive-questions/config.yaml -p 8000
+#
+# Estimates (difference in means; randomized-response prevalence with SEs):
+#   python -m potato.export --config examples/advanced/sensitive-questions/config.yaml --format survey_experiments --output out/
+
+annotation_task_name: "Sensitive questions"
+
+data_files:
+  - data/policies.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+
+conditions:
+  factors:
+    list_group: [control, treatment]
+    endorser: ["The city council", "A neighbourhood association"]
+  assignment: balanced
+
+phases:
+  order: [questions, annotation]
+  questions:
+    type: prestudy
+    file: surveys/questions.json
+  annotation:
+    type: annotation
+
+annotation_schemes:
+  - annotation_type: radio
+    name: support
+    description: "Would you support this proposal?"
+    labels: ["Support", "Oppose", "Not sure"]
+    label_requirement:
+      required: true

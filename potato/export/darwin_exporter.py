@@ -136,6 +136,15 @@ class DarwinExporter(BaseExporter):
                 f"{count} {obj_type} annotation(s) were not written: Darwin "
                 f"JSON has no equivalent shape.")
 
+        # A camera-trap answer triaged "empty" that kept boxes: written as
+        # drawn, and named, the same rule as the camera-trap exports.
+        from .camera_trap_exporter import CameraTrapReview, conflict_warning, triage_conflicts
+        review = CameraTrapReview(context)
+        if review.triage_scheme and review.box_scheme:
+            conflict = conflict_warning(triage_conflicts(context, review), "The Darwin export")
+            if conflict:
+                warnings.append(conflict)
+
         # Items nobody marked produce no record at all, so they are
         # absent from the output rather than present and empty.
         _blank = blank_item_warning(context, 'the Darwin export')

@@ -8,10 +8,16 @@ potato import --input instances_val2017.json --output-dir my-project
 python potato/flask_server.py start my-project/config.yaml -p 8000
 ```
 
-Twenty-two formats are supported: fifteen computer-vision, five text and
-qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA), and two whole-project
-formats (Label Studio and Argilla) that bring questions, annotators and model
-suggestions across together. See the
+Forty-five formats are supported:
+
+- sixteen computer-vision dataset formats, the Hugging Face Hub among them;
+- six text and qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA, TEI);
+- sixteen whole-project formats, which bring questions, annotators and model
+  suggestions across together: Label Studio, Argilla, Zooniverse, Ibex and
+  PCIbex, TextGrid, ELAN, FLExText, Toolbox, MegaDetector, COCO Camera Traps,
+  Raven, Audacity labels, BirdNET, IIIF, W3C Web Annotation and PAGE XML;
+- seven survey formats (see [Importing surveys](survey_import.md)), Network
+  Canvas among them. See the
 [format matrix](../data-export/format_matrix.md) for what survives each
 direction, and
 [Bringing a Project Into Potato](../guides/migrating-into-potato.md) for the
@@ -26,12 +32,31 @@ their own:
 | `--qdpx-end-position` | REFI-QDA | Force `inclusive` or `exclusive` instead of inferring it |
 | `--prodigy-keep-rejected` | Prodigy | Import tasks answered `reject`/`ignore`, which are dropped by default |
 
-Label Studio and Argilla take two more:
+Two more apply to the formats that carry people's answers:
 
 | Flag | Format | What it does |
 |---|---|---|
 | `--ls-config XML` | Label Studio | The project's labeling config. Without it the questions are inferred from the answers, and options nobody chose are lost |
-| `--keep-annotators` | Label Studio, Argilla | Write each source annotator's answers as that person's saved work (see below) |
+| `--keep-annotators` | Label Studio, Argilla, Zooniverse, W3C Web Annotation | Write each source annotator's answers as that person's saved work (see below) |
+
+The research-tool formats take these:
+
+| Flag | Format | What it does |
+|---|---|---|
+| `--md-threshold CONF` | MegaDetector | Lowest detection confidence to import (default 0.2) |
+| `--sequences` | MegaDetector, COCO Camera Traps | One item per camera-trap sequence (`seq_id`), shown as a gallery |
+| `--min-confidence CONF` | BirdNET | Lowest detection confidence to import (default 0.1) |
+| `--label-column COLUMN` | Raven | Which selection-table column holds the label |
+| `--texts PATH` | W3C Web Annotation | A folder or JSONL of the texts the annotations target |
+| `--page-xml-mode lines\|regions` | PAGE XML | One item per text line to correct (default), or one per page to correct the layout |
+| `--iiif-size SIZE` | IIIF | Image size to request from an IIIF Image service, such as `max` or `!2000,2000` |
+| `--tei-unit p\|div\|s\|l` | TEI | What counts as one item (default `p`) |
+
+Their guides: [Coming from Ibex](../guides/coming-from-ibex.md),
+[Linguistic fieldwork](../guides/linguistic-fieldwork.md),
+[Camera traps](../guides/camera-traps.md),
+[Bioacoustics](../guides/bioacoustics.md),
+[Digital humanities formats](../guides/digital-humanities.md).
 
 !!! important "Imported annotations are pre-annotations"
 
@@ -47,7 +72,14 @@ potato import --list-formats            # what is supported
 potato import -i FILE   -o DIR          # single-file formats
 potato import -i DIR    -o DIR          # directory formats
 potato import --hf-dataset cppe-5 -o DIR    # straight from the Hub
+potato import -i survey.qsf -o DIR      # a survey: see Importing surveys
+potato import -i survey.lss --into config.yaml   # add a survey to a project
 ```
+
+Surveys (Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe, Network
+Canvas) have their own page: [Importing surveys](survey_import.md). Zooniverse projects take
+`--zooniverse-workflow`, `--zooniverse-subjects`, `--workflow-id` and
+`--workflow-version`; see [Coming from Zooniverse](../guides/coming-from-zooniverse.md).
 
 The format is auto-detected. Pass `--input-format` when detection is wrong or
 ambiguous — auto-detection is deliberately conservative and refuses to guess
@@ -179,15 +211,16 @@ assignment read the project as annotated rather than as untouched.
 
 ### `--keep-annotators`
 
-Label Studio and Argilla only. Writes each source annotator's answers as that
-person's saved work under `annotation_output/<name>/`, and adds each of them to
-the roster, so `/admin/iaa` reports agreement as soon as the server starts.
+Label Studio, Argilla, Zooniverse and W3C Web Annotation only. Writes each
+source annotator's answers as that person's saved work under
+`annotation_output/<name>/`, and adds each of them to the roster, so
+`/admin/iaa` reports agreement as soon as the server starts.
 Unlike `--seed-user` this invents nobody: the answers are real people's.
 
 It also sets `max_annotations_per_item` to the number of people the source study
-meant each item to get: Argilla's `distribution.min_submitted`, or for Label
-Studio, which does not export its overlap setting, the most annotators any task
-has. Items the source study finished therefore count as complete, which is what
+meant each item to get: Argilla's `distribution.min_submitted`, or for the
+other formats, which do not export an overlap setting, the most annotators any
+item has. Items the source study finished therefore count as complete, which is what
 `/admin/iaa` needs to score them, and new annotators are given the rest. Raise
 the value to collect more judgements per item.
 

@@ -1,0 +1,26 @@
+[
+  {
+    "annotation_type": "price_list",
+    "name": "risk",
+    "description": "For each decision, choose the option you prefer.",
+    "preset": "holt_laury",
+    "single_switch": true,
+    "instructions": "If this part is drawn for payment, one of the ten decisions is drawn at random and the option you chose in it is played for real money.",
+    "label_requirement": {
+      "required": true
+    }
+  },
+  {
+    "annotation_type": "bdm",
+    "name": "voucher",
+    "description": "What is the most you would pay for a voucher worth $3.00?",
+    "min": 0,
+    "max": 5,
+    "step": 0.05,
+    "input": "number",
+    "instructions": "You have $5.00 to spend. A price between $0.00 and $5.00 is drawn after the study. If your bid is at least the price, you buy the voucher and pay the price, not your bid; otherwise you keep the $5.00. Bidding what the voucher is worth to you is your best choice.",
+    "label_requirement": {
+      "required": true
+    }
+  }
+]

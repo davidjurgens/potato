@@ -1,0 +1,25 @@
+/* Headphone check page (type: headphone_check). A standalone page: it does
+   not load Potato's stylesheet, so it carries its own light and dark colours. */
+:root { --hc-bg: #ffffff; --hc-fg: #18181b; --hc-muted: #52525b; --hc-border: #d4d4d8;
+        --hc-primary: #6e56cf; --hc-active: #ede9fe; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+    :root { --hc-bg: #111113; --hc-fg: #ededef; --hc-muted: #a1a1aa; --hc-border: #3f3f46;
+            --hc-primary: #8b74e8; --hc-active: #2e2650; }
+}
+body { margin: 0; background: var(--hc-bg); color: var(--hc-fg);
+       font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.hc-box { max-width: 36rem; margin: 3rem auto; padding: 0 1rem; display: flex; flex-direction: column;
+          gap: 1rem; align-items: flex-start; }
+.hc-box h1, .hc-box h2 { margin: 0; line-height: 1.25; }
+.hc-box p { margin: 0; color: var(--hc-muted); }
+.hc-progress { font-size: 0.9rem; }
+.hc-btn { min-height: 2.75rem; min-width: 2.75rem; padding: 0.5rem 1rem; border: 1px solid var(--hc-border);
+          border-radius: 0.5rem; background: var(--hc-bg); color: var(--hc-fg); font: inherit; cursor: pointer; }
+.hc-btn:focus-visible { outline: 3px solid var(--hc-primary); outline-offset: 2px; }
+.hc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.hc-primary { background: var(--hc-primary); border-color: var(--hc-primary); color: #fff; }
+.hc-choices { display: flex; gap: 0.75rem; }
+.hc-choice { min-width: 4rem; font-size: 1.25rem; }
+.hc-choice.hc-active { background: var(--hc-active); border-color: var(--hc-primary); }
+a.hc-btn { display: inline-flex; align-items: center; text-decoration: none; }
+a.hc-primary:hover { filter: brightness(1.08); }

@@ -1,24 +1,25 @@
 {
   "categories": {
-    "advanced": 60,
+    "advanced": 71,
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 7,
-    "audio": 8,
-    "classification": 32,
+    "audio": 11,
+    "classification": 33,
     "conversation": 4,
     "crowdsourcing": 6,
     "custom-layouts": 6,
     "embodied": 1,
-    "image": 18,
+    "image": 21,
     "labeling-engine": 3,
     "plugins": 1,
-    "span": 11,
+    "span": 12,
     "spatial": 3,
     "testing": 2,
+    "text": 1,
     "video": 8
   },
-  "count": 229,
+  "count": 249,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -426,6 +427,29 @@
     },
     {
       "annotation_types": [
+        "card_sort",
+        "triad_test"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/cultural-domain.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/cultural-domain",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "cultural-domain",
+      "path": "examples/advanced/cultural-domain/config.yaml",
+      "run": "potato start examples/advanced/cultural-domain/config.yaml -p 8000",
+      "task_name": "Cultural domain analysis (fruit)"
+    },
+    {
+      "annotation_types": [
         "multiselect",
         "radio"
       ],
@@ -444,6 +468,26 @@
       "path": "examples/advanced/dataset-publishing/config.yaml",
       "run": "potato start examples/advanced/dataset-publishing/config.yaml -p 8000",
       "task_name": "Movie Review Sentiment"
+    },
+    {
+      "annotation_types": [
+        "geo_annotation"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/dialect-map.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/dialect-map",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "dialect-map",
+      "path": "examples/advanced/dialect-map/config.yaml",
+      "run": "potato start examples/advanced/dialect-map/config.yaml -p 8000",
+      "task_name": "Draw a map: how people talk in Arventa"
     },
     {
       "annotation_types": [
@@ -491,6 +535,28 @@
     },
     {
       "annotation_types": [
+        "ego_network"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/ego-network-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/ego-network",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "ego-network",
+      "path": "examples/advanced/ego-network/config.yaml",
+      "run": "potato start examples/advanced/ego-network/config.yaml -p 8000",
+      "task_name": "Personal networks"
+    },
+    {
+      "annotation_types": [
         "radio"
       ],
       "category": "advanced",
@@ -512,6 +578,28 @@
       "path": "examples/advanced/embedding-visualization/config.yaml",
       "run": "potato start examples/advanced/embedding-visualization/config.yaml -p 8000",
       "task_name": "Embedding Visualization Demo"
+    },
+    {
+      "annotation_types": [
+        "likert"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/statements.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/external-task",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "external-task",
+      "path": "examples/advanced/external-task/config.yaml",
+      "run": "potato start examples/advanced/external-task/config.yaml -p 8000",
+      "task_name": "Group game and ratings"
     },
     {
       "annotation_types": [
@@ -631,6 +719,28 @@
       "path": "examples/advanced/html-annotation/config.yaml",
       "run": "potato start examples/advanced/html-annotation/config.yaml -p 8000",
       "task_name": "Simple HTML as Input Example"
+    },
+    {
+      "annotation_types": [
+        "belief_elicitation"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/events.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/incentivized-elicitation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "incentivized-elicitation",
+      "path": "examples/advanced/incentivized-elicitation/config.yaml",
+      "run": "potato start examples/advanced/incentivized-elicitation/config.yaml -p 8000",
+      "task_name": "Incentivized elicitation"
     },
     {
       "annotation_types": [
@@ -808,6 +918,26 @@
       "path": "examples/advanced/machine-annotators/config.yaml",
       "run": "potato start examples/advanced/machine-annotators/config.yaml -p 8000",
       "task_name": "Gene Function Curation (machine annotators demo)"
+    },
+    {
+      "annotation_types": [
+        "pure_display"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/sentences.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/maze-task",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "maze-task",
+      "path": "examples/advanced/maze-task/config.yaml",
+      "run": "potato start examples/advanced/maze-task/config.yaml -p 8000",
+      "task_name": "Maze task"
     },
     {
       "annotation_types": [
@@ -1051,6 +1181,30 @@
     },
     {
       "annotation_types": [
+        "radio",
+        "viewer_selection"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/structures.json"
+      ],
+      "description": "Annotators mark binding-site residues on two synthetic protein models in a",
+      "dir": "examples/advanced/protein-binding-site",
+      "display_types": [
+        "protein_structure",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "protein-binding-site",
+      "path": "examples/advanced/protein-binding-site/config.yaml",
+      "run": "potato start examples/advanced/protein-binding-site/config.yaml -p 8000",
+      "task_name": "Binding-site residues"
+    },
+    {
+      "annotation_types": [
         "radio"
       ],
       "category": "advanced",
@@ -1161,6 +1315,48 @@
       "path": "examples/advanced/search-example/config.yaml",
       "run": "potato start examples/advanced/search-example/config.yaml -p 8000",
       "task_name": "Search Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/sentences.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/self-paced-reading",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "self-paced-reading",
+      "path": "examples/advanced/self-paced-reading/config.yaml",
+      "run": "potato start examples/advanced/self-paced-reading/config.yaml -p 8000",
+      "task_name": "Self-paced reading"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/policies.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/sensitive-questions",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "sensitive-questions",
+      "path": "examples/advanced/sensitive-questions/config.yaml",
+      "run": "potato start examples/advanced/sensitive-questions/config.yaml -p 8000",
+      "task_name": "Sensitive questions"
     },
     {
       "annotation_types": [
@@ -1358,6 +1554,51 @@
       "path": "examples/advanced/url-data/config.yaml",
       "run": "potato start examples/advanced/url-data/config.yaml -p 8000",
       "task_name": "URL Data Source Demo"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "viewer_selection"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/calls.json"
+      ],
+      "description": "Annotators judge four synthetic variant calls as real, artifact or uncertain",
+      "dir": "examples/advanced/variant-review",
+      "display_types": [
+        "genome_locus",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "variant-review",
+      "path": "examples/advanced/variant-review/config.yaml",
+      "run": "potato start examples/advanced/variant-review/config.yaml -p 8000",
+      "task_name": "Variant call review"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/items.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/vocabulary-test",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "vocabulary-test",
+      "path": "examples/advanced/vocabulary-test/config.yaml",
+      "run": "potato start examples/advanced/vocabulary-test/config.yaml -p 8000",
+      "task_name": "Vocabulary test"
     },
     {
       "annotation_types": [
@@ -3067,6 +3308,72 @@
     },
     {
       "annotation_types": [
+        "spectrogram_annotation"
+      ],
+      "category": "audio",
+      "config_keys": [
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/recordings.jsonl"
+      ],
+      "description": "Two synthetic 6-second recordings (22.05 kHz WAV) with tones and frequency",
+      "dir": "examples/audio/bioacoustics-boxes",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "bioacoustics-boxes",
+      "path": "examples/audio/bioacoustics-boxes/config.yaml",
+      "run": "potato start examples/audio/bioacoustics-boxes/config.yaml -p 8000",
+      "task_name": "Bioacoustics: call boxes"
+    },
+    {
+      "annotation_types": [
+        "listening_test"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/excerpts.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/audio/listening-test-mushra",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "listening-test-mushra",
+      "path": "examples/audio/listening-test-mushra/config.yaml",
+      "run": "potato start examples/audio/listening-test-mushra/config.yaml -p 8000",
+      "task_name": "MUSHRA listening test"
+    },
+    {
+      "annotation_types": [
+        "listening_test"
+      ],
+      "category": "audio",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/clips.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/audio/listening-test-p808",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "listening-test-p808",
+      "path": "examples/audio/listening-test-p808/config.yaml",
+      "run": "potato start examples/audio/listening-test-p808/config.yaml -p 8000",
+      "task_name": "Speech quality (ACR)"
+    },
+    {
+      "annotation_types": [
         "audio_annotation"
       ],
       "category": "audio",
@@ -3252,6 +3559,27 @@
       "path": "examples/classification/cloze-test/config.yaml",
       "run": "potato start examples/classification/cloze-test/config.yaml -p 8000",
       "task_name": "Cloze test"
+    },
+    {
+      "annotation_types": [
+        "hierarchical_multiselect",
+        "radio"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/headlines.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/classification/codebook-content-analysis",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "codebook-content-analysis",
+      "path": "examples/classification/codebook-content-analysis/config.yaml",
+      "run": "potato start examples/classification/codebook-content-analysis/config.yaml -p 8000",
+      "task_name": "Headline topics"
     },
     {
       "annotation_types": [
@@ -4218,6 +4546,30 @@
     },
     {
       "annotation_types": [
+        "image_annotation",
+        "multiselect",
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/md_output.jsonl"
+      ],
+      "description": "Eight synthetic camera-trap frames from two cameras, with the MegaDetector",
+      "dir": "examples/image/camera-trap-review",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "camera-trap-review",
+      "path": "examples/image/camera-trap-review/config.yaml",
+      "run": "potato start examples/image/camera-trap-review/config.yaml -p 8000",
+      "task_name": "Camera-trap review"
+    },
+    {
+      "annotation_types": [
         "image_annotation"
       ],
       "category": "image",
@@ -4326,6 +4678,26 @@
     },
     {
       "annotation_types": [
+        "geo_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/geo-annotation-example.json"
+      ],
+      "description": "",
+      "dir": "examples/image/geo-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "geo-annotation",
+      "path": "examples/image/geo-annotation/config.yaml",
+      "run": "potato start examples/image/geo-annotation/config.yaml -p 8000",
+      "task_name": "Land cover on georeferenced images"
+    },
+    {
+      "annotation_types": [
         "image_annotation"
       ],
       "category": "image",
@@ -4343,6 +4715,30 @@
       "path": "examples/image/geometry-primitives/config.yaml",
       "run": "potato start examples/image/geometry-primitives/config.yaml -p 8000",
       "task_name": "Geometry Primitives"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/manifest.jsonl"
+      ],
+      "description": "A Presentation 3 manifest over two generated folio images. The canvases are",
+      "dir": "examples/image/iiif-manifest",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "iiif-manifest",
+      "path": "examples/image/iiif-manifest/config.yaml",
+      "run": "potato start examples/image/iiif-manifest/config.yaml -p 8000",
+      "task_name": "IIIF manifest (two folios)"
     },
     {
       "annotation_types": [
@@ -4779,6 +5175,26 @@
     },
     {
       "annotation_types": [
+        "interlinear_gloss"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/interlinear-gloss-example.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/span/interlinear-gloss",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "interlinear-gloss",
+      "path": "examples/span/interlinear-gloss/config.yaml",
+      "run": "potato start examples/span/interlinear-gloss/config.yaml -p 8000",
+      "task_name": "Interlinear glossing (Latin, illustrative)"
+    },
+    {
+      "annotation_types": [
         "span"
       ],
       "category": "span",
@@ -5015,6 +5431,28 @@
       "path": "examples/testing/verify-span-labeling/config.yaml",
       "run": "potato start examples/testing/verify-span-labeling/config.yaml -p 8000",
       "task_name": "Span Labeling Verification"
+    },
+    {
+      "annotation_types": [
+        "text_edit"
+      ],
+      "category": "text",
+      "config_keys": [],
+      "data_files": [
+        "data/letter.jsonl"
+      ],
+      "description": "A generated page image with five text lines, and a PAGE XML file whose",
+      "dir": "examples/text/htr-line-correction",
+      "display_types": [
+        "image_region"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "htr-line-correction",
+      "path": "examples/text/htr-line-correction/config.yaml",
+      "run": "potato start examples/text/htr-line-correction/config.yaml -p 8000",
+      "task_name": "HTR line correction"
     },
     {
       "annotation_types": [

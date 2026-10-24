@@ -39,13 +39,17 @@ def _uses_flow_features(config: dict) -> bool:
         return True
     if has_flow_rules(config):
         return True
-    return any(str(e.get("type", "")).lower() == "jspsych" or e.get("_kind") == "jspsych"
-               for e in phases_dict(config).values())
+    from potato.runtimes.phase import has_runtime_pages
+    return has_runtime_pages(config)
 
 
 def _states(context: ExportContext):
     from potato.server_utils.stored_states import iter_stored_states
+    from potato.user_state_management import upgrade_flow_record
     for user_dir, state in iter_stored_states(context.output_dir, context.config):
+        # A state saved before runtime phases keeps its runs under "jspsych".
+        if isinstance(state.get("flow_record"), dict):
+            upgrade_flow_record(state["flow_record"])
         yield state.get("user_id", user_dir), state
 
 
@@ -68,7 +72,8 @@ def write_participants(context: ExportContext, output_path: str,
     columns = (["user_id"] + [f"condition_{f}" for f in factors] +
                ["condition_ordinal", "cell_ordinal", "latin_ordinal", "final_phase",
                 "screened_out", "screened_out_page",
-                "skipped_pages", "page_orders", "question_orders", "jspsych_runs"])
+                "skipped_pages", "page_orders", "question_orders", "runtime_runs",
+                "runtime_answers"])
     rows = []
     for user_id, state in _states(context):
         rec = state.get("flow_record") or {}
@@ -86,10 +91,12 @@ def write_participants(context: ExportContext, output_path: str,
             "skipped_pages": "|".join(s.get("page", "") for s in rec.get("skipped_pages") or []),
             "page_orders": json.dumps(rec.get("page_orders") or {}, sort_keys=True),
             "question_orders": json.dumps(rec.get("question_orders") or {}, sort_keys=True),
-            "jspsych_runs": json.dumps({p: {k: v.get(k) for k in ("status", "attempts", "page_loads",
-                                                                   "n_trials", "run_id")}
-                                        for p, v in (rec.get("jspsych") or {}).items()},
+            "runtime_runs": json.dumps({p: {k: v.get(k) for k in ("kind", "status", "attempts",
+                                                                   "page_loads", "n_trials", "run_id")}
+                                        for p, v in (rec.get("runtimes") or {}).items()},
                                        sort_keys=True),
+            # What runtime pages derived from their runs (a headphone check's pass).
+            "runtime_answers": json.dumps(rec.get("runtime_answers") or {}, sort_keys=True),
         }
         for f in factors:
             row[f"condition_{f}"] = conds.get(f, "")
@@ -98,6 +105,44 @@ def write_participants(context: ExportContext, output_path: str,
         return None
     rows.sort(key=lambda r: r["user_id"])
     return _write(os.path.join(output_path, f"participants.{fmt_name}"), rows, columns, delimiter)
+
+
+REGION_COLUMNS = ["user_id", "instance_id", "region", "text", "rt_ms", "correct",
+                  "side", "errors", "trial_outcome", "onset_epoch_ms"]
+
+
+def write_regions(context: ExportContext, output_path: str,
+                  fmt_name: str, delimiter: str) -> Optional[str]:
+    """One row per region of a word-by-word trial (self-paced reading,
+    maze): its text and reading time, and for the maze whether the right word
+    was chosen."""
+    config = context.config or {}
+    block = config.get("trial_timing")
+    if not (isinstance(block, dict) and block.get("enabled") and block.get("presentation")):
+        return None
+    factors = list(((config.get("conditions") or {}).get("factors") or {}).keys())
+    columns = REGION_COLUMNS[:2] + [f"condition_{f}" for f in factors] + REGION_COLUMNS[2:]
+    rows = []
+    for user_id, state in _states(context):
+        conds = (state.get("flow_record") or {}).get("conditions") or {}
+        for instance_id, rec in (state.get("instance_id_to_trial") or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            for r in rec.get("regions") or []:
+                row = {"user_id": user_id, "instance_id": instance_id,
+                       "region": r.get("index", ""), "text": r.get("text", ""),
+                       "rt_ms": r.get("rt_ms", ""),
+                       "correct": "" if "correct" not in r else int(bool(r["correct"])),
+                       "side": r.get("side", ""), "errors": r.get("errors", ""),
+                       "trial_outcome": rec.get("outcome", ""),
+                       "onset_epoch_ms": rec.get("onset_epoch_ms", "")}
+                for f in factors:
+                    row[f"condition_{f}"] = conds.get(f, "")
+                rows.append(row)
+    if not rows:
+        return None
+    rows.sort(key=lambda r: (r["user_id"], float(r["onset_epoch_ms"] or 0), r["region"]))
+    return _write(os.path.join(output_path, f"regions.{fmt_name}"), rows, columns, delimiter)
 
 
 def write_trials(context: ExportContext, output_path: str,

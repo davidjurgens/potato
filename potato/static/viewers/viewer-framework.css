@@ -1,0 +1,128 @@
+/* Viewer displays (protein_structure, genome_locus) and the viewer_selection
+   scheme. Theme tokens only, so both follow light and dark mode. */
+
+.potato-viewer { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; min-width: 0;
+    box-sizing: border-box; }
+.potato-viewer .pv-main { display: flex; gap: 0.75rem; align-items: stretch; min-width: 0; }
+.potato-viewer .pv-stage-wrap { position: relative; flex: 1 1 auto; min-width: 0; min-height: 12rem;
+    border: 1px solid var(--border); border-radius: var(--radius, 0.5rem); overflow: hidden;
+    background: var(--card); }
+.potato-viewer .pv-stage-wrap.pv-auto-height { height: auto; min-height: 16rem; overflow: visible; }
+.potato-viewer .pv-stage { position: absolute; inset: 0; }
+.potato-viewer .pv-auto-height .pv-stage { position: relative; inset: auto; }
+.potato-viewer .pv-message { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; margin: 0; padding: 1rem 1.25rem; text-align: center;
+    color: var(--muted-foreground); background: var(--card); font-size: var(--text-sm, 0.8125rem);
+    line-height: 1.45; z-index: 2; }
+.potato-viewer .pv-message[hidden] { display: none; }
+.potato-viewer .pv-auto-height .pv-message { position: relative; min-height: 16rem; }
+.potato-viewer .pv-fallback { color: var(--warning-text, #7d4407); background: var(--warning-tint, #fdf3e2); }
+.potato-viewer .pv-error { color: var(--destructive-text, #9f1e17); background: var(--destructive-tint, #fdecea); }
+/* Without WebGL there is nothing to draw: the message takes only its own
+   height, so the residue table moves up under it. */
+.potato-viewer[data-viewer-state="no-webgl"] .pv-stage-wrap { height: auto !important; min-height: 0; }
+.potato-viewer[data-viewer-state="no-webgl"] .pv-stage { display: none; }
+.potato-viewer[data-viewer-state="no-webgl"] .pv-message,
+.potato-viewer[data-viewer-state="error"] .pv-auto-height .pv-message { position: static; min-height: 0; }
+.potato-viewer.pv-failed > .pv-message { position: static; border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem); }
+.potato-viewer .pv-status { min-height: 1.25rem; margin: 0; font-size: var(--text-sm, 0.8125rem);
+    color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+/* PAE image beside the structure */
+.potato-viewer .pv-side { flex: 0 0 auto; width: min(16rem, 38%); margin: 0; display: flex;
+    flex-direction: column; gap: 0.25rem; }
+.potato-viewer .pv-side img { width: 100%; height: auto; border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem); image-rendering: pixelated; }
+.potato-viewer .pv-side figcaption { font-size: var(--text-xs, 0.75rem); color: var(--muted-foreground); }
+
+/* pLDDT legend */
+.potato-viewer .pv-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0; padding: 0;
+    list-style: none; font-size: var(--text-xs, 0.75rem); color: var(--muted-foreground); }
+.potato-viewer .pv-legend li { display: inline-flex; align-items: center; gap: 0.35rem; }
+.potato-viewer .pv-swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.15); }
+
+/* Residue table */
+.potato-viewer .pv-residues { border: 1px solid var(--border); border-radius: var(--radius, 0.5rem);
+    padding: 0.5rem 0.75rem 0.75rem; background: var(--card); }
+.potato-viewer .pv-residues-head { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 0.25rem 0.75rem; margin-bottom: 0.5rem; }
+.potato-viewer .pv-residues-title { font-weight: 600; color: var(--card-foreground); }
+.potato-viewer .pv-residues-hint, .potato-viewer .pv-residues-note { font-size: var(--text-xs, 0.75rem);
+    color: var(--muted-foreground); margin: 0; }
+.potato-viewer .pv-chains { display: flex; flex-direction: column; gap: 0.6rem; max-height: 16rem;
+    overflow-y: auto; }
+.potato-viewer .pv-chain-name { font-size: var(--text-sm, 0.8125rem); font-weight: 600;
+    color: var(--card-foreground); margin-bottom: 0.2rem; }
+.potato-viewer .pv-count { font-weight: 400; color: var(--muted-foreground); }
+.potato-viewer .pv-res-strip { display: flex; flex-wrap: wrap; gap: 2px; }
+.potato-viewer .pv-res { position: relative; display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: flex-start; min-width: 1.6rem; height: 2.4rem; padding: 0.15rem 0.1rem 0;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--background, #fff);
+    color: var(--foreground); font: inherit; font-family: var(--font-mono, monospace);
+    font-size: 0.8rem; line-height: 1.1; cursor: pointer; }
+.potato-viewer .pv-res.pv-het { min-width: 2.6rem; font-size: 0.68rem; }
+.potato-viewer .pv-res-num { font-size: 0.58rem; color: var(--muted-foreground); visibility: hidden;
+    font-variant-numeric: tabular-nums; }
+.potato-viewer .pv-res.pv-tick .pv-res-num { visibility: visible; }
+.potato-viewer .pv-res:hover { border-color: var(--primary); }
+.potato-viewer .pv-res:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; z-index: 1; }
+.potato-viewer .pv-res[aria-pressed="true"] { background: var(--pv-sel, #c2255c); border-color: var(--pv-sel, #c2255c);
+    color: #fff; }
+.potato-viewer .pv-res[aria-pressed="true"] .pv-res-num { color: rgba(255, 255, 255, 0.9); visibility: visible; }
+/* Confidence band along the bottom edge when pLDDT colouring is on. */
+.potato-viewer .pv-res[data-band]::after { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px;
+    height: 3px; border-radius: 1px; }
+.potato-viewer .pv-res[data-band="0"]::after { background: #0053D6; }
+.potato-viewer .pv-res[data-band="1"]::after { background: #65CBF3; }
+.potato-viewer .pv-res[data-band="2"]::after { background: #FFDB13; }
+.potato-viewer .pv-res[data-band="3"]::after { background: #FF7D45; }
+
+/* igv.js sits on the card colour; its own styles assume white. */
+.potato-viewer[data-viewer-kind="genome_locus"] .pv-stage { background: #fff; color: #000; }
+
+@media (max-width: 640px) {
+    .potato-viewer .pv-main { flex-direction: column; }
+    /* igv.js keeps its navigation bar on one line; on a phone the bar scrolls
+       sideways inside the viewer instead of being cut off. Only here, so its
+       track menus are never clipped on a desktop. */
+    .potato-viewer .pv-stage-wrap.pv-auto-height { overflow-x: auto; overflow-y: hidden; }
+    .potato-viewer .pv-side { width: 100%; }
+}
+
+/* viewer_selection scheme */
+form.viewer-selection, .viewer-selection fieldset { width: 100%; box-sizing: border-box; min-width: 0; }
+.viewer-selection .vs-title { font-weight: 600; margin-bottom: 0.4rem; }
+.viewer-selection .vs-instructions { margin: 0 0 0.6rem; color: var(--muted-foreground); }
+.viewer-selection .vs-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
+    margin-bottom: 0.6rem; }
+.viewer-selection .vs-labels-title { font-size: var(--text-sm, 0.8125rem); color: var(--muted-foreground); }
+.viewer-selection .vs-label { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.25rem;
+    padding: 0.3rem 0.8rem; border: 1px solid var(--border); border-radius: 999px; background: var(--card);
+    color: var(--card-foreground); font: inherit; cursor: pointer; }
+.viewer-selection .vs-label:hover { background: var(--secondary); }
+.viewer-selection .vs-label[aria-checked="true"] { border-color: var(--primary);
+    box-shadow: inset 0 0 0 1px var(--primary); background: var(--primary-tint, var(--secondary)); font-weight: 600; }
+.viewer-selection .vs-label:focus-visible, .viewer-selection .vs-remove:focus-visible,
+.viewer-selection .vs-item-label:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.viewer-selection .vs-swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 50%;
+    background: var(--muted-foreground); flex: 0 0 auto; }
+.viewer-selection .vs-empty, .viewer-selection .vs-context, .viewer-selection .vs-count,
+.viewer-selection .vs-message { margin: 0.25rem 0; font-size: var(--text-sm, 0.8125rem);
+    color: var(--muted-foreground); }
+.viewer-selection .vs-context { font-variant-numeric: tabular-nums; }
+.viewer-selection .vs-message:empty, .viewer-selection .vs-count:empty { display: none; }
+.viewer-selection .vs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
+    gap: 0.3rem; }
+.viewer-selection .vs-item { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+    padding: 0.3rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius, 0.5rem);
+    background: var(--card); }
+.viewer-selection .vs-desc { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums; color: var(--card-foreground); }
+.viewer-selection .vs-item-label { min-height: 2rem; padding: 0.15rem 0.4rem; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: var(--background, #fff); color: var(--foreground); font: inherit; }
+.viewer-selection .vs-remove { min-height: 2rem; padding: 0.15rem 0.6rem; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: transparent; color: var(--card-foreground); font: inherit;
+    font-size: var(--text-sm, 0.8125rem); cursor: pointer; }
+.viewer-selection .vs-remove:hover { background: var(--secondary); }

@@ -46,6 +46,7 @@ OWNERS = {
     "region_caption.py": "region-caption.js",
     "rollout_evaluation.py": "rollout-eval.js",
     "volume_annotation.py": "volume-annotation.js",
+    "spectrogram_annotation.py": "spectrogram-annotation.js",
 }
 
 CHANGE_DISPATCH = re.compile(

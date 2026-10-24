@@ -21,6 +21,33 @@ appeared.
         stimulus_duration_ms: soa_ms
       disable_back_navigation: true
 
+Word-by-word presentation (self-paced reading, RSVP, the maze task) is a
+``presentation`` block; the item's text is shown one region at a time and
+each region's reading time is recorded:
+
+.. code-block:: yaml
+
+    trial_timing:
+      enabled: true
+      fixation_ms: 500
+      presentation:
+        mode: moving_window          # moving_window | centered | cumulative | maze
+        field: sentence              # item field (default: item_properties.text_key)
+        region_separator: "|"        # optional: regions instead of words
+        advance_key: space
+        question_field: question     # optional per-item comprehension question
+        # maze only:
+        distractor_field: distractors   # one distractor per region
+        maze_keys: {left: e, right: i}
+        on_error: stop               # stop | redo
+      response:                      # the comprehension or judgment question
+        schema: answer
+        keys: {f: "yes", j: "no"}
+
+With ``question_field``, an item without a question ends after the last
+region (outcome ``completed``); without it, every item asks the response
+scheme.
+
 Precision: onset is known to the display frame (about 17 ms at 60 Hz); the
 keyboard and display add latency the browser cannot see; browsers that coarsen
 timers for privacy (``privacy.resistFingerprinting``) round to tens of
@@ -47,7 +74,14 @@ logger = logging.getLogger(__name__)
 
 TIMING_KEYS = ("fixation_ms", "stimulus_duration_ms", "trial_duration_ms", "iti_ms")
 CONFIG_KEYS = {"enabled", *TIMING_KEYS, "fixation_symbol", "response", "item_overrides",
-               "disable_back_navigation", "show_response_options"}
+               "disable_back_navigation", "show_response_options", "presentation"}
+PRESENTATION_MODES = ("moving_window", "centered", "cumulative", "maze")
+PRESENTATION_KEYS = {"mode", "field", "region_separator", "advance_key", "question_field",
+                     "distractor_field", "maze_keys", "on_error", "mask_char"}
+#: Most regions one item may have (a long passage word by word).
+MAX_REGIONS = 400
+#: The maze's first word has no real competitor (Boyce et al., 2020).
+MAZE_FIRST_DISTRACTOR = "x-x-x"
 RESPONSE_KEYS = {"schema", "keys", "allow_mouse"}
 RESPONSE_TYPES = ("radio", "likert")
 
@@ -59,7 +93,7 @@ _NUMBER_FIELDS = (
 )
 _STRING_FIELDS = ("outcome", "key", "label")
 _BOOL_FIELDS = ("tab_hidden", "fullscreen_at_onset")
-OUTCOMES = ("response", "timeout")
+OUTCOMES = ("response", "timeout", "completed")
 
 #: Slack between the browser's and the server's clocks: the save request's
 #: own latency, plus the render-to-onset gap the server cannot see.
@@ -114,7 +148,28 @@ def validate_trial_timing_config(config_data: Dict[str, Any]) -> None:
             "trial_timing.trial_duration_ms is 0; omit it for no deadline")
     if not block.get("enabled"):
         return
+    presentation = block.get("presentation")
+    taken_keys = set()
+    if presentation is not None:
+        taken_keys = _validate_presentation(presentation)
+        timed = [k for k in ("trial_duration_ms", "stimulus_duration_ms") if block.get(k)]
+        if timed:
+            # On the config logger, which `potato validate` collects into its report.
+            logging.getLogger("potato.server_utils.config_module").warning(
+                "trial_timing: %s %s to the question after the reading, not to "
+                           "the reading itself, and an item with no question has no deadline",
+                           " and ".join(timed), "applies" if len(timed) == 1 else "apply")
     response = block.get("response")
+    if presentation is not None and response is None:
+        # Reading only: nothing to answer, so nothing else may be on the page.
+        others = [s.get("name") for s in config_data.get("annotation_schemes") or []
+                  if isinstance(s, dict) and s.get("annotation_type") != "pure_display"]
+        if others:
+            raise ConfigValidationError(
+                "trial_timing.presentation with no response: the timed page asks no "
+                f"question, so {', '.join(map(str, others))} could never be answered. Add "
+                "trial_timing.response (a comprehension question) or make them pure_display")
+        return
     if not isinstance(response, dict) or not response.get("schema"):
         raise ConfigValidationError(
             "trial_timing.response.schema must name the scheme that records the answer")
@@ -154,6 +209,11 @@ def validate_trial_timing_config(config_data: Dict[str, Any]) -> None:
                     f"label of '{scheme['name']}' ({', '.join(labels)})")
         if len(set(map(str, keys.values()))) != len(keys):
             raise ConfigValidationError("trial_timing.response.keys maps two keys to one label")
+        clash = {(" " if k == "space" else str(k).lower()) for k in keys} & taken_keys
+        if clash:
+            raise ConfigValidationError(
+                f"trial_timing.response.keys uses {', '.join(sorted(clash))}, which "
+                "trial_timing.presentation uses to advance or choose")
     # A timed page owns the keyboard and hides the forms, so a second
     # question on it can never be answered properly: keys meant for a text
     # box are taken as the response, or the form is hidden. Display-only
@@ -177,6 +237,103 @@ def validate_trial_timing_config(config_data: Dict[str, Any]) -> None:
     if isinstance(pocket, dict) and pocket.get("enabled"):
         logger.warning("trial_timing is enabled with pocket mode: phones and tablets are "
                        "sent to /pocket, which does not run timed trials.")
+
+
+def _single_key(value) -> Optional[str]:
+    if value == "space" or value == " ":
+        return " "
+    if isinstance(value, str) and len(value) == 1:
+        return value.lower()
+    return None
+
+
+def _validate_presentation(p: Any) -> set:
+    """Check trial_timing.presentation; return the keys it takes."""
+    from potato.server_utils.config_module import ConfigValidationError
+    where = "trial_timing.presentation"
+    if not isinstance(p, dict):
+        raise ConfigValidationError(f"{where} must be a mapping")
+    unknown = set(p) - PRESENTATION_KEYS
+    if unknown:
+        raise ConfigValidationError(f"{where} has unknown key(s): {', '.join(sorted(unknown))}")
+    mode = p.get("mode", "moving_window")
+    if mode not in PRESENTATION_MODES:
+        raise ConfigValidationError(f"{where}.mode must be one of {', '.join(PRESENTATION_MODES)}")
+    for key in ("field", "question_field", "distractor_field"):
+        if key in p and not (isinstance(p[key], str) and p[key]):
+            raise ConfigValidationError(f"{where}.{key} must be the name of an item field")
+    sep = p.get("region_separator")
+    if sep is not None and not (isinstance(sep, str) and 1 <= len(sep) <= 3 and sep.strip()):
+        raise ConfigValidationError(f"{where}.region_separator must be 1-3 characters, such as |")
+    mask = p.get("mask_char", "-")
+    if not (isinstance(mask, str) and len(mask) == 1):
+        raise ConfigValidationError(f"{where}.mask_char must be one character")
+    if mode == "maze":
+        if not p.get("distractor_field"):
+            raise ConfigValidationError(
+                f"{where}: mode maze needs distractor_field, the item field listing one "
+                "distractor per region")
+        maze_keys = p.get("maze_keys", {"left": "e", "right": "i"})
+        if (not isinstance(maze_keys, dict) or set(maze_keys) != {"left", "right"}
+                or not all(_single_key(v) for v in maze_keys.values())
+                or _single_key(maze_keys["left"]) == _single_key(maze_keys["right"])):
+            raise ConfigValidationError(
+                f"{where}.maze_keys must be {{left: <key>, right: <key>}}, two different "
+                "single keys")
+        if p.get("on_error", "stop") not in ("stop", "redo"):
+            raise ConfigValidationError(f"{where}.on_error must be stop or redo")
+        return {_single_key(v) for v in maze_keys.values()}
+    for key in ("distractor_field", "maze_keys", "on_error"):
+        if key in p:
+            raise ConfigValidationError(f"{where}.{key} applies to mode: maze only")
+    advance = _single_key(p.get("advance_key", "space"))
+    if advance is None:
+        raise ConfigValidationError(f"{where}.advance_key must be one key, or space")
+    return {advance}
+
+
+def split_regions(text: Any, separator: Optional[str]) -> List[str]:
+    if isinstance(text, list):
+        parts = [str(t) for t in text]
+    elif separator:
+        parts = str(text or "").split(separator)
+    else:
+        parts = str(text or "").split()
+    return [p.strip() for p in parts if p.strip()][:MAX_REGIONS]
+
+
+def _presentation_client(block: dict, config: dict, item_data: Optional[dict]) -> Optional[dict]:
+    p = block.get("presentation")
+    if not isinstance(p, dict):
+        return None
+    item = item_data if isinstance(item_data, dict) else {}
+    field = p.get("field") or ((config.get("item_properties") or {}).get("text_key") or "text")
+    sep = p.get("region_separator")
+    regions = split_regions(item.get(field), sep)
+    mode = p.get("mode", "moving_window")
+    out = {"mode": mode, "regions": regions, "mask_char": p.get("mask_char", "-"),
+           "question": None, "ask": True}
+    if p.get("question_field"):
+        q = item.get(p["question_field"])
+        out["question"] = str(q) if q not in (None, "") else None
+        out["ask"] = out["question"] is not None
+    if mode == "maze":
+        raw = item.get(p["distractor_field"])
+        distractors = split_regions(raw, sep)
+        if len(distractors) == len(regions) - 1:
+            distractors = [MAZE_FIRST_DISTRACTOR] + distractors
+        if len(distractors) != len(regions):
+            logger.warning("trial_timing maze: item %s has %d regions and %d distractors; "
+                           "missing ones are shown as %s", item.get("id"), len(regions),
+                           len(distractors), MAZE_FIRST_DISTRACTOR)
+            distractors = (distractors + [MAZE_FIRST_DISTRACTOR] * len(regions))[:len(regions)]
+        keys = p.get("maze_keys", {"left": "e", "right": "i"})
+        out.update({"distractors": distractors, "on_error": p.get("on_error", "stop"),
+                    "maze_keys": {"left": _single_key(keys["left"]),
+                                  "right": _single_key(keys["right"])}})
+    else:
+        out["advance_key"] = _single_key(p.get("advance_key", "space"))
+    return out
 
 
 def _override(item_data: Optional[dict], field: Optional[str]):
@@ -219,6 +376,7 @@ def client_config(config: dict, item_data: Optional[dict] = None) -> Optional[Di
         "allow_mouse": bool(response.get("allow_mouse", False)),
         "show_response_options": bool(block.get("show_response_options",
                                                 bool(response.get("allow_mouse", False)))),
+        "presentation": _presentation_client(block, config, item_data),
     }
 
 
@@ -252,6 +410,48 @@ def validate_record(record: Any, served_at: Optional[float], cfg: Dict[str, Any]
     outcome = clean.get("outcome")
     if outcome not in OUTCOMES:
         return None, ["bad_outcome"]
+    regions = record.get("regions")
+    if isinstance(regions, list):
+        kept = []
+        for r in regions[:MAX_REGIONS]:
+            if not isinstance(r, dict):
+                continue
+            row = {}
+            for f in ("index", "rt_ms", "errors"):
+                v = r.get(f)
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v:
+                    row[f] = v
+            for f in ("correct",):
+                if isinstance(r.get(f), bool):
+                    row[f] = r[f]
+            for f in ("text", "side"):
+                if isinstance(r.get(f), str) and len(r[f]) <= 200:
+                    row[f] = r[f]
+            if "rt_ms" in row and row["rt_ms"] < 0:
+                flags.append("bad_region_rt")
+            kept.append(row)
+        clean["regions"] = kept
+    pres = cfg.get("presentation") or {}
+    if outcome == "completed" and not pres.get("regions"):
+        flags.append("completed_without_presentation")
+    elif outcome == "completed":
+        # The page ends a trial as `completed` only when there is no question
+        # to ask after reading (trial-timing.js endReading), and only after
+        # the last region, or at a maze error with on_error: stop.
+        if pres.get("ask", True) and cfg.get("schema"):
+            flags.append("completed_with_question")
+        kept = clean.get("regions") or []
+        maze_stop = (pres.get("mode") == "maze" and pres.get("on_error", "stop") == "stop"
+                     and kept and kept[-1].get("correct") is False)
+        if maze_stop:
+            flags.append("maze_error")
+            if len(kept) > len(pres["regions"]):
+                flags.append("regions_incomplete")
+        elif len(kept) != len(pres["regions"]):
+            flags.append("regions_incomplete")
+    if pres.get("regions") and (clean.get("reloads") or 0) > 0:
+        # The sentence restarts on a reload, so the regions are a second reading.
+        flags.append("reloaded_mid_trial")
     if outcome == "response":
         if clean.get("label") is None:
             flags.append("response_without_label")
@@ -279,6 +479,9 @@ def validate_record(record: Any, served_at: Optional[float], cfg: Dict[str, Any]
         rt = clean.get("rt_ms")
         if rt is not None and rt > elapsed_ms + SERVER_CLOCK_TOLERANCE_MS:
             flags.append("rt_exceeds_server_elapsed")
+        reading = sum(r.get("rt_ms", 0) for r in clean.get("regions") or [])
+        if reading > elapsed_ms + SERVER_CLOCK_TOLERANCE_MS:
+            flags.append("reading_exceeds_server_elapsed")
         deadline = cfg.get("trial_duration_ms")
         if outcome == "timeout":
             if not deadline:
@@ -297,8 +500,15 @@ def validate_record(record: Any, served_at: Optional[float], cfg: Dict[str, Any]
 
 
 def excuses_required_answer(record: Optional[Dict[str, Any]]) -> bool:
-    """A real timeout lets the participant move on without an answer."""
-    if not isinstance(record, dict) or record.get("outcome") != "timeout":
+    """A real timeout lets the participant move on without an answer, and so
+    does a read sentence that had no question to ask."""
+    if not isinstance(record, dict):
+        return False
+    if record.get("outcome") == "completed":
+        bad = {"completed_without_presentation", "completed_with_question",
+               "regions_incomplete", "not_served"}
+        return not (set(record.get("flags") or []) & bad)
+    if record.get("outcome") != "timeout":
         return False
     bad = {"timeout_too_early", "timeout_without_deadline", "not_served"}
     return not (set(record.get("flags") or []) & bad)
@@ -307,7 +517,7 @@ def excuses_required_answer(record: Optional[Dict[str, Any]]) -> bool:
 def is_terminal(record: Optional[Dict[str, Any]]) -> bool:
     if not isinstance(record, dict):
         return False
-    if record.get("outcome") == "timeout":
+    if record.get("outcome") in ("timeout", "completed"):
         return excuses_required_answer(record)
     return record.get("outcome") == "response"
 

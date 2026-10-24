@@ -41,6 +41,19 @@ TOUCH_USABLE_TYPES = POCKET_CAPABLE_TYPES | {
     "semantic_differential",
     "span",
     "image_annotation",
+    # Each verified at phone width with tests/helpers/mobile.py in its own
+    # Playwright file (test_<type>_ui.py and kin), taps or touch drags included.
+    "interlinear_gloss",
+    "ego_network",
+    "free_list",
+    "triad_test",
+    "price_list",
+    "bdm",
+    "belief_elicitation",
+    "spectrogram_annotation",
+    "geo_annotation",
+    "list_experiment",
+    "randomized_response",
 }
 
 

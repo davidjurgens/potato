@@ -101,8 +101,10 @@ def _register_builtin_text_importers() -> None:
     # records overlap heavily -- Prodigy is checked first because it keys on
     # fields doccano never emits, while doccano's own shape would happily claim
     # a Prodigy file.
+    from .tei import TEIImporter
+
     for importer in (QDPXImporter(), BratImporter(), CoNLLImporter(),
-                     ProdigyImporter(), DoccanoImporter()):
+                     ProdigyImporter(), DoccanoImporter(), TEIImporter()):
         text_import_registry.register(importer)
 
 

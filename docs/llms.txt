@@ -17,9 +17,9 @@ Potato 1.0, EMNLP 2022 (System Demonstrations), https://aclanthology.org/2022.em
 Generated from the running code, not maintained by hand. Prefer these over prose
 when writing a config or calling the API.
 
-- [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json): every valid config.yaml key, all 63 annotation types and 24 display types; validates a config before the server runs
-- [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json): all 502 HTTP paths, with auth (`x-potato-auth`) and config gating (`x-potato-requires-config`) per operation
-- [Examples catalog](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-examples.manifest.json): all 229 example projects, with the annotation types, display types and features each one demonstrates
+- [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json): every valid config.yaml key, all 76 annotation types and 27 display types; validates a config before the server runs
+- [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json): all 512 HTTP paths, with auth (`x-potato-auth`) and config gating (`x-potato-requires-config`) per operation
+- [Examples catalog](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-examples.manifest.json): all 249 example projects, with the annotation types, display types and features each one demonstrates
 - [How to use them](https://potatoannotator.readthedocs.io/en/latest/api-reference/machine_readable/): editor setup, CI validation, jq recipes
 - [MCP server](https://potatoannotator.readthedocs.io/en/latest/tools/mcp_server/): `potato mcp serve` exposes the registries, the validator and a headless renderer as MCP tools
 - [Agent instructions](https://potatoannotator.readthedocs.io/en/latest/tools/authoring-agents/): the Claude Code skill and `AGENTS.md` for building a task, published separately at github.com/davidjurgens/potato-skill
@@ -49,12 +49,30 @@ when writing a config or calling the API.
 - [Experiment Flow](https://potatoannotator.readthedocs.io/en/latest/workflow/experiment_flow/): between-subjects conditions, page branching (show_when), screen-outs (exit_when), counterbalancing, randomized question order
 - [jsPsych Phase](https://potatoannotator.readthedocs.io/en/latest/workflow/jspsych_phase/): run a jsPsych 8 timeline as one page of a Potato study; data stored and exported per participant
 - [Timed Trials](https://potatoannotator.readthedocs.io/en/latest/workflow/timed_trials/): fixation, stimulus duration, response deadline, key-to-label reaction times on annotation items
+- [Sensitive Questions](https://potatoannotator.readthedocs.io/en/latest/annotation-types/measurement/sensitive_questions/): list experiments (item count technique) and randomized response (forced response, crosswise), estimated in the survey_experiments export
+- [Vocabulary Tests](https://potatoannotator.readthedocs.io/en/latest/annotation-types/measurement/vocabulary_test/): LexTALE-style word/nonword decision, scored in the lextale export; item lists not bundled
+- [Interlinear Glossed Text](https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/interlinear_gloss/): word-by-word morpheme segmentation and Leipzig glosses with alignment checks; FLExText and Toolbox import/export, gb4e LaTeX export
+- [Ego Networks](https://potatoannotator.readthedocs.io/en/latest/annotation-types/structured/ego_network/): name generators, interpreters, dyad census and a sociogram in one question; GraphML and density export; Network Canvas import
+- [Free Lists and Triad Tests](https://potatoannotator.readthedocs.io/en/latest/guides/cultural-domain-analysis/): free listing with salience (Smith's S), triad tests with balanced designs, pile sorts and cultural consensus analysis
+- [Incentive Payments](https://potatoannotator.readthedocs.io/en/latest/advanced/incentives/): price lists (Holt-Laury, time preference), BDM bids and scored belief reports, with seeded payoff draws and a Prolific bonus file
+- [Maps](https://potatoannotator.readthedocs.io/en/latest/annotation-types/spatial/geo_annotation/): points, lines and polygons on a map stored as GeoJSON; offline basemaps; draw-a-map heat maps for perceptual dialectology
+- [Protein Structures](https://potatoannotator.readthedocs.io/en/latest/annotation-types/science/protein_structures/): residues selected in 3Dmol.js (vendored) or Mol* (potato vendor fetch); mmCIF, BinaryCIF, PDB; pLDDT and PAE
+- [Genome Loci](https://potatoannotator.readthedocs.io/en/latest/annotation-types/science/genome_loci/): variant review in igv.js from local FASTA, BAM, VCF and BED over range requests; clicked calls stored by viewer_selection
+- [Spectrogram Annotation](https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/spectrogram_annotation/): time-frequency boxes on audio; Raven, Audacity and BirdNET import and export
+- [Camera Traps](https://potatoannotator.readthedocs.io/en/latest/guides/camera-traps/): review MegaDetector and COCO Camera Traps output; export MegaDetector JSON, Camtrap DP and Darwin Core
+- [Digital Humanities Formats](https://potatoannotator.readthedocs.io/en/latest/guides/digital-humanities/): IIIF manifests in and out, W3C Web Annotation import, PAGE XML line correction, TEI P5
+- [Content Analysis](https://potatoannotator.readthedocs.io/en/latest/guides/content-analysis/): codebooks from a CSV (taxonomy_file) and Krippendorff's alpha per variable with bootstrap intervals
+- [Coming from Ibex and PCIbex](https://potatoannotator.readthedocs.io/en/latest/guides/coming-from-ibex/): import an Ibex or PCIbex experiment folder, with Latin-square lists
+- [Self-Paced Reading and Maze](https://potatoannotator.readthedocs.io/en/latest/workflow/self_paced_reading/): moving-window, centred and cumulative self-paced reading and the (A-)maze task, with per-region reading times
+- [Listening Tests](https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/listening_tests/): MUSHRA (ITU-R BS.1534), BS.1116, ACR/DCR/CCR (ITU-T P.800/P.808), P.835 and ABX, blinded, with MOS and post-screening export
+- [Runtime Phases](https://potatoannotator.readthedocs.io/en/latest/workflow/runtime_phases/): jsPsych pages and the built-in headphone check (Huggins pitch, antiphase)
+- [Importing Surveys](https://potatoannotator.readthedocs.io/en/latest/tools/survey_import/): Qualtrics .qsf, SurveyJS, LimeSurvey .lss, XLSForm (ODK/Kobo), REDCap data dictionaries and Beiwe as Potato survey pages with their display logic
 - [Multi-Phase Workflows](https://potatoannotator.readthedocs.io/en/latest/workflow/surveyflow/): consent, screeners, instructions, training, post-study surveys
 - [Survey Instruments](https://potatoannotator.readthedocs.io/en/latest/advanced/survey_instruments/): 55 validated questionnaires by name (TIPI, PHQ-9, GAD-7, ...)
 
 ## Annotation
 
-- [Schema Gallery](https://potatoannotator.readthedocs.io/en/latest/annotation-types/schemas_and_templates/): all 63 annotation types
+- [Schema Gallery](https://potatoannotator.readthedocs.io/en/latest/annotation-types/schemas_and_templates/): all 76 annotation types
 - [Configuration Reference](https://potatoannotator.readthedocs.io/en/latest/configuration/config_reference/): every config option
 - [Quality Control](https://potatoannotator.readthedocs.io/en/latest/workflow/quality_control/): IAA, gold standards, attention checks
 - [Labeling Engine](https://potatoannotator.readthedocs.io/en/latest/labeling-engine/overview/): models label the dataset; a blind random human sample certifies which machine labels to accept, with stated error bounds and prevalence intervals

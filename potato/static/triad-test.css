@@ -1,0 +1,51 @@
+/* Triad tests (annotation_type: triad_test). Theme tokens only. */
+form.triad-test, .triad-test fieldset, .triad-test .tt-root { width: 100%; box-sizing: border-box; min-width: 0; }
+.triad-test .tt-title { font-weight: 600; margin-bottom: 0.4rem; }
+.triad-test .tt-instructions { margin: 0 0 0.75rem; color: var(--muted-foreground); }
+.triad-test .tt-root { display: flex; flex-direction: column; gap: 0.6rem; outline: none; }
+.triad-test .tt-loading, .triad-test .tt-keys { color: var(--muted-foreground); font-size: 0.85rem; margin: 0; }
+.triad-test .tt-error { color: var(--destructive-text, var(--destructive)); margin: 0; }
+
+.triad-test .tt-head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.triad-test .tt-progress { margin: 0; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.triad-test .tt-bar { flex: 1 1 8rem; height: 0.35rem; border-radius: 1rem; background: var(--muted); overflow: hidden; }
+.triad-test .tt-bar-fill { display: block; height: 100%; width: 0; background: var(--primary); transition: width 0.2s ease; }
+.triad-test .tt-question { margin: 0.25rem 0 0; font-weight: 600; }
+
+.triad-test .tt-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+.triad-test .tt-option {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    min-height: 4.5rem; padding: 0.75rem 1rem 0.75rem 2.25rem;
+    border: 1px solid var(--border); border-radius: 0.6rem;
+    background: var(--card); color: var(--card-foreground);
+    font: inherit; font-size: 1.05rem; text-align: center; cursor: pointer;
+}
+.triad-test .tt-option:hover { background: var(--secondary); }
+.triad-test .tt-option:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.triad-test .tt-option[aria-checked="true"] {
+    border-color: var(--primary); background: var(--primary-tint, var(--secondary));
+    box-shadow: inset 0 0 0 2px var(--primary);
+}
+.triad-test .tt-key {
+    position: absolute; top: 0.45rem; left: 0.55rem; min-width: 1.25rem; padding: 0 0.25rem;
+    border: 1px solid var(--border); border-radius: 0.3rem;
+    font-size: 0.75rem; line-height: 1.25rem; color: var(--muted-foreground); background: var(--background);
+}
+.triad-test .tt-option[aria-checked="true"] .tt-key { border-color: var(--primary); color: var(--foreground); }
+.triad-test .tt-item { overflow-wrap: anywhere; }
+
+.triad-test .tt-nav { display: flex; justify-content: space-between; gap: 0.5rem; }
+.triad-test .tt-nav button {
+    min-height: 2.5rem; padding: 0.4rem 0.9rem; border: 1px solid var(--border); border-radius: 0.5rem;
+    background: var(--card); color: var(--card-foreground); font: inherit; cursor: pointer;
+}
+.triad-test .tt-nav button:hover:not(:disabled) { background: var(--secondary); }
+.triad-test .tt-nav button:disabled { opacity: 0.45; cursor: not-allowed; }
+.triad-test .tt-nav button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.triad-test .tt-done { margin: 0; color: var(--success-text, var(--foreground)); font-weight: 500; }
+.triad-test .tt-done[hidden] { display: none; }
+
+@media (max-width: 560px) {
+    .triad-test .tt-options { grid-template-columns: 1fr; }
+    .triad-test .tt-option { min-height: 3.25rem; justify-content: flex-start; text-align: left; }
+}

@@ -22,6 +22,16 @@ them on save.
 |---|---|---|
 | **Label Studio** | JSON export + labeling config XML | Questions, every annotator's answers and model predictions. See [Coming from Label Studio](coming-from-label-studio.md) |
 | **Argilla** | `to_disk` folder or `to_hub` dataset | Questions, responses, suggestions and guidelines. See [Coming from Argilla](coming-from-argilla.md) |
+| **Zooniverse** | Workflow, classification and subject exports | Tasks, branching, subjects and volunteers' classifications. See [Coming from Zooniverse](coming-from-zooniverse.md) |
+| **Ibex, PCIbex** | Experiment folder (`data_includes/`, `chunk_includes/`) | Items, Latin-square lists and the main trial type (self-paced reading, maze, rating, two-key choice). See [Coming from Ibex](coming-from-ibex.md) |
+| **Network Canvas** | `.netcanvas` protocol | Ego forms and network stages as survey pages with an ego-network question. See [Coming from Network Canvas](coming-from-network-canvas.md) |
+| **FieldWorks (FLEx), Toolbox** | `.flextext`, Toolbox text files | Interlinear text with morphemes and glosses, pre-filled for review. See [Linguistic fieldwork](linguistic-fieldwork.md) |
+| **MegaDetector, COCO Camera Traps** | Batch-output JSON, COCO JSON with `seq_id` | Detections as boxes to review, empty/animal/person/vehicle triage, sequences. See [Camera traps](camera-traps.md) |
+| **Raven, Audacity, BirdNET** | Selection tables, label tracks, BirdNET output | Time-frequency boxes on a spectrogram. See [Bioacoustics](bioacoustics.md) |
+| **IIIF, W3C Web Annotation, Transkribus, eScriptorium, TEI** | Manifests, annotation JSON-LD, PAGE XML, TEI P5 | Canvases with their annotations, HTR line correction, named entities as spans. See [Digital humanities formats](digital-humanities.md) |
+| **Praat, ELAN** | `.TextGrid`, `.eaf` (one file or a folder, with the audio beside it) | Tiers and segments as a pre-filled tiered annotation. See [below](#tiered-audio-praat-and-elan) |
+| **Qualtrics, SurveyJS, LimeSurvey, REDCap, Beiwe** | `.qsf`, survey JSON, `.lss`, data dictionary `.csv`, survey JSON | Questions, pages and display logic as survey pages. See [Importing surveys](../tools/survey_import.md) |
+| **ODK, KoboToolbox, SurveyCTO** | XLSForm `.xlsx` | As above. See [Coming from ODK](coming-from-odk.md) |
 | **brat** | `.ann` + `.txt` | Directory of file pairs. Discontinuous mentions survive; relations do not yet |
 | **doccano** | JSONL | Sequence labelling and document classification |
 | **Prodigy** | `db-out` JSONL | Rejected tasks are dropped by default — see below |
@@ -60,6 +70,26 @@ the data file. With `--keep-annotators`, each person's answers become that
 person's saved work, so Potato reports agreement between them as soon as it
 starts. Without it, only the suggestions come across. The per-tool pages list
 what maps to what and what is left out.
+
+---
+
+## Tiered audio: Praat and ELAN
+
+```bash
+potato import -i recordings/ -o my-project
+```
+
+`recordings/` holds `.TextGrid` (or `.eaf`) files, each with an audio or
+video file of the same name beside it (`interview01.TextGrid` and
+`interview01.wav`). Each file becomes an item; its audio is copied into the
+project's `media/`. Each tier becomes a tier of one `tiered_annotation`
+scheme, and every non-empty interval becomes a segment on that tier, filled
+in when an annotator opens the item. A tier with at most 30 distinct values
+(phones, speaker codes) gets them as its labels; a tier of free text keeps
+each interval's text as the segment's value. The TextGrid and EAF exporters
+write the corrected tiers back out.
+
+TextGrids in UTF-16 (as Praat often saves them) and UTF-8 are both read.
 
 ---
 

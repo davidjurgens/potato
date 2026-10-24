@@ -108,6 +108,35 @@ def _annotator_origin(user_state: dict, instance_id: str,
     return {"kind": "human"}
 
 
+def _span_times(user_dir: str) -> dict:
+    """When each span was last added or changed, from annotation_history.jsonl.
+
+    ``{instance_id: {"schema:start:end": epoch seconds}}``. Spans get no
+    ``annotation_changes`` entry, so this file is the only record of when one
+    was made. The history stamps server-local time without a zone, read back
+    as local time. A missing or torn file gives what could be read.
+    """
+    from datetime import datetime
+    path = os.path.join(user_dir, "annotation_history.jsonl")
+    out: dict = {}
+    if not os.path.isfile(path):
+        return out
+    with open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            try:
+                action = json.loads(line)
+                if action.get("action_type") not in ("add_span", "update_span"):
+                    continue
+                span = action.get("span_data") or {}
+                key = f"{action.get('schema_name')}:{int(span['start'])}:{int(span['end'])}"
+                ts = datetime.fromisoformat(action["timestamp"]).timestamp()
+            except (ValueError, TypeError, KeyError, AttributeError):
+                continue
+            bucket = out.setdefault(str(action.get("instance_id")), {})
+            bucket[key] = max(ts, bucket.get(key, ts))
+    return out
+
+
 def load_annotations_from_output_dir(output_dir: str, schemas: list,
                                      config: Optional[Mapping] = None) -> list:
     """
@@ -137,6 +166,7 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
 
     for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
+        span_times = {} if uses_mysql(config) else _span_times(os.path.join(output_dir, user_dir))
 
         # Extract label annotations
         label_data = user_state.get("instance_id_to_label_to_value", {})
@@ -195,6 +225,8 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
                 # the two measures neither group, and nothing else in the
                 # record says which this row is.
                 "_origin": _annotator_origin(user_state, instance_id, roster),
+                # When each span was last saved, keyed "schema:start:end".
+                "_span_times": span_times.get(instance_id, {}),
             }
 
             # Process span data.

@@ -17,6 +17,12 @@
  *
  * The record goes to the server with the normal save (annotation.js puts
  * window.potatoTrial.record() in the /updateinstance body).
+ *
+ * With trial_timing.presentation the stimulus is the item's text shown one
+ * region at a time (moving window, centred, cumulative, or the maze task).
+ * Each region appears on a frame boundary like the stimulus does, and its
+ * reading time is the next key press minus that frame. After the last region
+ * the comprehension question, if any, runs as the normal response window.
  */
 (function () {
     'use strict';
@@ -43,6 +49,13 @@
     var reloads = 0;
     var result = null;
     var rafId = null;
+    var pres = cfg.presentation || null;
+    var regionIndex = -1;
+    var regionOnset = null;
+    var regionErrors = 0;
+    var regionLog = [];
+    var mazeCorrectSide = null;
+    var readingEl = null;
 
     var api = {
         ownsKeys: false,
@@ -178,9 +191,154 @@
         });
     }
 
+    // ---- Word-by-word presentation (self-paced reading, RSVP, maze) -----
+
+    function mask(text) {
+        return text.replace(/\S/g, pres.mask_char || '-');
+    }
+
+    function buildReading() {
+        var area = document.querySelector('.instance-area');
+        readingEl = document.createElement('div');
+        readingEl.id = 'potato-trial-reading';
+        readingEl.className = 'potato-trial-reading potato-trial-reading-' + pres.mode;
+        readingEl.setAttribute('aria-live', 'off');
+        if (area) { area.appendChild(readingEl); }
+        body.classList.add('potato-trial-presenting');
+        var legend = document.getElementById('potato-trial-keys');
+        var hint = pres.mode === 'maze'
+            ? (pres.maze_keys.left.toUpperCase() + ' = left word    ' + pres.maze_keys.right.toUpperCase() + ' = right word')
+            : ((pres.advance_key === ' ' ? 'Space' : pres.advance_key.toUpperCase()) + ' = next word');
+        var p = document.createElement('p');
+        p.id = 'potato-trial-reading-keys';
+        p.className = 'potato-trial-keys';
+        p.textContent = hint;
+        if (area) { area.parentNode.insertBefore(p, area.nextSibling); }
+        if (legend) { legend.hidden = true; }
+    }
+
+    function renderRegion(i) {
+        var regions = pres.regions;
+        readingEl.innerHTML = '';
+        if (pres.mode === 'maze') {
+            var correctLeft = Math.random() < 0.5;
+            mazeCorrectSide = correctLeft ? 'left' : 'right';
+            var right = regions[i], wrong = pres.distractors[i] || 'x-x-x';
+            [correctLeft ? right : wrong, correctLeft ? wrong : right].forEach(function (w, k) {
+                var span = document.createElement('span');
+                span.className = 'potato-trial-maze-word potato-trial-maze-' + (k ? 'right' : 'left');
+                span.textContent = w;
+                readingEl.appendChild(span);
+            });
+            return;
+        }
+        if (pres.mode === 'centered') {
+            var only = document.createElement('span');
+            only.className = 'potato-trial-region potato-trial-region-current';
+            only.textContent = regions[i];
+            readingEl.appendChild(only);
+            return;
+        }
+        regions.forEach(function (r, k) {
+            var span = document.createElement('span');
+            var shown = k === i || (pres.mode === 'cumulative' && k < i);
+            span.className = 'potato-trial-region' + (k === i ? ' potato-trial-region-current' : '');
+            span.textContent = shown ? r : mask(r);
+            readingEl.appendChild(span);
+            if (k < regions.length - 1) { readingEl.appendChild(document.createTextNode(' ')); }
+        });
+    }
+
+    function startReading() {
+        buildReading();
+        regionIndex = -1;
+        // The masked sentence first (or nothing, for centred and maze), then
+        // the first region on the first key press -- the usual self-paced
+        // reading start. The maze starts on its first word pair at once.
+        if (pres.mode === 'maze') {
+            showRegion(0);
+        } else {
+            if (pres.mode !== 'centered') {
+                readingEl.textContent = pres.regions.map(mask).join(' ');
+            }
+            setPhase('reading');
+        }
+    }
+
+    function showRegion(i) {
+        regionIndex = i;
+        regionErrors = 0;
+        renderRegion(i);
+        setPhase('reading');
+        rafId = requestAnimationFrame(function () {
+            rafId = requestAnimationFrame(function (ts) { regionOnset = ts; });
+        });
+    }
+
+    function readingKey(key, ts) {
+        if (pres.mode === 'maze') {
+            if (regionOnset === null) { return; }
+            var side = key === pres.maze_keys.left ? 'left' : (key === pres.maze_keys.right ? 'right' : null);
+            if (!side) { return; }
+            var correct = side === mazeCorrectSide;
+            if (!correct && pres.on_error === 'redo') {
+                regionErrors++;
+                readingEl.classList.add('potato-trial-maze-error');
+                setTimeout(function () { readingEl.classList.remove('potato-trial-maze-error'); }, 300);
+                return;
+            }
+            regionLog.push({index: regionIndex, text: pres.regions[regionIndex],
+                            rt_ms: Math.round((ts - regionOnset) * 10) / 10,
+                            correct: correct, side: side, errors: regionErrors});
+            if (!correct) { endReading(); return; }      // on_error: stop
+        } else {
+            if (key !== pres.advance_key) { return; }
+            if (regionIndex >= 0 && regionOnset !== null) {
+                regionLog.push({index: regionIndex, text: pres.regions[regionIndex],
+                                rt_ms: Math.round((ts - regionOnset) * 10) / 10});
+            }
+        }
+        regionOnset = null;
+        if (regionIndex + 1 < pres.regions.length) { showRegion(regionIndex + 1); }
+        else { endReading(); }
+    }
+
+    function endReading() {
+        if (readingEl) { readingEl.innerHTML = ''; }
+        var keysHint = document.getElementById('potato-trial-reading-keys');
+        if (keysHint) { keysHint.hidden = true; }
+        if (!pres.ask || !cfg.schema) {
+            finish('completed', null, performance.now());
+            return;
+        }
+        var legend = document.getElementById('potato-trial-keys');
+        if (legend) { legend.hidden = false; }
+        if (pres.question) {
+            var q = document.createElement('p');
+            q.className = 'potato-trial-question';
+            q.textContent = pres.question;
+            readingEl.appendChild(q);
+        } else {
+            body.classList.remove('potato-trial-presenting');
+        }
+        // The question is the stimulus of a normal response window.
+        rafId = requestAnimationFrame(function () {
+            rafId = requestAnimationFrame(function (ts) {
+                onset = ts;
+                setPhase('response');
+                if (cfg.show_response_options) { body.classList.add('potato-trial-responding'); }
+                loop(ts);
+            });
+        });
+    }
+
     function reveal() {
         rafId = requestAnimationFrame(function () {
             body.classList.remove('potato-trial-pending');
+            if (pres && pres.regions && pres.regions.length) {
+                startReading();
+                return;
+            }
             rafId = requestAnimationFrame(function (ts) {
                 onset = ts;
                 fullscreenAtOnset = !!document.fullscreenElement;
@@ -239,7 +397,8 @@
             key: key === ' ' ? 'space' : key,
             label: label,
             rt_ms: outcome === 'response' ? Math.round((ts - onset) * 10) / 10 : null,
-            onset_epoch_ms: Math.round(performance.timeOrigin + onset),
+            onset_epoch_ms: Math.round(performance.timeOrigin + (onset !== null ? onset : ts)),
+            regions: pres ? regionLog : undefined,
             fixation_ms_actual: fixationActual,
             stimulus_ms_actual: stimulusActual,
             iti_actual_ms: itiActual,
@@ -258,7 +417,8 @@
         };
         writeSession(LAST_END_KEY, String(performance.timeOrigin + ts));
         writeSession(STARTED_KEY, null);
-        advance(outcome === 'timeout', 0);
+        // A read sentence with no question has nothing to answer either.
+        advance(outcome === 'timeout' || outcome === 'completed', 0);
     }
 
     // annotation.js refuses to navigate while it is still loading or saving;
@@ -285,6 +445,16 @@
         if (!api.ownsKeys) { return; }
         var key = normalizeKey(e);
         var mapped = Object.prototype.hasOwnProperty.call(cfg.keys || {}, key);
+        if (state === 'reading') {
+            var readKeys = pres.mode === 'maze' ? [pres.maze_keys.left, pres.maze_keys.right]
+                : [pres.advance_key];
+            if (readKeys.indexOf(key) >= 0) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (!e.repeat) { readingKey(key, e.timeStamp); }
+            }
+            return;
+        }
         if (state === 'response') {
             if (mapped) {
                 e.preventDefault();

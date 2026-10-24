@@ -8011,3 +8011,12 @@ body > .container-fluid {
     outline: 2px solid var(--ring, #6e56cf);
     outline-offset: 1px;
 }
+
+/* Sensitive-question designs (list_experiment, randomized_response): the
+   statements, then the question's own form at the full width. */
+.survey-experiment { width: 100%; grid-column: 1 / -1; }
+.survey-experiment > .annotation-form { width: 100%; max-width: none; }
+.survey-experiment-list { margin: 0.25rem 0 0.75rem; padding-left: 1.5rem; }
+.survey-experiment-list li { margin: 0.2rem 0; }
+.survey-experiment-note, .survey-experiment-randomizer { color: var(--muted-foreground); }
+.survey-experiment-randomizer { border-left: 3px solid var(--border); padding-left: 0.75rem; }

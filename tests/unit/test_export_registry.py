@@ -167,8 +167,12 @@ class TestBuiltinExportersRegistered:
             "adjudication",
             # The labeling engine's resolved labels and certificate.
             "labeling_engine",
-            # Trial data from embedded jsPsych timelines (project SQLite).
-            "jspsych",
+            # Incentive payments (price_list / bdm / belief_elicitation).
+            "incentives",
+            # Trial data from runtime phase pages (project SQLite).
+            "jspsych", "runtime",
+            # Interchange: W3C Web Annotation, Frictionless, Psych-DS.
+            "web_annotation", "data_package", "psych_ds", "listening_test", "survey_experiments", "reliability", "lextale", "flextext", "toolbox", "igt", "ego_network", "cultural_domain", "megadetector", "camtrap_dp", "darwin_core", "raven", "audacity_labels", "geojson", "geo_overlap", "iiif_annotations", "page_xml", "tei",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}
@@ -253,11 +257,15 @@ class TestTheFormatListIsPinned:
         "agent_eval", "coding_eval", "episode_jsonl",
         "trajectory_correction", "annotation_telemetry", "keystrokes",
         # behavioral experiments
-        "jspsych",
+        "jspsych", "runtime",
+        # interchange and repository packaging
+        "web_annotation", "data_package", "psych_ds", "listening_test", "survey_experiments", "reliability", "lextale", "flextext", "toolbox", "igt", "ego_network", "cultural_domain", "megadetector", "camtrap_dp", "darwin_core", "raven", "audacity_labels", "geojson", "geo_overlap", "iiif_annotations", "page_xml", "tei",
         # adjudication outcome
         "adjudication",
         # labeling engine deliverable
         "labeling_engine",
+        # incentive payments
+        "incentives",
     }
 
     def test_every_registered_format_is_accounted_for(self):

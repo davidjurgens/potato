@@ -348,6 +348,21 @@ def _resolve_generated_template_path(html_file: str) -> str:
 # so adding a new generator or renaming a CSS class will cause a test failure
 # rather than a silent asset-loading miss.
 FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
+    "listening_test": ('data-annotation-type="listening_test"',),
+    # Viewer displays (protein_structure, genome_locus) and the viewer_selection
+    # scheme. Only the framework and adapters load here; each viewer fetches
+    # its library (3Dmol.js, igv.js, Mol*) itself when it mounts.
+    "viewer_display": ('class="potato-viewer', 'data-annotation-type="viewer_selection"'),
+    "spectrogram_annotation": ('data-annotation-type="spectrogram_annotation"',),
+    # Maps. OpenLayers is ~900 KB, so only a page with a map pays for it.
+    "geo_annotation": ('data-annotation-type="geo_annotation"',),
+    "ego_network": ('data-annotation-type="ego_network"',),
+    # Cultural domain analysis: free lists and triad tests share one gate.
+    "cultural_domain": ('data-annotation-type="free_list"', 'data-annotation-type="triad_test"'),
+    # price_list, bdm and belief_elicitation share one script and stylesheet.
+    "incentive_elicitation": ('data-annotation-type="price_list"', 'data-annotation-type="bdm"',
+                              'data-annotation-type="belief_elicitation"'),
+    "interlinear_gloss": ('data-annotation-type="interlinear_gloss"',),
     "image_annotation": ("image-annotation-container",),
     # Interactive segmentation, keyed on the tool button the schema renders.
     # Gated separately from image_annotation because the ONNX runtime is a
@@ -537,7 +552,8 @@ def _next_instance_prefetch_urls(user_state) -> list:
         if not ism.has_item(next_id):
             return []
 
-        data = ism.get_item(next_id).get_data() or {}
+        # Only fields the page may see: a listening test's files are private.
+        data = _strip_cloze_answers(ism.get_item(next_id).get_data() or {})
         urls = []
         for value in data.values():
             if _looks_prefetchable(value):
@@ -1859,6 +1875,9 @@ def load_all_data(config: dict):
     # cot_trace display + process_reward schema). Must run after items load so
     # every static item is segmented before assignment/rendering.
     apply_cot_segmentation_to_all(config)
+    # A listening test item that would lose its reference or slots.
+    from potato.listening.checks import check_items as _check_listening_items
+    _check_listening_items(config, get_item_state_manager())
     # Replay model predictions from previous training runs back into item data.
     # They are not durable on their own: item_data["predictions"] is populated
     # from the input file at load time and nothing re-persists it, so without
@@ -2388,14 +2407,15 @@ def load_phase_data(config: dict) -> None:
 
             phase = phases_dict[phase_name]
 
-            # An embedded jsPsych timeline: no questions, its own page.
-            from potato.jspsych.phase import is_jspsych_entry, register_jspsych_page, TEMPLATE
-            if is_jspsych_entry(phase):
-                register_jspsych_page(config, phase_name, phase,
+            # A study for another runtime (jsPsych, OSWeb, ...): no questions,
+            # its own page.
+            from potato.runtimes.phase import is_runtime_entry, register_runtime_page, TEMPLATE
+            if is_runtime_entry(phase):
+                register_runtime_page(config, phase_name, phase,
                                       lambda p: get_abs_or_rel_path(p, config))
                 get_user_state_manager().add_phase(
                     UserPhase.fromstr(phase["type"]), phase_name, TEMPLATE)
-                logger.debug(f"Registered jsPsych phase {phase_name} as {phase['type']}")
+                logger.debug(f"Registered {phase['_kind']} phase {phase_name} as {phase['type']}")
                 continue
 
             # Handle new format with annotation_schemes directly in phase
@@ -3199,9 +3219,9 @@ def get_current_page_html(config, username):
     usm = get_user_state_manager()
     html_fname = usm.get_phase_html_fname(phase, page)
 
-    from potato.jspsych.phase import jspsych_pages, render_jspsych_page
-    if page in jspsych_pages(config):
-        return render_jspsych_page(config, username, user_state, phase, page)
+    from potato.runtimes.phase import render_runtime_page, runtime_pages
+    if page in runtime_pages(config):
+        return render_runtime_page(config, username, user_state, phase, page)
 
     try:
         _phase_finished, _phase_total = progress_counts(username)
@@ -3435,7 +3455,8 @@ def get_current_page_html(config, username):
             types_tag.string = "window.priorPhaseAnswerTypes = " + types_json + ";"
             target.append(types_tag)
 
-    return str(soup)
+    from potato.server_utils.phase_flow import apply_condition_markup
+    return apply_condition_markup(str(soup), context.get('potato_conditions'))
 
 def _sanitize_codebook_url(url: str) -> str:
     """Sanitize codebook URL to prevent javascript: and other dangerous protocols."""
@@ -4322,7 +4343,8 @@ def render_page_with_annotations(username: str):
                             f"will be pre-selected")
                 else:
                     annotations[schema_name]['slider'] = str(predicted_value)
-            elif scheme['annotation_type'] in ('image_annotation', 'spatial_annotation'):
+            elif scheme['annotation_type'] in ('image_annotation', 'spatial_annotation',
+                                               'tiered_annotation', 'spectrogram_annotation'):
                 # Image annotations live in a single hidden input under the
                 # "_data" label. The DOM walk below has a dedicated fallback for
                 # it (`if not input_fields and label == "_data"`), which sets the
@@ -4335,9 +4357,25 @@ def render_page_with_annotations(username: str):
                 # objects work the same way (spatial_utils' contract: metres in
                 # the sensor frame, with `frame` and `track_id` on a sequence),
                 # restored by the viewer's _restoreFromInput.
+                # A tiered annotation is one JSON object, {"annotations":
+                # {tier: [...]}}, read back by _loadExistingAnnotations().
+                if scheme['annotation_type'] == 'spectrogram_annotation':
+                    # An untouched prefill is saved on Next as the annotator's
+                    # reviewed answer (source: import kept), so entries that
+                    # are not boxes must not reach the page at all.
+                    from potato.server_utils.acoustic_tables import clean_prefill
+                    predicted_value, dropped = clean_prefill(predicted_value)
+                    if dropped:
+                        logger.warning(
+                            f"Pre-annotation for spectrogram schema {schema_name}: "
+                            f"{len(dropped)} entr{'y' if len(dropped) == 1 else 'ies'} "
+                            f"left out because they are not boxes with a start_s and "
+                            f"end_s ({', '.join(dropped[:5])})")
                 if isinstance(predicted_value, str):
                     annotations[schema_name]['_data'] = predicted_value
-                elif isinstance(predicted_value, list):
+                elif isinstance(predicted_value, list) or (
+                        isinstance(predicted_value, dict)
+                        and scheme['annotation_type'] == 'tiered_annotation'):
                     annotations[schema_name]['_data'] = json.dumps(predicted_value)
                 else:
                     logger.warning(
@@ -4373,7 +4411,7 @@ def render_page_with_annotations(username: str):
                     annotations[s['name']]['text_box'] = s['label']
             else:
                 logger.warning('Label suggestions not supported for annotation_type %s, please submit a github issue to get support' % scheme_dict[s['name']]['annotation_type'])
-    logger.debug(f"annotations: {annotations}")
+    logger.debug("annotation schemes with values: %s", sorted(annotations) if isinstance(annotations, dict) else type(annotations).__name__)
     if annotations is not None:
         # Reset the state
         for schema_name, label_dict in annotations.items():
@@ -4483,9 +4521,9 @@ def render_page_with_annotations(username: str):
                                     if other.has_attr("selected"):
                                         del other["selected"]
                                 options[0]["selected"] = "selected"
-                                logger.debug(f"Set select {name} option to {value}")
+                                logger.debug("Set select %s from the saved answer", name)
                             else:
-                                logger.debug(f"No option found with value {value} for select {name}")
+                                logger.debug("No option matches the saved answer for select %s", name)
 
                     if False:
                         # If it's not a text area, let's see if this is the button
@@ -4557,7 +4595,10 @@ def render_page_with_annotations(username: str):
         from potato.server_utils.schemas.multirate import populate_dynamic_multirate
         rendered_html = populate_dynamic_multirate(rendered_html, item.get_data())
 
-    return rendered_html
+    # Vignette wording per condition: {condition.<factor>} in item text,
+    # questions and labels.
+    from potato.server_utils.phase_flow import apply_condition_markup
+    return apply_condition_markup(rendered_html, potato_conditions)
 
 
 def _get_inline_judge_prediction(instance_id, item):
@@ -5304,7 +5345,7 @@ def get_span_annotations_for_user_on(username, instance_id):
 
             # DEBUG: Show each span in detail
             for span, value in instance_spans.items():
-                logger.debug(f"Span: {span}, Value: {value}")
+                logger.debug("Span: %s", span)
                 if hasattr(span, 'get_schema'):
                     logger.debug(f"  Schema: {span.get_schema()}")
                     logger.debug(f"  Name: {span.get_name()}")
@@ -6804,6 +6845,12 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'download-models':
         from potato.models_cli import main as models_main
         sys.exit(models_main(sys.argv[2:]))
+
+    # ``vendor`` installs the large browser libraries some features need. It
+    # takes bundle names, not a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'vendor':
+        from potato.vendoring.cli import main as vendor_main
+        sys.exit(vendor_main(sys.argv[2:]))
 
     # ``deploy`` puts a task on a host and takes it down again. It has its own
     # subcommands and flag set, so it does not fit the mode + config_file

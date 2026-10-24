@@ -129,6 +129,9 @@ def collect_flow_answers(config: dict, user_state) -> Dict[str, Any]:
         CONDITION_PREFIX + factor: level
         for factor, level in conditions_for(user_state).items()
     }
+    # Answers a runtime page derived from its run (a headphone check's pass),
+    # beneath survey answers like conditions are.
+    flat.update(flow_record(user_state).get("runtime_answers") or {})
     types = _schema_types(config)
     store = getattr(user_state, "phase_to_page_to_label_to_value", None) or {}
     for _phase, pages in store.items():
@@ -298,3 +301,75 @@ def apply_counterbalance(config: dict, user_state, phase,
 
 def _phase_name(phase) -> str:
     return phase.value if hasattr(phase, "value") else str(phase)
+
+
+# --------------------------------------------------------------------------
+# Condition placeholders in page text
+# --------------------------------------------------------------------------
+
+_PLACEHOLDER_RE = None
+
+
+def apply_condition_markup(html: str, conditions: Optional[Dict[str, Any]]) -> str:
+    """Condition-specific page content, applied to a rendered page.
+
+    * An element with ``data-condition-only="factor=level"`` is removed
+      unless the participant is in that level (a list experiment's sensitive
+      item), so it is not in the HTML other participants receive.
+    * ``{condition.<factor>}`` is replaced by the participant's level.
+    """
+    if "data-condition-only" in html:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
+        for el in soup.select("[data-condition-only]"):
+            factor, _, level = str(el.get("data-condition-only", "")).partition("=")
+            if str((conditions or {}).get(factor)) != level:
+                el.decompose()
+            else:
+                del el["data-condition-only"]
+        html = str(soup)
+    return fill_condition_placeholders(html, conditions)
+
+
+def fill_condition_placeholders(html: str, conditions: Optional[Dict[str, Any]]) -> str:
+    """Replace ``{condition.<factor>}`` in a rendered page with the
+    participant's level of that factor (HTML-escaped).
+
+    This is how a vignette or endorsement experiment varies its wording
+    between conditions: "{condition.endorser} supports this policy" reads
+    "The governor supports this policy" in one cell and "A local group" in
+    another. Placeholders for factors the participant has no level for are
+    left as they are, so a typo shows on the page instead of vanishing.
+    """
+    global _PLACEHOLDER_RE
+    if not conditions or "{condition." not in html:
+        return html
+    import html as _html
+    import re
+    if _PLACEHOLDER_RE is None:
+        _PLACEHOLDER_RE = re.compile(r"\{condition\.([A-Za-z0-9_]+)\}")
+
+    def repl(m):
+        level = conditions.get(m.group(1))
+        return m.group(0) if level is None else _html.escape(str(level), quote=True)
+    return _PLACEHOLDER_RE.sub(repl, html)
+
+
+def fill_condition_data(value: Any, conditions: Optional[Dict[str, Any]]) -> Any:
+    """``value`` (an item record) with ``{condition.<factor>}`` filled in every
+    string, as the page shows it. Not HTML-escaped: this is data, for the
+    JSON APIs; whoever puts it in a page escapes it there."""
+    if not conditions:
+        return value
+    if isinstance(value, str):
+        if "{condition." not in value:
+            return value
+        import re
+        return re.sub(r"\{condition\.([A-Za-z0-9_]+)\}",
+                      lambda m: m.group(0) if conditions.get(m.group(1)) is None
+                      else str(conditions[m.group(1)]), value)
+    if isinstance(value, dict):
+        return {k: fill_condition_data(v, conditions) for k, v in value.items()}
+    if isinstance(value, list):
+        return [fill_condition_data(v, conditions) for v in value]
+    return value

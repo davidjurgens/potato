@@ -226,13 +226,13 @@ def _unmet_required_labels(user_state) -> list:
 def _refuse_unmet_phase_page(username, user_state):
     """The response that keeps a participant on a page with an unmet
     required answer, or None when the page may be left."""
-    # A jsPsych page is left only by its own finish call, once the run's data
-    # is stored. Without this a bare POST to /prestudy, or a leaked
-    # next_instance, would skip the task.
-    from potato.jspsych.phase import is_complete, jspsych_pages
+    # A runtime page (jsPsych, OSWeb, ...) is left only by its own finish
+    # call, once the run's data is stored. Without this a bare POST to
+    # /prestudy, or a leaked next_instance, would skip the task.
+    from potato.runtimes.phase import is_complete, runtime_pages
     _page = user_state.get_current_phase_and_page()[1]
-    if _page in jspsych_pages(config) and not is_complete(user_state, _page):
-        logger.warning("%s tried to leave jsPsych page %s before finishing it",
+    if _page in runtime_pages(config) and not is_complete(user_state, _page):
+        logger.warning("%s tried to leave task page %s before finishing it",
                        username, _page)
         return get_current_page_html(config, username), 400
     unmet = _unmet_required_labels(user_state)
@@ -464,6 +464,12 @@ def serve_media(filepath):
     if not os.path.isfile(requested):
         abort(404)
 
+    # A listening test's stimuli are heard only through their opaque slot
+    # URLs; serving them here would let a participant match files by hash.
+    from potato.listening.blind import is_protected_media
+    if is_protected_media(config, requested):
+        abort(404)
+
     # DICOM and NIfTI headers carry patient information that the volume
     # routes filter (display_tags); handing out the raw file would bypass
     # that. An administrator who wants downloads opts in.
@@ -474,14 +480,58 @@ def serve_media(filepath):
                            "is off)", filepath)
             abort(403)
 
-    response = send_from_directory(media_dir, filepath)
+    # A .gz file is served as the bytes on disk. Left to its guess, Flask sends
+    # `Content-Encoding: gzip` for one, and the browser then inflates it before
+    # the page sees it -- which breaks every reader that indexes into the
+    # compressed file: a bgzipped VCF or BED read through its .tbi index takes
+    # byte ranges of the compressed stream (genome_locus / igv.js), and a
+    # gzipped structure is inflated by the viewer itself.
+    # (.svgz keeps the header: an <img> needs it to draw one.)
+    import mimetypes
+    _type, encoding = mimetypes.guess_type(filepath)
+    raw_bytes = bool(encoding) and not filepath.lower().endswith(".svgz")
+    response = send_from_directory(
+        media_dir, filepath,
+        mimetype="application/octet-stream" if raw_bytes else None)
     # Range support exists and worked -- a range request gets 206 with a
     # correct Content-Range -- and was never advertised on the 200. Chrome's
     # media element probes with a range regardless, which is why seeking always
     # worked and why this went unnoticed; anything that reads the header first
     # takes its absence at its word.
     response.headers.setdefault("Accept-Ranges", "bytes")
+    # Media is project data, and it can come from an import of someone
+    # else's export, so it is never run as the server's own page: no type
+    # sniffing, and a document type (HTML, SVG, XML) opened directly gets an
+    # opaque origin with no scripts. An <img> of an SVG is unaffected; a
+    # codebook page opened in a tab still renders.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if os.path.splitext(filepath.lower())[1] in _ACTIVE_MEDIA_SUFFIXES:
+        response.headers["Content-Security-Policy"] = "sandbox"
     return response
+
+
+def _logged_keys(value):
+    """What a debug line may say about a request body: its keys, never the
+    values. Answers include survey responses, and a sensitive-questions page
+    is designed so that no single answer is recorded in the clear."""
+    if isinstance(value, dict):
+        return sorted(str(k) for k in value)
+    return type(value).__name__
+
+
+def _media_nosniff(response):
+    """nosniff on every /media response, errors included: a 403, 404 or 416
+    comes from abort() or send_from_directory, and a 405 from routing, before
+    serve_media sets its headers."""
+    from flask import request
+    if request.path.startswith("/media/"):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return response
+
+
+#: Media types a browser runs as a document (scripts, same-origin requests).
+_ACTIVE_MEDIA_SUFFIXES = {".html", ".htm", ".xhtml", ".xht", ".svg", ".svgz", ".xml",
+                          ".xsl", ".xslt", ".mht", ".mhtml", ".shtml"}
 
 
 def serve_plugin_static(plugin, filepath):
@@ -1536,11 +1586,10 @@ def submit_annotation():
         flask.Response: JSON response with submission result
     """
     logger.debug("=== SUBMIT ANNOTATION ROUTE START ===")
-    logger.debug(f"Session: {dict(session)}")
+    logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
     logger.debug(f"Request content type: {request.content_type}")
     logger.debug(f"Request is JSON: {request.is_json}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
 
 
@@ -1558,20 +1607,20 @@ def submit_annotation():
         data = request.get_json()
         instance_id = data.get("instance_id")
         annotations = data.get("annotations", {})
-        logger.debug(f"Received JSON data: {data}")
+        logger.debug("Received JSON keys: %s", _logged_keys(data))
     else:
         instance_id = request.form.get("instance_id")
         annotation_data = request.form.get("annotation_data")
-        logger.debug(f"Received form data: {dict(request.form)}")
+        logger.debug("Received form fields: %s", sorted(request.form.keys()))
         if annotation_data:
             annotations = json.loads(annotation_data)
-            logger.debug(f"Parsed annotation_data: {annotations}")
+            logger.debug("Parsed annotation_data for %d key(s)", len(annotations) if hasattr(annotations, "__len__") else 0)
         else:
             annotations = {}
             logger.debug("No annotation_data found in form")
 
     logger.debug(f"Instance ID: {instance_id}")
-    logger.debug(f"Annotations: {annotations}")
+    logger.debug("Annotation keys: %s", _logged_keys(annotations))
 
     if not instance_id:
         logger.warning("Missing instance_id")
@@ -1592,20 +1641,20 @@ def submit_annotation():
         # Process the annotations
         annotations_processed = 0
         for schema_name, label_data in annotations.items():
-            logger.debug(f"Processing schema: {schema_name}, label_data: {label_data}, type: {type(label_data)}")
+            logger.debug("Processing schema: %s, label_data type: %s", schema_name, type(label_data).__name__)
 
             if isinstance(label_data, dict):
                 # Nested structure: {'schema': {'label': 'value'}}
                 for label_name, value in label_data.items():
                     label = Label(schema_name, label_name)
-                    logger.debug(f"Adding annotation: {schema_name}:{label_name} = {value}")
+                    logger.debug("Adding annotation: %s:%s", schema_name, label_name)
                     user_state.add_label_annotation(instance_id, label, value)
                     annotations_processed += 1
             elif isinstance(label_data, str):
                 # Direct string value for text annotations: {'schema': 'value'}
                 # For text annotations, we need to create a label with a default name
                 label = Label(schema_name, "text_box")
-                logger.debug(f"Adding text annotation: {schema_name}:text_box = {label_data}")
+                logger.debug("Adding text annotation: %s:text_box", schema_name)
                 user_state.add_label_annotation(instance_id, label, label_data)
                 annotations_processed += 1
             else:
@@ -1630,8 +1679,8 @@ def submit_annotation():
 
         # Log the saved annotations
         all_annotations = user_state.get_all_annotations()
-        logger.debug(f"All annotations after save: {all_annotations}")
-        logger.debug(f"Annotations for instance {instance_id}: {all_annotations.get(instance_id, 'Not found')}")
+        logger.debug("Instances with annotations after save: %d", len(all_annotations or {}))
+        logger.debug("Annotations stored for instance %s: %s", instance_id, instance_id in (all_annotations or {}))
 
 
         logger.info(f"Successfully saved annotation for {instance_id} from {user_id}")
@@ -1691,10 +1740,9 @@ def register():
     Args:
         username: The username to initialize state for
     """
-    logger.debug("=== REGISTER ROUTE START ===")
-    logger.debug(f"Session before registration: {dict(session)}")
-    logger.debug(f"Request form data: {dict(request.form)}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
+    # Field names only: the form holds the password, and the headers the
+    # session cookie, and potato.log keeps DEBUG lines in debug mode.
+    logger.debug("Register request with fields: %s", sorted(request.form.keys()))
 
     if 'username' in session:
         logger.warning(f"User already logged in with username: {session['username']}, redirecting to annotate")
@@ -1764,7 +1812,7 @@ def register():
     session['username'] = username
     session.permanent = True
 
-    logger.debug(f"Session after registration: {dict(session)}")
+    logger.debug("Session keys after registration: %s", _logged_keys(dict(session)))
     logger.debug(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No session ID'}")
     logger.debug(f"User state manager has user '{username}': {get_user_state_manager().has_user(username)}")
     logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
@@ -1829,7 +1877,7 @@ def consent():
     # If the user is returning information from the page
     if request.method == 'POST':
         # The form should require that the user consent to the study
-        logger.debug(f'POST -> CONSENT: {request.form}')
+        logger.debug("POST -> CONSENT, fields: %s", sorted(request.form.keys()))
 
         refused = _refuse_unmet_phase_page(username, user_state)
         if refused is not None:
@@ -1868,7 +1916,7 @@ def instructions():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        logger.debug(f'POST -> INSTRUCTIONS: {request.form}')
+        logger.debug("POST -> INSTRUCTIONS, fields: %s", sorted(request.form.keys()))
 
         # Now that the user has read the instructions, advance the state
         # and have the home page redirect to the appropriate next phase
@@ -1964,7 +2012,7 @@ def training():
 
     # Handle POST requests (annotation submission)
     if request.method == 'POST':
-        logger.debug(f'POST -> TRAINING: {request.form}')
+        logger.debug("POST -> TRAINING, fields: %s", sorted(request.form.keys()))
 
         # Persist the graded training state however this handler returns.
         #
@@ -2199,7 +2247,7 @@ def prestudy():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        logger.debug(f'POST -> PRESTUDY: {request.form}')
+        logger.debug("POST -> PRESTUDY, fields: %s", sorted(request.form.keys()))
 
         # Advance the state and redirect to the appropriate next phase
         refused = _refuse_unmet_phase_page(username, user_state)
@@ -2435,11 +2483,10 @@ def annotate():
     Handle annotation page requests.
     """
     logger.debug("=== ANNOTATE ROUTE START ===")
-    logger.debug(f"Session: {dict(session)}")
+    logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
     logger.debug(f"Request method: {request.method}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Request content type: {request.content_type}")
     logger.debug(f"Request is JSON: {request.is_json}")
 
@@ -2649,9 +2696,9 @@ def annotate():
     if request.method == 'POST':
         logger.debug(f"POST request to annotate")
         if request.is_json:
-            logger.debug(f"POST JSON data: {request.get_json()}")
+            logger.debug("POST JSON keys: %s", _logged_keys(request.get_json(silent=True)))
         else:
-            logger.debug(f"POST form data: {dict(request.form)}")
+            logger.debug("POST form fields: %s", sorted(request.form.keys()))
 
     if request.is_json and request.json and 'action' in request.json:
        logger.debug(f"Action from JSON: {request.json['action']}")
@@ -3376,7 +3423,6 @@ def admin_user_state(user_id):
     """
     logger.debug("=== ADMIN USER STATE ROUTE START ===")
     logger.debug(f"Requested user_id: {user_id}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
 
     # Check API key
@@ -5948,7 +5994,7 @@ def go_to():
         return home()
 
     if request.method == 'POST':
-        logger.debug(f'POST -> GO_TO: {request.form}')
+        logger.debug("POST -> GO_TO, fields: %s", sorted(request.form.keys()))
         try:
             target_index = int(request.form.get("go_to"))
         except (TypeError, ValueError):
@@ -6534,6 +6580,11 @@ def get_current_instance():
             username, instance_id), username, instance_id)
         from potato.server_utils.schemas.cloze import strip_answer_fields
         raw_data = strip_answer_fields(config, raw_data)
+        from potato.geo.scheme import screen_item_basemaps
+        raw_data = screen_item_basemaps(config, raw_data)
+        # {condition.<factor>} filled as on the page.
+        from potato.server_utils.phase_flow import conditions_for, fill_condition_data
+        raw_data = fill_condition_data(raw_data, conditions_for(user_state))
 
         return jsonify({
             "instance_id": instance_id,
@@ -6588,6 +6639,10 @@ def get_instance_data():
             username, current_instance.get_id()), username, current_instance.get_id())
         from potato.server_utils.schemas.cloze import strip_answer_fields
         raw_data = strip_answer_fields(config, raw_data)
+        from potato.geo.scheme import screen_item_basemaps
+        raw_data = screen_item_basemaps(config, raw_data)
+        from potato.server_utils.phase_flow import conditions_for, fill_condition_data
+        raw_data = fill_condition_data(raw_data, conditions_for(user_state))
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)
@@ -6622,6 +6677,17 @@ def get_span_data(instance_id):
 
     username = session['username']
     logger.debug(f"Username: {username}")
+
+    # Item text is for participants who have reached the items: not before a
+    # screening page (a headphone check) is passed, and not after a screen-out.
+    _span_state = get_user_state(username)
+    if _span_state is not None:
+        from potato.server_utils.phase_flow import screened_out as _screened_out
+        if _screened_out(_span_state):
+            return jsonify({"error": "You have left this study."}), 403
+        if _span_state.get_phase() in (UserPhase.LOGIN, UserPhase.CONSENT,
+                                       UserPhase.PRESTUDY, UserPhase.INSTRUCTIONS):
+            return jsonify({"error": "Not in the annotation phase"}), 403
 
     # Get the original text for this instance
     try:
@@ -6659,7 +6725,13 @@ def get_span_data(instance_id):
         # `&amp;` five characters wide.
         from potato.server_utils.span_text import instance_dom_text
         displayed = get_displayed_text(original_text)
-        normalized_text = instance_dom_text(displayed if isinstance(displayed, str) else str(displayed))
+        displayed = displayed if isinstance(displayed, str) else str(displayed)
+        # The page fills {condition.<factor>} and drops data-condition-only
+        # elements before the browser measures the text, so do the same here.
+        if _span_state is not None:
+            from potato.server_utils.phase_flow import apply_condition_markup, conditions_for
+            displayed = apply_condition_markup(displayed, conditions_for(_span_state))
+        normalized_text = instance_dom_text(displayed)
         logger.debug(f"Normalized text: {normalized_text[:100]}...")
 
         # text_as_image: the response carries the text twice, as `text` and in
@@ -6817,7 +6889,7 @@ def update_instance():
     start_time = time.time()
 
     logger.debug("=== UPDATEINSTANCE ROUTE START ===")
-    logger.debug(f"Session: {dict(session)}")
+    logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
     logger.debug(f"Request content type: {request.content_type}")
     logger.debug(f"Request is JSON: {request.is_json}")
@@ -6833,7 +6905,7 @@ def update_instance():
         return jsonify({"status": "error", "message": "No active session"}), 401
 
     if request.is_json:
-        logger.debug(f"Received JSON data: {request.json}")
+        logger.debug("Received JSON keys: %s", _logged_keys(request.get_json(silent=True)))
         raw_instance_id = request.json.get("instance_id")
         if raw_instance_id is None or str(raw_instance_id).strip() == "":
             logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
@@ -7073,7 +7145,7 @@ def update_instance():
 
                 # Update annotation
                 user_state.add_label_annotation(instance_id, label, value)
-                logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value[:100]}..." if len(str(value)) > 100 else f"Added label annotation: {schema_name}:{label_name} = {value}")
+                logger.debug("Added label annotation: %s:%s", schema_name, label_name)
 
             # Record human↔judge comparison for the alignment loop (inline mode).
             _record_judge_comparison_if_enabled(username, instance_id)
@@ -7350,7 +7422,7 @@ def update_instance():
                     else:
                         # Add or update the span annotation
                         user_state.add_span_annotation(instance_id, span, value)
-                        logger.debug(f"Added span annotation: {span} with value: {value}")
+                        logger.debug("Added span annotation: %s", span)
             elif annotation_type == "label":
                 # Legacy v1 template posts ONE input per request (base_template.html
                 # registerAnnotation), so this is not a complete-set payload: clearing
@@ -7774,7 +7846,7 @@ def poststudy():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        logger.debug(f'POSTSTUDY: POST: {request.form}')
+        logger.debug("POSTSTUDY: POST, fields: %s", sorted(request.form.keys()))
 
         # Advance the state and move to the appropriate next phase
         refused = _refuse_unmet_phase_page(username, user_state)
@@ -11223,6 +11295,9 @@ def configure_routes(flask_app, app_config):
 
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
+    if not getattr(app, "_potato_media_nosniff", False):
+        app._potato_media_nosniff = True
+        app.after_request(_media_nosniff)
     # Transcoding proxy for formats no browser displays (TIFF, HEIC, RAW,
     # ProRes, MKV). Imported here rather than at module scope so a server with
     # neither Pillow nor ffmpeg starts exactly as fast as before.
@@ -11247,13 +11322,24 @@ def configure_routes(flask_app, app_config):
         register_rollout_routes(app, config)
     except Exception as e:
         logger.warning("Could not register rollout routes: %s", e)
-    # Embedded jsPsych timelines (`type: jspsych` phase pages). No optional
-    # dependency; the vendored jsPsych build is static.
+    # Runtime phase pages (`type: jspsych`, `type: osweb`, ...), and the
+    # large browser libraries installed with `potato vendor fetch`.
     try:
-        from potato.jspsych.routes import register_jspsych_routes
-        register_jspsych_routes(app, config)
+        from potato.runtimes.routes import register_runtime_routes
+        register_runtime_routes(app, config)
     except Exception as e:
-        logger.warning("Could not register jsPsych routes: %s", e)
+        logger.warning("Could not register runtime phase routes: %s", e)
+    try:
+        from potato.vendoring.routes import register_vendor_routes
+        register_vendor_routes(app)
+    except Exception as e:
+        logger.warning("Could not register fetched-vendor routes: %s", e)
+    # Listening tests (MUSHRA, ACR, ABX, ...): trial plans and blinded audio.
+    try:
+        from potato.listening.routes import register_listening_routes
+        register_listening_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register listening-test routes: %s", e)
     # Grounding evaluation: the current item's referring expressions.
     try:
         from potato.grounding.routes import register_grounding_routes

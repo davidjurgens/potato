@@ -1,0 +1,267 @@
+{
+ "info": {
+  "format_version": "1.4",
+  "detector": "md_v5a.0.0.pt",
+  "detection_completion_time": "2024-06-01 10:00:00",
+  "classifier": "synthetic-example-classifier"
+ },
+ "detection_categories": {
+  "1": "animal",
+  "2": "person",
+  "3": "vehicle"
+ },
+ "classification_categories": {
+  "1": "Odocoileus virginianus",
+  "2": "Procyon lotor"
+ },
+ "images": [
+  {
+   "file": "cam01/IMG_0001.JPG",
+   "max_detection_conf": 0.96,
+   "detections": [
+    {
+     "category": "1",
+     "conf": 0.96,
+     "bbox": [
+      0.25,
+      0.3979,
+      0.2945,
+      0.3521
+     ],
+     "classifications": [
+      [
+       "1",
+       0.91
+      ]
+     ]
+    },
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-14 05:42:10",
+   "seq_id": "cam01-s1",
+   "frame_num": 0,
+   "location": "cam01"
+  },
+  {
+   "file": "cam01/IMG_0002.JPG",
+   "max_detection_conf": 0.94,
+   "detections": [
+    {
+     "category": "1",
+     "conf": 0.94,
+     "bbox": [
+      0.3594,
+      0.4104,
+      0.2945,
+      0.3521
+     ],
+     "classifications": [
+      [
+       "1",
+       0.89
+      ]
+     ]
+    },
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-14 05:42:11",
+   "seq_id": "cam01-s1",
+   "frame_num": 1,
+   "location": "cam01"
+  },
+  {
+   "file": "cam01/IMG_0003.JPG",
+   "max_detection_conf": 0.71,
+   "detections": [
+    {
+     "category": "1",
+     "conf": 0.71,
+     "bbox": [
+      0.5156,
+      0.4188,
+      0.2945,
+      0.3521
+     ]
+    },
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-14 05:42:12",
+   "seq_id": "cam01-s1",
+   "frame_num": 2,
+   "location": "cam01"
+  },
+  {
+   "file": "cam01/IMG_0004.JPG",
+   "max_detection_conf": 0.91,
+   "detections": [
+    {
+     "category": "2",
+     "conf": 0.91,
+     "bbox": [
+      0.6562,
+      0.3542,
+      0.1094,
+      0.5104
+     ]
+    },
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-14 13:05:51",
+   "seq_id": "cam01-s2",
+   "frame_num": 0,
+   "location": "cam01"
+  },
+  {
+   "file": "cam01/IMG_0005.JPG",
+   "max_detection_conf": 0.88,
+   "detections": [
+    {
+     "category": "3",
+     "conf": 0.88,
+     "bbox": [
+      0.0938,
+      0.5208,
+      0.375,
+      0.265
+     ]
+    },
+    {
+     "category": "2",
+     "conf": 0.62,
+     "bbox": [
+      0.6562,
+      0.375,
+      0.1055,
+      0.4922
+     ]
+    },
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-14 13:05:52",
+   "seq_id": "cam01-s2",
+   "frame_num": 1,
+   "location": "cam01"
+  },
+  {
+   "file": "cam02/IMG_0101.JPG",
+   "max_detection_conf": 0.83,
+   "detections": [
+    {
+     "category": "1",
+     "conf": 0.83,
+     "bbox": [
+      0.3406,
+      0.6525,
+      0.2734,
+      0.175
+     ],
+     "classifications": [
+      [
+       "2",
+       0.78
+      ]
+     ]
+    },
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-15 23:18:40",
+   "seq_id": "cam02-s1",
+   "frame_num": 0,
+   "location": "cam02"
+  },
+  {
+   "file": "cam02/IMG_0102.JPG",
+   "max_detection_conf": 0.08,
+   "detections": [
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-15 23:18:41",
+   "seq_id": "cam02-s1",
+   "frame_num": 1,
+   "location": "cam02"
+  },
+  {
+   "file": "cam02/IMG_0103.JPG",
+   "max_detection_conf": 0.08,
+   "detections": [
+    {
+     "category": "1",
+     "conf": 0.08,
+     "bbox": [
+      0.05,
+      0.1,
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "datetime": "2024-05-16 10:02:03",
+   "seq_id": "cam02-s2",
+   "frame_num": 0,
+   "location": "cam02"
+  }
+ ]
+}

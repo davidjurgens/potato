@@ -44,6 +44,19 @@ from potato.item_state_management import get_item_state_manager, Item, SpanAnnot
 from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
 from dataclasses import dataclass
 
+def upgrade_flow_record(rec: dict) -> dict:
+    """Read a flow record written before runtime phases replaced the jsPsych
+    phase: its ``jspsych`` page records become ``runtimes`` (kind jspsych)."""
+    old = rec.get("jspsych") if isinstance(rec, dict) else None
+    if isinstance(old, dict):
+        runtimes = rec.setdefault("runtimes", {})
+        for page, run in old.items():
+            if isinstance(run, dict) and page not in runtimes:
+                runtimes[page] = dict(run, kind=run.get("kind", "jspsych"))
+        del rec["jspsych"]
+    return rec
+
+
 @dataclass
 class TrainingState:
     """
@@ -1905,7 +1918,7 @@ class UserState:
         user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
 
         # Absent in states written before experiment flow existed.
-        user_state.flow_record = j.get('flow_record', {}) or {}
+        user_state.flow_record = upgrade_flow_record(j.get('flow_record', {}) or {})
         user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
         user_state.prestudy_passed = j.get('prestudy_passed')
 
@@ -3670,7 +3683,7 @@ class InMemoryUserState(UserState):
         user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
 
         # Absent in states written before experiment flow existed.
-        user_state.flow_record = j.get('flow_record', {}) or {}
+        user_state.flow_record = upgrade_flow_record(j.get('flow_record', {}) or {})
         user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
         user_state.prestudy_passed = j.get('prestudy_passed')
 

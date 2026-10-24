@@ -29,7 +29,31 @@ air-gap claim.
 | Peaks.js (audio/video waveforms) | `static/peaks.min.js` |
 | PDF.js | `vendor/pdfjs/` |
 | Plotly 2.27.0 (admin embedding plot) | `vendor/plotly-2.27.0.min.js` |
+| jsPsych 8.3.0, 15 plugins, the mouse-tracking extension | `vendor/jspsych-8.3.0/` |
 | All of Potato's own CSS and JavaScript | `static/` |
+
+### Large libraries: `potato vendor fetch`
+
+Some browser libraries are too large to ship in the package, so they are not
+committed. In this release there is one: `molstar`, the Mol* structure
+viewer, which `protein_structure` loads when a field sets `engine: molstar`.
+`potato vendor fetch <name>` downloads the version this release of Potato
+pins, checks it against the published hash, and installs it:
+
+```bash
+potato vendor list                         # what can be fetched, and what is installed
+potato vendor fetch --for-config config.yaml   # everything one study needs
+potato vendor verify                       # re-check installed files against their hashes
+potato vendor path                         # where they are installed
+```
+
+Nothing is downloaded implicitly. A config that uses a feature whose library
+is not installed fails `potato validate` and startup with the command to run.
+Files go to `potato/vendor_fetched/<name>-<version>/`, or under
+`$POTATO_VENDOR_DIR` when it is set, and are served from
+`/vendor-fetched/<name>-<version>/`. For an air-gapped server, run the fetch
+on a connected machine with the same `POTATO_VENDOR_DIR` and copy the
+directory across; `potato vendor verify` checks the copy.
 
 Two of these were load-bearing rather than cosmetic. Without **jQuery**, span
 (text) annotation does not work at all. Without **Fabric.js**, the image canvas

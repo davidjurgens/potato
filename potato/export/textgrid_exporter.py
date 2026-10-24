@@ -23,6 +23,22 @@ from .base import BaseExporter, ExportContext, ExportResult
 logger = logging.getLogger(__name__)
 
 
+
+def tiered_payload(raw_value):
+    """A tiered_annotation answer as a dict, whatever shape it was stored in:
+    the JSON text, the dict itself, or the page's hidden input,
+    ``{"_data": "<json>"}`` (what the annotation page saves)."""
+    import json
+    if isinstance(raw_value, dict) and isinstance(raw_value.get("_data"), str) \
+            and set(raw_value) <= {"_data"}:
+        raw_value = raw_value["_data"]
+    if isinstance(raw_value, str):
+        try:
+            raw_value = json.loads(raw_value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return raw_value if isinstance(raw_value, dict) else None
+
 class TextGridExporter(BaseExporter):
     """
     Exports tiered annotations to Praat TextGrid format.
@@ -100,15 +116,7 @@ class TextGridExporter(BaseExporter):
                 tiered_data = None
                 for ann in instance_annotations:
                     if schema_name in ann.get("labels", {}):
-                        try:
-                            import json
-                            raw_value = ann["labels"][schema_name]
-                            if isinstance(raw_value, str):
-                                tiered_data = json.loads(raw_value)
-                            elif isinstance(raw_value, dict):
-                                tiered_data = raw_value
-                        except (json.JSONDecodeError, TypeError):
-                            pass
+                        tiered_data = tiered_payload(ann["labels"][schema_name])
                         break
 
                 if not tiered_data:

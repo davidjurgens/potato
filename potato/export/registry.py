@@ -141,7 +141,23 @@ def _register_builtin_exporters():
     from .quotation_report_exporter import QuotationReportExporter
     from .convokit_exporter import ConvoKitExporter
     from .keystroke_exporter import KeystrokeExporter
-    from .jspsych_exporter import JsPsychExporter
+    from .runtime_exporter import JsPsychExporter, RuntimeExporter
+    from .web_annotation_exporter import WebAnnotationExporter
+    from .listening_exporter import ListeningTestExporter
+    from .geo_exporter import GeoJSONExporter, GeoOverlapExporter
+    from .camera_trap_exporter import MegaDetectorExporter, CamtrapDPExporter, DarwinCoreExporter
+    from .bioacoustics_exporter import RavenExporter, AudacityLabelsExporter
+    from .iiif_exporter import IIIFAnnotationExporter
+    from .page_xml_exporter import PageXMLExporter
+    from .tei_exporter import TEIExporter
+    from .cultural_domain_exporter import CulturalDomainExporter
+    from .ego_network_exporter import EgoNetworkExporter
+    from .incentives_exporter import IncentivesExporter
+    from .interlinear_exporter import FlexTextExporter, ToolboxExporter, IGTExporter
+    from .survey_experiment_exporter import SurveyExperimentExporter
+    from .reliability_exporter import ReliabilityExporter
+    from .lextale_exporter import LexTALEExporter
+    from .data_package_exporter import DataPackageExporter, PsychDSExporter
     from .annotation_telemetry_exporter import AnnotationTelemetryExporter
     from .episode_exporter import EpisodeJsonlExporter
     from .adjudication_exporter import AdjudicationExporter
@@ -196,6 +212,23 @@ def _register_builtin_exporters():
         # back to JSONL when pyarrow is absent, so it has no hard dependency.
         KeystrokeExporter(),
         # Trial data from embedded jsPsych timelines, also from the SQLite store.
+        RuntimeExporter(),
+        WebAnnotationExporter(),
+        ListeningTestExporter(),
+        GeoJSONExporter(), GeoOverlapExporter(),
+        # Ecology: camera-trap review and bioacoustic boxes.
+        MegaDetectorExporter(), CamtrapDPExporter(), DarwinCoreExporter(),
+        RavenExporter(), AudacityLabelsExporter(),
+        IIIFAnnotationExporter(), PageXMLExporter(), TEIExporter(),
+        CulturalDomainExporter(),
+        EgoNetworkExporter(),
+        IncentivesExporter(),
+        FlexTextExporter(), ToolboxExporter(), IGTExporter(),
+        SurveyExperimentExporter(),
+        ReliabilityExporter(),
+        LexTALEExporter(),
+        DataPackageExporter(),
+        PsychDSExporter(),
         JsPsychExporter(),
         AnnotationTelemetryExporter(),
         # The adjudicated label is the deliverable of an adjudicated

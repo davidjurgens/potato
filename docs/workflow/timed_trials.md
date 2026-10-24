@@ -11,6 +11,10 @@ categorization. For frame-critical presentation, auditory onsets, or
 paradigms that need code on each trial, use a
 [jsPsych phase](jspsych_phase.md).
 
+To show the item's text one word or region at a time (self-paced reading,
+RSVP, the maze task), add a `presentation` block; see
+[Self-paced reading and the maze task](self_paced_reading.md).
+
 ## Configuration
 
 ```yaml
@@ -47,6 +51,7 @@ trial_timing:
 | `show_response_options` | `allow_mouse` | Show the scheme's options during the trial |
 | `item_overrides` | none | Per-item timing from item fields, e.g. `{stimulus_duration_ms: soa_ms}`. `0` in the field means no limit |
 | `disable_back_navigation` | `true` | Hide Previous, so no stimulus is shown twice |
+| `presentation` | none | Word-by-word display; see [Self-paced reading](self_paced_reading.md). With it, `response` is optional |
 
 ## Trial sequence
 

@@ -36,3 +36,33 @@
     white-space: pre;
     margin: 0.5rem 0 1rem;
 }
+
+/* Word-by-word presentation (trial_timing.presentation). The item's own
+   rendering is replaced by the reading line while the trial runs. */
+.potato-trial-presenting .instance-area > :not(#potato-trial-reading):not(#potato-trial-fixation) {
+    display: none;
+}
+.potato-trial-reading {
+    min-height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 1rem;
+    font-size: 1.4rem;
+    line-height: 1.6;
+}
+.potato-trial-reading-moving_window,
+.potato-trial-reading-cumulative {
+    /* Monospace, so the masks keep the words' shapes and the line never moves. */
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    /* Block, not flex: a flex row drops the spaces between the words. */
+    display: block;
+    white-space: pre-wrap;
+}
+.potato-trial-reading-centered { font-size: 2rem; }
+.potato-trial-reading-maze { justify-content: space-around; font-size: 1.8rem; }
+.potato-trial-maze-word { min-width: 8ch; text-align: center; }
+.potato-trial-maze-error { outline: 3px solid var(--destructive, #dc2626); outline-offset: 4px; }
+.potato-trial-question { margin: 0; font-family: inherit; font-size: 1.2rem; text-align: center;
+                         white-space: normal; width: 100%; }

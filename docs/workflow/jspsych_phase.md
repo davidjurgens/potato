@@ -24,6 +24,7 @@ phases:
 |---|---|---|
 | `timeline` | required | A `.js` file in the task directory that defines `window.potatoTimeline` |
 | `plugins` | `[]` | Plugins to load, from the list below |
+| `extensions` | `[]` | jsPsych extensions to load and pass to `initJsPsych`. Shipped: `mouse-tracking` |
 | `extra_scripts` | `[]` | More `.js` files from the task directory, such as plugins Potato does not ship, loaded after `plugins` and before the timeline |
 | `assets_dir` | none | A folder of stimuli the timeline can load (images, audio, video, text, CSS, fonts) |
 | `expose_answers` | `[]` | Survey questions from earlier pages whose answers the timeline receives. Each must be asked on an earlier page; answers arrive as strings, numbers included (`"30"`) |
@@ -50,6 +51,26 @@ they do it.
 
 Other plugins, including ones from `jspsych-contrib`, go in `extra_scripts`
 as browser builds (the `index.browser.min.js` file of the npm package).
+
+### Extensions
+
+`extensions: [mouse-tracking]` loads `@jspsych/extension-mouse-tracking`
+1.2.0 and registers it with jsPsych. A trial turns it on in the usual way,
+and each such trial gets `mouse_tracking_data` (a list of `{x, y, t, event}`
+samples) and `mouse_tracking_targets` in its data:
+
+```javascript
+{
+    type: jsPsychHtmlButtonResponse,
+    stimulus: '<p id="stim">Which is bigger?</p>',
+    choices: ['3', '8'],
+    extensions: [{type: jsPsychExtensionMouseTracking, params: {targets: ['#stim']}}]
+}
+```
+
+The WebGazer eye-tracking extension is not shipped. WebGazer needs
+`'unsafe-eval'`, which the jsPsych page's Content-Security-Policy does not
+allow.
 
 ## The timeline file
 
@@ -119,7 +140,9 @@ message instead of a blank page.
 ## Data and export
 
 Runs are stored in the project database (`project.sqlite` in the task
-directory), not in `user_state.json`. The `jspsych` export format writes:
+directory, table `runtime_runs`), not in `user_state.json`. The `jspsych`
+export format writes the files below; the `runtime` format writes the same
+for every [runtime phase](runtime_phases.md) the project uses:
 
 | File | Content |
 |---|---|
@@ -169,6 +192,7 @@ to half of the participants (`conditions`).
 
 ## Related
 
+- [Runtime phases](runtime_phases.md)
 - [Coming from jsPsych](../guides/coming-from-jspsych.md)
 - [Experiment flow](experiment_flow.md)
 - [Timed trials](timed_trials.md)

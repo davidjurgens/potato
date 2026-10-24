@@ -97,8 +97,25 @@ def _schemes_in(config_dir: str) -> Tuple[dict, ...]:
         for name, phase in phases.items():
             if name != "order" and isinstance(phase, dict):
                 schemes.extend(phase.get("annotation_schemes") or [])
+                schemes.extend(_survey_file_schemes(config_dir, phase.get("file")))
 
     return tuple(s for s in schemes if isinstance(s, dict))
+
+
+def _survey_file_schemes(config_dir: str, rel) -> list:
+    """The questions in a survey page's ``file`` (a JSON or YAML list), which
+    is where survey-only types such as ``list_experiment`` are configured."""
+    if not isinstance(rel, str) or not rel.endswith((".json", ".yaml", ".yml")):
+        return []
+    import json
+    import yaml
+    path = os.path.join(_repo_root(), config_dir, rel)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f) if rel.endswith(".json") else yaml.safe_load(f)
+    except (OSError, ValueError, yaml.YAMLError):
+        return []
+    return list(data) if isinstance(data, list) else []
 
 
 def example_scheme_for(type_name: str) -> Optional[dict]:

@@ -13,6 +13,25 @@
  *   displayLogicManager.evaluateAll();
  */
 
+/**
+ * A number the way display_logic.py reads one: "3abc", "" and booleans are
+ * not numbers (parseFloat would read "3abc" as 3).
+ */
+function dlStrictNumber(value) {
+    if (value === null || value === undefined || typeof value === 'boolean' ||
+            Array.isArray(value)) { return NaN; }
+    if (typeof value === 'number') { return value; }
+    const text = String(value).trim();
+    return text === '' ? NaN : Number(text);
+}
+
+/** Characters in a text answer; items in a list answer (as in Python). */
+function dlAnswerLength(value) {
+    if (value === null || value === undefined) { return 0; }
+    if (Array.isArray(value)) { return value.length; }
+    return String(value).length;
+}
+
 class DisplayLogicManager {
     constructor() {
         // Map of schema name -> display logic configuration
@@ -87,7 +106,7 @@ class DisplayLogicManager {
      */
     buildDependencyGraph() {
         this.displayLogicRules.forEach((rule, schemaName) => {
-            const conditions = rule.show_when || [];
+            const conditions = this.leafConditions(rule.show_when);
 
             conditions.forEach(condition => {
                 const watchedSchema = condition.schema;
@@ -379,16 +398,51 @@ class DisplayLogicManager {
         if (conditions.length === 0) {
             return true; // No conditions = always visible
         }
+        return this.evaluateItems(logic, conditions, annotations);
+    }
 
-        const results = conditions.map(condition => {
-            return this.evaluateCondition(condition, annotations);
+    /**
+     * `all` / `any` / `not` groups, mirroring display_logic.group_key on the
+     * server: an item without `schema` whose only key is one of those three.
+     */
+    groupKey(item) {
+        if (!item || typeof item !== 'object' || 'schema' in item) return null;
+        const keys = Object.keys(item);
+        if (keys.length !== 1) return null;
+        return ['all', 'any', 'not'].includes(keys[0]) ? keys[0] : null;
+    }
+
+    groupItems(item) {
+        const key = this.groupKey(item);
+        const inner = item[key];
+        if (key === 'not' && inner && !Array.isArray(inner)) return [inner];
+        return Array.isArray(inner) ? inner : [];
+    }
+
+    leafConditions(items) {
+        const out = [];
+        (items || []).forEach(item => {
+            if (this.groupKey(item)) {
+                out.push(...this.leafConditions(this.groupItems(item)));
+            } else if (item && typeof item === 'object') {
+                out.push(item);
+            }
         });
+        return out;
+    }
 
-        if (logic === 'all') {
-            return results.every(r => r);
-        } else {
-            return results.some(r => r);
-        }
+    evaluateItems(logic, items, annotations) {
+        const results = items.map(item => {
+            const key = this.groupKey(item);
+            if (key === 'not') {
+                return !this.evaluateItems('all', this.groupItems(item), annotations);
+            }
+            if (key) {
+                return this.evaluateItems(key, this.groupItems(item), annotations);
+            }
+            return this.evaluateCondition(item, annotations);
+        });
+        return logic === 'any' ? results.some(r => r) : results.every(r => r);
     }
 
     /**
@@ -456,6 +510,20 @@ class DisplayLogicManager {
             return this.checkLengthRange(actualValue, value);
         }
 
+        // Number of options selected
+        if (['count_gt', 'count_lt', 'count_equals'].includes(operator)) {
+            let n = 0;
+            if (!this.isEmpty(actualValue)) {
+                n = Array.isArray(actualValue) ? actualValue.length
+                    : (typeof actualValue === 'object' ? Object.keys(actualValue).length : 1);
+            }
+            const want = parseInt(value, 10);
+            if (Number.isNaN(want)) return false;
+            if (operator === 'count_gt') return n > want;
+            if (operator === 'count_lt') return n < want;
+            return n === want;
+        }
+
         console.warn('[DisplayLogic] Unknown operator:', operator);
         return false;
     }
@@ -493,6 +561,11 @@ class DisplayLogicManager {
     valuesEqual(actual, expected, caseSensitive) {
         if (actual === null || actual === undefined) {
             return expected === null || expected === undefined;
+        }
+        // A multiselect's list is not equal to one option (String(["a"]) is
+        // "a"); `contains` tests membership. Mirrors display_logic.py.
+        if (Array.isArray(actual)) {
+            return false;
         }
 
         // A number in the YAML (`value: 3`) against a form value, which is a
@@ -569,8 +642,8 @@ class DisplayLogicManager {
      * Check numeric comparison.
      */
     checkNumeric(operator, actual, expected) {
-        const actualNum = parseFloat(actual);
-        const expectedNum = parseFloat(expected);
+        const actualNum = dlStrictNumber(actual);
+        const expectedNum = dlStrictNumber(expected);
 
         if (isNaN(actualNum) || isNaN(expectedNum)) {
             return false;
@@ -593,9 +666,9 @@ class DisplayLogicManager {
             return false;
         }
 
-        const actualNum = parseFloat(actual);
-        const minVal = parseFloat(range[0]);
-        const maxVal = parseFloat(range[1]);
+        const actualNum = dlStrictNumber(actual);
+        const minVal = dlStrictNumber(range[0]);
+        const maxVal = dlStrictNumber(range[1]);
 
         if (isNaN(actualNum) || isNaN(minVal) || isNaN(maxVal)) {
             return false;
@@ -608,7 +681,7 @@ class DisplayLogicManager {
      * Check text length comparison.
      */
     checkLength(operator, actual, expected) {
-        const length = actual ? String(actual).length : 0;
+        const length = dlAnswerLength(actual);
         const expectedLen = parseInt(expected);
 
         if (isNaN(expectedLen)) {
@@ -633,7 +706,7 @@ class DisplayLogicManager {
             return false;
         }
 
-        const length = actual ? String(actual).length : 0;
+        const length = dlAnswerLength(actual);
         const minLen = parseInt(range[0]);
         const maxLen = parseInt(range[1]);
 
@@ -716,7 +789,7 @@ class DisplayLogicManager {
         }
 
         const annotations = this.getCurrentAnnotations();
-        const conditions = rule.show_when || [];
+        const conditions = this.leafConditions(rule.show_when);
         const reasons = conditions.map(cond => {
             const actual = annotations[cond.schema];
             return `${cond.schema} ${cond.operator} ${JSON.stringify(cond.value)} (actual: ${JSON.stringify(actual)})`;
@@ -796,7 +869,7 @@ class DisplayLogicManager {
 
             if (!visible) {
                 // Build reason string
-                const conditions = rule.show_when || [];
+                const conditions = this.leafConditions(rule.show_when);
                 const annotations = this.getCurrentAnnotations();
                 const reasons = conditions.map(cond => {
                     const actual = annotations[cond.schema];

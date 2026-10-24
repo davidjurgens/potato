@@ -75,7 +75,7 @@ def _login(base_url, username):
 
 def _page(s, base):
     r = s.get(f"{base}/", timeout=5)
-    m = re.search(r'<script type="application/json" id="potato-jspsych-config">(.*?)</script>',
+    m = re.search(r'<script type="application/json" id="potato-runtime-config">(.*?)</script>',
                   r.text, re.S)
     return r, (json.loads(m.group(1)) if m else None)
 
@@ -98,30 +98,30 @@ def test_page_renders_with_config_and_csp(js_server):
     csp = r.headers.get("Content-Security-Policy", "")
     assert "script-src 'self'" in csp and "connect-src 'self'" in csp
     assert "plugin-html-keyboard-response.js" in r.text
-    assert "jspsych-bridge.js" in r.text
+    assert "runtime-bridge.js" in r.text and "runtime-boot-jspsych.js" in r.text
 
 
 def test_timeline_served_raw(js_server):
     s = _login(js_server.base_url, "js_timeline")
     _page(s, js_server.base_url)
-    r = s.get(f"{js_server.base_url}/jspsych/stroop/timeline.js", timeout=5)
+    r = s.get(f"{js_server.base_url}/runtime/stroop/study", timeout=5)
     assert r.status_code == 200
     assert r.text == TIMELINE
     assert r.headers["Content-Type"].startswith("text/javascript")
 
 
 def test_timeline_needs_a_session(js_server):
-    r = requests.get(f"{js_server.base_url}/jspsych/stroop/timeline.js", timeout=5)
+    r = requests.get(f"{js_server.base_url}/runtime/stroop/study", timeout=5)
     assert r.status_code == 404
 
 
 def test_assets_served_and_traversal_refused(js_server):
     s = _login(js_server.base_url, "js_assets")
     _page(s, js_server.base_url)
-    ok = s.get(f"{js_server.base_url}/jspsych/stroop/assets/red.txt", timeout=5)
+    ok = s.get(f"{js_server.base_url}/runtime/stroop/assets/red.txt", timeout=5)
     assert ok.status_code == 200 and ok.text == "RED"
     for bad in ("../../secret.txt", "..%2F..%2Fsecret.txt", "../stroop.js"):
-        r = s.get(f"{js_server.base_url}/jspsych/stroop/assets/{bad}", timeout=5)
+        r = s.get(f"{js_server.base_url}/runtime/stroop/assets/{bad}", timeout=5)
         assert r.status_code == 404, bad
 
 
@@ -157,7 +157,7 @@ def test_finish_advances_and_is_idempotent(js_server):
     again = _finish(s, js_server.base_url, cfg)
     assert again.status_code == 200 and again.json().get("duplicate")
     html = s.get(f"{js_server.base_url}/", timeout=5).text
-    assert "potato-jspsych-config" not in html
+    assert "potato-runtime-config" not in html
     assert 'data-schema-name="rating"' in html
 
 
@@ -249,7 +249,7 @@ def test_trial_seq_bounded(js_server):
 
 def test_late_trial_post_does_not_downgrade_a_finished_run(js_server):
     """Audit 94, J1."""
-    from potato.jspsych import store
+    from potato.runtimes import store
     s = _login(js_server.base_url, "js_race")
     _, cfg = _page(s, js_server.base_url)
     assert _finish(s, js_server.base_url, cfg).status_code == 200
@@ -272,3 +272,15 @@ def test_refused_post_does_not_orphan_the_open_tab(js_server):
     assert r.status_code == 200
     s.post(f"{js_server.base_url}/prestudy", data={}, timeout=5)
     assert _finish(s, js_server.base_url, cfg).status_code == 200
+
+
+def test_old_jspsych_urls_say_where_they_moved(js_server):
+    """Audit 96 R4."""
+    base = js_server.base_url
+    r = requests.get(f"{base}/jspsych/stroop/timeline", timeout=5)
+    assert r.status_code == 410 and r.json()["moved_to"] == "/runtime/stroop/study"
+    r = requests.post(f"{base}/api/jspsych/finish", json={}, timeout=5)
+    assert r.status_code == 410 and r.json()["moved_to"] == "/api/runtime/finish"
+    for path in ("/jspsych/stroop", "/jspsych/stroop/"):
+        r = requests.get(f"{base}{path}", timeout=5, allow_redirects=False)
+        assert r.status_code == 410 and r.json()["moved_to"] == "/runtime/stroop/study", path

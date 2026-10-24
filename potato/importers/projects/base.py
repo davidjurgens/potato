@@ -14,6 +14,7 @@ suggestions and people's responses, so the writer converts each type in one
 place:
 
     radio        str            the option name
+    select       str            the option name
     multiselect  list[str]      option names
     likert       int            the scale point, 1-based
     text         str
@@ -33,7 +34,7 @@ from typing import Any, Dict, List, Optional
 #: Scheme types the writer can store a person's answer for. Anything else is
 #: reported by the importer and left out rather than half-written.
 SUPPORTED_TYPES = frozenset({
-    "radio", "multiselect", "likert", "text", "number", "slider", "span",
+    "radio", "multiselect", "select", "likert", "text", "number", "slider", "span",
     "image_annotation",
 })
 
@@ -75,6 +76,13 @@ class ProjectImportResult:
     warnings: List[str] = field(default_factory=list)
     #: What was left out and how often, for the summary.
     skipped: Counter = field(default_factory=Counter)
+    #: Files to copy into the project: path under the project -> source path
+    #: (a TextGrid's audio, say, served from media/).
+    media_files: Dict[str, str] = field(default_factory=dict)
+    #: Folders media_files may come from. The writer refuses a source whose
+    #: real path (symlinks resolved) is outside them; empty means the input
+    #: folder (the input itself when it is a folder, else its parent).
+    media_roots: List[str] = field(default_factory=list)
 
     def warn(self, message: str) -> None:
         if message not in self.warnings:

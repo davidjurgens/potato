@@ -1,0 +1,26 @@
+[
+  {
+    "id": "call_1",
+    "locus": "chr1:1201",
+    "note": "call_1: C>G at chr1:1,201. Is this call real?",
+    "bam": "reads/sample1.bam"
+  },
+  {
+    "id": "call_2",
+    "locus": "chr1:2051",
+    "note": "call_2: G>T at chr1:2,051. Is this call real?",
+    "bam": "reads/sample1.bam"
+  },
+  {
+    "id": "call_3",
+    "locus": "chr1:3301",
+    "note": "call_3: AA>A at chr1:3,301. Is this call real?",
+    "bam": "reads/sample1.bam"
+  },
+  {
+    "id": "call_4",
+    "locus": "chr2:801",
+    "note": "call_4: A>G at chr2:801. Is this call real?",
+    "bam": "reads/sample1.bam"
+  }
+]

@@ -615,9 +615,12 @@ def generate_slider_layout_internal(annotation_scheme):
         
         function setupCustomSlider(sliderInput) {{
             const sliderId = sliderInput.id;
-            const min = parseInt(sliderInput.min);
-            const max = parseInt(sliderInput.max);
-            const step = parseInt(sliderInput.step) || 1;
+            // parseFloat, not parseInt: a 0..1 slider in steps of 0.1 snapped
+            // to whole numbers, so it could only ever store 0 or 1.
+            const min = parseFloat(sliderInput.min);
+            const max = parseFloat(sliderInput.max);
+            const step = parseFloat(sliderInput.step) || 1;
+            const stepDecimals = (String(step).split('.')[1] || '').length;
             
             // Get references to custom elements
             const container = document.getElementById('customSlider_' + sliderId);
@@ -646,8 +649,9 @@ def generate_slider_layout_internal(annotation_scheme):
                 // Calculate the new value based on the click position
                 let newValue = min + (percentClicked / 100) * (max - min);
                 
-                // Snap to the nearest step
-                newValue = Math.round(newValue / step) * step;
+                // Snap to the nearest step (rounded to the step's precision, so
+                // 0.1 * 3 stores 0.3 rather than 0.30000000000000004)
+                newValue = Number((Math.round((newValue - min) / step) * step + min).toFixed(stepDecimals));
                 
                 // Ensure the value is within bounds
                 newValue = Math.max(min, Math.min(max, newValue));
@@ -820,8 +824,8 @@ def generate_slider_layout_internal(annotation_scheme):
         
         function updateCustomSlider(sliderInput) {{
             const sliderId = sliderInput.id;
-            const min = parseInt(sliderInput.min);
-            const max = parseInt(sliderInput.max);
+            const min = parseFloat(sliderInput.min);
+            const max = parseFloat(sliderInput.max);
             
             const sliderThumb = document.getElementById('sliderThumb_' + sliderId);
             const sliderTrackActive = document.getElementById('sliderTrackActive_' + sliderId);

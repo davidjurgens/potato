@@ -94,6 +94,34 @@ stimulus that appears in both lists needs a distinct ID in each (for example
 A [`type: jspsych`](jspsych_phase.md) timeline receives the conditions as
 `potato.conditions`, and its trial data gets a `condition_<factor>` column.
 
+## Wording per condition
+
+`{condition.<factor>}` anywhere on a page, in item text, question wording or
+option labels, is replaced by the participant's level of that factor. This
+is how an endorsement experiment or a factorial vignette varies its text:
+
+```yaml
+conditions:
+  factors:
+    endorser: ["The city council", "A neighbourhood association"]
+```
+
+```json
+{"id": "p1", "text": "{condition.endorser} proposes turning the car park into a park."}
+```
+
+The replacement is HTML-escaped. A placeholder for a factor the participant
+has no level of stays on the page as written, so a typo is visible.
+`/api/current_instance`, `/api/instance_data` and `/api/spans/<id>` return the
+filled text, and span offsets count the characters of the filled text, as the
+participant saw it. Exports write the item text as it is in the data file,
+with the placeholder. A span after a placeholder therefore does not line up
+with the exported text: shift it by the difference in length between the
+placeholder and the participant's level (their conditions are in the export),
+or do not put placeholders in text that is annotated with spans.
+[List experiments](../annotation-types/measurement/sensitive_questions.md)
+use the same mechanism to show a statement to one group only.
+
 ## Skipping pages: `show_when`
 
 ```yaml
@@ -115,7 +143,7 @@ phases:
 The grammar is the one question-level
 [display_logic](../configuration/conditional_logic.md) uses: a list of
 conditions with `schema`, `operator` and `value`, combined with `logic: all`
-(default) or `logic: any`, and the same 16 operators. A rule can test any
+(default) or `logic: any`, and the same 19 operators and nested `all` / `any` / `not` groups. A rule can test any
 question asked on an earlier page, in any phase, and any `condition.<factor>`.
 
 The rule is checked when the participant leaves the page before it. A hidden
@@ -211,16 +239,17 @@ Option order within a question is a separate setting,
 | `question_orders` | Each randomized page's question order |
 | `skipped_pages` | Pages passed over by `show_when` |
 | `screened_out` | The page and time of a screen-out |
-| `jspsych` | Status, attempts, page loads and trial count of each jsPsych page |
+| `runtimes` | Kind, status, attempts, page loads, trial count and run id of each [runtime page](runtime_phases.md) (jsPsych, headphone check, external task) |
+| `runtime_answers` | What runtime pages derived from their runs, such as a headphone check's `<page>_passed` |
 
 The CSV and TSV exports write one row per participant to
 `participants.csv` (or `.tsv`). With a `feedback` factor its header is:
 
 ```text
-user_id,condition_feedback,condition_ordinal,cell_ordinal,latin_ordinal,final_phase,screened_out,screened_out_page,skipped_pages,page_orders,question_orders,jspsych_runs
+user_id,condition_feedback,condition_ordinal,cell_ordinal,latin_ordinal,final_phase,screened_out,screened_out_page,skipped_pages,page_orders,question_orders,runtime_runs,runtime_answers
 ```
 
-`skipped_pages` is `|`-separated; the last three columns are JSON.
+`skipped_pages` is `|`-separated; the last four columns are JSON.
 
 The MySQL backend does not store the flow record; a server using it logs a
 warning when these features are configured.

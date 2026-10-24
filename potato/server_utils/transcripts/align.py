@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .core import group_words_into_turns, to_seconds
 
@@ -296,17 +296,7 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
     except ET.ParseError:
         return []
 
-    # Time slots: id -> seconds.
-    slots: Dict[str, float] = {}
-    for slot in root.iter("TIME_SLOT"):
-        slot_id = slot.get("TIME_SLOT_ID")
-        value = slot.get("TIME_VALUE")
-        if slot_id is None:
-            continue
-        try:
-            slots[slot_id] = float(value) / 1000.0 if value is not None else 0.0
-        except (TypeError, ValueError):
-            slots[slot_id] = 0.0
+    slots = _eaf_slots(root)
 
     media = _eaf_media(root)
 
@@ -316,6 +306,7 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
     segments: List[Dict[str, Any]] = []
 
     for tier in root.iter("TIER"):
+        tier_id = tier.get("TIER_ID") or None
         speaker = tier.get("PARTICIPANT") or tier.get("TIER_ID") or None
         if speaker is not None:
             speaker = speaker.strip() or None
@@ -328,6 +319,7 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
                     continue
                 segment = {
                     "speaker": speaker,
+                    "tier_id": tier_id,
                     "start": slots.get(aligned.get("TIME_SLOT_REF1", ""), 0.0),
                     "end": slots.get(aligned.get("TIME_SLOT_REF2", ""), 0.0),
                     "text": content,
@@ -347,6 +339,7 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
                     continue
                 pending_refs.append({
                     "speaker": speaker,
+                    "tier_id": tier_id,
                     "text": content,
                     "ref": ref.get("ANNOTATION_REF"),
                     "id": ref.get("ANNOTATION_ID"),
@@ -357,6 +350,7 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
         parent = by_id.get(pending.get("ref") or "")
         segment = {
             "speaker": pending["speaker"],
+            "tier_id": pending["tier_id"],
             "start": parent["start"] if parent else 0.0,
             "end": parent["end"] if parent else 0.0,
             "text": pending["text"],
@@ -369,6 +363,59 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
 
     segments.sort(key=lambda s: (s["start"], s["end"]))
     return segments
+
+
+def _eaf_slots(root: ET.Element) -> Dict[str, float]:
+    """TIME_SLOT id -> seconds. A slot with no TIME_VALUE is unaligned: ELAN
+    places it between the aligned slots around it in TIME_ORDER, so it gets a
+    linear interpolation of them (it used to become 0.0, giving segments that
+    end before they start)."""
+    order: List[Tuple[str, Optional[float]]] = []
+    for slot in root.iter("TIME_SLOT"):
+        slot_id = slot.get("TIME_SLOT_ID")
+        if slot_id is None:
+            continue
+        try:
+            value = float(slot.get("TIME_VALUE")) / 1000.0
+        except (TypeError, ValueError):
+            value = None
+        order.append((slot_id, value))
+    known = [i for i, (_, v) in enumerate(order) if v is not None]
+    out: Dict[str, float] = {}
+    for i, (slot_id, value) in enumerate(order):
+        if value is None:
+            before = max((k for k in known if k < i), default=None)
+            after = min((k for k in known if k > i), default=None)
+            if before is not None and after is not None:
+                v0, v1 = order[before][1], order[after][1]
+                value = v0 + (v1 - v0) * (i - before) / (after - before)
+            elif before is not None or after is not None:
+                value = order[before if before is not None else after][1]
+            else:
+                value = 0.0
+        out[slot_id] = value
+    return out
+
+
+def eaf_tier_info(text: str) -> Dict[str, Any]:
+    """Tier ids in document order with their PARENT_REF, and how many time
+    slots had no TIME_VALUE (for import reports)."""
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return {"tiers": [], "unaligned_slots": 0}
+    tiers = [(t.get("TIER_ID"), t.get("PARENT_REF")) for t in root.iter("TIER") if t.get("TIER_ID")]
+    unaligned = sum(1 for s in root.iter("TIME_SLOT") if s.get("TIME_VALUE") in (None, ""))
+    return {"tiers": tiers, "unaligned_slots": unaligned}
+
+
+def textgrid_tier_names(text: str) -> List[str]:
+    """Every tier's name in a TextGrid (long or short format), empty ones too."""
+    names = re.findall(r'^\s*name\s*=\s*"((?:[^"]|"")*)"', text, flags=re.M)
+    if not names:
+        # Short format: "IntervalTier" / "TextTier", then the quoted name.
+        names = re.findall(r'"(?:IntervalTier|TextTier)"\s*\n\s*"((?:[^"]|"")*)"', text)
+    return [n.replace('""', '"') for n in names]
 
 
 def _eaf_value(element: ET.Element) -> str:

@@ -125,6 +125,15 @@ def answer_fields(config: dict) -> List[str]:
         if isinstance(scheme, dict) and scheme.get("annotation_type") == "cloze" \
                 and scheme.get("answer_field"):
             fields.append(str(scheme["answer_field"]))
+    # A listening test's files and conditions (the page plays opaque slots).
+    from potato.listening.blind import private_item_fields as listening_fields
+    fields.extend(f for f in listening_fields(config) if f not in fields)
+    # A LexTALE-style vocabulary test's word/nonword key.
+    from potato.lextale import private_item_fields as lextale_fields
+    fields.extend(lextale_fields(config))
+    # Outcomes and pre-drawn prices that settle incentive payments.
+    from potato.incentives import private_item_fields
+    fields.extend(private_item_fields(config))
     return fields
 
 

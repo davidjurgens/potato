@@ -412,6 +412,9 @@ def _register_builtin_displays():
     from .live_coding_agent_display import LiveCodingAgentDisplay
     from .cot_trace_display import CotTraceDisplay
     from .audio_dialogue_display import AudioDialogueDisplay
+    from .protein_structure_display import ProteinStructureDisplay
+    from .genome_locus_display import GenomeLocusDisplay
+    from .image_region_display import ImageRegionDisplay
 
     displays = [
         DisplayDefinition(
@@ -601,6 +604,27 @@ def _register_builtin_displays():
             lazy_populated=True,  # trace populated by live coding-agent session
             description="Live coding agent viewer with real-time streaming and intervention controls"
         ),
+        DisplayDefinition(
+            name="protein_structure",
+            renderer=ProteinStructureDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Protein structure (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*, with residue selection"
+        ),
+        DisplayDefinition(
+            name="genome_locus",
+            renderer=GenomeLocusDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Genome locus in igv.js: reference, reads, variants and annotation tracks"
+        ),
+        DisplayDefinition(
+            name="image_region",
+            renderer=ImageRegionDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="One rectangle of a larger image (a text line, a word, a figure), cropped in the browser"
+        ),
     ]
 
     for display in displays:
@@ -611,3 +635,10 @@ def _register_builtin_displays():
 
 # Auto-register built-in displays on import
 _register_builtin_displays()
+
+
+def display_required_bundles(config):
+    """Fetchable browser bundles the config's viewer displays need
+    (potato.vendoring.requirements reads this)."""
+    from .viewer_display import display_required_bundles as _viewer_bundles
+    return _viewer_bundles(config)

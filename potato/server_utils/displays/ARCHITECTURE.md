@@ -167,6 +167,37 @@ label, and `.display-field-content` wrapper.
 7. Write unit tests verifying render output
 8. Write a contract enforcement test (see `test_display_span_contract.py`)
 
+## Viewer Displays
+
+`viewer_display.py` holds `ViewerDisplay`, the base for displays that embed
+a third-party JavaScript viewer (`protein_structure` in 3Dmol.js or Mol*,
+`genome_locus` in igv.js). A new viewer is a subclass plus one adapter in
+`static/viewers/`. The base provides:
+
+- the container (`div.potato-viewer` with `data-viewer-kind`,
+  `data-viewer-field` and `data-viewer-config`) and its status and fallback
+  slots
+- lazy loading: the page loads `viewer-framework.js` and the adapters; the
+  library itself is fetched when a viewer mounts, from `static/vendor/` or
+  from a `potato vendor fetch` bundle (`ViewerEngine.bundles`)
+- a WebGL check that shows a message instead of a blank canvas
+- `window.potatoViewers[field]` with `getSelection`, `setSelection`,
+  `onSelectionChange` and `describe`, which the `viewer_selection` scheme
+  binds to through `viewer_field`
+- `validate_selection()`, which checks a selection against the viewer's
+  shape and returns the problems. The server does not call it: saving and
+  exporting keep the selection JSON as the browser sent it
+- `display_required_bundles()`: `potato validate` and boot fail on a config
+  whose engine needs a bundle that has not been fetched
+- `resolve_source()`, which raises `ViewerDataError` for an http(s) URL in
+  the data unless the field sets `allow_remote: true`
+
+A subclass sets `name`, `engines` and `default_engine`, and implements
+`client_config()` (the JSON the adapter receives; raise `ViewerDataError`
+for an item that cannot be shown) and `validate_item()`. `render_extras()`
+adds HTML under the stage, such as the residue table that works without
+WebGL.
+
 ## Shared Utilities
 
 | Function | Location | Purpose |

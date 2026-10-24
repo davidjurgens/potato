@@ -88,3 +88,21 @@ class TestRegistrationAuth:
         assert r2.status_code == 200
         # Should contain annotation content, not login form
         assert "annotation" in r2.text.lower() or "instance" in r2.text.lower()
+
+    def test_registration_logs_no_password_or_cookie(self, caplog):
+        """The register route logged the whole form (password included), the
+        session and every request header at DEBUG, and potato.log keeps DEBUG
+        lines in debug mode."""
+        import logging
+        secret = "reg-log-check-7c1f9a"
+        s = requests.Session()
+        s.get(f"{self.server.base_url}/")
+        # Set on the routes' logger itself: an earlier test in a full run can
+        # leave it above DEBUG, and the root level does not override that.
+        with caplog.at_level(logging.DEBUG, logger="potato.flask_server"):
+            s.post(f"{self.server.base_url}/register",
+                   data={"email": "log_check_user", "pass": secret})
+        text = "\n".join(r.getMessage() for r in caplog.records)
+        assert "Register request with fields" in text
+        assert secret not in text
+        assert "Cookie" not in text and "session=" not in text

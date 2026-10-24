@@ -12,6 +12,7 @@ participant-group qualification sync, and test participants.
 
 import logging
 import math
+import threading
 
 from flask import Blueprint, jsonify, request
 
@@ -305,6 +306,14 @@ def crowd_bonus(study_id):
     if not bonuses:
         return jsonify({"error": "bonuses required: [[participant_id, amount], ...]"}), 400
 
+    return _set_up_bonuses(client, study_id, bonuses, bool(body.get('pay')))
+
+
+def _set_up_bonuses(client, study_id, bonuses, pay, on_paid=None):
+    """Validate, set up the bulk bonus, and dispatch it only when ``pay``.
+
+    ``on_paid(bulk_id, result)`` runs after Prolific accepts the payment.
+    """
     from potato.crowdsourcing.prolific_api import ProlificAPIError, validate_bonus_rows
     try:
         validate_bonus_rows(bonuses)
@@ -313,15 +322,114 @@ def crowd_bonus(study_id):
     try:
         setup = client.set_up_bonuses(study_id, bonuses)
         result = {"setup": setup}
-        if body.get('pay'):
+        if pay:
             bulk_id = setup.get('id')
             if not bulk_id:
                 return jsonify({"error": "Bonus setup returned no id; not paying",
                                 "setup": setup}), 502
             result["payment"] = client.pay_bonuses(bulk_id)
+            if on_paid is not None:
+                on_paid(bulk_id, result)
         return jsonify(result), 200
     except ProlificAPIError as e:
         return jsonify({"error": str(e), "status_code": e.status_code}), 502
+
+
+_PAYMENT_LOCK = threading.Lock()
+
+
+@crowd_admin_bp.route('/incentive_bonuses', methods=['GET', 'POST'])
+@require_permission(Permission.MANAGE_CROWDSOURCING)
+def crowd_incentive_bonuses():
+    """Bonuses computed from stored answers by potato/incentives.py.
+
+    GET, or POST without ``pay``: a dry run. Nothing is sent to Prolific; the
+    response lists each participant's bonus, the Prolific rows and their total.
+
+    POST {"pay": true, "expected_total": "12.40", "study_id": "..."}: sets up
+    and pays those rows through the same code as /study/<id>/bonus.
+    ``expected_total`` must equal the dry run's ``prolific_total``, so the
+    amount paid is the amount that was reviewed; if an answer changed in
+    between, the request is refused (409) and nothing is sent.
+
+    Every paid batch is recorded in ``<task_dir>/incentive_payments.json``.
+    A batch with the same rows as an earlier one, or one that pays a
+    participant an earlier batch already paid, is refused (409) with the
+    earlier batch named, unless the body has ``"repeat": true``.
+
+    ``"skip_paid": true`` pays only the participants no recorded batch has
+    paid; ``expected_total`` must then equal the dry run's ``unpaid_total``.
+    The dry run lists ``already_paid`` and ``unpaid_total`` for this.
+    """
+    from potato.incentives import report_from_config
+    body = (request.get_json(force=True, silent=True) or {}) if request.method == 'POST' else {}
+    try:
+        report = report_from_config(_config())
+        summary = report.summary()
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    from potato.incentives import paid_participants, payments_path, rows_total
+    ledger = payments_path(_config())
+    try:
+        paid = paid_participants(ledger)
+    except (OSError, ValueError) as e:
+        return jsonify({"error": f"Could not read the payments record {ledger}: {e}"}), 500
+    unpaid = [list(r) for r in summary["prolific_rows"] if str(r[0]) not in paid]
+    summary["already_paid"] = sorted({str(r[0]) for r in summary["prolific_rows"]} & paid)
+    summary["unpaid_total"] = rows_total(unpaid)
+    if body.get('pay') is not True:
+        return jsonify({"dry_run": True, **summary}), 200
+
+    skip_paid = body.get('skip_paid') is True
+    if skip_paid and body.get('repeat') is True:
+        return jsonify({"error": "Send skip_paid or repeat, not both"}), 400
+    total_key = "unpaid_total" if skip_paid else "prolific_total"
+    expected = body.get('expected_total')
+    if expected is None or str(expected).strip() != summary[total_key]:
+        return jsonify({"error": "expected_total does not match the computed total; run the "
+                                 f"dry run again and confirm its {total_key}",
+                        total_key: summary[total_key]}), 409
+    rows = unpaid if skip_paid else [list(r) for r in summary["prolific_rows"]]
+    if not rows:
+        message = ("Every participant owed a bonus was already paid" if skip_paid
+                   else "No participant is owed a bonus")
+        return jsonify({"error": message, **summary}), 400
+    study_id = _study_id(body.get('study_id'))
+    if not study_id:
+        return jsonify({"error": "study_id required (in the body or crowdsourcing.prolific.study_id)"}), 400
+    from potato.incentives import earlier_payments, payments_path, record_payment
+    ledger = payments_path(_config())
+    with _PAYMENT_LOCK:
+        try:
+            earlier = earlier_payments(ledger, rows)
+        except (OSError, ValueError) as e:
+            return jsonify({"error": f"Could not read the payments record {ledger}: {e}; "
+                                     "not paying"}), 500
+        if earlier and body.get('repeat') is not True:
+            payees = {p for p, _ in rows}
+            return jsonify({
+                "error": "These participants were already paid: " + "; ".join(
+                    f"bulk bonus {rec.get('bulk_id')} on {rec.get('paid_at')} "
+                    f"({', '.join(sorted(payees & {p for p, _ in rec.get('rows') or []}))})"
+                    for rec in earlier)
+                + ". Send \"repeat\": true to pay them again.",
+                "earlier_batches": [{k: rec.get(k) for k in ("bulk_id", "study_id", "paid_at", "total")}
+                                    for rec in earlier],
+                "prolific_total": summary["prolific_total"]}), 409
+        client, err = _client()
+        if err:
+            return err
+
+        def on_paid(bulk_id, result):
+            try:
+                result["recorded"] = record_payment(ledger, rows, bulk_id, study_id,
+                                                    rows_total(rows), repeat=bool(earlier))
+            except OSError as e:
+                logger.error("Paid bulk bonus %s but could not record it in %s: %s",
+                             bulk_id, ledger, e)
+                result["warning"] = (f"Paid, but the payment could not be recorded in {ledger}; "
+                                     "a repeat would not be refused")
+        return _set_up_bonuses(client, study_id, rows, pay=True, on_paid=on_paid)
 
 
 @crowd_admin_bp.route('/cost_preview', methods=['GET'])

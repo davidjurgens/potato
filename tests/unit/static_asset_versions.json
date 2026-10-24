@@ -148,8 +148,8 @@
     "version": "1"
   },
   "display-logic.js": {
-    "sha256": "61faa26de6e354cb",
-    "version": "5"
+    "sha256": "2920a731dbc5cea9",
+    "version": "7"
   },
   "document-bbox.css": {
     "sha256": "d8710e81e67457ae",
@@ -158,6 +158,14 @@
   "document-bbox.js": {
     "sha256": "b53b7ebb08d21ec5",
     "version": "3"
+  },
+  "ego-network.css": {
+    "sha256": "a3db8bce7fd37a83",
+    "version": "1"
+  },
+  "ego-network.js": {
+    "sha256": "4ad02308cee97830",
+    "version": "1"
   },
   "entity-linking.js": {
     "sha256": "c3ea7f6df2f1cd4a",
@@ -183,6 +191,22 @@
     "sha256": "16e0b90c890792b8",
     "version": "6"
   },
+  "free-list.css": {
+    "sha256": "4f89ee4ac620e196",
+    "version": "1"
+  },
+  "free-list.js": {
+    "sha256": "6383202e5b191347",
+    "version": "1"
+  },
+  "geo-annotation.css": {
+    "sha256": "cbc22a29fb133a3b",
+    "version": "1"
+  },
+  "geo-annotation.js": {
+    "sha256": "ba8707241550bcce",
+    "version": "2"
+  },
   "grounding-eval.css": {
     "sha256": "6f947831b1b92db6",
     "version": "2"
@@ -199,6 +223,14 @@
     "sha256": "22dacc9e32b8833b",
     "version": "55"
   },
+  "incentive-elicitation.css": {
+    "sha256": "20183e12b6f6efa0",
+    "version": "1"
+  },
+  "incentive-elicitation.js": {
+    "sha256": "1d3972fa3522ad9d",
+    "version": "1"
+  },
   "instance-display.js": {
     "sha256": "1f97e150e3d901c4",
     "version": "5"
@@ -210,6 +242,14 @@
   "interaction_tracker.js": {
     "sha256": "8367128b658589f8",
     "version": "4"
+  },
+  "interlinear-gloss.css": {
+    "sha256": "c57dfa21a0362de4",
+    "version": "1"
+  },
+  "interlinear-gloss.js": {
+    "sha256": "185ae6222b962528",
+    "version": "1"
   },
   "js/pdf-viewer.js": {
     "sha256": "64b0d86af915fb89",
@@ -226,6 +266,14 @@
   "label-visibility.js": {
     "sha256": "cd90e8806852a329",
     "version": "2"
+  },
+  "listening-test.css": {
+    "sha256": "99044b653e677013",
+    "version": "5"
+  },
+  "listening-test.js": {
+    "sha256": "de7607b9a279a2c0",
+    "version": "3"
   },
   "live-agent-viewer.js": {
     "sha256": "fd3a2f51e3383b10",
@@ -395,13 +443,21 @@
     "sha256": "c35d731585c1f6b9",
     "version": "2"
   },
+  "spectrogram-annotation.css": {
+    "sha256": "fbda4f80d5d79b34",
+    "version": "1"
+  },
+  "spectrogram-annotation.js": {
+    "sha256": "2e7835214c7e1602",
+    "version": "1"
+  },
   "spreadsheet-display.css": {
     "sha256": "b7ae8488ab879d3c",
     "version": "2"
   },
   "styles.css": {
-    "sha256": "a7bcdc4526f5aba7",
-    "version": "41"
+    "sha256": "dfce8e44716dd169",
+    "version": "42"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",
@@ -419,17 +475,29 @@
     "sha256": "81187e571efed11d",
     "version": "15"
   },
+  "triad-design.js": {
+    "sha256": "7c52f0b30650ce18",
+    "version": "1"
+  },
+  "triad-test.css": {
+    "sha256": "c16c791ada4df28b",
+    "version": "1"
+  },
+  "triad-test.js": {
+    "sha256": "81a904786fc5136e",
+    "version": "1"
+  },
   "triage.js": {
     "sha256": "c2b0c1c31603b8ca",
     "version": "2"
   },
   "trial-timing.css": {
-    "sha256": "34597e034cb58d96",
-    "version": "1"
+    "sha256": "7ab6c55cda611aee",
+    "version": "3"
   },
   "trial-timing.js": {
-    "sha256": "df48e69db348a21d",
-    "version": "1"
+    "sha256": "18a800447f5ca6c2",
+    "version": "2"
   },
   "truth-serum.js": {
     "sha256": "9795b4dd43262680",
@@ -450,6 +518,26 @@
   "video-annotation.js": {
     "sha256": "913b05779170e631",
     "version": "24"
+  },
+  "viewers/genome-locus.js": {
+    "sha256": "64bd704779263288",
+    "version": "3"
+  },
+  "viewers/protein-structure.js": {
+    "sha256": "136fef029f936ee7",
+    "version": "1"
+  },
+  "viewers/viewer-framework.css": {
+    "sha256": "b3c0b5d8f0dca40d",
+    "version": "1"
+  },
+  "viewers/viewer-framework.js": {
+    "sha256": "c0093d8e28a0d54f",
+    "version": "1"
+  },
+  "viewers/viewer-selection.js": {
+    "sha256": "8fa04bcedc0e5470",
+    "version": "1"
   },
   "visual_ai_assistant.js": {
     "sha256": "f388e903a142dc96",

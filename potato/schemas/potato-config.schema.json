@@ -446,6 +446,23 @@
             "if": {
               "properties": {
                 "annotation_type": {
+                  "const": "bdm"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "max"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
                   "const": "constant_sum"
                 }
               },
@@ -473,6 +490,23 @@
             "then": {
               "required": [
                 "span_schema"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "ego_network"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "stages"
               ]
             }
           },
@@ -535,6 +569,11 @@
                       "required": [
                         "taxonomy_preset"
                       ]
+                    },
+                    {
+                      "required": [
+                        "taxonomy_file"
+                      ]
                     }
                   ]
                 }
@@ -575,6 +614,25 @@
                 "max_label",
                 "min_label",
                 "size"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "list_experiment"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "items",
+                "sensitive_item",
+                "treatment"
               ]
             }
           },
@@ -808,6 +866,23 @@
             "if": {
               "properties": {
                 "annotation_type": {
+                  "const": "spectrogram_annotation"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
                   "const": "tiered_annotation"
                 }
               },
@@ -860,6 +935,23 @@
             "if": {
               "properties": {
                 "annotation_type": {
+                  "const": "viewer_selection"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "viewer_field"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
                   "const": "volume_annotation"
                 }
               },
@@ -875,6 +967,7 @@
           }
         ],
         "properties": {
+          "abbreviations": {},
           "accept_key": {},
           "accept_label": {},
           "action_key": {},
@@ -889,6 +982,7 @@
           "allow_annotator_create": {},
           "allow_correction": {},
           "allow_discontinuous": {},
+          "allow_duplicates": {},
           "allow_empty_groups": {},
           "allow_html": {},
           "allow_identifying_tags": {},
@@ -896,11 +990,15 @@
           "allow_neutral": {},
           "allow_note": {},
           "allow_paste": {},
+          "allow_replay": {},
           "allow_reset": {},
           "allow_singletons": {},
           "allow_tie": {},
           "allow_ties": {},
           "allow_unanswerable": {},
+          "amount_now": {},
+          "amounts_later": {},
+          "anchors": {},
           "annotation_type": {
             "description": "Annotation type, as registered in the schema registry.",
             "oneOf": [
@@ -915,6 +1013,14 @@
               {
                 "const": "audio_annotation",
                 "description": "Audio segmentation and annotation with waveform visualization"
+              },
+              {
+                "const": "bdm",
+                "description": "Becker-DeGroot-Marschak bid: the most the participant would pay"
+              },
+              {
+                "const": "belief_elicitation",
+                "description": "Probability report (0-100) or a distribution over bins that sums to 100"
               },
               {
                 "const": "bws",
@@ -957,6 +1063,10 @@
                 "description": "Coreference chain annotation for grouping mentions of the same entity"
               },
               {
+                "const": "ego_network",
+                "description": "Personal (ego) network: name generators, per-person questions, dyad census and a sociogram"
+              },
+              {
                 "const": "emergent_behavior",
                 "description": "Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift"
               },
@@ -981,6 +1091,14 @@
                 "description": "Multi-agent failure attribution: responsible agent + decisive step + reason"
               },
               {
+                "const": "free_list",
+                "description": "Free list: items typed one at a time, in order, with timings (cultural domain analysis)"
+              },
+              {
+                "const": "geo_annotation",
+                "description": "Maps: draw labelled points, lines and polygons, pin places, or label regions (OpenLayers)"
+              },
+              {
                 "const": "grounding_eval",
                 "description": "Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer"
               },
@@ -1001,8 +1119,20 @@
                 "description": "Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
               },
               {
+                "const": "interlinear_gloss",
+                "description": "Interlinear glossed text: morpheme segmentation and glosses aligned per word (Leipzig rules)"
+              },
+              {
                 "const": "likert",
                 "description": "Likert scale rating"
+              },
+              {
+                "const": "list_experiment",
+                "description": "List experiment (item count technique) for a sensitive question"
+              },
+              {
+                "const": "listening_test",
+                "description": "Listening tests: MUSHRA, BS.1116, ACR, DCR, CCR, ABX and P.835, with blinded stimuli"
               },
               {
                 "const": "multi_document_event",
@@ -1029,6 +1159,10 @@
                 "description": "Pairwise comparison of two items (binary selection or scale rating)"
               },
               {
+                "const": "price_list",
+                "description": "Multiple price list: choose option A or B in each row (Holt & Laury preset, time preference)"
+              },
+              {
                 "const": "process_reward",
                 "description": "Per-step process reward signals for PRM training"
               },
@@ -1039,6 +1173,10 @@
               {
                 "const": "radio",
                 "description": "Single-choice radio button selection"
+              },
+              {
+                "const": "randomized_response",
+                "description": "Randomized response (forced response, crosswise) for a sensitive question"
               },
               {
                 "const": "range_slider",
@@ -1089,6 +1227,10 @@
                 "description": "3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
               },
               {
+                "const": "spectrogram_annotation",
+                "description": "Time-frequency boxes drawn on a spectrogram of the item's audio (bioacoustics)"
+              },
+              {
                 "const": "speech_transcript",
                 "description": "Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
               },
@@ -1133,6 +1275,10 @@
                 "description": "Annotation of conversation tree nodes with path selection"
               },
               {
+                "const": "triad_test",
+                "description": "Triad test: which of three items is most different, over a balanced set of triads"
+              },
+              {
                 "const": "triage",
                 "description": "Binary accept/reject triage for rapid data curation"
               },
@@ -1147,6 +1293,10 @@
               {
                 "const": "video_annotation",
                 "description": "Video annotation with temporal segments, frame classification, keyframes, and object tracking"
+              },
+              {
+                "const": "viewer_selection",
+                "description": "Selection made in a viewer display (residues in a protein_structure, features and locus in a genome_locus), with optional labels"
               },
               {
                 "const": "voice_interaction",
@@ -1167,8 +1317,12 @@
           "auto_select_parent": {},
           "autoplay": {},
           "bad_text_label": {},
+          "basemap": {},
+          "basemap_field": {},
           "behaviors": {},
           "best_description": {},
+          "bid_label": {},
+          "bins": {},
           "blind": {},
           "branch_comparison": {},
           "brush_size": {},
@@ -1176,29 +1330,37 @@
           "calls_key": {},
           "caption_field": {},
           "carry_over": {},
+          "center": {},
           "cf_verdicts": {},
           "codebook": {},
           "collapsed_tiers": {},
           "collapsible": {},
           "color_mode": {},
+          "colormap": {},
           "cols": {},
           "cols_key": {},
           "columns": {},
           "comment_categories": {},
+          "condition_field": {},
           "contention_labels": {},
           "controls": {},
           "coord_space": {},
+          "coordinate_order": {},
           "correctness_options": {},
+          "count_prompt": {},
           "criteria": {},
+          "currency": {},
           "custom_css": {},
           "default_box_height": {},
           "default_cols": {},
           "default_rows": {},
           "default_window": {},
+          "delay_label": {},
           "description": {
             "description": "Prompt shown to the annotator.",
             "type": "string"
           },
+          "design": {},
           "dimensions": {},
           "display_config": {},
           "display_logic": {},
@@ -1220,6 +1382,8 @@
           "expressions_field": {},
           "failure_causes": {},
           "fallback_text": {},
+          "feature_text": {},
+          "fft_size": {},
           "file_rating_dimensions": {},
           "fill_max_pixels": {},
           "fill_mode": {},
@@ -1231,17 +1395,22 @@
           "frame_stepping": {},
           "freeform_brush_size": {},
           "freeform_simplify": {},
+          "gloss_field": {},
           "groups": {},
           "has_free_response": {},
+          "height": {},
+          "hidden_reference": {},
           "highlight_color": {},
           "hint": {},
           "horizontal": {},
           "humanize_labels": {},
           "image_key": {},
           "inline_with_trace": {},
+          "input": {},
           "input_type": {},
           "input_width": {},
           "instance_masks": {},
+          "instructions": {},
           "intervention_field": {},
           "intervention_time_field": {},
           "items": {},
@@ -1253,9 +1422,11 @@
           "label": {},
           "label_requirement": {},
           "labels": {},
+          "language": {},
           "layers": {},
           "layout": {},
           "left_label": {},
+          "lextale": {},
           "link_types": {},
           "linked_acts": {},
           "lod": {},
@@ -1266,6 +1437,10 @@
           "max": {},
           "maxTick": {},
           "max_annotations": {},
+          "max_boxes": {},
+          "max_features": {},
+          "max_freq": {},
+          "max_items": {},
           "max_label": {},
           "max_lanes": {},
           "max_length": {},
@@ -1275,13 +1450,20 @@
           "max_score": {},
           "max_segments": {},
           "max_selections": {},
+          "max_triads": {},
           "max_value": {},
           "max_violations": {},
           "media_type": {},
+          "metalanguage": {},
+          "method": {},
           "milestones": {},
           "min": {},
           "min_annotations": {},
+          "min_boxes": {},
           "min_chars": {},
+          "min_features": {},
+          "min_freq": {},
+          "min_items": {},
           "min_label": {},
           "min_length": {},
           "min_per_item": {},
@@ -1289,8 +1471,10 @@
           "min_phases": {},
           "min_screen_size": {},
           "min_segments": {},
+          "min_selections": {},
           "min_value": {},
           "mode": {},
+          "morphemes_field": {},
           "mpr": {},
           "multiline": {},
           "muted": {},
@@ -1299,12 +1483,20 @@
             "type": "string"
           },
           "node_scheme": {},
+          "nonsensitive_prevalence": {},
+          "nonsensitive_statement": {},
+          "normalize": {},
+          "now_label": {},
+          "option_labels": {},
           "option_randomization": {},
           "options": {},
           "options_from_data": {},
           "outcomes": {},
           "overlap_labels": {},
           "overview_height": {},
+          "p_no": {},
+          "p_truth": {},
+          "p_yes": {},
           "pairs": {},
           "pan_enabled": {},
           "passage_field": {},
@@ -1314,22 +1506,32 @@
           "playback_rate_control": {},
           "point_budget": {},
           "point_size": {},
+          "preannotation_field": {},
           "precision": {},
           "predictions_field": {},
           "prefill_rtstruct_field": {},
+          "preset": {},
           "profiles_field": {},
           "profiles_per_set": {},
+          "projection": {},
           "prompt_field": {},
           "propagation": {},
           "quality_scale": {},
+          "question": {},
           "question_field": {},
           "randomize_order": {},
+          "randomizer": {},
           "rating_scale": {},
+          "reference_field": {},
           "region_type": {},
           "reject_key": {},
           "reject_label": {},
           "require_all": {},
+          "require_all_played": {},
+          "require_all_regions": {},
           "require_clean": {},
+          "require_full_playback": {},
+          "require_one_at_100": {},
           "require_reason_on_edit": {},
           "require_verification": {},
           "required": {},
@@ -1350,11 +1552,14 @@
           "segment_schemes": {},
           "segmentation": {},
           "segments_key": {},
+          "sensitive_item": {},
+          "sensitive_position": {},
           "sequential_key_binding": {},
           "series_shown": {},
           "session_level": {},
           "severities": {},
           "show_char_count": {},
+          "show_codes": {},
           "show_diff": {},
           "show_distribution_chart": {},
           "show_edit_distance": {},
@@ -1367,28 +1572,36 @@
           "show_span_labels": {},
           "show_tier_labels": {},
           "show_timecode": {},
+          "show_translation": {},
           "show_value": {},
           "show_values": {},
           "shuffle": {},
+          "single_switch": {},
           "size": {},
           "skeletons": {},
           "skip_key": {},
           "skip_label": {},
           "slab_thickness": {},
           "slots": {},
+          "snapping": {},
           "source_field": {},
           "span_schema": {},
           "speaker_key": {},
           "spectrogram": {},
           "spectrogram_options": {},
+          "stage_layout": {},
+          "stages": {},
           "starting_value": {},
           "step": {},
           "step_text_key": {},
           "steps_key": {},
+          "stimuli_field": {},
           "streams": {},
           "target_field": {},
           "target_schema": {},
+          "task": {},
           "taxonomy": {},
+          "taxonomy_file": {},
           "taxonomy_preset": {},
           "team_dimensions": {},
           "template_name": {},
@@ -1400,6 +1613,7 @@
           "tier_height": {},
           "tiers": {},
           "tiles": {},
+          "time_limit_s": {},
           "timeline_height": {},
           "title": {},
           "tools": {},
@@ -1411,6 +1625,8 @@
           "tracking_options": {},
           "transcript_field": {},
           "transcript_tier": {},
+          "translation_field": {},
+          "treatment": {},
           "tuple_size": {},
           "turn_binding": {},
           "turn_label": {},
@@ -1426,12 +1642,14 @@
           "video_key": {},
           "video_path": {},
           "viewer": {},
+          "viewer_field": {},
           "views": {},
           "violation_types": {},
           "visual_display": {},
           "waveform": {},
           "window_presets": {},
           "worst_description": {},
+          "zoom": {},
           "zoom_enabled": {}
         },
         "required": [
@@ -1512,6 +1730,37 @@
             "zoom_enabled": true
           },
           "source": "examples/audio/audio-annotation/config.yaml"
+        },
+        "bdm": {
+          "scheme": {
+            "annotation_type": "bdm",
+            "description": "What is the most you would pay for a voucher worth $3.00?",
+            "input": "number",
+            "instructions": "You have $5.00 to spend. A price between $0.00 and $5.00 is drawn after the study. If your bid is at least the price, you buy the voucher and pay the price, not your bid; otherwise you keep the $5.00. Bidding what the voucher is worth to you is your best choice.",
+            "label_requirement": {
+              "required": true
+            },
+            "max": 5,
+            "min": 0,
+            "name": "voucher",
+            "step": 0.05
+          },
+          "source": "examples/advanced/incentivized-elicitation/config.yaml"
+        },
+        "belief_elicitation": {
+          "scheme": {
+            "annotation_type": "belief_elicitation",
+            "description": "How likely is it that this happens?",
+            "instructions": "Move the slider to your probability. You may win $2.00: the closer your report is to what happens, the higher your chance of winning.",
+            "label_requirement": {
+              "required": true
+            },
+            "left_label": "Certainly not",
+            "mode": "point",
+            "name": "forecast",
+            "right_label": "Certainly"
+          },
+          "source": "examples/advanced/incentivized-elicitation/config.yaml"
         },
         "bws": {
           "scheme": {
@@ -1708,6 +1957,67 @@
             }
           },
           "source": "examples/span/coreference/config.yaml"
+        },
+        "ego_network": {
+          "scheme": {
+            "annotation_type": "ego_network",
+            "description": "Record the network this person describes",
+            "label_requirement": {
+              "required": true
+            },
+            "name": "described_network",
+            "stage_layout": "stacked",
+            "stages": [
+              {
+                "id": "mentioned",
+                "min_alters": 1,
+                "prompt": "Add each person the interviewee says they talk to.",
+                "title": "People mentioned",
+                "type": "name_generator"
+              },
+              {
+                "id": "role",
+                "prompt": "What is each person to the interviewee?",
+                "questions": [
+                  {
+                    "description": "{name} is the interviewee's",
+                    "labels": [
+                      {
+                        "name": "family",
+                        "text": "Family"
+                      },
+                      {
+                        "name": "friend",
+                        "text": "Friend"
+                      },
+                      {
+                        "name": "work",
+                        "text": "Work or school"
+                      },
+                      {
+                        "name": "unclear",
+                        "text": "Not stated"
+                      }
+                    ],
+                    "name": "role",
+                    "type": "radio"
+                  }
+                ],
+                "required": true,
+                "title": "Role",
+                "type": "name_interpreter"
+              },
+              {
+                "id": "ties",
+                "no_label": "No or not stated",
+                "prompt": "Does the excerpt say {a} and {b} know each other?",
+                "title": "Ties between them",
+                "type": "dyad_census",
+                "yes_label": "Yes"
+              }
+            ]
+          },
+          "source": "examples/advanced/ego-network/config.yaml"
         },
         "emergent_behavior": {
           "scheme": {
@@ -1975,6 +2285,62 @@
           },
           "source": "examples/agent-traces/failure-attribution/config.yaml"
         },
+        "free_list": {
+          "scheme": {
+            "annotation_type": "free_list",
+            "description": "List all the kinds of fruit you can think of.",
+            "instructions": "Type one kind of fruit, then press Enter. Keep going until you cannot think of any more. The order you list them in is part of the answer, so write them down as they come to mind.",
+            "label_requirement": {
+              "required": true
+            },
+            "max_items": 60,
+            "min_items": 3,
+            "name": "fruit_freelist",
+            "normalize": true
+          },
+          "source": "examples/advanced/cultural-domain/config.yaml"
+        },
+        "geo_annotation": {
+          "scheme": {
+            "annotation_type": "geo_annotation",
+            "basemap": {
+              "geojson": "maps/regions.geojson",
+              "region_id_property": "id",
+              "region_name_property": "name"
+            },
+            "description": "Draw the areas where people speak differently",
+            "feature_text": {
+              "prompt": "What do you call how people talk there?",
+              "required": true
+            },
+            "height": 460,
+            "instructions": "Outline each area where you think people talk differently from other places. Areas may overlap. Give each one the name you would use for the way people talk there, and say how different it sounds to you.",
+            "label_requirement": {
+              "required": true
+            },
+            "labels": [
+              {
+                "color": "#56B4E9",
+                "name": "A little different"
+              },
+              {
+                "color": "#D55E00",
+                "name": "Very different"
+              },
+              {
+                "color": "#CC79A7",
+                "name": "Hard to understand"
+              }
+            ],
+            "name": "dialect_areas",
+            "task": "draw",
+            "tools": [
+              "freehand",
+              "polygon"
+            ]
+          },
+          "source": "examples/advanced/dialect-map/config.yaml"
+        },
         "grounding_eval": {
           "scheme": {
             "annotation_type": "grounding_eval",
@@ -2090,6 +2456,29 @@
           },
           "source": "examples/image/image-annotation/config.yaml"
         },
+        "interlinear_gloss": {
+          "scheme": {
+            "abbreviations": "leipzig",
+            "annotation_type": "interlinear_gloss",
+            "description": "Segment each word into morphemes and gloss every morpheme",
+            "gloss_field": "glosses",
+            "instructions": "Put - between affixes and = before a clitic, in both lines. Write grammatical categories in capitals (ACC, PL, 3SG) and join several meanings of one morpheme with a dot (NOM.SG).",
+            "label_requirement": {
+              "required": true
+            },
+            "language": "la",
+            "metalanguage": "en",
+            "morphemes_field": "morphemes",
+            "name": "igt",
+            "source_field": "text",
+            "tiers": [
+              "pos",
+              "notes"
+            ],
+            "translation_field": "translation"
+          },
+          "source": "examples/span/interlinear-gloss/config.yaml"
+        },
         "likert": {
           "scheme": {
             "annotation_type": "likert",
@@ -2101,6 +2490,46 @@
             "size": 5
           },
           "source": "examples/classification/likert/config.yaml"
+        },
+        "list_experiment": {
+          "scheme": {
+            "annotation_type": "list_experiment",
+            "description": "Here is a list of things some people have done in the last year. How many of them have you done?",
+            "items": [
+              "Gone to a live music concert",
+              "Bought a book in a shop",
+              "Volunteered for a local group"
+            ],
+            "label_requirement": {
+              "required": true
+            },
+            "name": "lists",
+            "sensitive_item": "Driven a car after drinking alcohol",
+            "treatment": {
+              "factor": "list_group",
+              "level": "treatment"
+            }
+          },
+          "source": "examples/advanced/sensitive-questions/config.yaml"
+        },
+        "listening_test": {
+          "scheme": {
+            "anchors": [
+              3500,
+              7000
+            ],
+            "annotation_type": "listening_test",
+            "description": "Rate the audio quality of each sample against the reference",
+            "instructions": "Listen to the reference, then to every sample. One of the samples is the reference itself; rate it 100. Use the loop to compare a short passage.",
+            "label_requirement": {
+              "required": true
+            },
+            "method": "mushra",
+            "name": "quality",
+            "reference_field": "reference",
+            "stimuli_field": "stimuli"
+          },
+          "source": "examples/audio/listening-test-mushra/config.yaml"
         },
         "multi_document_event": {
           "scheme": {
@@ -2236,6 +2665,20 @@
           },
           "source": "examples/classification/pairwise-scale/config.yaml"
         },
+        "price_list": {
+          "scheme": {
+            "annotation_type": "price_list",
+            "description": "For each decision, choose the option you prefer.",
+            "instructions": "If this part is drawn for payment, one of the ten decisions is drawn at random and the option you chose in it is played for real money.",
+            "label_requirement": {
+              "required": true
+            },
+            "name": "risk",
+            "preset": "holt_laury",
+            "single_switch": true
+          },
+          "source": "examples/advanced/incentivized-elicitation/config.yaml"
+        },
         "process_reward": {
           "scheme": {
             "ai_prelabel": true,
@@ -2274,6 +2717,21 @@
             "sequential_key_binding": true
           },
           "source": "examples/classification/single-choice/config.yaml"
+        },
+        "randomized_response": {
+          "scheme": {
+            "annotation_type": "randomized_response",
+            "description": "Read both statements. Do not say which is true.",
+            "label_requirement": {
+              "required": true
+            },
+            "method": "crosswise",
+            "name": "cheating_crosswise",
+            "nonsensitive_prevalence": 0.25,
+            "nonsensitive_statement": "My mother was born in January, February or March.",
+            "question": "I have copied someone else's work and handed it in as my own."
+          },
+          "source": "examples/advanced/sensitive-questions/config.yaml"
         },
         "range_slider": {
           "scheme": {
@@ -2660,6 +3118,34 @@
           },
           "source": "examples/spatial/kitti-cuboids/config.yaml"
         },
+        "spectrogram_annotation": {
+          "scheme": {
+            "annotation_type": "spectrogram_annotation",
+            "description": "Check the boxes imported from Raven selection tables: move, resize, relabel or delete them, and draw any call that was missed.",
+            "instructions": "Drag on the spectrogram to draw a box around a call. Drag a box to move it and its corners to resize it; pick the call type with the buttons or keys 1-4.",
+            "labels": [
+              {
+                "color": "#2563eb",
+                "name": "whistle"
+              },
+              {
+                "color": "#dc2626",
+                "name": "upsweep"
+              },
+              {
+                "color": "#16a34a",
+                "name": "downsweep"
+              },
+              {
+                "color": "#d97706",
+                "name": "trill"
+              }
+            ],
+            "name": "calls",
+            "source_field": "audio_url"
+          },
+          "source": "examples/audio/bioacoustics-boxes/config.yaml"
+        },
         "speech_transcript": {
           "scheme": {
             "allow_correction": true,
@@ -2948,6 +3434,20 @@
           },
           "source": "examples/span/conversation-tree/config.yaml"
         },
+        "triad_test": {
+          "scheme": {
+            "annotation_type": "triad_test",
+            "description": "Triads",
+            "instructions": "Each triad shows three items. Choose the one that is most different from the other two. There are no right answers.",
+            "items_field": "items",
+            "label_requirement": {
+              "required": true
+            },
+            "name": "triads",
+            "question": "Which is most different?"
+          },
+          "source": "examples/advanced/cultural-domain/config.yaml"
+        },
         "triage": {
           "scheme": {
             "annotation_type": "triage",
@@ -3019,6 +3519,25 @@
             "zoom_enabled": true
           },
           "source": "examples/video/video-frame-annotation/config.yaml"
+        },
+        "viewer_selection": {
+          "scheme": {
+            "annotation_type": "viewer_selection",
+            "description": "Select the residues that form the binding site",
+            "instructions": "Choose a label, then click residues in the 3D view or the residue table. Click a selected residue again to remove it.",
+            "label_requirement": {
+              "required": true
+            },
+            "labels": [
+              "zinc ligand",
+              "interface"
+            ],
+            "max_selections": 12,
+            "min_selections": 1,
+            "name": "binding_site",
+            "viewer_field": "structure"
+          },
+          "source": "examples/advanced/protein-binding-site/config.yaml"
         },
         "voice_interaction": {
           "scheme": {
@@ -4504,6 +5023,45 @@
       },
       "type": "object"
     },
+    "incentives": {
+      "additionalProperties": true,
+      "description": "Bonus payments for price_list, bdm and belief_elicitation answers. Computed after the participant finishes, from the stored answers, by the `incentives` export and the admin route /admin/api/crowd/incentive_bonuses; never paid automatically",
+      "properties": {
+        "currency": {
+          "default": "USD",
+          "description": "Currency label written to bonuses.csv. Prolific pays in the study's own currency",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Compute bonuses: turns on the `incentives` export and the admin route",
+          "type": "boolean"
+        },
+        "max_bonus": {
+          "description": "Upper limit on one participant's bonus. A capped total is marked in bonuses.csv",
+          "type": "number"
+        },
+        "only_finished": {
+          "default": true,
+          "description": "Draw and pay only for participants who reached the end of the study",
+          "type": "boolean"
+        },
+        "pay": {
+          "default": "one_random_item",
+          "description": "one_random_item pays one decision drawn at random from all of a participant's paid decisions; all (or its alias sum) pays the sum of every decision",
+          "type": "string"
+        },
+        "rules": {
+          "description": "One rule per paid scheme: `scheme`, `method` (mpl_random_row, bdm or bsr), an optional `name`, and the method's keys -- bdm: `endowment`, `draw: {min, max, step}` or `price_field`, `item_value` or `value_field`; bsr: `prize` and `outcome_field` or `outcome`",
+          "type": "array"
+        },
+        "seed": {
+          "description": "Private text mixed into every draw. Without it the draws follow from the user id and rule name alone, which anyone with the code could compute in advance; keep it out of public repositories",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "instance_display": {
       "$comment": "Display types accepting span annotation targets: audio_dialogue, code, coding_trace, dialogue, document, eval_trace, interactive_chat, multi_agent_discussion, text",
       "additionalProperties": true,
@@ -4570,12 +5128,20 @@
                     "description": "Scrollable image gallery with captions"
                   },
                   {
+                    "const": "genome_locus",
+                    "description": "Genome locus in igv.js: reference, reads, variants and annotation tracks"
+                  },
+                  {
                     "const": "html",
                     "description": "HTML content display (sanitized)"
                   },
                   {
                     "const": "image",
                     "description": "Image display with optional zoom"
+                  },
+                  {
+                    "const": "image_region",
+                    "description": "One rectangle of a larger image (a text line, a word, a figure), cropped in the browser"
                   },
                   {
                     "const": "interactive_chat",
@@ -4600,6 +5166,10 @@
                   {
                     "const": "pdf",
                     "description": "PDF document display with PDF.js rendering"
+                  },
+                  {
+                    "const": "protein_structure",
+                    "description": "Protein structure (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*, with residue selection"
                   },
                   {
                     "const": "spreadsheet",
@@ -6529,6 +7099,10 @@
           "description": "Minimum blank interval between one response and the next fixation, in ms. Page loading counts toward it",
           "minimum": 0,
           "type": "integer"
+        },
+        "presentation": {
+          "description": "Show the item's text one region at a time and record each region's reading time: `mode` (moving_window, centered, cumulative or maze), `field`, `region_separator`, `advance_key`, `question_field`, and for the maze `distractor_field`, `maze_keys` and `on_error`. With it, `response` (the comprehension question) is optional",
+          "type": "object"
         },
         "response": {
           "description": "`schema` (a radio or likert scheme), `keys` (key to label, e.g. `{f: word, j: nonword}`) and `allow_mouse`",

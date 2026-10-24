@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Ego (personal) network collection, two ways.
+#
+# 1. As a survey page (the usual design): before the annotation task each
+#    participant names the people they talk to about important matters and
+#    the people they would ask for practical help, answers questions about each
+#    person, says which pairs know each other, and arranges them on a map.
+#    The page is surveys/your-network.json.
+# 2. As an annotation task: coders read short interview excerpts and record
+#    the network each interviewee describes, one ego network per item.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/ego-network/config.yaml -p 8000
+#
+# Export egos.csv, alters.csv, edges.csv and one GraphML file per network.
+# Alter names are left out unless you pass export_names=true:
+#   python -m potato.export --config examples/advanced/ego-network/config.yaml --format ego_network --output out/
+
+annotation_task_name: "Personal networks"
+
+data_files:
+  - data/ego-network-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+export_include_phase_data: true
+
+user_config:
+  allow_all_users: true
+  users: []
+
+phases:
+  order:
+    - your_network
+    - annotation
+  your_network:
+    type: prestudy
+    file: surveys/your-network.json
+  annotation:
+    type: annotation
+
+annotation_schemes:
+  - annotation_type: ego_network
+    name: described_network
+    description: "Record the network this person describes"
+    stage_layout: stacked
+    label_requirement:
+      required: true
+    stages:
+      - type: name_generator
+        id: mentioned
+        title: People mentioned
+        prompt: "Add each person the interviewee says they talk to."
+        min_alters: 1
+      - type: name_interpreter
+        id: role
+        title: Role
+        prompt: "What is each person to the interviewee?"
+        required: true
+        questions:
+          - name: role
+            type: radio
+            description: "{name} is the interviewee's"
+            labels:
+              - {name: family, text: Family}
+              - {name: friend, text: Friend}
+              - {name: work, text: Work or school}
+              - {name: unclear, text: "Not stated"}
+      - type: dyad_census
+        id: ties
+        title: Ties between them
+        prompt: "Does the excerpt say {a} and {b} know each other?"
+        yes_label: "Yes"
+        no_label: "No or not stated"
+
+site_dir: default

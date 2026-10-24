@@ -1,5 +1,5 @@
 """
-Whole-project importers: Label Studio and Argilla.
+Whole-project importers: Label Studio, Argilla, Zooniverse, and tiered TextGrid / EAF files.
 
 See :mod:`potato.importers.projects.base` for why these are separate from the
 CV and text importers.
@@ -12,10 +12,35 @@ from typing import Optional
 
 from .argilla import ArgillaImporter
 from .label_studio import LabelStudioImporter
+from .ibex import IbexImporter
+from .interlinear import FlexTextImporter, ToolboxImporter
+from .textgrid import EAFImporter, TextGridImporter
+from .zooniverse import ZooniverseImporter
+from .camera_traps import COCOCameraTrapsImporter, MegaDetectorImporter
+from .bioacoustics import AudacityLabelsImporter, BirdNETImporter, RavenImporter
+from .iiif import IIIFImporter
+from .page_xml import PageXMLImporter
+from .web_annotation import WebAnnotationImporter
 
 IMPORTERS = {
     "label_studio": LabelStudioImporter(),
     "argilla": ArgillaImporter(),
+    "textgrid": TextGridImporter(),
+    "eaf": EAFImporter(),
+    "zooniverse": ZooniverseImporter(),
+    "ibex": IbexImporter(),
+    "flextext": FlexTextImporter(),
+    "toolbox": ToolboxImporter(),
+    "megadetector": MegaDetectorImporter(),
+    "coco_camera_traps": COCOCameraTrapsImporter(),
+    # BirdNET before Raven: its selection tables are Raven tables too.
+    "birdnet": BirdNETImporter(),
+    "raven": RavenImporter(),
+    "audacity_labels": AudacityLabelsImporter(),
+    # IIIF before Web Annotation: a manifest holds annotation pages too.
+    "iiif": IIIFImporter(),
+    "web_annotation": WebAnnotationImporter(),
+    "page_xml": PageXMLImporter(),
 }
 
 #: Spellings people type for the same format.
@@ -23,6 +48,26 @@ ALIASES = {
     "label-studio": "label_studio",
     "labelstudio": "label_studio",
     "ls": "label_studio",
+    "praat": "textgrid",
+    "elan": "eaf",
+    "panoptes": "zooniverse",
+    "pcibex": "ibex",
+    "penncontroller": "ibex",
+    "flex": "flextext",
+    "fieldworks": "flextext",
+    "shoebox": "toolbox",
+    "sfm": "toolbox",
+    "md": "megadetector",
+    "cct": "coco_camera_traps",
+    "coco-camera-traps": "coco_camera_traps",
+    "audacity": "audacity_labels",
+    "raven_selection": "raven",
+    "iiif_manifest": "iiif",
+    "w3c": "web_annotation",
+    "web-annotation": "web_annotation",
+    "hypothesis": "web_annotation",
+    "page": "page_xml",
+    "transkribus": "page_xml",
 }
 
 

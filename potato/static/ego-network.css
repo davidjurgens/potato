@@ -1,0 +1,147 @@
+/* Ego networks (annotation_type: ego_network). Uses the page's theme
+   tokens, so it follows light and dark mode.
+
+   styles.css sets `.annotation-form fieldset span { color: var(--text-color)
+   !important }`, so the few spans here that carry their own colour say
+   !important too. */
+form.ego-network, .ego-network fieldset, .ego-network .en-root { width: 100%; min-width: 0; box-sizing: border-box; }
+.ego-network .en-title { font-weight: 600; margin-bottom: 0.5rem; }
+.ego-network .en-root { display: flex; flex-direction: column; gap: 0.75rem; }
+.ego-network .en-body { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.ego-network .en-loading, .ego-network .en-note, .ego-network .en-count,
+.ego-network .en-step-count, .ego-network .en-last { color: var(--muted-foreground); font-size: var(--text-sm, 0.8125rem); margin: 0; }
+.ego-network .en-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Steps */
+.ego-network .en-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.ego-network .en-step {
+    display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.25rem;
+    padding: 0.25rem 0.75rem 0.25rem 0.3rem; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--card); color: var(--card-foreground); font: inherit; font-size: var(--text-sm, 0.8125rem); cursor: pointer;
+}
+.ego-network .en-step:disabled { opacity: 0.5; cursor: not-allowed; }
+.ego-network .en-step-n {
+    display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 999px;
+    background: var(--muted); color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.ego-network .en-step-done .en-step-n { background: var(--success-tint, #e7f5ef); color: var(--success-text, #047857) !important; }
+.ego-network .en-step[aria-current="step"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.ego-network .en-step[aria-current="step"] .en-step-n { background: var(--primary); color: var(--primary-foreground) !important; }
+
+.ego-network .en-stage { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.ego-network .en-stage-title { margin: 0; font-size: var(--text-md, 1.0625rem); font-weight: 600; outline: none; }
+.ego-network .en-stage-title:focus-visible { box-shadow: 0 0 0 2px var(--ring); border-radius: 0.25rem; }
+.ego-network .en-prompt { margin: 0; font-size: var(--text-base, 1rem); }
+.ego-network .en-instructions { margin: 0; color: var(--muted-foreground); }
+.ego-network .en-sub { margin: 0.25rem 0 0; font-weight: 500; font-size: var(--text-sm, 0.8125rem); }
+.ego-network .en-empty { margin: 0; padding: 0.75rem; border: 1px dashed var(--border); border-radius: var(--radius, 0.5rem); color: var(--muted-foreground); }
+.ego-network .en-msg { margin: 0; padding: 0.5rem 0.75rem; border-radius: var(--radius, 0.5rem);
+    background: var(--warning-tint, #fdf3e2); color: var(--warning-text, #7d4407); }
+
+.ego-network .en-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem;
+    padding-top: 0.75rem; border-top: 1px solid var(--border); }
+
+/* Buttons and inputs */
+.ego-network .en-btn, .ego-network .en-option, .ego-network .en-roster-item, .ego-network .en-chip-add {
+    min-height: 2.5rem; padding: 0.4rem 0.9rem; border: 1px solid var(--border); border-radius: var(--radius, 0.5rem);
+    background: var(--card); color: var(--card-foreground); font: inherit; cursor: pointer; text-align: left;
+}
+.ego-network .en-btn:hover:not(:disabled), .ego-network .en-option:hover, .ego-network .en-roster-item:hover:not(:disabled),
+.ego-network .en-chip-add:hover:not(:disabled) { background: var(--secondary); }
+.ego-network .en-btn:disabled, .ego-network .en-roster-item:disabled, .ego-network .en-chip-add:disabled { opacity: 0.45; cursor: not-allowed; }
+.ego-network .en-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.ego-network .en-btn-primary:hover:not(:disabled) { background: var(--primary); filter: brightness(1.08); }
+.ego-network button:focus-visible, .ego-network input:focus-visible, .ego-network summary:focus-visible {
+    outline: 2px solid var(--ring); outline-offset: 2px; }
+.ego-network .en-input {
+    min-height: 2.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--input, var(--border)); border-radius: var(--radius, 0.5rem);
+    background: var(--background); color: var(--foreground); font: inherit; min-width: 0; box-sizing: border-box;
+}
+.ego-network .en-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.ego-network .en-label { font-weight: 500; margin: 0; }
+.ego-network .en-name-input { flex: 1 1 12rem; }
+
+.ego-network .en-options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.ego-network .en-option[aria-checked="true"], .ego-network .en-roster-item[aria-pressed="true"] {
+    background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.ego-network .en-option[role="checkbox"][aria-checked="true"]::before,
+.ego-network .en-roster-item[aria-pressed="true"]::before { content: "\2713\00a0"; }
+.ego-network .en-option-no[aria-checked="true"] { background: var(--foreground); border-color: var(--foreground); color: var(--background); }
+
+/* Chips (people named in a generator) */
+.ego-network .en-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.ego-network .en-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.25rem 0.2rem 0.8rem;
+    border-radius: 999px; background: var(--primary-tint, var(--secondary)); color: var(--foreground); min-height: 2.25rem; }
+.ego-network .en-chip-name { font-weight: 500; overflow-wrap: anywhere; }
+.ego-network .en-chip-remove { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: 999px;
+    background: transparent; color: var(--muted-foreground); font-size: 1.15rem; line-height: 1; cursor: pointer; }
+.ego-network .en-chip-remove:hover { background: var(--card); color: var(--destructive-text, #9f1e17); }
+.ego-network .en-chip-add { border-style: dashed; border-radius: 999px; min-height: 2.25rem; }
+
+.ego-network .en-roster-search { width: 100%; max-width: 24rem; }
+.ego-network .en-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem;
+    max-height: 16rem; overflow-y: auto; }
+
+/* Name interpreter */
+.ego-network .en-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: 0.75rem; }
+.ego-network .en-card { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.85rem; min-width: 0;
+    border: 1px solid var(--border); border-radius: var(--radius, 0.5rem); background: var(--card); }
+.ego-network .en-card-done { border-color: color-mix(in srgb, var(--success-text, #047857) 45%, var(--border)); }
+.ego-network .en-card-title { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.5rem;
+    margin: 0; font-size: var(--text-base, 1rem); font-weight: 600; overflow-wrap: anywhere; }
+.ego-network .en-card-progress { font-weight: 400; font-size: var(--text-xs, 0.75rem); }
+.ego-network .en-card-done .en-card-progress { color: var(--success-text, #047857) !important; font-weight: 600; }
+.ego-network .en-q { display: flex; flex-direction: column; gap: 0.35rem; }
+.ego-network .en-q-label { margin: 0; font-size: var(--text-dense, 0.875rem); }
+.ego-network .en-req { color: var(--destructive-text, #9f1e17) !important; }
+.ego-network .en-q .en-option { min-height: 2.25rem; padding: 0.3rem 0.7rem; font-size: var(--text-dense, 0.875rem); }
+.ego-network .en-q-input { width: 100%; }
+
+/* Dyad census */
+.ego-network .en-census-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.ego-network .en-pair-n { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ego-network .en-progress { height: 0.5rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
+.ego-network .en-progress > span { display: block; height: 100%; background: var(--primary); }
+.ego-network .en-pair-q { margin: 0.25rem 0 0; font-size: var(--text-md, 1.0625rem); }
+.ego-network .en-pair-options .en-option { min-width: 6rem; text-align: center; }
+.ego-network .en-pair-nav { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+.ego-network .en-pairs summary { cursor: pointer; font-size: var(--text-sm, 0.8125rem); padding: 0.25rem 0; }
+.ego-network .en-pair-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 0.35rem; }
+.ego-network .en-pair-jump { width: 100%; min-height: 2.25rem; padding: 0.25rem 0.6rem; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: var(--card); color: var(--card-foreground); font: inherit;
+    font-size: var(--text-sm, 0.8125rem); text-align: left; cursor: pointer; }
+.ego-network .en-pair-jump[aria-current="true"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.ego-network .en-pair-open .en-pair-state { font-style: italic; }
+.ego-network .en-pair-yes .en-pair-state { color: var(--success-text, #047857) !important; font-weight: 600; }
+.ego-network .en-pair-no .en-pair-state { font-weight: 600; }
+
+/* Sociogram */
+.ego-network .en-canvas-wrap { width: 100%; max-width: 36rem; margin: 0 auto; }
+.ego-network .en-sociogram { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; touch-action: none; user-select: none; }
+.ego-network .en-canvas-bg { fill: var(--card); stroke: var(--border); stroke-width: 2; }
+.ego-network .en-ring { fill: color-mix(in srgb, var(--primary) 4%, transparent); stroke: var(--border); stroke-width: 2; }
+.ego-network .en-ego { fill: var(--muted-foreground); }
+.ego-network .en-tie { stroke: var(--foreground); stroke-width: 5; stroke-linecap: round; opacity: 0.7; }
+.ego-network .en-node { cursor: grab; outline: none; }
+.ego-network .en-node:active { cursor: grabbing; }
+.ego-network .en-node-circle { fill: var(--primary); stroke: var(--card); stroke-width: 5; }
+.ego-network .en-node-label { fill: var(--foreground); font-size: 34px; font-weight: 600; paint-order: stroke;
+    stroke: var(--card); stroke-width: 8px; stroke-linejoin: round; pointer-events: none; }
+.ego-network .en-node-selected .en-node-circle { fill: var(--foreground); stroke: var(--primary); stroke-width: 10; }
+.ego-network .en-node:focus-visible .en-node-circle { stroke: var(--ring); stroke-width: 12; }
+.ego-network .en-tie-panel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;
+    border: 1px solid var(--border); border-radius: var(--radius, 0.5rem); background: var(--card); }
+.ego-network .en-tie-done { align-self: flex-start; }
+
+@media (max-width: 560px) {
+    .ego-network .en-step-t { display: none; }
+    .ego-network .en-step { padding-right: 0.3rem; }
+    .ego-network .en-step[aria-current="step"] .en-step-t { display: inline; }
+    .ego-network .en-step[aria-current="step"] { padding-right: 0.75rem; }
+    .ego-network .en-foot .en-btn { flex: 1 1 auto; text-align: center; }
+    .ego-network .en-step-count { order: -1; width: 100%; }
+}
+
+/* Stacked layout: every stage on the page at once */
+.ego-network .en-body > .en-stage + .en-stage { border-top: 1px solid var(--border); padding-top: 1rem; }

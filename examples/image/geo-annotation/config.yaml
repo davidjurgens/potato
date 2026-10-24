@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Land-cover polygons over georeferenced images.
+#
+# Each item names a small image and the longitude/latitude extent it covers
+# (the item's `map` field). Annotators outline water, forest, fields and
+# built-up areas; the answer is a GeoJSON FeatureCollection in EPSG:4326, so
+# a GIS can read it directly. The first item carries a suggested polygon
+# (the `suggested` field) for the annotator to check. The images are
+# synthetic and the map needs no network.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/image/geo-annotation/config.yaml -p 8000
+#
+# Export one GeoJSON file per item:
+#   python -m potato.export --config examples/image/geo-annotation/config.yaml --format geojson --output out/
+
+annotation_task_name: "Land cover on georeferenced images"
+
+data_files:
+  - data/geo-annotation-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: geo_annotation
+    name: land_cover
+    description: "Outline the land cover"
+    task: draw
+    tools: [polygon, freehand, point]
+    labels:
+      - name: Water
+        color: "#0072B2"
+      - name: Forest
+        color: "#009E73"
+      - name: Field
+        color: "#E69F00"
+      - name: Built-up
+        color: "#CC79A7"
+    basemap_field: map
+    preannotation_field: suggested
+    snapping: true
+    height: 440
+    label_requirement:
+      required: true

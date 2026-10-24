@@ -1,0 +1,116 @@
+/* Incentivized elicitation: price_list, bdm, belief_elicitation. Theme tokens
+   only, so the widgets follow light and dark mode. */
+form.incentive-widget, .incentive-widget fieldset { width: 100%; box-sizing: border-box; min-width: 0; }
+.incentive-widget .iw-title { font-weight: 600; margin-bottom: var(--space-sm, 0.5rem); color: var(--foreground); }
+.incentive-widget .iw-instructions { margin: 0 0 var(--space-md, 1rem); color: var(--foreground); max-width: 70ch; }
+.incentive-widget .iw-hint { margin: var(--space-xs, 0.25rem) 0 0; color: var(--muted-foreground); font-size: var(--text-dense, 0.875rem); }
+.incentive-widget .iw-status { margin: var(--space-sm, 0.5rem) 0 0; min-height: 1.4em; font-size: var(--text-dense, 0.875rem);
+    color: var(--muted-foreground); }
+.incentive-widget .iw-status[data-tone="error"] { color: var(--destructive-text); }
+.incentive-widget .iw-status[data-tone="done"] { color: var(--foreground); }
+
+/* ---------------------------------------------------------- price list -- */
+.price-list .pl-table { display: flex; flex-direction: column; gap: var(--space-xs, 0.25rem); }
+.price-list .pl-head,
+.price-list .pl-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-sm, 0.5rem); align-items: stretch; }
+.price-list .pl-head { font-size: var(--text-dense, 0.875rem); font-weight: 600; color: var(--muted-foreground);
+    padding-bottom: var(--space-xs, 0.25rem); border-bottom: 1px solid var(--border); }
+.price-list .pl-num { align-self: center; text-align: right; font-variant-numeric: tabular-nums;
+    color: var(--muted-foreground); font-size: var(--text-dense, 0.875rem); }
+.price-list .pl-choice {
+    display: flex; align-items: center; gap: var(--space-sm, 0.5rem);
+    min-height: 2.75rem; padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+    border: 1px solid var(--border); border-radius: var(--radius, 0.5rem);
+    background: var(--card); color: var(--card-foreground);
+    font: inherit; font-size: var(--text-dense, 0.875rem); line-height: 1.35; text-align: left;
+    cursor: pointer;
+}
+.price-list .pl-choice:hover { border-color: var(--primary); }
+.price-list .pl-choice:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.price-list .pl-choice[aria-checked="true"] { background: var(--primary-tint, var(--secondary)); border-color: var(--primary);
+    box-shadow: inset 0 0 0 1px var(--primary); color: var(--foreground); }
+.price-list .pl-mark { flex: none; width: 1rem; height: 1rem; border-radius: 50%;
+    border: 2px solid var(--muted-foreground); box-sizing: border-box; }
+.price-list .pl-choice[aria-checked="true"] .pl-mark { border-color: var(--primary);
+    background: radial-gradient(circle, var(--primary) 0 45%, transparent 50%); }
+.price-list .pl-tag { flex: none; font-weight: 600; min-width: 1ch; }
+.price-list .pl-text { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+/* Rows the single-switch rule filled in after a click elsewhere. */
+.price-list .pl-row.pl-auto .pl-choice[aria-checked="true"] { animation: pl-auto 0.7s ease-out; }
+@keyframes pl-auto { from { box-shadow: inset 0 0 0 1px var(--primary), 0 0 0 3px var(--ring); } }
+@media (prefers-reduced-motion: reduce) {
+    .price-list .pl-row.pl-auto .pl-choice[aria-checked="true"] { animation: none; }
+}
+
+/* ----------------------------------------------------------------- bdm -- */
+.bdm .bdm-entry { display: flex; flex-direction: column; gap: var(--space-xs, 0.25rem); }
+.bdm .bdm-label, .belief-elicitation .be-label { font-weight: 500; color: var(--foreground); }
+.bdm .bdm-number-row { display: inline-flex; align-items: center; gap: var(--space-xs, 0.25rem); }
+.bdm .bdm-currency { font-weight: 600; color: var(--foreground); }
+.bdm .bdm-number,
+.belief-elicitation .be-bin-input {
+    width: 8rem; min-height: 2.75rem; padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+    border: 1px solid var(--input); border-radius: var(--radius, 0.5rem);
+    background: var(--card); color: var(--card-foreground); font: inherit; font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+}
+.bdm .bdm-number:focus-visible,
+.belief-elicitation .be-bin-input:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.bdm .bdm-number[aria-invalid="true"],
+.belief-elicitation .be-bin-input[aria-invalid="true"] { border-color: var(--destructive); }
+.bdm .bdm-slider-row,
+.belief-elicitation .be-slider-row { display: flex; align-items: center; gap: var(--space-sm, 0.5rem); width: 100%; }
+.bdm .bdm-slider-row, .belief-elicitation .be-slider-row { min-height: 2.75rem; }
+.bdm .bdm-slider, .belief-elicitation .be-slider { flex: 1 1 auto; min-width: 0; }
+.bdm .bdm-end { color: var(--muted-foreground); font-size: var(--text-dense, 0.875rem); font-variant-numeric: tabular-nums; }
+.bdm .bdm-value, .belief-elicitation .be-value { min-width: 4.5rem; text-align: right; font-weight: 600;
+    font-variant-numeric: tabular-nums; color: var(--foreground); }
+.bdm .bdm-slider:focus-visible, .belief-elicitation .be-slider:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* An unset slider has a hollow thumb, so the starting midpoint does not read
+   as an answer. */
+.bdm .bdm-slider:not(.bdm-set)::-webkit-slider-thumb,
+.belief-elicitation .be-slider:not(.be-set)::-webkit-slider-thumb {
+    background: var(--card); border: 2px dashed var(--muted-foreground); box-shadow: none; }
+.bdm .bdm-slider:not(.bdm-set)::-moz-range-thumb,
+.belief-elicitation .be-slider:not(.be-set)::-moz-range-thumb {
+    background: var(--card); border: 2px dashed var(--muted-foreground); box-shadow: none; }
+
+/* ------------------------------------------------------ belief (point) -- */
+.belief-elicitation .be-point { display: flex; flex-direction: column; gap: var(--space-xs, 0.25rem); }
+.belief-elicitation .be-ends { display: flex; justify-content: space-between; gap: var(--space-md, 1rem);
+    margin-right: 5rem; font-size: var(--text-dense, 0.875rem); color: var(--muted-foreground); }
+
+/* ------------------------------------------------------- belief (bins) -- */
+.belief-elicitation .be-bins { display: flex; flex-direction: column; gap: var(--space-xs, 0.25rem); }
+.belief-elicitation .be-bin { display: grid; grid-template-columns: minmax(6rem, 12rem) 6rem minmax(0, 1fr);
+    align-items: center; gap: var(--space-sm, 0.5rem); }
+.belief-elicitation .be-bin-input { width: 6rem; }
+.belief-elicitation .be-bin-label { margin: 0; color: var(--foreground); overflow-wrap: anywhere; }
+.belief-elicitation .be-bar { display: block; height: 0.75rem; border-radius: 999px; background: var(--muted);
+    border: 1px solid var(--border); overflow: hidden; }
+.belief-elicitation .be-bar-fill { display: block; height: 100%; width: 0; background: var(--primary);
+    transition: width 0.15s ease-out; }
+@media (prefers-reduced-motion: reduce) { .belief-elicitation .be-bar-fill { transition: none; } }
+.belief-elicitation .be-total { margin: var(--space-sm, 0.5rem) 0 0; padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+    border-radius: var(--radius, 0.5rem); background: var(--muted); color: var(--foreground);
+    font-variant-numeric: tabular-nums; display: inline-block; }
+.belief-elicitation .be-total[data-state="done"] { background: var(--success-tint); color: var(--success-text); }
+.belief-elicitation .be-total[data-state="over"],
+.belief-elicitation .be-total[data-state="error"] { background: var(--destructive-tint); color: var(--destructive-text); }
+.belief-elicitation .be-total[data-state="under"] { background: var(--warning-tint); color: var(--warning-text); }
+
+@media (max-width: 560px) {
+    .price-list .pl-head, .price-list .pl-row { grid-template-columns: 1.5rem minmax(0, 1fr) minmax(0, 1fr);
+        gap: var(--space-xs, 0.25rem); }
+    .price-list .pl-choice { padding: var(--space-xs, 0.25rem); gap: var(--space-xs, 0.25rem); }
+    /* The column headings name the options; the mark shows the choice. */
+    .price-list .pl-tag { display: none; }
+    .belief-elicitation .be-bin { grid-template-columns: minmax(0, 1fr) 5rem; }
+    .belief-elicitation .be-bin-input { width: 5rem; }
+    .belief-elicitation .be-bar { grid-column: 1 / -1; }
+    .belief-elicitation .be-ends { margin-right: 0; }
+}
+
+/* A visible track: the page default is a near-white bar on a white card. */
+.bdm .bdm-slider, .belief-elicitation .be-slider { background: var(--muted-foreground); }

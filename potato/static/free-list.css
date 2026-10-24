@@ -1,0 +1,66 @@
+/* Free lists (annotation_type: free_list). Theme tokens only, so light and
+   dark mode both work. */
+form.free-list, .free-list fieldset, .free-list .fl-root { width: 100%; box-sizing: border-box; min-width: 0; }
+.free-list .fl-title { font-weight: 600; margin-bottom: 0.4rem; }
+.free-list .fl-instructions { margin: 0 0 0.75rem; color: var(--muted-foreground); }
+.free-list .fl-root { display: flex; flex-direction: column; gap: 0.5rem; max-width: 40rem; }
+.free-list .fl-loading { color: var(--muted-foreground); font-size: 0.85rem; margin: 0; }
+
+.free-list .fl-entry-label { font-size: 0.85rem; font-weight: 500; }
+.free-list .fl-entry-row { display: flex; gap: 0.5rem; min-width: 0; }
+.free-list .fl-entry {
+    flex: 1 1 auto; min-width: 0; min-height: 2.5rem; padding: 0.4rem 0.7rem;
+    border: 1px solid var(--input, var(--border)); border-radius: 0.5rem;
+    background: var(--background); color: var(--foreground); font: inherit;
+}
+.free-list .fl-entry:disabled { background: var(--muted); color: var(--muted-foreground); cursor: not-allowed; }
+.free-list button {
+    min-height: 2.5rem; padding: 0.4rem 0.9rem; border: 1px solid var(--border); border-radius: 0.5rem;
+    background: var(--card); color: var(--card-foreground); font: inherit; cursor: pointer;
+}
+.free-list button:hover:not(:disabled) { background: var(--secondary); }
+.free-list button:disabled { opacity: 0.5; cursor: not-allowed; }
+.free-list .fl-add, .free-list .fl-start {
+    background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); font-weight: 500;
+}
+.free-list .fl-add:hover:not(:disabled), .free-list .fl-start:hover:not(:disabled) {
+    background: var(--primary); filter: brightness(0.92);
+}
+.free-list .fl-entry:focus-visible, .free-list button:focus-visible {
+    outline: 2px solid var(--ring); outline-offset: 2px;
+}
+.free-list .fl-status { min-height: 1.2em; margin: 0; font-size: 0.85rem; color: var(--muted-foreground); }
+
+.free-list .fl-items {
+    margin: 0; padding: 0; list-style: none; counter-reset: fl;
+    border: 1px solid var(--border); border-radius: 0.5rem; background: var(--card);
+}
+.free-list .fl-item {
+    counter-increment: fl; display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.3rem 0.4rem 0.3rem 0.75rem; border-top: 1px solid var(--border); color: var(--card-foreground);
+}
+.free-list .fl-item:first-child { border-top: 0; }
+.free-list .fl-item::before {
+    content: counter(fl) "."; min-width: 1.75rem; color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; text-align: right;
+}
+.free-list .fl-item-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.free-list .fl-delete {
+    min-height: 2rem; min-width: 2rem; padding: 0 0.5rem; border-color: transparent;
+    background: transparent; color: var(--muted-foreground); font-size: 1.15rem; line-height: 1;
+}
+.free-list .fl-delete:hover:not(:disabled) { color: var(--destructive); background: var(--destructive-tint, var(--secondary)); }
+
+.free-list .fl-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.free-list .fl-count { margin: 0; font-size: 0.85rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.free-list .fl-undo[hidden] { display: none; }
+
+.free-list .fl-timed { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.free-list .fl-clock { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.free-list .fl-clock-label { color: var(--muted-foreground); font-size: 0.85rem; }
+.free-list .fl-clock-value { font-weight: 600; }
+.free-list .fl-clock-low .fl-clock-value { color: var(--destructive-text, var(--destructive)); }
+.free-list .fl-timeup {
+    margin: 0; padding: 0.5rem 0.75rem; border-radius: 0.5rem;
+    background: var(--warning-tint, var(--muted)); color: var(--warning-text, var(--foreground));
+}

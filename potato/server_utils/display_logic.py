@@ -17,6 +17,17 @@ Example Configuration:
           operator: equals
           value: "Yes"
       logic: all  # 'all' = AND, 'any' = OR
+
+An item of ``show_when`` may also be a group, nested to any depth up to
+``MAX_GROUP_DEPTH``::
+
+      show_when:
+        - schema: age
+          operator: gte
+          value: 18
+        - any:
+            - {schema: country, operator: equals, value: US}
+            - not: {schema: consent_region, operator: empty}
 """
 
 import re
@@ -55,7 +66,83 @@ SUPPORTED_OPERATORS = {
     "length_gt": "Text length greater than",
     "length_lt": "Text length less than",
     "length_in_range": "Text length within range (inclusive)",
+
+    # Number of options selected (multiselect, ranking, ...)
+    "count_gt": "Number of selected options greater than",
+    "count_lt": "Number of selected options less than",
+    "count_equals": "Number of selected options equal to",
 }
+
+#: Keys that make a ``show_when`` item a group instead of a condition.
+GROUP_KEYS = ("all", "any", "not")
+
+#: Deepest nesting of groups accepted.
+MAX_GROUP_DEPTH = 8
+
+_COUNT_OPERATORS = ("count_gt", "count_lt", "count_equals")
+
+
+def group_key(item: Any) -> Optional[str]:
+    """``all`` / ``any`` / ``not`` when ``item`` is a group, else None."""
+    if not isinstance(item, dict) or "schema" in item:
+        return None
+    keys = [k for k in GROUP_KEYS if k in item]
+    return keys[0] if len(keys) == 1 and len(item) == 1 else None
+
+
+def group_items(item: Dict[str, Any]) -> List[Any]:
+    """The items inside a group. ``not`` takes one item or a list (all of
+    which must hold for the negation to fail)."""
+    key = group_key(item)
+    inner = item[key]
+    if key == "not" and isinstance(inner, dict):
+        return [inner]
+    return inner if isinstance(inner, list) else []
+
+
+def iter_leaf_conditions(items: Any, path: str = "show_when"):
+    """Every plain condition in a ``show_when`` list, with its config path,
+    descending into groups."""
+    for i, item in enumerate(items or []):
+        here = f"{path}[{i}]"
+        key = group_key(item)
+        if key:
+            sub_path = f"{here}.{key}"
+            yield from iter_leaf_conditions(group_items(item), sub_path)
+        elif isinstance(item, dict):
+            yield here, item
+
+
+def structure_errors(items: Any, path: str = "show_when", depth: int = 0) -> List[str]:
+    """Shape problems in a ``show_when`` list (groups and leaves), without
+    checking operator values."""
+    errors: List[str] = []
+    if not isinstance(items, list):
+        return [f"{path} must be a list of conditions"]
+    if not items:
+        return [f"{path} must have at least one condition"]
+    if depth > MAX_GROUP_DEPTH:
+        return [f"{path}: groups nest deeper than {MAX_GROUP_DEPTH}"]
+    for i, item in enumerate(items):
+        here = f"{path}[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{here} must be a dictionary")
+            continue
+        if "schema" not in item and any(k in item for k in GROUP_KEYS):
+            key = group_key(item)
+            if key is None:
+                errors.append(f"{here}: a group has exactly one of all / any / not, and nothing else")
+                continue
+            inner = item[key]
+            if key == "not" and isinstance(inner, dict):
+                inner = [inner]
+            errors.extend(structure_errors(inner, f"{here}.{key}", depth + 1))
+    return errors
+
+
+def _is_number(v: Any) -> bool:
+    """An int or float, not a bool and not a numeric string."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
 @dataclass
@@ -91,14 +178,14 @@ class DisplayLogicCondition:
                                f"as [min, max], got: {self.value}")
             # Validate that range values are numeric
             for v in self.value:
-                if not isinstance(v, (int, float)):
+                if not _is_number(v):
                     raise ValueError(f"Operator '{self.operator}' requires numeric range values, "
                                    f"got: {self.value}")
-        elif self.operator in ("gt", "gte", "lt", "lte", "length_gt", "length_lt"):
+        elif self.operator in ("gt", "gte", "lt", "lte", "length_gt", "length_lt") + _COUNT_OPERATORS:
             # Numeric operators require numeric values
             if self.value is None:
                 raise ValueError(f"Operator '{self.operator}' requires a numeric value")
-            if not isinstance(self.value, (int, float)):
+            if not _is_number(self.value):
                 raise ValueError(f"Operator '{self.operator}' requires a numeric value, "
                                f"got: {type(self.value).__name__} '{self.value}'")
         elif self.value is None and self.operator not in ("empty", "not_empty"):
@@ -128,6 +215,40 @@ class DisplayLogicCondition:
 
 
 @dataclass
+class DisplayLogicGroup:
+    """``all`` / ``any`` / ``not`` over nested items (conditions or groups)."""
+    logic: str
+    items: List[Any] = field(default_factory=list)
+
+    def leaves(self):
+        for item in self.items:
+            if isinstance(item, DisplayLogicGroup):
+                yield from item.leaves()
+            else:
+                yield item
+
+    def to_dict(self) -> Dict[str, Any]:
+        inner = [i.to_dict() for i in self.items]
+        if self.logic == "not" and len(inner) == 1:
+            return {"not": inner[0]}
+        return {self.logic: inner}
+
+
+def _parse_item(data: Any, depth: int = 0):
+    key = group_key(data)
+    if key:
+        if depth >= MAX_GROUP_DEPTH:
+            raise ValueError(f"display logic groups nest deeper than {MAX_GROUP_DEPTH}")
+        items = [_parse_item(d, depth + 1) for d in group_items(data)]
+        if not items:
+            raise ValueError(f"an empty '{key}' group")
+        return DisplayLogicGroup(logic=key, items=items)
+    if not isinstance(data, dict):
+        raise ValueError(f"a condition must be a mapping, got {data!r}")
+    return DisplayLogicCondition.from_dict(data)
+
+
+@dataclass
 class DisplayLogicRule:
     """
     Represents a complete display logic rule with multiple conditions.
@@ -144,9 +265,19 @@ class DisplayLogicRule:
         if self.logic not in ("all", "any"):
             raise ValueError(f"Invalid logic type: {self.logic}. Must be 'all' or 'any'")
 
+    def leaves(self) -> List[DisplayLogicCondition]:
+        """Every plain condition, descending into groups."""
+        out: List[DisplayLogicCondition] = []
+        for item in self.conditions:
+            if isinstance(item, DisplayLogicGroup):
+                out.extend(item.leaves())
+            else:
+                out.append(item)
+        return out
+
     def get_watched_schemas(self) -> Set[str]:
         """Return set of schema names this rule depends on."""
-        return {condition.schema for condition in self.conditions}
+        return {condition.schema for condition in self.leaves()}
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert rule to dictionary for serialization."""
@@ -158,11 +289,8 @@ class DisplayLogicRule:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DisplayLogicRule":
         """Create a rule from a dictionary (config format)."""
-        conditions = []
         show_when = data.get("show_when", [])
-
-        for cond_data in show_when:
-            conditions.append(DisplayLogicCondition.from_dict(cond_data))
+        conditions = [_parse_item(item) for item in show_when]
 
         return cls(
             conditions=conditions,
@@ -207,8 +335,8 @@ class DisplayLogicValidator:
 
             # Extract schemas this one depends on
             dependencies = set()
-            show_when = display_logic.get("show_when", [])
-            for condition in show_when:
+            show_when = display_logic.get("show_when", []) if isinstance(display_logic, dict) else []
+            for _path, condition in iter_leaf_conditions(show_when):
                 if "schema" in condition:
                     dependencies.add(condition["schema"])
 
@@ -266,13 +394,13 @@ class DisplayLogicValidator:
             errors.append(f"Schema '{schema_name}': 'show_when' must have at least one condition")
             return errors
 
-        # Validate each condition
-        for i, condition in enumerate(show_when):
-            prefix = f"Schema '{schema_name}', condition {i+1}"
+        shape = structure_errors(show_when)
+        if shape:
+            return [f"Schema '{schema_name}': {e}" for e in shape]
 
-            if not isinstance(condition, dict):
-                errors.append(f"{prefix}: condition must be a dictionary")
-                continue
+        # Validate each condition
+        for path, condition in iter_leaf_conditions(show_when):
+            prefix = f"Schema '{schema_name}', {path}"
 
             # Required fields
             if "schema" not in condition:
@@ -312,29 +440,30 @@ class DisplayLogicValidator:
             elif len(value) != 2:
                 errors.append(f"{prefix}: range value must have exactly 2 elements [min, max]")
             else:
-                try:
-                    min_val, max_val = float(value[0]), float(value[1])
-                    if min_val > max_val:
-                        errors.append(f"{prefix}: range min ({min_val}) is greater than max ({max_val})")
-                except (ValueError, TypeError):
-                    errors.append(f"{prefix}: range values must be numeric")
+                if not all(_is_number(v) for v in value):
+                    # The same test the rule applies at runtime (from_dict); a
+                    # quoted number passes float() here and fails there.
+                    errors.append(f"{prefix}: range values must be numbers (unquoted)")
+                elif value[0] > value[1]:
+                    errors.append(f"{prefix}: range min ({value[0]}) is greater than max ({value[1]})")
             return errors
 
         # Numeric operators need numeric values
-        if operator in ("gt", "gte", "lt", "lte", "length_gt", "length_lt"):
+        if operator in ("gt", "gte", "lt", "lte", "length_gt", "length_lt") + _COUNT_OPERATORS:
             if value is None:
                 errors.append(f"{prefix}: operator '{operator}' requires a value")
-            else:
-                try:
-                    float(value)
-                except (ValueError, TypeError):
-                    errors.append(f"{prefix}: operator '{operator}' requires a numeric value")
+            elif not _is_number(value):
+                errors.append(f"{prefix}: operator '{operator}' requires a number (unquoted, "
+                              f"not true/false), got {value!r}")
             return errors
 
         # Regex operator needs a valid pattern
         if operator == "matches":
             if value is None:
                 errors.append(f"{prefix}: operator 'matches' requires a regex pattern")
+            elif not isinstance(value, str):
+                errors.append(f"{prefix}: operator 'matches' requires the pattern as a string, "
+                              f"got {value!r}")
             else:
                 try:
                     re.compile(value)
@@ -353,7 +482,7 @@ class DisplayLogicValidator:
         errors = []
         show_when = display_logic.get("show_when", [])
 
-        for i, condition in enumerate(show_when):
+        for path, condition in iter_leaf_conditions(show_when):
             ref_schema = condition.get("schema")
             # `condition.<factor>` addresses the participant's assigned
             # between-subjects condition, not a question; the factor is
@@ -363,7 +492,7 @@ class DisplayLogicValidator:
                 continue
             if ref_schema and ref_schema not in self.schema_names:
                 errors.append(
-                    f"Schema '{schema_name}', condition {i+1}: references unknown schema '{ref_schema}'"
+                    f"Schema '{schema_name}', {path}: references unknown schema '{ref_schema}'"
                 )
 
         return errors
@@ -474,8 +603,12 @@ class DisplayLogicEvaluator:
 
         # Regex matching
         if operator == "matches":
+            # Unanswered matches nothing, not even a pattern that fits ""
+            # (display-logic.js agrees).
+            if actual is None:
+                return False
             if not isinstance(actual, str):
-                actual = str(actual) if actual is not None else ""
+                actual = str(actual)
             flags = 0 if case_sensitive else re.IGNORECASE
             try:
                 return bool(re.search(expected, actual, flags))
@@ -498,6 +631,9 @@ class DisplayLogicEvaluator:
 
         if operator == "length_in_range":
             return DisplayLogicEvaluator._check_length_range(actual, expected)
+
+        if operator in _COUNT_OPERATORS:
+            return DisplayLogicEvaluator._check_count(operator, schema_value, expected)
 
         logger.warning(f"Unknown operator: {operator}")
         return False
@@ -532,6 +668,10 @@ class DisplayLogicEvaluator:
         if actual is None and expected is None:
             return True
         if actual is None or expected is None:
+            return False
+        # A multiselect's list is not equal to one option; `contains` tests
+        # membership. (JS's String(["a"]) == "a" used to say otherwise.)
+        if isinstance(actual, (list, tuple, set)):
             return False
 
         # A number in the YAML (`value: 3`) against a form value, which is
@@ -628,7 +768,7 @@ class DisplayLogicEvaluator:
     def _check_length(operator: str, actual: Any, expected: Any) -> bool:
         """Check text length comparison."""
         try:
-            length = len(str(actual)) if actual is not None else 0
+            length = DisplayLogicEvaluator._length(actual)
             expected_len = int(expected)
         except (ValueError, TypeError):
             return False
@@ -641,10 +781,38 @@ class DisplayLogicEvaluator:
         return False
 
     @staticmethod
+    def _length(actual: Any) -> int:
+        """Characters in a text answer; items in a list answer."""
+        if actual is None:
+            return 0
+        if isinstance(actual, (list, tuple, set)):
+            return len(actual)
+        return len(str(actual))
+
+    @staticmethod
+    def _check_count(operator: str, actual: Any, expected: Any) -> bool:
+        """Number of selected options. A single answer counts as one."""
+        if DisplayLogicEvaluator._is_empty(actual):
+            n = 0
+        elif isinstance(actual, (list, tuple, set, dict)):
+            n = len(actual)
+        else:
+            n = 1
+        try:
+            want = int(expected)
+        except (TypeError, ValueError):
+            return False
+        if operator == "count_gt":
+            return n > want
+        if operator == "count_lt":
+            return n < want
+        return n == want
+
+    @staticmethod
     def _check_length_range(actual: Any, range_val: List) -> bool:
         """Check if text length is within range (inclusive)."""
         try:
-            length = len(str(actual)) if actual is not None else 0
+            length = DisplayLogicEvaluator._length(actual)
             min_len, max_len = int(range_val[0]), int(range_val[1])
         except (ValueError, TypeError, IndexError):
             return False
@@ -669,17 +837,25 @@ class DisplayLogicEvaluator:
         if not rule.conditions:
             # No conditions = always visible
             return True
+        return DisplayLogicEvaluator._evaluate_items(rule.logic, rule.conditions, annotations)
 
+    @staticmethod
+    def _evaluate_items(logic: str, items: List[Any], annotations: Dict[str, Any]) -> bool:
         results = []
-        for condition in rule.conditions:
-            schema_value = annotations.get(condition.schema)
-            result = DisplayLogicEvaluator.evaluate_condition(condition, schema_value)
-            results.append(result)
-
-        if rule.logic == "all":
-            return all(results)
-        else:  # "any"
+        for item in items:
+            if isinstance(item, DisplayLogicGroup):
+                if item.logic == "not":
+                    results.append(not DisplayLogicEvaluator._evaluate_items(
+                        "all", item.items, annotations))
+                else:
+                    results.append(DisplayLogicEvaluator._evaluate_items(
+                        item.logic, item.items, annotations))
+            else:
+                results.append(DisplayLogicEvaluator.evaluate_condition(
+                    item, annotations.get(item.schema)))
+        if logic == "any":
             return any(results)
+        return all(results)
 
     @staticmethod
     def evaluate_visibility(
@@ -708,7 +884,7 @@ class DisplayLogicEvaluator:
             if not is_visible:
                 # Build reason string
                 reasons = []
-                for cond in rule.conditions:
+                for cond in rule.leaves():
                     actual_val = annotations.get(cond.schema, "<not set>")
                     reasons.append(f"{cond.schema} {cond.operator} {cond.value} (actual: {actual_val})")
                 reason = f"Conditions not met ({rule.logic}): " + ", ".join(reasons)

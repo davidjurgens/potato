@@ -71,10 +71,13 @@ still ignored. When an option appears in both places, `display_options` wins.
 | `text` | Plain text content | Yes |
 | `html` | Sanitized HTML content | No |
 | `image` | Image display with zoom | No |
+| `image_region` | One rectangle of a larger image (a text line, a word, a figure), cropped in the browser; see [Digital humanities](../guides/digital-humanities.md) | No |
 | `video` | Video player | No |
 | `audio` | Audio player | No |
 | `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
 | `gallery` | Scrollable gallery with captions. Images, plus video for URLs ending in `.mp4`, `.m4v`, `.webm`, `.ogv` or `.mov` (played with controls) | No |
+| `protein_structure` | **Protein structure** (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*: cartoon, pLDDT colouring, residue selection by click or residue table; see [Protein structures](science/protein_structures.md) | No |
+| `genome_locus` | **Genome locus** in igv.js: indexed FASTA, BAM/CRAM, VCF, BED/GFF3, bigWig from the media directory; see [Genome loci](science/genome_loci.md) | No |
 | `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |

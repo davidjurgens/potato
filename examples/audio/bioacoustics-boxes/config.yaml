@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Bioacoustics: time-frequency boxes on a spectrogram.
+#
+# Two synthetic 6-second recordings (media/) with tones and frequency sweeps
+# at known times and frequencies. The Raven selection tables in source/ were
+# imported with
+#   potato import --input <folder with the tables and the WAVs> --output-dir <project>
+# so each clip opens with their boxes drawn. The tables have two mistakes to
+# fix: site_a_0600 is missing the downsweep at 4.5-5.0 s (4-7 kHz), and the
+# trill in site_b_0615 (4.0-4.6 s) is labelled a whistle.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/audio/bioacoustics-boxes/config.yaml -p 8000
+#
+# Export the corrected boxes:
+#   python -m potato.export -c examples/audio/bioacoustics-boxes/config.yaml -f raven -o out/
+#   python -m potato.export -c examples/audio/bioacoustics-boxes/config.yaml -f audacity_labels -o out/
+port: 8000
+annotation_task_name: 'Bioacoustics: call boxes'
+task_dir: .
+output_annotation_dir: annotation_output/
+data_files:
+- data/recordings.jsonl
+item_properties:
+  id_key: id
+  text_key: recording
+user_config:
+  allow_all_users: true
+  users: []
+site_dir: default
+instance_display:
+  fields:
+  - key: recording
+    type: text
+    label: Recording
+pre_annotation:
+  enabled: true
+  field: predictions
+  allow_modification: true
+annotation_schemes:
+- annotation_type: spectrogram_annotation
+  name: calls
+  description: 'Check the boxes imported from Raven selection tables: move, resize,
+    relabel or delete them, and draw any call that was missed.'
+  source_field: audio_url
+  labels:
+  - name: whistle
+    color: '#2563eb'
+  - name: upsweep
+    color: '#dc2626'
+  - name: downsweep
+    color: '#16a34a'
+  - name: trill
+    color: '#d97706'
+  instructions: Drag on the spectrogram to draw a box around a call. Drag a box to
+    move it and its corners to resize it; pick the call type with the buttons or keys
+    1-4.

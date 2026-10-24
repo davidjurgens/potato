@@ -56,6 +56,22 @@ PLUGINS = {
 }
 
 
+#: name -> {"version", "global", "sha256", "scripts": extra static paths
+#: loaded first, "plugins": companion plugins the timeline must list,
+#: "csp": {directive: (sources, ...)}}
+EXTENSIONS = {
+    "mouse-tracking": {
+        "version": "1.2.0", "global": "jsPsychExtensionMouseTracking",
+        "sha256": "WvGgORlig/wMD8mIvwa+FYHztyTcPDRuRbKpbV6RySc=",
+    },
+}
+
+
+def extension_static_path(name: str) -> str:
+    """Path under potato/static/ for a vendored extension."""
+    return f"vendor/{VENDOR_SUBDIR}/extensions/extension-{name}.js"
+
+
 def plugin_static_path(name: str) -> str:
     """Path under potato/static/ for a vendored plugin."""
     return f"vendor/{VENDOR_SUBDIR}/plugins/plugin-{name}.js"

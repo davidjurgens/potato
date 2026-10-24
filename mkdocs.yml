@@ -22,6 +22,21 @@ nav:
         - Coming from Label Studio: guides/coming-from-label-studio.md
         - Coming from Argilla: guides/coming-from-argilla.md
         - Coming from jsPsych: guides/coming-from-jspsych.md
+        - Coming from Qualtrics: guides/coming-from-qualtrics.md
+        - Coming from REDCap: guides/coming-from-redcap.md
+        - Coming from ODK and KoboToolbox: guides/coming-from-odk.md
+        - Coming from Zooniverse: guides/coming-from-zooniverse.md
+        - Coming from Ibex and PCIbex: guides/coming-from-ibex.md
+        - Content Analysis: guides/content-analysis.md
+        - "Linguistic Fieldwork: FLEx and Toolbox": guides/linguistic-fieldwork.md
+        - Coming from Network Canvas: guides/coming-from-network-canvas.md
+        - Cultural Domain Analysis: guides/cultural-domain-analysis.md
+        - "Perceptual Dialectology: Draw-a-Map": guides/perceptual-dialectology.md
+        - Digital Humanities Formats: guides/digital-humanities.md
+        - "Camera Traps: MegaDetector Review": guides/camera-traps.md
+        - "Bioacoustics: Raven, Audacity, BirdNET": guides/bioacoustics.md
+        - "Structural Biology: Marking Residues": guides/structural-biology.md
+        - "Genomics: Reviewing Variant Calls": guides/genomics-variant-review.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Configuration Reference: configuration/config_reference.md
@@ -52,6 +67,7 @@ nav:
             - Coreference Annotation: annotation-types/text/coreference_annotation.md
             - Entity Linking: annotation-types/text/entity_linking.md
             - Span Linking: annotation-types/text/span_linking.md
+            - Interlinear Glossed Text: annotation-types/text/interlinear_gloss.md
             - Error Span: annotation-types/text/error_span.md
             - Text Edit: annotation-types/text/text_edit.md
             - Cloze (Fill in the Blank): annotation-types/text/cloze.md
@@ -63,6 +79,8 @@ nav:
             - Interactive Segmentation: annotation-types/multimedia/segmentation.md
             - Text Prompting: annotation-types/multimedia/text_prompting.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
+            - Listening Tests: annotation-types/multimedia/listening_tests.md
+            - Spectrogram Annotation: annotation-types/multimedia/spectrogram_annotation.md
             - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
@@ -76,11 +94,20 @@ nav:
             - Point Cloud Annotation: annotation-types/spatial/point_cloud.md
             - Calibration and 2D Verification: annotation-types/spatial/calibration.md
             - Depth Maps: annotation-types/spatial/depth_maps.md
+            - Maps (Geographic Annotation): annotation-types/spatial/geo_annotation.md
+        - Scientific Viewers:
+            - Protein Structures: annotation-types/science/protein_structures.md
+            - Genome Loci: annotation-types/science/genome_loci.md
         - Embodied:
             - Episode Annotation: annotation-types/embodied/episodes.md
             - Robot Dataset Formats: annotation-types/embodied/robot_formats.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
+            - Sensitive Questions: annotation-types/measurement/sensitive_questions.md
+            - Vocabulary Tests (LexTALE): annotation-types/measurement/vocabulary_test.md
+            - Price Lists: annotation-types/measurement/price_list.md
+            - BDM Bids: annotation-types/measurement/bdm.md
+            - Belief Elicitation: annotation-types/measurement/belief_elicitation.md
             - Range Slider: annotation-types/measurement/range_slider.md
             - Constant Sum: annotation-types/measurement/constant_sum.md
             - Semantic Differential: annotation-types/measurement/semantic_differential.md
@@ -92,11 +119,16 @@ nav:
             - Dialogue Annotation: annotation-types/structured/dialogue_annotation.md
             - Hierarchical Multiselect: annotation-types/structured/hierarchical_multiselect.md
             - Card Sorting: annotation-types/structured/card_sort.md
+            - Ego Networks: annotation-types/structured/ego_network.md
+            - Free Lists: annotation-types/survey/free_list.md
+            - Triad Tests: annotation-types/survey/triad_test.md
     - Workflow Phases:
         - Multi-Phase Workflows: workflow/surveyflow.md
         - Experiment Flow: workflow/experiment_flow.md
+        - Runtime Phases: workflow/runtime_phases.md
         - jsPsych Phase: workflow/jspsych_phase.md
         - Timed Trials: workflow/timed_trials.md
+        - Self-Paced Reading and Maze: workflow/self_paced_reading.md
         - Guidelines and Codebooks: workflow/annotation_guidelines.md
         - Training Phase: workflow/training_phase.md
         - Quality Control: workflow/quality_control.md
@@ -169,6 +201,7 @@ nav:
         - Machine Annotators: advanced/machine_annotators.md
         - Embedding Visualization: advanced/embedding_visualization.md
         - Survey Instruments: advanced/survey_instruments.md
+        - Incentive Payments: advanced/incentives.md
         - Category-Based Assignment: advanced/category_assignment.md
         - Task Assignment: advanced/task_assignment.md
         - Agreement Over Time: advanced/agreement_drift.md
@@ -223,6 +256,7 @@ nav:
         - Publishing Datasets: data-export/publishing_datasets.md
     - Tools:
         - Import CLI: tools/import_cli.md
+        - Importing Surveys: tools/survey_import.md
         - Preview CLI: tools/preview_cli.md
         - MCP Server: tools/mcp_server.md
         - Agent Instructions: tools/authoring-agents.md

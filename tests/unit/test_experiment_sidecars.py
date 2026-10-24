@@ -33,7 +33,8 @@ def test_participants_table():
     _write_state(out, "alice", flow_record={
         "conditions": {"feedback": "none"}, "condition_ordinal": 0,
         "skipped_pages": [{"page": "smoking"}], "page_orders": {"group_0": ["b", "a"]},
-        "jspsych": {"stroop": {"status": "complete", "attempts": 1, "n_trials": 37, "run_id": "r1"}}})
+        "runtimes": {"stroop": {"kind": "jspsych", "status": "complete", "attempts": 1, "n_trials": 37, "run_id": "r1"}},
+        "runtime_answers": {"headphones_passed": "yes", "headphones_correct": 6}})
     _write_state(out, "bob", flow_record={
         "conditions": {"feedback": "immediate"}, "condition_ordinal": 1,
         "screened_out": {"page": "screener", "at": 1.0}})
@@ -42,7 +43,9 @@ def test_participants_table():
     rows = {r["user_id"]: r for r in _rows(path)}
     assert rows["alice"]["condition_feedback"] == "none"
     assert rows["alice"]["skipped_pages"] == "smoking"
-    assert json.loads(rows["alice"]["jspsych_runs"])["stroop"]["n_trials"] == 37
+    assert json.loads(rows["alice"]["runtime_runs"])["stroop"]["n_trials"] == 37
+    assert json.loads(rows["alice"]["runtime_answers"]) == {"headphones_correct": 6,
+                                                           "headphones_passed": "yes"}
     assert rows["bob"]["screened_out"] == "1" and rows["bob"]["screened_out_page"] == "screener"
 
 
@@ -89,7 +92,7 @@ def test_sidecars_written_when_no_item_was_annotated():
     out = os.path.join(base, "annotation_output")
     _write_state(out, "alice", flow_record={
         "conditions": {"feedback": "none"},
-        "jspsych": {"stroop": {"status": "complete", "attempts": 1, "page_loads": 2,
+        "runtimes": {"stroop": {"kind": "jspsych", "status": "complete", "attempts": 1, "page_loads": 2,
                                "n_trials": 37, "run_id": "r1"}}},
                  instance_id_to_trial={"w1": {"outcome": "timeout", "onset_epoch_ms": 1}})
     config = {"conditions": {"factors": {"feedback": ["none", "immediate"]}},
@@ -99,7 +102,7 @@ def test_sidecars_written_when_no_item_was_annotated():
     names = {os.path.basename(p) for p in result.files_written}
     assert {"participants.csv", "trials.csv"} <= names
     row = _rows(os.path.join(base, "participants.csv"))[0]
-    assert json.loads(row["jspsych_runs"])["stroop"]["page_loads"] == 2
+    assert json.loads(row["runtime_runs"])["stroop"]["page_loads"] == 2
 
 
 def test_csv_cli_writes_sidecars_without_annotations():
@@ -112,7 +115,7 @@ def test_csv_cli_writes_sidecars_without_annotations():
     out = os.path.join(base, "annotation_output")
     _write_state(out, "alice", flow_record={
         "conditions": {"feedback": "none"},
-        "jspsych": {"stroop": {"status": "complete", "attempts": 1, "page_loads": 1,
+        "runtimes": {"stroop": {"kind": "jspsych", "status": "complete", "attempts": 1, "page_loads": 1,
                                "n_trials": 3, "run_id": "r1"}}})
     with open(os.path.join(base, "data.jsonl"), "w") as f:
         f.write(json.dumps({"id": "i1", "text": "x"}) + "\n")

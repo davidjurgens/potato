@@ -50,11 +50,13 @@ participant and exported with the rest.
 | `*-keyboard-response` with `trial_duration` | `trial_timing` | [Timed trials](../workflow/timed_trials.md): fixation, stimulus duration, deadline, key-to-label RT |
 | `instructions`, `external-html` | `type: instructions` pages, HTML files | |
 | `jsPsych.data` interaction data (blur, focus) | `authenticity` paradata | Page leaves, copies, external pastes, automation signals |
-| Mouse-tracking extension | Pointer totals in `authenticity` | Totals only, not x/y trajectories |
+| Mouse-tracking extension | `extensions: [mouse-tracking]` in a jsPsych phase | x/y trajectories per trial. On annotation items, `authenticity` keeps pointer totals only |
+| `jspsych-contrib` self-paced reading, maze | `trial_timing.presentation` | [Self-paced reading and maze](../workflow/self_paced_reading.md): moving window, centred, cumulative, maze; per-region reading times |
+| `audio-*-response` quality ratings, headphone checks | `listening_test` scheme, `type: headphone_check` page | [Listening tests](../annotation-types/multimedia/listening_tests.md) (MUSHRA, ACR, ABX, ...) and the [headphone check](../workflow/runtime_phases.md#headphone-check) |
 | Writing process | `keystroke_logging` | Content-blind keystroke timing on free-text fields |
 | Prolific URL variables, completion redirect | `login.type: url_direct` (or `prolific`) and `completion_code` | Completion and screen-out codes; `login.type: prolific` adds API monitoring |
 | SONA | `crowdsourcing.sona` | Automatic credit |
-| `jsPsych.data.get().csv()` | `python -m potato.export` | 36 formats, including CSV, JSONL and Parquet. The CSV/TSV export adds `participants` and `trials` tables |
+| `jsPsych.data.get().csv()` | `python -m potato.export` | 41 formats, including CSV, JSONL, Parquet, Psych-DS and Frictionless Data Package. The CSV/TSV export adds `participants`, `trials` and `regions` tables |
 | JATOS, Pavlovia, Cognition.run | `potato deploy`, Hugging Face Spaces | Potato is the server |
 | `simulation` mode | `python -m potato.simulator` | Simulated annotators against a running server |
 
@@ -62,7 +64,8 @@ participant and exported with the rest.
 
 - Frame-locked stimulus presentation on canvas, audio scheduled with Web
   Audio, or anything else that needs code on the trial. Use a jsPsych phase.
-- Eye tracking (WebGazer), webcam recording, and mouse trajectories.
+- Eye tracking (WebGazer) and webcam recording. Mouse trajectories need a
+  jsPsych phase with the mouse-tracking extension.
 - Fullscreen across items. Each Potato item is a page load, and browsers leave
   fullscreen on navigation. A jsPsych phase can hold fullscreen for its whole
   timeline.

@@ -1957,6 +1957,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "when `response.allow_mouse` is on",
         type="boolean", category=FEATURES,
     ),
+    "trial_timing.presentation": _D(
+        "Show the item's text one region at a time and record each region's "
+        "reading time: `mode` (moving_window, centered, cumulative or maze), "
+        "`field`, `region_separator`, `advance_key`, `question_field`, and for "
+        "the maze `distractor_field`, `maze_keys` and `on_error`. With it, "
+        "`response` (the comprehension question) is optional",
+        type="object", category=FEATURES,
+    ),
     "authenticity": _D(
         "Page-level, content-blind authenticity paradata on every task type: "
         "leaving the page, copying the item, pasting text that did not come "
@@ -3510,6 +3518,53 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "cot_segmentation.llm_max_chars": _D(
         "Characters of reasoning sent to the model under the llm strategy",
         type="integer", category=AGENT_EVAL,
+    ),
+
+    # ---------------------------------------------------------- incentives --
+    "incentives": _D(
+        "Bonus payments for price_list, bdm and belief_elicitation answers. "
+        "Computed after the participant finishes, from the stored answers, by "
+        "the `incentives` export and the admin route "
+        "/admin/api/crowd/incentive_bonuses; never paid automatically",
+        type="object", category=INTEG, see_also=("crowdsourcing",),
+    ),
+    "incentives.enabled": _D(
+        "Compute bonuses: turns on the `incentives` export and the admin "
+        "route",
+        type="boolean", default=False, category=INTEG,
+    ),
+    "incentives.currency": _D(
+        "Currency label written to bonuses.csv. Prolific pays in the study's "
+        "own currency",
+        type="string", default="USD", category=INTEG,
+    ),
+    "incentives.rules": _D(
+        "One rule per paid scheme: `scheme`, `method` (mpl_random_row, bdm or "
+        "bsr), an optional `name`, and the method's keys -- bdm: `endowment`, "
+        "`draw: {min, max, step}` or `price_field`, `item_value` or "
+        "`value_field`; bsr: `prize` and `outcome_field` or `outcome`",
+        type="array", category=INTEG,
+    ),
+    "incentives.pay": _D(
+        "one_random_item pays one decision drawn at random from all of a "
+        "participant's paid decisions; all (or its alias sum) pays the sum "
+        "of every decision",
+        type="string", default="one_random_item", category=INTEG,
+    ),
+    "incentives.max_bonus": _D(
+        "Upper limit on one participant's bonus. A capped total is marked in "
+        "bonuses.csv",
+        type="number", category=INTEG,
+    ),
+    "incentives.seed": _D(
+        "Private text mixed into every draw. Without it the draws follow from "
+        "the user id and rule name alone, which anyone with the code could "
+        "compute in advance; keep it out of public repositories",
+        type="string", category=INTEG,
+    ),
+    "incentives.only_finished": _D(
+        "Draw and pay only for participants who reached the end of the study",
+        type="boolean", default=True, category=INTEG,
     ),
 
     # ------------------------------------------------------------- internal --

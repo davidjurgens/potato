@@ -9,6 +9,16 @@ from .span import generate_span_layout, render_span_annotations, get_spans_for_f
 from .span_link import generate_span_link_layout
 from .textbox import generate_textbox_layout
 from .cloze import generate_cloze_layout
+from .listening_test import generate_listening_test_layout
+from .viewer_selection import generate_viewer_selection_layout
+from .spectrogram_annotation import generate_spectrogram_annotation_layout
+from .geo_annotation import generate_geo_annotation_layout
+from .ego_network import generate_ego_network_layout
+from .free_list import generate_free_list_layout
+from .triad_test import generate_triad_test_layout
+from .incentive_schemes import generate_price_list_layout, generate_bdm_layout, generate_belief_elicitation_layout
+from .interlinear_gloss import generate_interlinear_gloss_layout
+from .survey_experiments import generate_list_experiment_layout, generate_randomized_response_layout
 from .slider import generate_slider_layout
 from .video import generate_video_layout
 from .image_annotation import generate_image_annotation_layout

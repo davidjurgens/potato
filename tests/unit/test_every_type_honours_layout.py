@@ -69,6 +69,14 @@ PROBE_EXTRAS = {
     "context_attribution": {"source_field": "ctx"},
     "cot_trace": {"steps_key": "steps"},
     "process_reward": {"steps_key": "steps"},
+    "bdm": {"max": 10},
+    "ego_network": {"stages": [{"type": "name_generator", "id": "g"}]},
+    "geo_annotation": {"basemap": {"tiles": "https://tiles.example.org/{z}/{x}/{y}.png",
+                                   "attribution": "probe"}},
+    "list_experiment": {"items": ["a", "b"], "sensitive_item": "c"},
+    "price_list": {"preset": "holt_laury"},
+    "triad_test": {"labels": ["alpha", "beta", "gamma"]},
+    "viewer_selection": {"viewer_field": "structure"},
 }
 
 

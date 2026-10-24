@@ -29,8 +29,25 @@ NON_CV_EXPORTERS = {
     # Behavioural streams about how an annotation was made, not the annotation
     # itself. It carries no geometry, so it has no row in the format matrix.
     "annotation_telemetry",
-    # Trial data from embedded jsPsych timelines; no geometry.
-    "jspsych",
+    # Trial data from runtime phase pages (jsPsych, OSWeb, ...); no geometry.
+    "jspsych", "runtime",
+    # CSV tables wrapped in repository metadata (Frictionless, Psych-DS).
+    "data_package", "psych_ds",
+    # Listening-test ratings by condition; no geometry.
+    "listening_test",
+    # Estimates for list experiments and randomized response; no geometry.
+    "survey_experiments",
+    # Intercoder reliability table; no geometry.
+    "reliability",
+    # Vocabulary test scores; no geometry.
+    "lextale",
+    # Survey and fieldwork tables with no geometry: ego networks (GraphML),
+    # cultural domain analysis, incentive payments, TEI text, Darwin Core
+    # occurrences (one row per identification; the boxes go to camtrap_dp).
+    "ego_network", "cultural_domain", "incentives", "tei", "darwin_core",
+    # Interlinear glossed text (FLExText, Toolbox, Leipzig text/LaTeX); word
+    # and morpheme alignment, no geometry.
+    "flextext", "toolbox", "igt",
     # REFI-QDA project exchange: text codings for qualitative software. Its
     # only geometry is a character offset, so it belongs to the text formats.
     "qdpx",

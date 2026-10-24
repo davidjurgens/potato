@@ -23,6 +23,8 @@ from .base import BaseExporter, ExportContext, ExportResult
 logger = logging.getLogger(__name__)
 
 
+from .textgrid_exporter import tiered_payload
+
 class EAFExporter(BaseExporter):
     """
     Exports tiered annotations to ELAN Annotation Format (EAF).
@@ -98,15 +100,7 @@ class EAFExporter(BaseExporter):
                 tiered_data = None
                 for ann in instance_annotations:
                     if schema_name in ann.get("labels", {}):
-                        try:
-                            import json
-                            raw_value = ann["labels"][schema_name]
-                            if isinstance(raw_value, str):
-                                tiered_data = json.loads(raw_value)
-                            elif isinstance(raw_value, dict):
-                                tiered_data = raw_value
-                        except (json.JSONDecodeError, TypeError):
-                            pass
+                        tiered_data = tiered_payload(ann["labels"][schema_name])
                         break
 
                 if not tiered_data:

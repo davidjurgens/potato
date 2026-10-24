@@ -31,7 +31,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=41">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=42">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=4">
@@ -191,6 +191,46 @@
     <!-- Entity Linking Styles (knowledge base linking) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}?v=2">
 
+    <!-- Listening tests (MUSHRA, ACR, ABX, ...) -->
+    {% if frontend_assets.listening_test | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='listening-test.css') }}?v=5">
+    {% endif %}
+
+    <!-- Viewer displays (protein_structure, genome_locus) and viewer_selection -->
+    {% if frontend_assets.viewer_display | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='viewers/viewer-framework.css') }}?v=1">
+    {% endif %}
+
+    <!-- Spectrogram box annotation (bioacoustics) -->
+    {% if frontend_assets.spectrogram_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='spectrogram-annotation.css') }}?v=1">
+    {% endif %}
+
+    <!-- Maps (geo_annotation): OpenLayers, vendored -->
+    {% if frontend_assets.geo_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/ol-10.9.0/ol.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='geo-annotation.css') }}?v=1">
+    {% endif %}
+
+    <!-- Ego networks: name generators, dyad census, sociogram -->
+    {% if frontend_assets.ego_network | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='ego-network.css') }}?v=1">
+    {% endif %}
+
+    <!-- Cultural domain analysis: free lists and triad tests -->
+    {% if frontend_assets.cultural_domain | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='free-list.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='triad-test.css') }}?v=1">
+    {% endif %}
+
+    <!-- Incentivized elicitation (price_list, bdm, belief_elicitation) -->
+    {% if frontend_assets.incentive_elicitation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='incentive-elicitation.css') }}?v=1">
+    {% endif %}
+    {% if frontend_assets.interlinear_gloss | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='interlinear-gloss.css') }}?v=1">
+    {% endif %}
+
     <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}?v=2">
@@ -219,7 +259,7 @@
     <!-- Project-level base CSS (injected from base_css config option) -->
     {{ PROJECT_BASE_CSS | safe }}
     {% if trial_timing_client_config %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='trial-timing.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='trial-timing.css') }}?v=3">
     {% endif %}
 </head>
 
@@ -787,7 +827,7 @@
     <script src="{{ url_for('static', filename='span-touch.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=6"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
-    <script src="{{ url_for('static', filename='display-logic.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='display-logic.js') }}?v=7"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
@@ -799,7 +839,7 @@
     <script type="text/javascript">
         window.potatoTrialTiming = {{ trial_timing_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='trial-timing.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='trial-timing.js') }}?v=2"></script>
     {% endif %}
     {# Plugins load after annotation.js so they can use its functions. #}
     {% for href in (plugin_assets | default({})).get('styles', []) %}
@@ -1047,6 +1087,52 @@
     <!-- Triage annotation manager -->
     {% if frontend_assets.triage | default(false) %}
     <script src="{{ url_for('static', filename='triage.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Listening test player (MUSHRA, ACR, ABX, ...) -->
+    {% if frontend_assets.listening_test | default(false) %}
+    <script src="{{ url_for('static', filename='listening-test.js') }}?v=3"></script>
+    {% endif %}
+
+    <!-- Viewer displays: framework and adapters. The libraries themselves
+         (3Dmol.js, igv.js, Mol*) are loaded by the framework when a viewer
+         mounts, so a page pays only for the one it shows. -->
+    {% if frontend_assets.viewer_display | default(false) %}
+    <script src="{{ url_for('static', filename='viewers/viewer-framework.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='viewers/protein-structure.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='viewers/genome-locus.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='viewers/viewer-selection.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Spectrogram box annotation (bioacoustics) -->
+    {% if frontend_assets.spectrogram_annotation | default(false) %}
+    <script src="{{ url_for('static', filename='spectrogram-annotation.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Maps (geo_annotation): OpenLayers, vendored; geotiff.js loads on demand -->
+    {% if frontend_assets.geo_annotation | default(false) %}
+    <script src="{{ url_for('static', filename='vendor/ol-10.9.0/ol.js') }}"></script>
+    <script src="{{ url_for('static', filename='geo-annotation.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Ego networks: name generators, dyad census, sociogram -->
+    {% if frontend_assets.ego_network | default(false) %}
+    <script src="{{ url_for('static', filename='ego-network.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Cultural domain analysis: free lists and triad tests -->
+    {% if frontend_assets.cultural_domain | default(false) %}
+    <script src="{{ url_for('static', filename='free-list.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='triad-design.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='triad-test.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Incentivized elicitation (price_list, bdm, belief_elicitation) -->
+    {% if frontend_assets.incentive_elicitation | default(false) %}
+    <script src="{{ url_for('static', filename='incentive-elicitation.js') }}?v=1"></script>
+    {% endif %}
+    {% if frontend_assets.interlinear_gloss | default(false) %}
+    <script src="{{ url_for('static', filename='interlinear-gloss.js') }}?v=1"></script>
     {% endif %}
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->

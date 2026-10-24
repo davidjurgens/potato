@@ -280,13 +280,26 @@ def validate_condition_references(config_data: Dict[str, Any],
     factors = set((spec.get("factors") or {}) if isinstance(spec, dict) else {})
     if schemes is None:
         schemes = list(config_data.get("annotation_schemes") or [])
+    levels = (spec.get("factors") or {}) if isinstance(spec, dict) else {}
+    for scheme in schemes:
+        if isinstance(scheme, dict) and scheme.get("annotation_type") == "list_experiment":
+            t = scheme.get("treatment") or {}
+            if t.get("factor") not in factors:
+                raise ConfigValidationError(
+                    f"list_experiment '{scheme.get('name')}': treatment.factor must be a factor "
+                    f"in conditions.factors ({', '.join(sorted(factors)) or 'none declared'})")
+            if str(t.get("level")) not in [str(v) for v in levels.get(t["factor"]) or []]:
+                raise ConfigValidationError(
+                    f"list_experiment '{scheme.get('name')}': treatment.level must be one of "
+                    f"the levels of {t['factor']}")
     for scheme in schemes:
         if not isinstance(scheme, dict):
             continue
         logic = scheme.get("display_logic")
         if not isinstance(logic, dict):
             continue
-        for cond in logic.get("show_when") or []:
+        from potato.server_utils.display_logic import iter_leaf_conditions
+        for _path, cond in iter_leaf_conditions(logic.get("show_when") or []):
             ref = str((cond or {}).get("schema", "")) if isinstance(cond, dict) else ""
             if ref.startswith(CONDITION_PREFIX) and ref[len(CONDITION_PREFIX):] not in factors:
                 declared = ", ".join(sorted(factors)) or "none declared"

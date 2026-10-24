@@ -56,6 +56,9 @@ def label_entries(scheme: dict, value: Any) -> List[list]:
         return [entry(value, str(value))]
     if kind == "multiselect":
         return [entry(v, str(v)) for v in (value or [])]
+    if kind == "select":
+        # The dropdown's label_name is "select-one" and its value the option.
+        return [entry("select-one", str(value))]
     if kind == "likert":
         return [entry(int(value), str(int(value)))]
     if kind == "text":
@@ -166,6 +169,26 @@ def write_project(result: ProjectImportResult, output_dir: str, source: str,
 
         if keep_annotators:
             written.extend(_write_annotators(result, output, schemes, task_name))
+
+    if result.media_files and not config_only:
+        import shutil
+        from potato.importers.projects._dh import within
+        # Checked here, where every importer's files are copied: a symlink in
+        # a downloaded dataset (tar and zip both carry them) would otherwise
+        # copy any local file into media/, which the server publishes.
+        roots = [Path(r) for r in result.media_roots] or [
+            Path(source) if Path(source).is_dir() else Path(source).parent]
+        for rel, src in result.media_files.items():
+            if not within(Path(src), roots):
+                result.warn(f"{rel}: its source {src} is outside the input folder "
+                            "(a link out of it?); not copied")
+                result.skipped["files outside the input folder"] += 1
+                continue
+            dest = output / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                shutil.copy2(src, dest)
+                written.append(str(dest))
 
     config_path = output / "config.yaml"
     with config_path.open("w", encoding="utf-8") as handle:

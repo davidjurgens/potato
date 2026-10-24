@@ -8,6 +8,7 @@
 # --- Core dependencies (also declared in setup.py install_requires) ---
 beautifulsoup4>=4.10.0
 click>=8.0.3
+defusedxml>=0.7.1
 Flask>=3.0.0
 itsdangerous>=2.1.0
 Jinja2>=3.1.6

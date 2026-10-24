@@ -118,6 +118,43 @@ answer of 3, which the form stores as the string `"3"`.
 | `length_lt` | Text length < value | `value: 10` |
 | `length_in_range` | Length within range | `value: [10, 100]` |
 
+#### Number Selected (multiselect, ranking)
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `count_gt` | More than `value` options selected | `value: 1` |
+| `count_lt` | Fewer than `value` options selected | `value: 3` |
+| `count_equals` | Exactly `value` options selected | `value: 0` |
+
+A single answer counts as one and an unanswered question as zero.
+
+### Groups: mixing AND and OR
+
+An item of `show_when` can be a group instead of a condition: `all` (every
+item holds), `any` (at least one holds), or `not` (negates one item, or all of
+a list). Groups nest, up to 8 levels.
+
+```yaml
+display_logic:
+  show_when:
+    - schema: age
+      operator: gte
+      value: 18
+    - any:
+        - schema: country
+          operator: equals
+          value: US
+        - not:
+            schema: region
+            operator: empty
+```
+
+This shows the question to adults who are in the US or who named a region.
+The top-level `logic` key still applies to the outer list. Groups work
+everywhere this grammar is used: `display_logic`, page `show_when`, and
+`exit_when`. The survey importers write them when translating Qualtrics,
+SurveyJS, XLSForm or REDCap logic.
+
 ## Examples
 
 ### 1. Single Condition

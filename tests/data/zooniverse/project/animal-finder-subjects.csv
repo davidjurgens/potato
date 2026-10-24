@@ -1,0 +1,5 @@
+subject_id,project_id,workflow_id,subject_set_id,metadata,locations,classifications_count,retired_at,retirement_reason,created_at,updated_at
+1001,7,101,55,"{""Filename"":""a.jpg"",""site"":""north""}","{""0"":""https://example.org/subjects/a.jpg""}",4,,,2026-01-01 00:00:00 UTC,
+1002,7,101,55,"{""Filename"":""b.jpg"",""site"":""south""}","{""0"":""https://example.org/subjects/b.jpg""}",3,,,2026-01-01 00:00:00 UTC,
+1003,7,101,55,"{""Filename"":""c.jpg"",""site"":""east""}","{""0"":""https://example.org/subjects/c.jpg"",""1"":""https://example.org/subjects/c2.jpg""}",0,,,2026-01-01 00:00:00 UTC,
+2001,7,999,56,"{""Filename"":""z.jpg""}","{""0"":""https://example.org/subjects/z.jpg""}",0,,,2026-01-01 00:00:00 UTC,

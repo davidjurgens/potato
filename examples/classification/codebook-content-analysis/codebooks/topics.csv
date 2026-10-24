@@ -1,0 +1,12 @@
+code,label,parent,description
+1,Economy,,"Taxes, jobs, prices and the budget"
+101,Taxes,1,
+102,Jobs and wages,1,
+103,Prices and inflation,1,
+2,Environment,,
+201,Climate,2,Climate change and emissions
+202,Pollution,2,
+3,Health,,
+301,Hospitals and care,3,
+302,Public health,3,"Vaccination, smoking, disease prevention"
+9,Other,,Anything that fits no category above

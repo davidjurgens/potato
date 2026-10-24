@@ -16,11 +16,14 @@ import time
 import pytest
 import requests
 
+from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_directory
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PORT = 9820
-BASE = f"http://127.0.0.1:{PORT}"
+# Chosen in _start. A fixed port let another test's server answer the
+# readiness probe, and the webhook post then got that server's 404.
+PORT = None
+BASE = None
 
 CONFIG = """
 annotation_task_name: Restart test
@@ -39,12 +42,17 @@ annotation_schemes:
 
 
 def _start(task_dir):
+    global PORT, BASE
+    PORT = find_free_port()
+    BASE = f"http://127.0.0.1:{PORT}"
     log = open(os.path.join(task_dir, "server.log"), "a")
     proc = subprocess.Popen(
         [sys.executable, os.path.join(REPO, "potato", "flask_server.py"), "start",
          "config.yaml", "-p", str(PORT), "--host", "127.0.0.1"],
         cwd=task_dir, env=dict(os.environ, PYTHONPATH=REPO), stdout=log, stderr=subprocess.STDOUT)
     for _ in range(120):
+        if proc.poll() is not None:
+            pytest.fail("server exited at start; see " + os.path.join(task_dir, "server.log"))
         try:
             requests.get(BASE + "/", timeout=1)
             return proc

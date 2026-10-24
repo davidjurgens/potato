@@ -440,6 +440,9 @@ KNOWN_CONFIG_KEYS = {
     },
     # The always-on interaction tracker (clicks, focus, scroll, shortcut keys).
     "interaction_tracking": {"enabled", "disclose_to_annotators", "disclosure_text"},
+    # Incentive payments for price_list / bdm / belief_elicitation answers.
+    # Validated by potato.incentives.validate_incentives_config().
+    "incentives": {"enabled", "currency", "rules", "pay", "max_bonus", "seed", "only_finished"},
     # Between-subjects conditions for experiment designs. Validated by
     # experiment_conditions.validate_conditions_config().
     "conditions": {"factors", "assignment", "balance_on", "max_per_cell", "cells"},
@@ -447,7 +450,7 @@ KNOWN_CONFIG_KEYS = {
     # potato.trial_timing.validate_trial_timing_config().
     "trial_timing": {"enabled", "fixation_ms", "fixation_symbol", "stimulus_duration_ms",
                      "trial_duration_ms", "iti_ms", "response", "item_overrides",
-                     "disable_back_navigation", "show_response_options"},
+                     "disable_back_navigation", "show_response_options", "presentation"},
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
@@ -809,20 +812,24 @@ def normalize_config_before_validation(
         logger.debug(f"Resolved task_dir to: {task_dir}")
 
     _apply_require_fully_annotated(config_data)
-    _normalize_jspsych_phases(config_data)
+    _normalize_runtime_phases(config_data)
+    from potato.server_utils.taxonomy_files import apply_taxonomy_files
+    apply_taxonomy_files(config_data, config_file_dir)
 
     return config_data
 
 
-def _normalize_jspsych_phases(config_data: Dict[str, Any]) -> None:
-    """Give each `type: jspsych` phase a survey slot to run in.
+def _normalize_runtime_phases(config_data: Dict[str, Any]) -> None:
+    """Give each runtime phase (`type: jspsych`, `type: osweb`, ...) a survey
+    slot to run in.
 
-    The phase sequence has one slot per phase type, and a jsPsych task sits
+    The phase sequence has one slot per phase type, and a runtime task sits
     either before the annotation phase (prestudy) or after it (poststudy).
-    The entry keeps `_kind: jspsych` so the loader and renderer know what it
+    The entry keeps `_kind: <runtime>` so the loader and renderer know what it
     is; everything else -- ordering, `show_when`, counterbalancing,
     `--debug-phase` -- treats it as an ordinary survey page.
     """
+    from potato.runtimes.phase import is_runtime_type
     from potato.server_utils.phase_flow import phases_dict
     phases = config_data.get("phases")
     if not phases:
@@ -841,8 +848,9 @@ def _normalize_jspsych_phases(config_data: Dict[str, Any]) -> None:
 
     first_annotation = next((i for i, n in enumerate(order) if _is_annotation(n)), None)
     for name, entry in entries.items():
-        if str(entry.get("type", "")).lower() != "jspsych":
+        if not is_runtime_type(entry.get("type")):
             continue
+        kind = str(entry.get("type")).lower()
         slot = entry.get("slot")
         pos = order.index(name) if name in order else None
         inferred = ("poststudy" if (first_annotation is not None and pos is not None
@@ -858,8 +866,10 @@ def _normalize_jspsych_phases(config_data: Dict[str, Any]) -> None:
         if slot not in ("prestudy", "poststudy"):
             raise ConfigValidationError(
                 f"phases.{name}.slot must be 'prestudy' or 'poststudy', not '{slot}'")
-        entry["_kind"] = "jspsych"
+        entry["_kind"] = kind
         entry["type"] = slot
+        from potato.runtimes.registry import get_adapter
+        get_adapter(kind).normalize(name, entry)
 
 
 def _scheme_is_required_for_test(scheme: Dict[str, Any]) -> bool:
@@ -2798,16 +2808,20 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     validate_trial_timing_config(config_data)
 
     # Embedded jsPsych phase pages (after normalization gave them a slot)
-    from potato.jspsych.phase import validate_jspsych_config
-    validate_jspsych_config(config_data)
+    from potato.runtimes.phase import validate_runtime_config
+    validate_runtime_config(config_data)
 
     # Page rules that name questions in phase files. The server checks these
     # at boot; doing it here too means `potato validate` fails on them.
     validate_phase_flow_files(config_data, config_file_dir)
 
     # The files a jsPsych page names (timeline, extra scripts, assets).
-    from potato.jspsych.phase import validate_jspsych_files
-    validate_jspsych_files(config_data, config_file_dir)
+    from potato.runtimes.phase import validate_runtime_files
+    validate_runtime_files(config_data, config_file_dir)
+
+    # Incentive payment rules (price_list / bdm / belief_elicitation)
+    from potato.incentives import validate_incentives_config
+    validate_incentives_config(config_data, config_file_dir)
 
     # Warn about quota / batch-group keys that will never be read
     warn_unreachable_quota_keys(config_data)
@@ -4487,6 +4501,47 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     if scheme['annotation_type'] == 'volume_annotation':
         _validate_volume_annotation(scheme, path)
 
+    if scheme['annotation_type'] == 'listening_test':
+        _validate_listening_test(scheme, path)
+
+    if scheme['annotation_type'] == 'viewer_selection':
+        _validate_viewer_selection(scheme, path)
+
+    if scheme['annotation_type'] == 'spectrogram_annotation':
+        _validate_spectrogram_annotation(scheme, path)
+
+    if scheme['annotation_type'] == 'geo_annotation':
+        _validate_geo_annotation(scheme, path)
+
+    if scheme['annotation_type'] in ('free_list', 'triad_test'):
+        _validate_cultural_domain_scheme(scheme, path)
+
+    if scheme['annotation_type'] == 'ego_network':
+        _validate_ego_network(scheme, path)
+
+    if scheme['annotation_type'] in ('price_list', 'bdm', 'belief_elicitation'):
+        _validate_incentive_scheme(scheme, path)
+
+    if scheme['annotation_type'] == 'interlinear_gloss':
+        _validate_interlinear_gloss(scheme, path)
+
+    if scheme['annotation_type'] in ('list_experiment', 'randomized_response'):
+        _validate_survey_experiment(scheme, path)
+
+    if 'lextale' in scheme:
+        lt = scheme['lextale']
+        if scheme['annotation_type'] != 'radio' or not isinstance(lt, dict):
+            raise ConfigValidationError(
+                f"{path}.lextale applies to a radio scheme: {{answer_field, word, nonword}}")
+        if not (isinstance(lt.get('answer_field'), str) and lt['answer_field']):
+            raise ConfigValidationError(
+                f"{path}.lextale.answer_field must name the item field holding word / nonword")
+        names = [l if isinstance(l, str) else (l or {}).get('name') for l in scheme.get('labels') or []]
+        for key in ('word', 'nonword'):
+            if str(lt.get(key, key)) not in names:
+                raise ConfigValidationError(
+                    f"{path}.lextale.{key} is '{lt.get(key, key)}', which is not one of the labels")
+
     if scheme['annotation_type'] == 'cloze':
         # The generator turns a bad cloze into an error card on the page; say
         # so here instead, where `potato validate` can report it.
@@ -5119,12 +5174,19 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     elif annotation_type == 'hierarchical_multiselect':
         # Either an explicit taxonomy or a built-in preset (e.g. MAST) is required.
+        # taxonomy_file is resolved into taxonomy by
+        # normalize_config_before_validation; a caller that validates without
+        # normalizing still has the file reference here.
         preset = scheme.get('taxonomy_preset')
-        if 'taxonomy' not in scheme and not preset:
+        taxonomy_file = scheme.get('taxonomy_file')
+        if 'taxonomy' not in scheme and not preset and not taxonomy_file:
             raise ConfigValidationError(
-                f"{path} requires 'taxonomy' or 'taxonomy_preset' for "
-                f"hierarchical_multiselect annotation type")
-        if preset:
+                f"{path} requires 'taxonomy', 'taxonomy_preset' or 'taxonomy_file' "
+                f"for hierarchical_multiselect annotation type")
+        if 'taxonomy' not in scheme and not preset:
+            if not isinstance(taxonomy_file, str):
+                raise ConfigValidationError(f"{path}.taxonomy_file must be a path")
+        elif preset:
             from potato.server_utils.failure_taxonomy import TAXONOMY_PRESETS
             if str(preset).strip().lower() not in TAXONOMY_PRESETS:
                 raise ConfigValidationError(
@@ -5189,6 +5251,222 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         validate_display_logic_structure(scheme['display_logic'], path)
 
 
+def _validate_survey_experiment(scheme: Dict[str, Any], path: str) -> None:
+    if scheme['annotation_type'] == 'list_experiment':
+        items = scheme.get('items')
+        if not isinstance(items, list) or len(items) < 2 or not all(
+                isinstance(i, str) and i.strip() for i in items):
+            raise ConfigValidationError(f"{path}.items must list at least two statements")
+        if not (isinstance(scheme.get('sensitive_item'), str) and scheme['sensitive_item'].strip()):
+            raise ConfigValidationError(f"{path}.sensitive_item must be the sensitive statement")
+        t = scheme.get('treatment')
+        if not (isinstance(t, dict) and t.get('factor') and t.get('level') is not None):
+            raise ConfigValidationError(
+                f"{path}.treatment must be {{factor: <conditions factor>, level: <level>}}: "
+                "who sees the sensitive statement")
+        pos = scheme.get('sensitive_position')
+        if pos is not None and (isinstance(pos, bool) or not isinstance(pos, int)
+                                or not 0 <= pos <= len(items)):
+            raise ConfigValidationError(
+                f"{path}.sensitive_position must be 0 to {len(items)} (default: last)")
+        return
+    method = scheme.get('method', 'forced_response')
+    if method not in ('forced_response', 'crosswise'):
+        raise ConfigValidationError(f"{path}.method must be forced_response or crosswise")
+    if method == 'crosswise':
+        p = scheme.get('nonsensitive_prevalence')
+        if (isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 < p < 1
+                or abs(p - 0.5) < 0.05):
+            raise ConfigValidationError(
+                f"{path}.nonsensitive_prevalence must be the known probability that the "
+                "non-sensitive statement is true, between 0 and 1 and not close to 0.5 "
+                "(at 0.5 the design cannot estimate anything)")
+        if not (isinstance(scheme.get('nonsensitive_statement'), str)
+                and scheme['nonsensitive_statement'].strip()):
+            raise ConfigValidationError(f"{path}.nonsensitive_statement is required for crosswise")
+        return
+    given = [k for k in ('p_truth', 'p_yes', 'p_no') if k in scheme]
+    if given:
+        if len(given) != 3 or any(isinstance(scheme[k], bool) or not isinstance(scheme[k], (int, float))
+                                  or not 0 <= scheme[k] <= 1 for k in given):
+            raise ConfigValidationError(f"{path}: give all of p_truth, p_yes, p_no, each 0 to 1")
+        if abs(sum(scheme[k] for k in given) - 1) > 1e-6:
+            raise ConfigValidationError(f"{path}: p_truth + p_yes + p_no must be 1")
+        if scheme['p_truth'] <= 0:
+            raise ConfigValidationError(f"{path}.p_truth must be above 0")
+        if not scheme.get('randomizer'):
+            raise ConfigValidationError(
+                f"{path}: with your own probabilities, describe the randomizer in `randomizer` "
+                "(the default text states the default probabilities)")
+
+
+def _validate_listening_test(scheme: Dict[str, Any], path: str) -> None:
+    from potato.listening.plan import METHODS, SCALES
+    method = scheme.get("method", "mushra")
+    if method not in METHODS:
+        raise ConfigValidationError(
+            f"{path}.method must be one of {', '.join(METHODS)}, got {method!r}")
+    for key in ("stimuli_field", "reference_field", "condition_field"):
+        if key in scheme and not (isinstance(scheme[key], str) and scheme[key]):
+            raise ConfigValidationError(f"{path}.{key} must be the name of an item field")
+    anchors = scheme.get("anchors")
+    if anchors is not None:
+        if method != "mushra":
+            raise ConfigValidationError(f"{path}.anchors applies to method: mushra only")
+        if (not isinstance(anchors, list) or not anchors
+                or not all(isinstance(a, int) and not isinstance(a, bool) and 500 <= a <= 20000
+                           for a in anchors)):
+            raise ConfigValidationError(
+                f"{path}.anchors must be a list of low-pass cut-offs in Hz (500 to 20000), "
+                "such as [3500, 7000]")
+    for key in ("hidden_reference", "loop", "require_full_playback", "require_all_played",
+                "require_one_at_100", "allow_replay"):
+        if key in scheme and not isinstance(scheme[key], bool):
+            raise ConfigValidationError(f"{path}.{key} must be true or false")
+    labels = scheme.get("scale_labels")
+    if labels is not None:
+        expected = len(SCALES.get(method, []))
+        if method in ("mushra", "bs1116", "p835", "abx") or expected == 0:
+            raise ConfigValidationError(f"{path}.scale_labels applies to acr, dcr and ccr only")
+        if (not isinstance(labels, list) or len(labels) != expected
+                or not all(isinstance(l, str) and l.strip() for l in labels)):
+            raise ConfigValidationError(
+                f"{path}.scale_labels must be {expected} labels, best first, for method {method}")
+
+
+def _validate_interlinear_gloss(scheme: Dict[str, Any], path: str) -> None:
+    from potato.igt import resolve_abbreviations
+    for key in ("source_field", "morphemes_field", "gloss_field", "translation_field",
+                "language", "metalanguage"):
+        if key in scheme and not (isinstance(scheme[key], str) and scheme[key].strip()):
+            raise ConfigValidationError(f"{path}.{key} must be a non-empty string")
+    tiers = scheme.get("tiers")
+    if tiers is not None:
+        if (not isinstance(tiers, list)
+                or not all(isinstance(t, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", t) for t in tiers)):
+            raise ConfigValidationError(
+                f"{path}.tiers must be a list of tier names such as [pos, notes]")
+        reserved = sorted({"word", "morphemes", "gloss"} & set(tiers))
+        if reserved:
+            raise ConfigValidationError(
+                f"{path}.tiers may not use {', '.join(reserved)}: those lines are always shown")
+        if len(set(tiers)) != len(tiers):
+            raise ConfigValidationError(f"{path}.tiers names a tier twice")
+    if "show_translation" in scheme and not isinstance(scheme["show_translation"], bool):
+        raise ConfigValidationError(f"{path}.show_translation must be true or false")
+    if "abbreviations" in scheme:
+        spec = scheme["abbreviations"]
+        if isinstance(spec, str) and spec.strip().lower() != "leipzig":
+            raise ConfigValidationError(
+                f"{path}.abbreviations must be 'leipzig', a list of labels or a mapping of "
+                f"label to meaning, got {spec!r}")
+        try:
+            resolve_abbreviations(spec)
+        except ValueError as exc:
+            raise ConfigValidationError(f"{path}.{exc}") from None
+
+
+def _validate_incentive_scheme(scheme: Dict[str, Any], path: str) -> None:
+    from potato.server_utils.schemas.incentive_schemes import validate_incentive_scheme
+    try:
+        validate_incentive_scheme(scheme)
+    except ValueError as e:
+        raise ConfigValidationError(f"{path} ({scheme['annotation_type']}): {e}")
+
+
+def _validate_ego_network(scheme: Dict[str, Any], path: str) -> None:
+    """The page builds from the same normalization, so what passes here renders."""
+    from potato.server_utils.schemas.ego_network import EgoNetworkConfigError, normalize_scheme
+    try:
+        normalize_scheme(scheme)
+    except EgoNetworkConfigError as e:
+        raise ConfigValidationError(f"{path} (ego_network): {e}")
+
+
+def _validate_cultural_domain_scheme(scheme: Dict[str, Any], path: str) -> None:
+    """free_list and triad_test: the checks live beside each generator."""
+    if scheme['annotation_type'] == 'free_list':
+        from potato.server_utils.schemas.free_list import validate_scheme
+    else:
+        from potato.server_utils.schemas.triad_test import validate_scheme
+    try:
+        validate_scheme(scheme)
+    except ValueError as e:
+        raise ConfigValidationError(f"{path} ({scheme['annotation_type']}): {e}")
+
+
+def _validate_geo_annotation(scheme: Dict[str, Any], path: str) -> None:
+    """Maps: labels, task, tools, and a basemap the project supplies or
+    configures (no external tiles unless `basemap.tiles` names them)."""
+    from potato.geo.scheme import validate_geo_scheme
+    try:
+        for warning in validate_geo_scheme(scheme, path):
+            logger.warning(warning)
+    except ValueError as e:
+        raise ConfigValidationError(str(e))
+
+
+def _validate_spectrogram_annotation(scheme: Dict[str, Any], path: str) -> None:
+    from potato.server_utils.schemas.spectrogram_annotation import COLORMAPS, FFT_SIZES
+    labels = scheme.get("labels")
+    if not isinstance(labels, list) or not labels:
+        raise ConfigValidationError(f"{path}.labels must be a non-empty list of label names")
+    names = [l.get("name") if isinstance(l, dict) else l for l in labels]
+    if not all(isinstance(n, str) and n.strip() for n in names):
+        raise ConfigValidationError(
+            f"{path}.labels: every label needs a name (quote names YAML would read as "
+            "true/false or a number)")
+    if len(set(names)) != len(names):
+        raise ConfigValidationError(f"{path}.labels has a duplicate name")
+
+    def number(key):
+        value = scheme.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise ConfigValidationError(f"{path}.{key} must be a number of hertz, 0 or more")
+        return float(value)
+
+    low, high = number("min_freq"), number("max_freq")
+    if low is not None and high is not None and high <= low:
+        raise ConfigValidationError(f"{path}.max_freq must be above min_freq")
+    if "fft_size" in scheme and scheme["fft_size"] not in FFT_SIZES:
+        raise ConfigValidationError(
+            f"{path}.fft_size must be one of {', '.join(map(str, FFT_SIZES))}")
+    if "colormap" in scheme and scheme["colormap"] not in COLORMAPS:
+        raise ConfigValidationError(f"{path}.colormap must be one of {', '.join(COLORMAPS)}")
+    for key in ("height", "min_boxes", "max_boxes"):
+        value = scheme.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise ConfigValidationError(f"{path}.{key} must be a whole number, 0 or more")
+    if (scheme.get("min_boxes") is not None and scheme.get("max_boxes") is not None
+            and scheme["max_boxes"] < scheme["min_boxes"]):
+        raise ConfigValidationError(f"{path}.max_boxes must be at least min_boxes")
+    if "source_field" in scheme and not (isinstance(scheme["source_field"], str)
+                                         and scheme["source_field"]):
+        raise ConfigValidationError(f"{path}.source_field must be the name of an item field")
+
+
+def _validate_viewer_selection(scheme: Dict[str, Any], path: str) -> None:
+    """viewer_selection on its own (labels, counts, viewer_field present).
+    Whether viewer_field names a viewer display is checked with the whole
+    config, in _validate_viewer_displays."""
+    from potato.server_utils.schemas.viewer_selection import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
+def _validate_viewer_displays(config_data: Dict[str, Any]) -> None:
+    """Viewer displays (protein_structure, genome_locus): options, the browser
+    bundles they need (naming `potato vendor fetch <name>`), and the display
+    field each viewer_selection scheme binds to."""
+    from potato.server_utils.displays.viewer_display import validate_viewer_config
+    errors = validate_viewer_config(config_data)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
 def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -> None:
     """
     Validate the structure of a display_logic configuration block.
@@ -5204,7 +5482,8 @@ def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -
     Raises:
         ConfigValidationError: If the display_logic is invalid
     """
-    from potato.server_utils.display_logic import SUPPORTED_OPERATORS
+    from potato.server_utils.display_logic import (
+        SUPPORTED_OPERATORS, iter_leaf_conditions, structure_errors)
 
     if not isinstance(display_logic, dict):
         raise ConfigValidationError(f"{path}.display_logic must be a dictionary")
@@ -5220,12 +5499,12 @@ def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -
     if len(show_when) == 0:
         raise ConfigValidationError(f"{path}.display_logic.show_when must have at least one condition")
 
-    # Validate each condition
-    for i, condition in enumerate(show_when):
-        cond_path = f"{path}.display_logic.show_when[{i}]"
+    shape = structure_errors(show_when, f"{path}.display_logic.show_when")
+    if shape:
+        raise ConfigValidationError(shape[0])
 
-        if not isinstance(condition, dict):
-            raise ConfigValidationError(f"{cond_path} must be a dictionary")
+    # Validate each condition, inside groups too
+    for cond_path, condition in iter_leaf_conditions(show_when, f"{path}.display_logic.show_when"):
 
         # Required fields
         if 'schema' not in condition:
@@ -5257,28 +5536,33 @@ def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -
                 raise ConfigValidationError(
                     f"{cond_path}: range value must have exactly 2 elements [min, max]"
                 )
-            try:
-                min_val, max_val = float(value[0]), float(value[1])
-                if min_val > max_val:
-                    raise ConfigValidationError(
-                        f"{cond_path}: range min ({min_val}) is greater than max ({max_val})"
-                    )
-            except (ValueError, TypeError):
-                raise ConfigValidationError(f"{cond_path}: range values must be numeric")
+            # The rule's own runtime test (display_logic._is_number): a quoted
+            # number passes float() here and fails when the rule is built.
+            from potato.server_utils.display_logic import _is_number
+            if not all(_is_number(v) for v in value):
+                raise ConfigValidationError(f"{cond_path}: range values must be numeric (numbers, unquoted)")
+            if value[0] > value[1]:
+                raise ConfigValidationError(
+                    f"{cond_path}: range min ({value[0]}) is greater than max ({value[1]})"
+                )
         # Numeric operators need numeric values
-        elif operator in ('gt', 'gte', 'lt', 'lte', 'length_gt', 'length_lt'):
+        elif operator in ('gt', 'gte', 'lt', 'lte', 'length_gt', 'length_lt',
+                          'count_gt', 'count_lt', 'count_equals'):
             if value is None:
                 raise ConfigValidationError(f"{cond_path}: operator '{operator}' requires a value")
-            try:
-                float(value)
-            except (ValueError, TypeError):
+            from potato.server_utils.display_logic import _is_number
+            if not _is_number(value):
                 raise ConfigValidationError(
-                    f"{cond_path}: operator '{operator}' requires a numeric value"
+                    f"{cond_path}: operator '{operator}' requires a numeric value (a number, "
+                    f"unquoted, not true/false), got {value!r}"
                 )
         # Regex operator needs a valid pattern
         elif operator == 'matches':
             if value is None:
                 raise ConfigValidationError(f"{cond_path}: operator 'matches' requires a regex pattern")
+            if not isinstance(value, str):
+                raise ConfigValidationError(
+                    f"{cond_path}: operator 'matches' requires the pattern as a string, got {value!r}")
             try:
                 import re
                 re.compile(value)
@@ -5858,27 +6142,31 @@ def validate_phase_order(config_data: Dict[str, Any]) -> None:
 
 def _phase_flow_rule_errors(spec: Any, where: str, factors: Dict[str, Any]) -> None:
     """Refuse a malformed `show_when` list (the display_logic grammar)."""
-    from potato.server_utils.display_logic import DisplayLogicRule
+    from potato.server_utils.display_logic import (
+        DisplayLogicRule, iter_leaf_conditions, structure_errors)
     from potato.server_utils.phase_flow import CONDITION_PREFIX
     show_when = spec.get("show_when") if isinstance(spec, dict) else None
     if not isinstance(show_when, list) or not show_when:
         raise ConfigValidationError(
             f"{where}.show_when must be a non-empty list of conditions "
             "(schema, operator, value), the same form display_logic uses")
-    for i, cond in enumerate(show_when):
-        if not isinstance(cond, dict) or not cond.get("schema") or not cond.get("operator"):
+    shape = structure_errors(show_when, f"{where}.show_when")
+    if shape:
+        raise ConfigValidationError(shape[0])
+    for cond_path, cond in iter_leaf_conditions(show_when, f"{where}.show_when"):
+        if not cond.get("schema") or not cond.get("operator"):
             raise ConfigValidationError(
-                f"{where}.show_when[{i}] needs 'schema' and 'operator'")
+                f"{cond_path} needs 'schema' and 'operator'")
         schema = str(cond["schema"])
         if schema.startswith(CONDITION_PREFIX):
             factor = schema[len(CONDITION_PREFIX):]
             if factor not in factors:
                 declared = ", ".join(sorted(factors)) or "none declared"
                 raise ConfigValidationError(
-                    f"{where}.show_when[{i}] refers to '{schema}', but "
+                    f"{cond_path} refers to '{schema}', but "
                     f"conditions.factors has no factor '{factor}' ({declared})")
             from potato.server_utils.experiment_conditions import check_condition_value
-            check_condition_value(f"{where}.show_when[{i}]", cond, factors)
+            check_condition_value(cond_path, cond, factors)
     try:
         DisplayLogicRule.from_dict({"show_when": show_when,
                                     "logic": spec.get("logic", "all")})
@@ -5904,9 +6192,19 @@ def validate_phase_flow_config(config_data: Dict[str, Any]) -> None:
         factors = {}
     entries = phases_dict(config_data)
 
+    from potato.phase import UserPhase
+    from potato.runtimes.registry import runtime_kinds
+    known_types = ({m.value for m in UserPhase} - {"login", "done"}) | set(runtime_kinds())
     for name, entry in entries.items():
         where = f"phases.{name}"
         ptype = str(entry.get("type") or name).lower()
+        if "type" in entry and ptype not in known_types:
+            import difflib
+            near = difflib.get_close_matches(ptype, sorted(known_types), n=1)
+            raise ConfigValidationError(
+                f"{where}.type is '{entry['type']}', which is not a phase type"
+                + (f" (did you mean '{near[0]}'?)" if near else "")
+                + f". Phase types: {', '.join(sorted(known_types))}")
         if "show_when" in entry:
             if ptype == "annotation" or name == "annotation":
                 raise ConfigValidationError(
@@ -6008,7 +6306,13 @@ def phase_page_schemes(config_data: Dict[str, Any],
     pages: Dict[str, List[Dict[str, Any]]] = {}
     for name, entry in phases_dict(config_data).items():
         kind = str(entry.get("type") or name).lower()
-        if kind in ("training", "annotation") or entry.get("_kind") == "jspsych":
+        if entry.get("_kind"):
+            from potato.runtimes.registry import get_adapter
+            adapter = get_adapter(entry["_kind"])
+            if adapter is not None:
+                pages[name] = adapter.answer_schemes(name, entry)
+            continue
+        if kind in ("training", "annotation"):
             continue
         schemes: List[Dict[str, Any]] = []
         if isinstance(entry.get("annotation_schemes"), list):
@@ -6059,6 +6363,14 @@ def validate_phase_flow_references(config_data: Dict[str, Any],
     """
     from potato.server_utils.phase_flow import CONDITION_PREFIX, phases_dict
     entries = phases_dict(config_data)
+    # A runtime page answers questions of its own (a headphone check's
+    # `<page>_passed`), which page rules may test like survey answers.
+    page_schemes = dict(page_schemes)
+    from potato.runtimes.registry import get_adapter
+    for name, entry in entries.items():
+        adapter = get_adapter(entry.get("_kind")) if isinstance(entry, dict) else None
+        if adapter is not None and name not in page_schemes:
+            page_schemes[name] = adapter.answer_schemes(name, entry)
     phases = config_data.get("phases")
     order = (phases.get("order") if isinstance(phases, dict) and
              isinstance(phases.get("order"), list) else list(entries))
@@ -6094,7 +6406,8 @@ def validate_phase_flow_references(config_data: Dict[str, Any],
                                   ("exit_when", entry.get("exit_when"), False)):
             if key not in entry or not isinstance(spec, dict):
                 continue
-            for cond in spec.get("show_when") or []:
+            from potato.server_utils.display_logic import iter_leaf_conditions
+            for _cond_path, cond in iter_leaf_conditions(spec.get("show_when") or []):
                 schema = str(cond.get("schema", ""))
                 if schema.startswith(CONDITION_PREFIX):
                     continue
@@ -7038,6 +7351,26 @@ def warn_about_unreadable_optional_files(config_data: Dict[str, Any],
                 f"{resolved}). The server starts anyway and the feature is "
                 f"silently off."
             )
+
+    # A map's outline file: missing, the page shows an error box in place of
+    # the map, and nothing else says so.
+    for scheme in config_data.get('annotation_schemes') or []:
+        if not (isinstance(scheme, dict) and scheme.get('annotation_type') == 'geo_annotation'):
+            continue
+        outline = (scheme.get('basemap') or {}).get('geojson') \
+            if isinstance(scheme.get('basemap'), dict) else None
+        if not isinstance(outline, str) or outline.startswith(("http://", "https://", "/media/")):
+            continue
+        try:
+            resolved = validate_path_security(outline, base_dir, project_dir)
+        except ConfigSecurityError as e:
+            messages.append(f"{scheme.get('name')}.basemap.geojson: {e}")
+            continue
+        if not os.path.exists(resolved):
+            messages.append(
+                f"geo_annotation '{scheme.get('name')}': basemap.geojson names {outline!r}, "
+                f"which does not exist (looked in {resolved}); the page will show an error "
+                f"in place of the map.")
 
     return messages
 
@@ -9257,6 +9590,8 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         ConfigValidationError: If the instance_display configuration is invalid
     """
     if "instance_display" not in config_data:
+        # Still checks that no viewer_selection scheme is left without a viewer.
+        _validate_viewer_displays(config_data)
         return  # instance_display is optional (backwards compatible)
 
     display_config = config_data["instance_display"]
@@ -9291,7 +9626,8 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
             "live_agent", "coding_trace", "live_coding_agent",
             "multi_agent_discussion", "cot_trace", "audio_dialogue",
-            "depth_map",
+            "depth_map", "image_region",
+            "protein_structure", "genome_locus",
         ]
 
     for i, field in enumerate(fields):
@@ -9378,6 +9714,11 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     if "resizable" in display_config:
         if not isinstance(display_config["resizable"], bool):
             raise ConfigValidationError("instance_display.resizable must be a boolean (true/false)")
+
+    # After the per-field checks, so a field that fails one of those (an
+    # unsupported span_target, say) is told so rather than about its viewer
+    # options.
+    _validate_viewer_displays(config_data)
 
     # Check for deprecation warning: using annotation schemas for display-only
     _check_display_only_deprecation(config_data)

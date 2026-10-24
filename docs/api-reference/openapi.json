@@ -780,6 +780,50 @@
         ]
       }
     },
+    "/admin/api/crowd/incentive_bonuses": {
+      "get": {
+        "operationId": "get_crowd_admin_crowd_incentive_bonuses",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Bonuses computed from stored answers by potato/incentives.py.",
+        "tags": [
+          "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      },
+      "post": {
+        "operationId": "post_crowd_admin_crowd_incentive_bonuses",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Bonuses computed from stored answers by potato/incentives.py.",
+        "tags": [
+          "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
+        ]
+      }
+    },
     "/admin/api/crowd/qualification_sync": {
       "post": {
         "operationId": "post_crowd_admin_crowd_qualification_sync",
@@ -5293,43 +5337,51 @@
         ]
       }
     },
-    "/api/jspsych/finish": {
-      "post": {
-        "operationId": "post_jspsych_finish",
+    "/api/jspsych/{rest}": {
+      "get": {
+        "operationId": "get_jspsych_api_moved",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rest",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
           }
         },
-        "summary": "The whole run's data. Marks the page complete and moves the participant on.",
+        "summary": "The jsPsych phase's URLs from before runtime phases (/jspsych/<page>/...,",
         "tags": [
           "core"
-        ],
-        "x-potato-auth": [
-          "inline:session_username"
         ]
-      }
-    },
-    "/api/jspsych/trial": {
+      },
       "post": {
-        "operationId": "post_jspsych_trial",
+        "operationId": "post_jspsych_api_moved",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rest",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
           }
         },
-        "summary": "Store one trial as it finishes (``save: incremental``).",
+        "summary": "The jsPsych phase's URLs from before runtime phases (/jspsych/<page>/...,",
         "tags": [
           "core"
-        ],
-        "x-potato-auth": [
-          "inline:session_username"
         ]
       }
     },
@@ -5423,6 +5475,71 @@
           }
         },
         "summary": "Delete a specific link annotation.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/listening/audio/{schema}/{instance_id}/{slot}": {
+      "get": {
+        "operationId": "get_listening_audio",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schema",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/listening/plan": {
+      "get": {
+        "operationId": "get_listening_plan",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
         "tags": [
           "core"
         ],
@@ -6917,6 +7034,46 @@
           }
         },
         "summary": "Build and return the current item's rollout manifest.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/runtime/finish": {
+      "post": {
+        "operationId": "post_runtime_finish",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The whole run's data. Marks the page complete and moves the participant on.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/runtime/trial": {
+      "post": {
+        "operationId": "post_runtime_trial",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Store one trial as it finishes (``save: incremental``).",
         "tags": [
           "core"
         ],
@@ -9184,9 +9341,9 @@
         ]
       }
     },
-    "/jspsych/{page}/assets/": {
+    "/jspsych/{page}": {
       "get": {
-        "operationId": "get_jspsych_asset_root",
+        "operationId": "get_jspsych_page_moved",
         "parameters": [
           {
             "in": "path",
@@ -9200,22 +9357,39 @@
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
           }
         },
+        "summary": "The jsPsych phase's URLs from before runtime phases (/jspsych/<page>/...,",
         "tags": [
           "core"
+        ]
+      },
+      "post": {
+        "operationId": "post_jspsych_page_moved",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
-        "x-potato-auth": [
-          "inline:session_username"
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "The jsPsych phase's URLs from before runtime phases (/jspsych/<page>/...,",
+        "tags": [
+          "core"
         ]
       }
     },
-    "/jspsych/{page}/assets/{path}": {
+    "/jspsych/{page}/{rest}": {
       "get": {
-        "operationId": "get_jspsych_asset",
+        "operationId": "get_jspsych_moved",
         "parameters": [
           {
             "in": "path",
@@ -9227,7 +9401,7 @@
           },
           {
             "in": "path",
-            "name": "path",
+            "name": "rest",
             "required": true,
             "schema": {
               "format": "path",
@@ -9238,52 +9412,15 @@
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
           }
         },
+        "summary": "The jsPsych phase's URLs from before runtime phases (/jspsych/<page>/...,",
         "tags": [
           "core"
-        ],
-        "x-potato-auth": [
-          "inline:session_username"
         ]
-      }
-    },
-    "/jspsych/{page}/continue": {
+      },
       "post": {
-        "operationId": "post_jspsych_continue",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
-          }
-        },
-        "summary": "Leave a completed jsPsych page (reached again by back navigation).",
-        "tags": [
-          "core"
-        ],
-        "x-potato-auth": [
-          "inline:session_username"
-        ]
-      }
-    },
-    "/jspsych/{page}/script/{idx}.js": {
-      "get": {
-        "operationId": "get_jspsych_extra_script",
+        "operationId": "post_jspsych_moved",
         "parameters": [
           {
             "in": "path",
@@ -9295,38 +9432,10 @@
           },
           {
             "in": "path",
-            "name": "idx",
+            "name": "rest",
             "required": true,
             "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
-          }
-        },
-        "tags": [
-          "core"
-        ],
-        "x-potato-auth": [
-          "inline:session_username"
-        ]
-      }
-    },
-    "/jspsych/{page}/timeline.js": {
-      "get": {
-        "operationId": "get_jspsych_timeline",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "page",
-            "required": true,
-            "schema": {
+              "format": "path",
               "type": "string"
             }
           }
@@ -9334,16 +9443,11 @@
         "responses": {
           "200": {
             "description": "Success"
-          },
-          "401": {
-            "description": "Authentication required"
           }
         },
+        "summary": "The jsPsych phase's URLs from before runtime phases (/jspsych/<page>/...,",
         "tags": [
           "core"
-        ],
-        "x-potato-auth": [
-          "inline:session_username"
         ]
       }
     },
@@ -10940,6 +11044,276 @@
         },
         "tags": [
           "rooms"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/assets/": {
+      "get": {
+        "operationId": "get_runtime_asset_root",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/assets/{path}": {
+      "get": {
+        "operationId": "get_runtime_asset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/continue": {
+      "post": {
+        "operationId": "post_runtime_continue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Leave a completed task page (reached again by back navigation).",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/return": {
+      "get": {
+        "operationId": "get_runtime_return",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Back from a ``type: external`` task: store what it sent and move on.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/script/{idx}.js": {
+      "get": {
+        "operationId": "get_runtime_extra_script",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "idx",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/stimulus/{idx}.wav": {
+      "get": {
+        "operationId": "get_runtime_stimulus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "idx",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "A sound the server made for one trial of the participant's current run",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/study": {
+      "get": {
+        "operationId": "get_runtime_main",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/runtime/{page}/study/{path}": {
+      "get": {
+        "operationId": "get_runtime_main_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "A file inside a study that is a directory (an unzipped export).",
+        "tags": [
+          "core"
         ],
         "x-potato-auth": [
           "inline:session_username"
@@ -12645,6 +13019,38 @@
         "x-potato-auth": [
           "inline:session_username",
           "inline:debug_only"
+        ]
+      }
+    },
+    "/vendor-fetched/{dirname}/{path}": {
+      "get": {
+        "operationId": "get_vendor_fetched",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dirname",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "tags": [
+          "core"
         ]
       }
     },

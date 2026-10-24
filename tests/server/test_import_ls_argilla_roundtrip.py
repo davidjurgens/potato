@@ -10,7 +10,6 @@ agreement statistic over the imported people.
 
 import json
 import os
-import re
 import shutil
 
 import pytest
@@ -93,18 +92,16 @@ class TestLabelStudioProject:
 
     def test_the_iaa_page_reports_the_imported_people(self, ls_server):
         """The docs point people at /admin/iaa, so check that page too."""
-        from bs4 import BeautifulSoup
         response = requests.get(f"{ls_server.base_url}/admin/iaa",
                                 headers={"X-API-Key": ADMIN_KEY})
         assert response.status_code == 200, response.text[:300]
-        text = BeautifulSoup(response.text, "html.parser").get_text(" ", strip=True)
-        # The page embeds the report as JSON. /admin/iaa scores only items that
-        # have reached their annotator cap, which the importer sets from the
-        # source study (here: two people per task).
-        match = re.search(r'"sentiment":\{"annotation_type":"radio","kind":"nominal",'
-                          r'"metrics":(\{[^{}]*\})', text)
-        assert match, text[:800]
-        metrics = json.loads(match.group(1))
+        # Parsed rather than matched: a regex on compact JSON failed in a full
+        # server run, where the same report came back indented. /admin/iaa
+        # scores only items that have reached their annotator cap, which the
+        # importer sets from the source study (here: two people per task).
+        sentiment = response.json()["schemas"]["sentiment"]
+        assert sentiment["kind"] == "nominal", sentiment
+        metrics = sentiment["metrics"]
         assert metrics["n_items"] == 2 and metrics["n_annotators"] == 2, metrics
         assert metrics["alpha_nominal"] == pytest.approx(0.0, abs=1e-6), metrics
 

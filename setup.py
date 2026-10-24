@@ -13,6 +13,9 @@ def read_readme():
 _CORE_DEPS = [
     "beautifulsoup4>=4.10.0",
     "click>=8.0.3",
+    # Entity-expansion refusals for untrusted XML (FLExText, PAGE, TEI,
+    # LimeSurvey imports). Pure Python; imported only by those importers.
+    "defusedxml>=0.7.1",
     "Flask>=3.0.0",
     "itsdangerous>=2.1.0",
     "Jinja2>=3.1.6",

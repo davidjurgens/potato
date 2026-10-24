@@ -169,6 +169,9 @@ qa-testing/
 # `potato download-models`, never committed. The default model alone
 # is ~45MB, and the licence that applies is the upstream one, not ours.
 potato/models/
+# Large browser libraries installed per install with `potato vendor fetch`
+# (see potato/vendoring/__init__.py).
+potato/vendor_fetched/
 # Detector weights the YOLO source downloads into an example on first run
 # (yolov8n.pt, about 6 MB, AGPL-licensed upstream).
 examples/**/*.pt
@@ -196,3 +199,6 @@ examples/video/mask-propagation/media/
 # repository.
 user_config.json
 user_config.jsonl
+
+# Derived media made on first request (listening-test anchors, ...).
+.potato_cache/

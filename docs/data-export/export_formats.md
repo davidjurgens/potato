@@ -602,16 +602,210 @@ CSV and TSV exports also write `participants.csv` (conditions, page and
 question orders, skipped pages, screen-outs) when the study uses
 [experiment flow](../workflow/experiment_flow.md) features, and `trials.csv`
 (one row per timed trial, including timeouts) when
-[`trial_timing`](../workflow/timed_trials.md) is on.
+[`trial_timing`](../workflow/timed_trials.md) is on, and `regions.csv` (one
+row per region of a [self-paced reading or maze](../workflow/self_paced_reading.md)
+trial).
 
-### jsPsych (jspsych)
+### Runtime phases (runtime, jspsych)
 
-Trial data from [`type: jspsych` phases](../workflow/jspsych_phase.md):
-`jspsych_runs.csv`, `jspsych_trials.csv` (one row per trial, every column
-jsPsych recorded), `jspsych_interaction.csv`, and each run's raw JSON.
+Data from [runtime phases](../workflow/runtime_phases.md): for each runtime
+used, `<kind>_runs.csv`, `<kind>_trials.csv` (one row per trial, every column
+the task recorded), `<kind>_interaction.csv`, and each run's raw JSON.
+`jspsych` writes only the `type: jspsych` pages' files.
 
 ```bash
+python -m potato.export --config config.yaml --format runtime --output ./export/
 python -m potato.export --config config.yaml --format jspsych --output ./export/
+```
+
+### Listening tests (listening_test)
+
+Ratings from [`listening_test` schemes](../annotation-types/multimedia/listening_tests.md),
+with each sample mapped back to its condition: `listening_ratings.csv`,
+`listening_summary.csv` (mean, SD and 95% interval per condition: MOS,
+CMOS, MUSHRA and BS.1116 scores), `listening_abx.csv`, and
+`listening_screening.csv` (the ITU-R BS.1534-3 post-screening rule).
+
+```bash
+python -m potato.export --config config.yaml --format listening_test --output ./export/
+```
+
+### Incentive payments (incentives)
+
+Bonuses for [`price_list`](../annotation-types/measurement/price_list.md),
+[`bdm`](../annotation-types/measurement/bdm.md) and
+[`belief_elicitation`](../annotation-types/measurement/belief_elicitation.md)
+answers, computed from the stored answers under the config's `incentives:`
+rules. `bonuses.csv` has one row per paid-for decision with the seed, every
+random draw, the payoff, and the participant's total; `bonuses_prolific.csv`
+is Prolific's bulk bonus format (`<participant_id>,<amount>` per line, no
+header). Nothing is paid. See [Incentive payments](../advanced/incentives.md).
+
+```bash
+python -m potato.export --config config.yaml --format incentives --output ./export/
+```
+
+### Interlinear glossed text (flextext, toolbox, igt)
+
+From an [interlinear_gloss](../annotation-types/text/interlinear_gloss.md)
+scheme: `flextext` writes `<user>.flextext` for FieldWorks, `toolbox` writes
+`<user>.txt` with aligned Toolbox columns, and `igt` writes `igt.txt` (Leipzig
+three-line text) and `igt.tex` (gb4e `\gll` / `\glt`). FLEx GUIDs, lexicon
+links and tiers other than `pos` are not written back. See
+[Linguistic fieldwork](../guides/linguistic-fieldwork.md).
+
+### Ego networks (ego_network)
+
+From an [ego_network](../annotation-types/structured/ego_network.md) question:
+`egos.csv` (network size, ties, density, isolates, components and whether
+the network is complete), `alters.csv`, `edges.csv`, and one GraphML file
+per participant and item under `graphml/`. Names are left out unless
+`--option export_names=true`.
+
+### Cultural domain analysis (cultural_domain)
+
+Free lists, triad tests and pile sorts (from `card_sort`): item salience
+(Smith's S, CSI), item-by-item similarity matrices, and a cultural consensus
+analysis with informant competence. Options: `normalize`, `synonyms` (a CSV
+mapping variants to one name), `consensus_schemes`, `consensus_choices`,
+`consensus_min_answers`. See
+[Cultural domain analysis](../guides/cultural-domain-analysis.md).
+
+### Camera traps (megadetector, camtrap_dp, darwin_core)
+
+From a camera-trap review project ([Camera traps](../guides/camera-traps.md)):
+
+- `megadetector`: MegaDetector batch-output JSON with the corrected boxes. A
+  box the reviewer drew or changed has confidence 1.0. A box the reviewer
+  left unchanged keeps the detector's `conf` and the classifier's own score.
+  Boxes on an image triaged empty are kept and listed in the warnings, as in
+  every camera-trap export.
+- `camtrap_dp`: a Camtrap DP 1.0 package (deployments, media, observations,
+  `datapackage.json`). Coordinates and package metadata come from item
+  fields or `--option` values (`title`, `license`, `contributor`,
+  `timezone`, `capture_method`, `sampling_design`); anything missing is
+  named in the warnings. Run a Camtrap DP validator before publishing.
+- `darwin_core`: an occurrence table. `basisOfRecord` is
+  MachineObservation when the model's identification was left unchanged and
+  HumanObservation otherwise; `--option basis_of_record=...` forces one.
+
+### Bioacoustics (raven, audacity_labels)
+
+The boxes of a
+[spectrogram_annotation](../annotation-types/multimedia/spectrogram_annotation.md)
+question, one file per recording: Raven selection tables, and Audacity label
+tracks (the spectral form when a box has frequencies). Both import back by
+file name. See [Bioacoustics](../guides/bioacoustics.md).
+
+### Viewer selections (no dedicated format)
+
+A [viewer_selection](../annotation-types/science/protein_structures.md#data-format)
+answer (residues picked on a protein structure, or the locus and calls picked
+in the [genome viewer](../annotation-types/science/genome_loci.md#data-format))
+has no exporter of its own. Its JSON is written as the scheme's value by
+`jsonl`, `csv` and `tsv`, and by the other general formats.
+
+### Maps (geojson, geo_overlap)
+
+From a [geo_annotation](../annotation-types/spatial/geo_annotation.md)
+question:
+
+- `geojson`: RFC 7946 FeatureCollections (`[lon, lat]`, EPSG:4326), with
+  the item, participant and label on each feature; `--option
+  layout=per_item` (default) or `single`.
+- `geo_overlap`: for each label or typed name, the share of participants
+  whose polygon covers each grid cell, as GeoJSON cells and a PNG, plus
+  tables of the names given. Options: `group_by`, `cells`, `cell_size`,
+  `extent`, `schema`. See
+  [Perceptual dialectology](../guides/perceptual-dialectology.md).
+
+### Digital humanities (iiif_annotations, page_xml, tei)
+
+See [Digital humanities formats](../guides/digital-humanities.md).
+
+- `iiif_annotations`: one AnnotationPage per canvas, targeting the canvas
+  in canvas coordinates, and a copy of the manifest that references them,
+  for Mirador or Universal Viewer. Options: `base_url`, `embed=true`.
+- `page_xml`: the project's copy of each PAGE XML file, edited in place:
+  corrected line text (lines mode) or moved, added and removed regions and
+  lines (regions mode). Other content is kept. Options: `keep_words`,
+  `annotator` (one annotator's version; otherwise one folder each).
+- `tei`: TEI P5 with the spans as inline elements (`<rs type>`, or the
+  original element name), and spans that cannot nest in `<standOff>`.
+  Option: `annotator`.
+
+### Survey experiments (survey_experiments)
+
+Prevalence estimates for [list experiments and randomized-response
+questions](../annotation-types/measurement/sensitive_questions.md):
+`survey_experiments.csv` with the estimate, standard error, 95% interval
+and counts per scheme.
+
+### Reliability (reliability)
+
+Krippendorff's alpha per question with a bootstrap interval, percent
+agreement and the units and coders it rests on, as `reliability.csv` and a
+Markdown table. See [Content analysis](../guides/content-analysis.md).
+
+### Vocabulary test (lextale)
+
+LexTALE-style scores per participant from a radio scheme with a `lextale`
+block: `lextale.csv`. See [Vocabulary tests](../annotation-types/measurement/vocabulary_test.md).
+
+### W3C Web Annotation (web_annotation)
+
+Every annotation as a [W3C Web Annotation](https://www.w3.org/TR/annotation-model/)
+in one JSON-LD `AnnotationCollection` (`web_annotations.jsonld`), the format
+IIIF viewers (Mirador, Universal Viewer), Annotorious and Hypothesis read:
+
+- a text span: a `TextQuoteSelector` (the words plus 32 characters of
+  context each side) refined by a `TextPositionSelector` (code-point offsets);
+- an image region: a `FragmentSelector` (`xywh=pixel:` when the image's size
+  is known, `xywh=percent:` otherwise) for a box, an `SvgSelector` for a
+  polygon or polyline;
+- an answer to a question: a `TextualBody` on the whole item,
+  `purpose: classifying` for a chosen option and `describing` for free text.
+
+The target is the item's `url` field when it has one, else
+`urn:potato:<task>:<item id>`; pass `base_iri` in the export options to mint
+`<base_iri><item id>` instead. Structured answers (tiered annotations,
+rubrics) have no Web Annotation shape and are counted in the warnings.
+
+A region's target is its image. An image in the project's `media/` folder is
+served at a bare server path (`/media/page1.png`), which is not an IRI, so the
+export writes it relative to the project folder (`media/page1.png`) and warns.
+Pass `media_base_url` to write absolute IRIs
+(`https://annotate.example.org/media/page1.png`). Re-importing the file with
+`--image-dir` pointing at the project's `media/` folder finds the images again.
+
+```bash
+python -m potato.export --config config.yaml --format web_annotation --output ./export/ \
+    --option media_base_url=https://annotate.example.org/
+```
+
+### Frictionless Data Package (data_package)
+
+The CSV export (annotations, participants, trials, phase answers, runtime
+tables) plus a [Data Package v2](https://datapackage.org/) `datapackage.json`
+listing each CSV with a Table Schema: each column's type and the question's
+wording as its description. Single-choice answers are written one column
+per option (`sentiment.positive`, holding `positive` or empty), and each such
+column gets that option as its `enum`. `frictionless validate datapackage.json` checks it; Zenodo and OSF
+preview it.
+
+```bash
+python -m potato.export --config config.yaml --format data_package --output ./export/
+```
+
+### Psych-DS (psych_ds)
+
+The same tables in the [Psych-DS](https://psychds-docs.readthedocs.io/)
+layout: `dataset_description.json` (schema.org `Dataset` JSON-LD, every
+column listed in `variableMeasured`) and the CSVs under `data/` with
+keyword file names (`study-<task>_table-annotations_data.csv`).
+
+```bash
+python -m potato.export --config config.yaml --format psych_ds --output ./export/
 ```
 
 ### KITTI 3D (kitti_3d)

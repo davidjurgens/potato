@@ -124,6 +124,19 @@ class TestRegistryDrivenValidation:
             # A cloze needs one passage source: `text` or `source_field`.
             if type_name == "cloze" and "text" not in scheme and "source_field" not in scheme:
                 scheme["text"] = "The [[cat]] sat."
+            # Types whose minimum is more than their required fields.
+            if type_name == "bdm":
+                scheme.update(min=0, max=10)
+            if type_name == "price_list":
+                scheme["preset"] = "holt_laury"
+            if type_name == "ego_network":
+                scheme["stages"] = [{"type": "name_generator", "id": "people",
+                                     "prompt": "Who do you talk to?"}]
+            if type_name == "list_experiment":
+                scheme.update(items=["a", "b"], sensitive_item="s",
+                              treatment={"factor": "g", "level": "t"})
+            if type_name == "geo_annotation":
+                scheme.update(labels=["Area"], basemap={"geojson": "maps/regions.geojson"})
 
             # Should not raise
             validate_single_annotation_scheme(scheme, f"test_scheme[{type_name}]")

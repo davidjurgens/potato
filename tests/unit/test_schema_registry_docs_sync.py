@@ -151,7 +151,11 @@ class TestSchemaDocPointers:
                     mismatched.append((schema_type, path, "no config.yaml"))
                     continue
                 text = config.read_text(encoding="utf-8", errors="ignore")
-                if not re.search(
+                from potato.server_utils.schema_examples import _schemes_in
+                # A survey-only type is configured in a phase's survey file.
+                in_phase_file = any(s.get("annotation_type") == schema_type
+                                    for s in _schemes_in(path))
+                if not in_phase_file and not re.search(
                     rf'annotation_type:\s*["\']?{re.escape(schema_type)}["\']?\s*$',
                     text,
                     flags=re.MULTILINE,

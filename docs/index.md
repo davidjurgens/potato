@@ -27,6 +27,15 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Crowdsourcing Guide](guides/crowdsourcing-guide.md) - Running tasks on Prolific and other platforms (for the full list, see [Choosing a Crowdsourcing Platform](deployment/crowdsourcing-platforms.md))
 - [Agent Evaluation Guide](guides/agent-evaluation-guide.md) - Evaluating AI agents, coding agents, and web agents
 - [AI-Assisted Annotation Guide](guides/ai-assisted-annotation-guide.md) - Using LLMs, active learning, and Solo Mode
+- [Content Analysis](guides/content-analysis.md) - Codebooks from a file and intercoder reliability per variable
+- [Cultural Domain Analysis](guides/cultural-domain-analysis.md) - Free lists, triad tests, pile sorts and consensus analysis
+- [Perceptual Dialectology](guides/perceptual-dialectology.md) - Draw-a-map tasks and overlap heat maps
+- [Digital Humanities Formats](guides/digital-humanities.md) - IIIF, W3C Web Annotation, PAGE XML line correction and TEI
+- [Camera Traps](guides/camera-traps.md) - Review MegaDetector output; export Camtrap DP and Darwin Core
+- [Bioacoustics](guides/bioacoustics.md) - Spectrogram boxes from Raven, Audacity and BirdNET
+- [Structural Biology](guides/structural-biology.md) - Marking residues on protein structures
+- [Genomics](guides/genomics-variant-review.md) - Reviewing variant calls in igv.js
+- [Coming from Ibex and PCIbex](guides/coming-from-ibex.md) - Import an Ibex or PCIbex experiment with its Latin-square lists
 
 ## Getting Started
 
@@ -43,8 +52,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 63 annotation types and 24 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 502 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 76 annotation types and 27 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 512 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -75,6 +84,7 @@ over prose when writing a config or calling the API.
 - [Conversation Tree Annotation](annotation-types/structured/conversation_tree_annotation.md) - Annotate hierarchical conversation structures
 - [Format Support](annotation-types/format_support.md) - PDF, Word, code, and spreadsheet annotation
 - [Span Linking](annotation-types/text/span_linking.md) - Relationship linking between text spans
+- [Interlinear Glossed Text](annotation-types/text/interlinear_gloss.md) - Morpheme segmentation and Leipzig glossing, with FLExText and Toolbox import/export
 - [Soft Label](annotation-types/measurement/soft_label.md) - Probability distribution across labels via constrained sliders
 - [Confidence Annotation](annotation-types/measurement/confidence_annotation.md) - Pair any annotation with an explicit confidence rating
 - [Constant Sum](annotation-types/measurement/constant_sum.md) - Allocate a fixed budget of points across categories
@@ -83,6 +93,15 @@ over prose when writing a config or calling the API.
 - [Range Slider](annotation-types/measurement/range_slider.md) - Dual-thumb slider for selecting an acceptable min-max range
 - [Hierarchical Multi-Label Selection](annotation-types/structured/hierarchical_multiselect.md) - Select labels from an expandable tree taxonomy
 - [Visual Analog Scale (VAS)](annotation-types/measurement/vas.md) - Continuous analog scale for fine-grained magnitude estimation
+- [Sensitive Questions](annotation-types/measurement/sensitive_questions.md) - List experiments and randomized response, with prevalence estimates in the export
+- [Vocabulary Tests (LexTALE)](annotation-types/measurement/vocabulary_test.md) - Word/nonword decision scored per participant
+- [Price Lists](annotation-types/measurement/price_list.md), [BDM Bids](annotation-types/measurement/bdm.md) and [Belief Elicitation](annotation-types/measurement/belief_elicitation.md) - Incentive-compatible elicitation; see [Incentive Payments](advanced/incentives.md)
+- [Ego Networks](annotation-types/structured/ego_network.md) - Name generators, interpreters, dyad census and sociogram
+- [Free Lists](annotation-types/survey/free_list.md) and [Triad Tests](annotation-types/survey/triad_test.md) - Cultural domain elicitation
+- [Maps](annotation-types/spatial/geo_annotation.md) - Points, lines and polygons on a map, as GeoJSON
+- [Protein Structures](annotation-types/science/protein_structures.md) - Residue selection in 3Dmol.js or Mol*, with pLDDT colouring
+- [Genome Loci](annotation-types/science/genome_loci.md) - A locus in igv.js with reads, calls and features
+- [Spectrogram Annotation](annotation-types/multimedia/spectrogram_annotation.md) - Time-frequency boxes on audio
 - [Extractive QA](annotation-types/text/extractive_qa.md) - SQuAD-style answer span highlighting
 - [Rubric Evaluation](annotation-types/measurement/rubric_eval.md) - Multi-criteria rubric grid for LLM evaluation
 - [Text Edit / Post-Edit](annotation-types/text/text_edit.md) - Inline text editing with diff tracking

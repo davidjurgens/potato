@@ -27,6 +27,7 @@ STAGE1_COMMANDS = {
     "deploy": "put a task on a host, and take it down again",
     "share": "serve a task on a temporary public URL",
     "download-models": "fetch segmentation model weights",
+    "vendor": "install the large browser libraries some features need",
     "version": "print the version, and the commit when run from a checkout",
 }
 

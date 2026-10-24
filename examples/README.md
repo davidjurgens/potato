@@ -216,10 +216,10 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 229 examples, generated from the configs themselves.
+All 249 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
-### advanced/ (60)
+### advanced/ (71)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -241,15 +241,20 @@ The `Types` column lists the annotation types each one uses.
 | [`codebook-invivo-example/`](advanced/codebook-invivo-example/) | Codebook In-Vivo Example | `span` |
 | [`codebook-sidebar/`](advanced/codebook-sidebar/) | Politeness — Codebook Sidebar | `radio` |
 | [`conditional-logic/`](advanced/conditional-logic/) | Conditional Logic Demo - PII Detection | `multiselect`, `radio`, `slider`, `text` |
+| [`cultural-domain/`](advanced/cultural-domain/) | Cultural domain analysis (fruit) | `card_sort`, `triad_test` |
 | [`dataset-publishing/`](advanced/dataset-publishing/) | Movie Review Sentiment | `multiselect`, `radio` |
+| [`dialect-map/`](advanced/dialect-map/) | Draw a map: how people talk in Arventa | `geo_annotation` |
 | [`diversity/`](advanced/diversity/) | Topic Classification with Diversity Ordering | `radio` |
 | [`diversity-test/`](advanced/diversity-test/) | Diversity Ordering Test (100 items, 5 themes) | `radio` |
+| [`ego-network/`](advanced/ego-network/) | Personal networks | `ego_network` |
 | [`embedding-visualization/`](advanced/embedding-visualization/) | Embedding Visualization Demo | `radio` |
+| [`external-task/`](advanced/external-task/) | Group game and ratings | `likert` |
 | [`full-study-skeleton/`](advanced/full-study-skeleton/) | Full Study Skeleton | `likert`, `radio`, `span`, `text` |
 | [`grid-layout/`](advanced/grid-layout/) | Grid Layout Demo | `likert`, `multiselect`, `radio`, `text` |
 | [`heterogeneous-coverage/`](advanced/heterogeneous-coverage/) | Heterogeneous Coverage Example | `radio`, `span` |
 | [`hotkey-review/`](advanced/hotkey-review/) | Hotkey Trace Review | `radio` |
 | [`html-annotation/`](advanced/html-annotation/) | Simple HTML as Input Example | `multiselect` |
+| [`incentivized-elicitation/`](advanced/incentivized-elicitation/) | Incentivized elicitation | `belief_elicitation` |
 | [`jspsych-stroop/`](advanced/jspsych-stroop/) | jsPsych Stroop with word ratings | `radio` |
 | [`keystroke-calibration/`](advanced/keystroke-calibration/) | keystroke-calibration | `text` |
 | [`keystroke-logging/`](advanced/keystroke-logging/) | keystroke-logging | `radio`, `text` |
@@ -258,6 +263,7 @@ The `Types` column lists the annotation types each one uses.
 | [`long-guidelines/`](advanced/long-guidelines/) | Politeness — Long Guidelines | `radio` |
 | [`mace-demo/`](advanced/mace-demo/) | MACE Competence Estimation Demo | `radio` |
 | [`machine-annotators/`](advanced/machine-annotators/) | Gene Function Curation (machine annotators demo) | `radio` |
+| [`maze-task/`](advanced/maze-task/) | Maze task | `pure_display` |
 | [`memos-example/`](advanced/memos-example/) | Memos Example | `radio` |
 | [`mturk-example/`](advanced/mturk-example/) | MTurk Annotation Task | `radio` |
 | [`multi-document-events/`](advanced/multi-document-events/) | Cross-Document Disaster Events | `multi_document_event` |
@@ -269,11 +275,14 @@ The `Types` column lists the annotation types each one uses.
 | [`pdf-link-scroll/`](advanced/pdf-link-scroll/) | PDF Linking — Scroll View | `radio` |
 | [`per-cohort-schemas/`](advanced/per-cohort-schemas/) | Per-Cohort Schemas Example | `radio`, `text` |
 | [`pocket-mode/`](advanced/pocket-mode/) | Pocket — Sentiment Triage | `radio` |
+| [`protein-binding-site/`](advanced/protein-binding-site/) | Binding-site residues | `radio`, `viewer_selection` |
 | [`psychometrics/`](advanced/psychometrics/) | Psychometrics — Sarcasm with Error Bars | `radio` |
 | [`qda-mode-example/`](advanced/qda-mode-example/) | QDA Mode Example | `multiselect`, `span` |
 | [`quality-control/`](advanced/quality-control/) | Sentiment Analysis with Quality Control | `radio` |
 | [`review-workflow/`](advanced/review-workflow/) | Review Workflow | `radio` |
 | [`search-example/`](advanced/search-example/) | Search Example | `radio` |
+| [`self-paced-reading/`](advanced/self-paced-reading/) | Self-paced reading | `radio` |
+| [`sensitive-questions/`](advanced/sensitive-questions/) | Sensitive questions | `radio` |
 | [`showcase/`](advanced/showcase/) | Potato Showcase — Politeness | `radio` |
 | [`solo-mode/`](advanced/solo-mode/) | sentiment-solo-demo | `radio` |
 | [`spreadsheet-annotation/`](advanced/spreadsheet-annotation/) | Data Quality Annotation | `multiselect`, `text` |
@@ -283,6 +292,8 @@ The `Types` column lists the annotation types each one uses.
 | [`triage/`](advanced/triage/) | Simple Triage Example | `triage` |
 | [`truth-serum/`](advanced/truth-serum/) | Truth Serum — Sarcasm | `radio` |
 | [`url-data/`](advanced/url-data/) | URL Data Source Demo | `radio` |
+| [`variant-review/`](advanced/variant-review/) | Variant call review | `multiselect`, `radio`, `viewer_selection` |
+| [`vocabulary-test/`](advanced/vocabulary-test/) | Vocabulary test | `radio` |
 
 ### agent-testing/ (3)
 
@@ -365,7 +376,7 @@ The `Types` column lists the annotation types each one uses.
 | [`ollama-ai-demo/`](ai-assisted/ollama-ai-demo/) | AI-Assisted Product Review Analysis | `radio` |
 | [`span-ai-keywords-demo/`](ai-assisted/span-ai-keywords-demo/) | Span Annotation with AI & Admin Keywords | `span` |
 
-### audio/ (8)
+### audio/ (11)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -374,11 +385,14 @@ The `Types` column lists the annotation types each one uses.
 | [`audio-dialogue/`](audio/audio-dialogue/) | Podcast Dialogue Annotation | `likert`, `radio`, `span`, `span_link` |
 | [`audio-dialogue-sporc/`](audio/audio-dialogue-sporc/) | SPoRC Podcast Dialogue | `likert`, `radio`, `span`, `span_link` |
 | [`audio-with-context/`](audio/audio-with-context/) | Audio Segmentation with Context | `audio_annotation` |
+| [`bioacoustics-boxes/`](audio/bioacoustics-boxes/) | Bioacoustics: call boxes | `spectrogram_annotation` |
+| [`listening-test-mushra/`](audio/listening-test-mushra/) | MUSHRA listening test | `listening_test` |
+| [`listening-test-p808/`](audio/listening-test-p808/) | Speech quality (ACR) | `listening_test` |
 | [`segment-questions/`](audio/segment-questions/) | Interruptions in Consultations | `audio_annotation` |
 | [`tiered-annotation/`](audio/tiered-annotation/) | Tiered Annotation Example | `tiered_annotation` |
 | [`transcript-formats/`](audio/transcript-formats/) | Transcript Formats | `radio`, `span` |
 
-### classification/ (32)
+### classification/ (33)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -388,6 +402,7 @@ The `Types` column lists the annotation types each one uses.
 | [`check-box-dynamic-labels/`](classification/check-box-dynamic-labels/) | Simple Check Box Dynamic Labels Example | `multiselect` |
 | [`check-box-with-free-response/`](classification/check-box-with-free-response/) | Simple Check Box With Free Response Example | `multiselect` |
 | [`cloze-test/`](classification/cloze-test/) | Cloze test | `cloze` |
+| [`codebook-content-analysis/`](classification/codebook-content-analysis/) | Headline topics | `hierarchical_multiselect`, `radio` |
 | [`confidence-calibrated/`](classification/confidence-calibrated/) | Confidence-Calibrated Sentiment Annotation | `confidence`, `radio` |
 | [`conjoint/`](classification/conjoint/) | AI Assistant Preference Study | `conjoint` |
 | [`constant-sum/`](classification/constant-sum/) | Constant-Sum Topic Relevance Allocation | `constant_sum` |
@@ -452,17 +467,20 @@ The `Types` column lists the annotation types each one uses.
 |---------|------|-------|
 | [`lerobot-episode/`](embodied/lerobot-episode/) | Robot episode review | `episode_annotation`, `text` |
 
-### image/ (18)
+### image/ (21)
 
 | Example | Task | Types |
 |---------|------|-------|
 | [`annotation-critique/`](image/annotation-critique/) | Annotation review (VLM as judge) | `image_annotation` |
+| [`camera-trap-review/`](image/camera-trap-review/) | Camera-trap review | `image_annotation`, `multiselect`, `radio` |
 | [`coco-import/`](image/coco-import/) | object_detection (imported) | `image_annotation` |
 | [`ct-volume/`](image/ct-volume/) | CT volume segmentation | `radio`, `volume_annotation` |
 | [`deep-zoom/`](image/deep-zoom/) | Deep-zoom survey annotation | `image_annotation` |
 | [`document-bbox/`](image/document-bbox/) | Document Region Annotation | `radio` |
 | [`format-migration/`](image/format-migration/) | Format migration | `image_annotation` |
+| [`geo-annotation/`](image/geo-annotation/) | Land cover on georeferenced images | `geo_annotation` |
 | [`geometry-primitives/`](image/geometry-primitives/) | Geometry Primitives | `image_annotation` |
+| [`iiif-manifest/`](image/iiif-manifest/) | IIIF manifest (two folios) | `image_annotation` |
 | [`image-ai-detection/`](image/image-ai-detection/) | AI-Assisted Object Detection | `image_annotation` |
 | [`image-annotation/`](image/image-annotation/) | Object Detection Demo | `image_annotation`, `radio` |
 | [`image-classification/`](image/image-classification/) | Image Classification | `radio` |
@@ -489,7 +507,7 @@ The `Types` column lists the annotation types each one uses.
 |---------|------|-------|
 | [`counter/`](plugins/counter/) | Plugin example - counting people | `counter`, `radio` |
 
-### span/ (11)
+### span/ (12)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -498,6 +516,7 @@ The `Types` column lists the annotation types each one uses.
 | [`dependency-tree/`](span/dependency-tree/) | Dependency Tree Annotation | `span`, `span_link` |
 | [`entity-linking/`](span/entity-linking/) | Entity Linking Example | `span` |
 | [`event-annotation/`](span/event-annotation/) | Event Annotation Example | `event_annotation`, `span` |
+| [`interlinear-gloss/`](span/interlinear-gloss/) | Interlinear glossing (Latin, illustrative) | `interlinear_gloss` |
 | [`multi-span/`](span/multi-span/) | Multi-Span Annotation Example | `span` |
 | [`segmentation/`](span/segmentation/) | Image Segmentation Demo | `image_annotation` |
 | [`span-labeling/`](span/span-labeling/) | Simple Highlighting Example | `span` |
@@ -519,6 +538,12 @@ The `Types` column lists the annotation types each one uses.
 |---------|------|-------|
 | [`verify-format-displays/`](testing/verify-format-displays/) | Format Display Verification | `radio`, `text` |
 | [`verify-span-labeling/`](testing/verify-span-labeling/) | Span Labeling Verification | `span` |
+
+### text/ (1)
+
+| Example | Task | Types |
+|---------|------|-------|
+| [`htr-line-correction/`](text/htr-line-correction/) | HTR line correction | `text_edit` |
 
 ### video/ (8)
 

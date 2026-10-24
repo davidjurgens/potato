@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Perceptual dialectology: a draw-a-map task on a fictional country.
+#
+# Participants draw the areas where they think people speak differently,
+# name each area in their own words, pin where they grew up, and label each
+# province by how its speech sounds to them. The province outlines in
+# maps/regions.geojson are synthetic (no real borders), and the map works
+# offline: nothing is fetched from a tile server.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/dialect-map/config.yaml -p 8000
+#
+# Aggregate the drawn areas into a heat map (share of participants whose
+# areas cover each cell), with a PNG preview and a CSV of the names:
+#   python -m potato.export --config examples/advanced/dialect-map/config.yaml --format geo_overlap --output out/
+# Or export every feature as GeoJSON:
+#   python -m potato.export --config examples/advanced/dialect-map/config.yaml --format geojson --output out/
+
+annotation_task_name: "Draw a map: how people talk in Arventa"
+
+data_files:
+  - data/dialect-map.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: geo_annotation
+    name: dialect_areas
+    description: "Draw the areas where people speak differently"
+    instructions: >-
+      Outline each area where you think people talk differently from other
+      places. Areas may overlap. Give each one the name you would use for the
+      way people talk there, and say how different it sounds to you.
+    task: draw
+    tools: [freehand, polygon]
+    labels:
+      - name: "A little different"
+        color: "#56B4E9"
+      - name: "Very different"
+        color: "#D55E00"
+      - name: "Hard to understand"
+        color: "#CC79A7"
+    feature_text:
+      prompt: "What do you call how people talk there?"
+      required: true
+    basemap:
+      geojson: maps/regions.geojson
+      region_id_property: id
+      region_name_property: name
+    height: 460
+    label_requirement:
+      required: true
+
+  - annotation_type: geo_annotation
+    name: home
+    description: "Where did you grow up?"
+    task: pin
+    labels:
+      - "Where you grew up"
+    basemap:
+      geojson: maps/regions.geojson
+    height: 360
+
+  - annotation_type: geo_annotation
+    name: province_speech
+    description: "How does the speech of each province sound to you?"
+    task: classify_region
+    labels:
+      - name: "Sounds like home"
+        color: "#009E73"
+      - name: "Sounds different"
+        color: "#E69F00"
+      - name: "Don't know"
+        color: "#7F7F7F"
+    basemap:
+      geojson: maps/regions.geojson
+      region_id_property: id
+      region_name_property: name
+    height: 380

@@ -375,6 +375,18 @@ def _register_builtin_schemas():
     from .rubric_eval import generate_rubric_eval_layout
     from .text_edit import generate_text_edit_layout
     from .cloze import generate_cloze_layout
+    from .listening_test import generate_listening_test_layout
+    from .viewer_selection import generate_viewer_selection_layout
+    from .spectrogram_annotation import generate_spectrogram_annotation_layout
+    from .geo_annotation import generate_geo_annotation_layout
+    from .ego_network import generate_ego_network_layout
+    from .free_list import generate_free_list_layout
+    from .triad_test import generate_triad_test_layout
+    from .incentive_schemes import (generate_price_list_layout, generate_bdm_layout,
+                                    generate_belief_elicitation_layout)
+    from .interlinear_gloss import generate_interlinear_gloss_layout
+    from .survey_experiments import (generate_list_experiment_layout,
+                                     generate_randomized_response_layout)
     from .error_span import generate_error_span_layout
     from .card_sort import generate_card_sort_layout
     from .conjoint import generate_conjoint_layout
@@ -403,7 +415,7 @@ def _register_builtin_schemas():
             name="radio",
             generator=generate_radio_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order"],
+            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order", "lextale"],
             supports_keybindings=True,
             single_select=True,
             description="Single-choice radio button selection"
@@ -449,6 +461,131 @@ def _register_builtin_schemas():
                              "input_width", "label_requirement"],
             supports_keybindings=False,
             description="Fill-in-the-blank passage, scored against an answer key kept on the server"
+        ),
+        SchemaDefinition(
+            name="list_experiment",
+            generator=generate_list_experiment_layout,
+            required_fields=["name", "description", "items", "sensitive_item", "treatment"],
+            optional_fields=["sensitive_position", "count_prompt", "label_requirement"],
+            supports_keybindings=False,
+            description="List experiment (item count technique) for a sensitive question"
+        ),
+        SchemaDefinition(
+            name="randomized_response",
+            generator=generate_randomized_response_layout,
+            required_fields=["name", "description"],
+            optional_fields=["method", "question", "randomizer", "p_truth", "p_yes", "p_no",
+                             "nonsensitive_statement", "nonsensitive_prevalence",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Randomized response (forced response, crosswise) for a sensitive question"
+        ),
+        SchemaDefinition(
+            name="price_list",
+            generator=generate_price_list_layout,
+            required_fields=["name", "description"],
+            optional_fields=["preset", "rows", "scale", "currency", "single_switch", "option_labels",
+                             "amount_now", "amounts_later", "delay_label", "now_label",
+                             "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Multiple price list: choose option A or B in each row (Holt & Laury preset, time preference)"
+        ),
+        SchemaDefinition(
+            name="bdm",
+            generator=generate_bdm_layout,
+            required_fields=["name", "description", "max"],
+            optional_fields=["min", "step", "input", "currency", "bid_label", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Becker-DeGroot-Marschak bid: the most the participant would pay"
+        ),
+        SchemaDefinition(
+            name="belief_elicitation",
+            generator=generate_belief_elicitation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["mode", "bins", "step", "left_label", "right_label", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Probability report (0-100) or a distribution over bins that sums to 100"
+        ),
+        SchemaDefinition(
+            name="spectrogram_annotation",
+            generator=generate_spectrogram_annotation_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["source_field", "min_freq", "max_freq", "fft_size", "colormap",
+                             "height", "min_boxes", "max_boxes", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Time-frequency boxes drawn on a spectrogram of the item's audio (bioacoustics)"
+        ),
+        SchemaDefinition(
+            name="viewer_selection",
+            generator=generate_viewer_selection_layout,
+            required_fields=["name", "description", "viewer_field"],
+            optional_fields=["labels", "min_selections", "max_selections", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Selection made in a viewer display (residues in a protein_structure, "
+                        "features and locus in a genome_locus), with optional labels"
+        ),
+        SchemaDefinition(
+            name="listening_test",
+            generator=generate_listening_test_layout,
+            required_fields=["name", "description"],
+            optional_fields=["method", "stimuli_field", "reference_field", "condition_field",
+                             "hidden_reference",
+                             "anchors", "loop", "require_full_playback", "require_all_played",
+                             "require_one_at_100", "allow_replay", "scale_labels",
+                             "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Listening tests: MUSHRA, BS.1116, ACR, DCR, CCR, ABX and P.835, with blinded stimuli"
+        ),
+        SchemaDefinition(
+            name="geo_annotation",
+            generator=generate_geo_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["task", "labels", "tools", "feature_text", "basemap", "basemap_field",
+                             "preannotation_field", "coordinate_order", "projection", "center",
+                             "zoom", "height", "snapping", "min_features", "max_features",
+                             "require_all_regions", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Maps: draw labelled points, lines and polygons, pin places, or label regions (OpenLayers)"
+        ),
+        SchemaDefinition(
+            name="free_list",
+            generator=generate_free_list_layout,
+            required_fields=["name", "description"],
+            optional_fields=["min_items", "max_items", "time_limit_s", "allow_duplicates",
+                             "normalize", "placeholder", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Free list: items typed one at a time, in order, with timings (cultural domain analysis)"
+        ),
+        SchemaDefinition(
+            name="triad_test",
+            generator=generate_triad_test_layout,
+            required_fields=["name", "description"],
+            optional_fields=["labels", "items_field", "design", "max_triads", "question",
+                             "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Triad test: which of three items is most different, over a balanced set of triads"
+        ),
+        SchemaDefinition(
+            name="ego_network",
+            generator=generate_ego_network_layout,
+            required_fields=["name", "description", "stages"],
+            optional_fields=["stage_layout", "label_requirement"],
+            supports_keybindings=False,
+            description="Personal (ego) network: name generators, per-person questions, dyad census and a sociogram"
+        ),
+        SchemaDefinition(
+            name="interlinear_gloss",
+            generator=generate_interlinear_gloss_layout,
+            required_fields=["name", "description"],
+            optional_fields=["source_field", "morphemes_field", "gloss_field", "translation_field",
+                             "tiers", "abbreviations", "language", "metalanguage",
+                             "show_translation", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Interlinear glossed text: morpheme segmentation and glosses aligned per word (Leipzig rules)"
         ),
         SchemaDefinition(
             name="number",
@@ -707,7 +844,7 @@ def _register_builtin_schemas():
             name="hierarchical_multiselect",
             generator=generate_hierarchical_multiselect_layout,
             required_fields=["name", "description", "taxonomy"],
-            optional_fields=["auto_select_children", "auto_select_parent", "show_search", "max_selections", "taxonomy_preset", "tooltips"],
+            optional_fields=["auto_select_children", "auto_select_parent", "show_search", "max_selections", "taxonomy_preset", "tooltips", "taxonomy_file", "show_codes"],
             supports_keybindings=False,
             description="Hierarchical tree-structured multi-label selection"
         ),

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Handwritten text recognition (HTR) line correction from PAGE XML
+#
+# Each text line of the page is one item: the line is cropped out of the page
+# image (image_region display) and its recognised text is pre-filled for
+# correction (text_edit).
+#
+# Made with:
+#   potato import -f page_xml -i examples/text/htr-line-correction/source \
+#       -o examples/text/htr-line-correction
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/text/htr-line-correction/config.yaml -p 8000
+#
+# Write the corrected lines back into the PAGE XML:
+#   python -m potato.export -c examples/text/htr-line-correction/config.yaml -f page_xml -o /tmp/htr-out
+
+port: 8000
+annotation_task_name: HTR line correction
+task_dir: .
+output_annotation_dir: annotation_output/
+data_files:
+- data/letter.jsonl
+item_properties:
+  id_key: id
+  text_key: htr_text
+user_config:
+  allow_all_users: true
+  users: []
+site_dir: default
+instance_display:
+  fields:
+  - key: line_image
+    type: image_region
+    label: Line
+annotation_schemes:
+- annotation_type: text_edit
+  name: transcription
+  description: Correct the transcription of this line
+  source_field: htr_text
+  show_diff: true
+  show_edit_distance: true
+  allow_reset: true

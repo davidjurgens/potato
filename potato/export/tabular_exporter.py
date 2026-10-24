@@ -575,23 +575,6 @@ def _write_delimited(context: ExportContext, output_path: str,
                                 with_origin=with_origin, with_engine=with_engine)
             for ann in context.annotations]
 
-    if not rows:
-        # No item annotations, but a study can still have a design record: a
-        # jsPsych-only study, or one where every participant was screened out
-        # or timed out. Those sidecars do not depend on the rows.
-        from .experiment_sidecars import write_participants, write_trials
-        files = []
-        for writer in (write_participants, write_trials):
-            sidecar = writer(context, output_path, fmt_name, delimiter)
-            if sidecar:
-                files.append(sidecar)
-        return ExportResult(
-            success=True,
-            format_name=fmt_name,
-            files_written=files or [out_file],
-            stats={"num_records": 0},
-        )
-
     # Collect all column names preserving order (instance_id, user_id first)
     columns = ["instance_id", "user_id"]
     seen = set(columns)
@@ -601,14 +584,18 @@ def _write_delimited(context: ExportContext, output_path: str,
                 columns.append(key)
                 seen.add(key)
 
-    with open(out_file, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=columns, delimiter=delimiter,
-                                extrasaction="ignore")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-
-    files_written = [out_file]
+    files_written = []
+    if rows:
+        with open(out_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=columns, delimiter=delimiter,
+                                    extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+        files_written.append(out_file)
+    # With no item annotations a study still has its other records: survey
+    # pages (a survey-only study is what the survey importers build), a
+    # jsPsych-only study, or one where everyone was screened out.
     phase_file = _write_phase_delimited(context, output_path, fmt_name, delimiter)
     if phase_file:
         files_written.append(phase_file)
@@ -623,8 +610,8 @@ def _write_delimited(context: ExportContext, output_path: str,
         files_written.append(authenticity_file)
     # Experiment designs: who was in which condition and what they were
     # shown (participants), and the timed-trial records (trials).
-    from .experiment_sidecars import write_participants, write_trials
-    for writer in (write_participants, write_trials):
+    from .experiment_sidecars import write_participants, write_regions, write_trials
+    for writer in (write_participants, write_trials, write_regions):
         sidecar = writer(context, output_path, fmt_name, delimiter)
         if sidecar:
             files_written.append(sidecar)
@@ -641,6 +628,9 @@ def _write_delimited(context: ExportContext, output_path: str,
                     f"cloze '{_scheme.get('name')}': {len(_bad)} item(s) have an answer key "
                     f"whose length differs from the passage's blanks ({', '.join(_bad[:5])}"
                     f"{', ...' if len(_bad) > 5 else ''}); only the blanks were scored")
+    if not rows:
+        warnings.append(f"No item annotations, so annotations.{fmt_name} was not written"
+                        + ("." if files_written else "; nothing else to export either."))
     excl = _phase_exclusion_warning(context)
     if excl:
         warnings.append(excl)

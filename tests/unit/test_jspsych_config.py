@@ -5,17 +5,17 @@ import os
 
 import pytest
 
-from potato.jspsych import store
-from potato.jspsych.phase import (
+from potato.runtimes import store
+from potato.runtimes.phase import (
     content_security_policy,
-    register_jspsych_page,
-    validate_jspsych_entry,
+    register_runtime_page as register_jspsych_page,
+    validate_runtime_entry as validate_jspsych_entry,
 )
 from potato.jspsych.vendored import CORE, PLUGINS, core_static_path, plugin_static_path
 from potato.server_utils.config_module import (
     ConfigSecurityError,
     ConfigValidationError,
-    _normalize_jspsych_phases,
+    _normalize_runtime_phases as _normalize_jspsych_phases,
 )
 from tests.helpers.test_utils import create_test_directory
 
@@ -103,8 +103,9 @@ class TestRegister:
         entry = {"type": "prestudy", "_kind": "jspsych", "timeline": "tasks/t.js",
                  "assets_dir": "tasks/stim"}
         register_jspsych_page(config, "t", entry, lambda p: os.path.join(task_dir, p))
-        spec = config["_jspsych_pages"]["t"]
-        assert spec["timeline"].endswith(os.path.join("tasks", "t.js"))
+        spec = config["_runtime_pages"]["t"]
+        assert spec["kind"] == "jspsych"
+        assert spec["main"].endswith(os.path.join("tasks", "t.js"))
         assert spec["max_bytes"] == 10 * 1024 * 1024
 
     def test_missing_file(self):
@@ -162,7 +163,7 @@ class TestCsp:
 class TestStore:
     def test_round_trip(self):
         task_dir = create_test_directory("jspsych_store")
-        store.start_run(task_dir, project="p", user_id="u", phase="prestudy", page="t",
+        store.start_run(task_dir, project="p", runtime="jspsych", user_id="u", phase="prestudy", page="t",
                         run_id="r1", attempt=1, conditions={"f": "a"})
         store.save_trials(task_dir, "r1", [{"rt": 300}], complete=False)
         assert store.get_run(task_dir, "r1")["status"] == "partial"
@@ -175,3 +176,39 @@ class TestStore:
         assert run["interaction"][0]["event"] == "blur"
         listed = store.list_runs(task_dir, "p")
         assert [r["run_id"] for r in listed] == ["r1"] and "trials" not in listed[0]
+
+
+class TestExtensions:
+    BASE = {"type": "prestudy", "_kind": "jspsych", "timeline": "t.js"}
+
+    def test_mouse_tracking_loads_before_the_plugins_and_is_named_to_jspsych(self):
+        from potato.runtimes.adapters.jspsych import ADAPTER
+        entry = dict(self.BASE, extensions=["mouse-tracking"], plugins=["html-button-response"])
+        validate_jspsych_entry("t", entry)
+        spec = ADAPTER.spec_extras(entry)
+        _styles, scripts = ADAPTER.assets(spec)
+        paths = [a.path for a in scripts]
+        ext = next(i for i, p in enumerate(paths) if "extension-mouse-tracking" in p)
+        plugin = next(i for i, p in enumerate(paths) if "plugin-html-button-response" in p)
+        assert paths[0].endswith("jspsych.js") and ext < plugin
+        assert ADAPTER.client_extras(spec) == {
+            "extensions": [{"name": "mouse-tracking", "global": "jsPsychExtensionMouseTracking"}]}
+
+    def test_unknown_extension_refused(self):
+        with pytest.raises(ConfigValidationError, match="does not ship"):
+            validate_jspsych_entry("t", dict(self.BASE, extensions=["webgazer"]))
+
+    def test_extension_file_defines_its_global(self):
+        from potato.jspsych.vendored import EXTENSIONS, extension_static_path
+        for name, info in EXTENSIONS.items():
+            with open(os.path.join(STATIC, extension_static_path(name)), encoding="utf-8") as f:
+                assert f"var {info['global']}=" in f.read(200), name
+
+
+def test_unknown_phase_type_is_refused_at_validate():
+    """Audit 96 R11: `type: jspych` passed validate and died at start."""
+    from potato.server_utils.config_module import ConfigValidationError, validate_phase_flow_config
+    cfg = {"phases": {"order": ["task", "annotation"], "task": {"type": "jspych"},
+                      "annotation": {"type": "annotation"}}}
+    with pytest.raises(ConfigValidationError, match="did you mean 'jspsych'"):
+        validate_phase_flow_config(cfg)

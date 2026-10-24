@@ -57,9 +57,10 @@ _UNIVERSAL_SCHEME_FIELDS = {"name", "description"}
 # implements the alternative.
 #
 #   hierarchical_multiselect: schemas/hierarchical_multiselect.py:164 raises
-#   unless one of 'taxonomy' or 'taxonomy_preset' is present.
+#   unless one of 'taxonomy' or 'taxonomy_preset' is present; 'taxonomy_file'
+#   is read into 'taxonomy' at load (taxonomy_files.apply_taxonomy_files).
 _REQUIRED_FIELD_ALTERNATIVES = {
-    ("hierarchical_multiselect", "taxonomy"): ["taxonomy_preset"],
+    ("hierarchical_multiselect", "taxonomy"): ["taxonomy_preset", "taxonomy_file"],
 }
 
 def _data_source_types():

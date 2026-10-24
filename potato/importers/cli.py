@@ -135,7 +135,8 @@ def parse_args(args=None):
               "inferred from the answers, and options nobody chose are lost."))
     parser.add_argument(
         "--keep-annotators", action="store_true",
-        help=("Label Studio and Argilla: write each source annotator's answers "
+        help=("Label Studio, Argilla, Zooniverse and W3C Web Annotation: write "
+              "each source annotator's answers "
               "as that person's saved work, so agreement can be computed at "
               "once. Unlike --seed-user this fabricates nobody: the answers "
               "are real people's. Without it they are left out and only model "
@@ -146,6 +147,64 @@ def parse_args(args=None):
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose logging")
 
+    eco = parser.add_argument_group("camera traps and bioacoustics")
+    eco.add_argument(
+        "--md-threshold", type=float, default=None, metavar="CONF",
+        help=("MegaDetector: leave out detections below this confidence "
+              "(default 0.2)"))
+    eco.add_argument(
+        "--sequences", action="store_true",
+        help=("MegaDetector / COCO Camera Traps: one item per seq_id, shown as "
+              "a gallery, instead of one item per image"))
+    eco.add_argument(
+        "--min-confidence", type=float, default=None, metavar="CONF",
+        help=("BirdNET / Raven: leave out rows whose Confidence is below this "
+              "(BirdNET default 0.1)"))
+    eco.add_argument(
+        "--label-column", metavar="COLUMN",
+        help=("Raven / BirdNET: the column the box label comes from (default: "
+              "Annotation, Species, ... for Raven; Scientific Name for BirdNET)"))
+    dh = parser.add_argument_group("digital humanities (IIIF, Web Annotation, PAGE XML, TEI)")
+    dh.add_argument(
+        "--texts", metavar="PATH",
+        help=("Web Annotation: the annotated documents, as a folder of text files "
+              "named after each target's last path segment or a JSONL file of "
+              "{\"source\": ..., \"text\": ...} rows. Text-selector annotations need it."))
+    dh.add_argument(
+        "--page-xml-mode", choices=["lines", "regions"], default="lines",
+        help=("PAGE XML: 'lines' (one item per text line, correct the transcription; "
+              "default) or 'regions' (one item per page, correct the layout polygons)"))
+    dh.add_argument(
+        "--iiif-size", metavar="SIZE",
+        help=("IIIF: request every image through its Image API service at this size "
+              "(e.g. max, !2000,2000, 1500,). Default: the painting body's own URL."))
+    dh.add_argument(
+        "--tei-unit", choices=["p", "div", "s", "l"], default="p",
+        help="TEI: what one item is: a paragraph-level block (default), a div, a sentence or a verse line")
+    zoo = parser.add_argument_group("Zooniverse")
+    zoo.add_argument("--zooniverse-workflow",
+                     help="Workflow export (CSV or API JSON) for a classification export")
+    zoo.add_argument("--zooniverse-subjects",
+                     help="Subject export CSV, which carries the media URLs")
+    zoo.add_argument("--workflow-id", help="Workflow id to import (default: the most used)")
+    zoo.add_argument("--workflow-version",
+                     help="Workflow version, e.g. 16 or 16.55 (default: the latest used)")
+    survey = parser.add_argument_group(
+        "surveys (Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, ...)")
+    survey.add_argument(
+        "--into", metavar="CONFIG",
+        help=("Add the survey's pages to this existing config. The config is not "
+              "changed; a merged copy is written beside it as "
+              "<config>.with-<survey>.yaml."))
+    survey.add_argument(
+        "--survey-slot", choices=("prestudy", "poststudy"), default="prestudy",
+        help="Run the survey before (prestudy, default) or after the annotation task")
+    survey.add_argument(
+        "--survey-language",
+        help="Language to import from a multilingual survey (LimeSurvey, XLSForm), e.g. en or de")
+    survey.add_argument(
+        "--prefix", default="",
+        help="Prefix every imported question and page name (avoids clashes with --into)")
     return parser.parse_args(args)
 
 
@@ -470,8 +529,12 @@ def _load_document(path: str):
     """
     # utf-8-sig drops a byte-order mark, which json.loads otherwise rejects
     # as "Unexpected UTF-8 BOM" on a file that is otherwise fine.
-    with open(path, "r", encoding="utf-8-sig") as fh:
-        text = fh.read()
+    try:
+        with open(path, "r", encoding="utf-8-sig") as fh:
+            text = fh.read()
+    except UnicodeDecodeError as exc:
+        return None, (f"{path} is not UTF-8 text (byte offset {exc.start}); if it is a "
+                      f"project export, pass -f with its format")
 
     # CVAT and Pascal VOC export one XML file. Their importers parse the text
     # themselves, and detection tells them apart by root element. Running it
@@ -539,6 +602,61 @@ def _container_format(path: str, explicit: Optional[str]):
     return None
 
 
+def _survey_format(parsed) -> Optional[str]:
+    """Which survey importer (Qualtrics, SurveyJS, ...), if any, applies."""
+    from . import surveys
+    if parsed.input_format:
+        return surveys.resolve(parsed.input_format)
+    if parsed.input and not parsed.hf_dataset:
+        return surveys.detect(parsed.input)
+    return None
+
+
+def _run_survey_import(parsed, fmt: str) -> int:
+    """A questionnaire from another tool as Potato survey pages."""
+    from pathlib import Path as _Path
+
+    from . import surveys
+    from .surveys.writer import apply_prefix, write_into, write_new_project
+
+    if not parsed.output_dir and not parsed.into:
+        print("error: pass --output-dir for a new project, or --into CONFIG to add the "
+              "survey to an existing one", file=sys.stderr)
+        return 2
+    try:
+        result = surveys.IMPORTERS[fmt].parse_path(
+            _Path(parsed.input), {"language": parsed.survey_language})
+        apply_prefix(result, parsed.prefix)
+        if parsed.into:
+            written = write_into(result, parsed.into, parsed.input, slot=parsed.survey_slot,
+                                 prefix=parsed.prefix)
+        else:
+            written = write_new_project(result, parsed.output_dir, parsed.input,
+                                        slot=parsed.survey_slot)
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Imported {len(result.pages)} page(s) and {result.num_questions()} question(s) "
+          f"from {result.source_format}.")
+    if result.untranslated:
+        report = next((_Path(w).name for w in written if _Path(w).name.startswith("IMPORT_REPORT")),
+                      "IMPORT_REPORT.md")
+        print(f"  {len(result.untranslated)} construct(s) did not carry over; "
+              f"see {report}:")
+        for u in result.untranslated[:10]:
+            print(f"    - {u.line()}")
+        if len(result.untranslated) > 10:
+            print(f"    ... and {len(result.untranslated) - 10} more")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+    for path in written:
+        print(f"  wrote {path}")
+    config_path = next((w for w in written if w.endswith((".yaml", ".yml"))), None)
+    if config_path:
+        print(f"\nRun it:\n  python potato/flask_server.py start {config_path} -p 8000")
+    return 0
+
+
 def _project_format(parsed) -> Optional[str]:
     """Which whole-project importer (Label Studio, Argilla), if any, applies."""
     from . import projects
@@ -571,15 +689,48 @@ def _run_project_import(parsed, fmt: str) -> int:
         if not source:
             print("error: --input is required", file=sys.stderr)
             return 2
-        result = importer.parse_path(_Path(source), {"ls_config": parsed.ls_config})
+        result = importer.parse_path(_Path(source), {
+            "ls_config": parsed.ls_config,
+            "workflow": parsed.zooniverse_workflow,
+            "subjects": parsed.zooniverse_subjects,
+            "workflow_id": parsed.workflow_id,
+            "workflow_version": parsed.workflow_version,
+            # Digital humanities: the raw input (a IIIF manifest URL loses
+            # its "//" inside a Path), the texts Web Annotations point at,
+            # the PAGE XML mode and the IIIF image size.
+            "source": source,
+            "texts": parsed.texts,
+            "page_xml_mode": parsed.page_xml_mode,
+            "iiif_size": parsed.iiif_size,
+            "image_dir": parsed.image_dir,
+            "image_url_prefix": parsed.image_url_prefix,
+            "md_threshold": parsed.md_threshold,
+            "sequences": parsed.sequences,
+            "min_confidence": parsed.min_confidence,
+            "label_column": parsed.label_column})
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    if hasattr(importer, "write_project"):
+        # An importer with its own project layout (Ibex: one data file per
+        # Latin-square list).
+        written = importer.write_project(result, parsed.output_dir, source=source)
+        print(f"Imported {len(result.items)} item(s) from {result.source_format} as a "
+              f"{result.kind} task" + (f" in {result.lists} lists." if result.lists > 1 else "."))
+        for line in result.report:
+            print(f"  not carried over: {line}")
+        for warning in result.warnings:
+            print(f"  warning: {warning}")
+        for path in written:
+            print(f"  wrote {path}")
+        return 0
+
     written = write_project(result, parsed.output_dir,
                             source=parsed.hf_dataset or source,
                             keep_annotators=parsed.keep_annotators,
-                            config_only=parsed.config_only)
+                            config_only=parsed.config_only,
+                            extra_config=getattr(result, "extra_config", None))
     summary = result.summarize()
     print(f"Imported {summary['num_items']} item(s), {summary['num_schemes']} "
           f"question(s), {summary['num_responses']} answer(s) from "
@@ -734,12 +885,13 @@ def main(args=None) -> int:
     )
 
     if parsed.list_formats:
-        from . import projects
+        from . import projects, surveys
         for heading, infos in (
                 ("Image / video annotation formats", import_registry.list_importers()),
                 ("Text annotation formats", text_import_registry.list_importers()),
                 ("Whole projects (questions, annotators and suggestions)",
-                 projects.list_importers())):
+                 projects.list_importers()),
+                ("Surveys (as Potato survey pages)", surveys.list_importers())):
             print(f"{heading}:\n")
             for info in infos:
                 exts = ", ".join(info["file_extensions"]) or "-"
@@ -751,6 +903,12 @@ def main(args=None) -> int:
         print("error: --input is required (or --hf-dataset, or --list-formats)",
               file=sys.stderr)
         return 2
+    # Surveys first: their detectors are strict (a QSF's SurveyEntry, a
+    # SurveyJS model's pages/elements), and --into replaces --output-dir.
+    survey_format = _survey_format(parsed)
+    if survey_format:
+        return _run_survey_import(parsed, survey_format)
+
     if not parsed.output_dir:
         print("error: --output-dir is required", file=sys.stderr)
         return 2
@@ -767,6 +925,7 @@ def main(args=None) -> int:
         "conll_document_unit": parsed.conll_document_unit,
         "qdpx_end_position": parsed.qdpx_end_position,
         "prodigy_keep_rejected": parsed.prodigy_keep_rejected,
+        "tei_unit": parsed.tei_unit,
     }
 
     # Whole-project formats first: a Label Studio export is a JSON list, which

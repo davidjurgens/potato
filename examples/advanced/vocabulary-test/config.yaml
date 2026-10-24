@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# A LexTALE-style vocabulary test (Lemhoefer & Broersma 2012)
+#
+# Each item is a letter string; the participant says whether it is an
+# English word. The item field `is_word` holds the answer and is never sent
+# to the page. The export scores each participant: the average of the
+# percentage of words and of nonwords answered correctly.
+#
+# These eight items are made up for the example and are not the LexTALE
+# list. To run LexTALE, obtain the list from its authors.
+#
+#   python potato/flask_server.py start examples/advanced/vocabulary-test/config.yaml -p 8000
+#   python -m potato.export --config examples/advanced/vocabulary-test/config.yaml --format lextale --output out/
+
+annotation_task_name: "Vocabulary test"
+
+data_files:
+  - data/items.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+assignment_strategy: random
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: radio
+    name: lexicality
+    description: "Is this an existing English word?"
+    labels: ["yes", "no"]
+    horizontal: true
+    lextale:
+      answer_field: is_word
+      word: "yes"
+      nonword: "no"
+    label_requirement:
+      required: true

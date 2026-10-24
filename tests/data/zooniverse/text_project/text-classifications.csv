@@ -1,0 +1,2 @@
+classification_id,user_name,user_id,user_ip,workflow_id,workflow_name,workflow_version,created_at,gold_standard,expert,metadata,annotations,subject_data,subject_ids
+10,dana,21,dd,303,Highlighter,2.0,2026-03-01 10:00:00 UTC,,,{},"[{""task"":""T0"",""task_label"":"""",""value"":[{""start"":0,""end"":4,""text"":""Cats"",""labelInformation"":{""label"":""Predator"",""color"":""#ff0""}},{""start"":14,""end"":18,""text"":""mice"",""labelInformation"":{""label"":""Prey"",""color"":""#0ff""}}]}]","{""5001"":{""text"":""Cats \ud83d\udc31 chase mice.""}}",5001

@@ -123,6 +123,30 @@ annotation_schemes:
         - "C30-C39 Respiratory and intrathoracic organs"
 ```
 
+### Taxonomy from a file
+
+`taxonomy_file` loads the hierarchy from a CSV of codes, for a codebook
+too long to write in the config:
+
+```yaml
+- annotation_type: hierarchical_multiselect
+  name: topic
+  description: Which topics does the text cover?
+  taxonomy_file: codebooks/topics.csv
+  show_codes: true
+```
+
+The CSV has the columns `code`, `label`, `parent` (the parent's code, empty
+at the top level) and an optional `description`, used as the tooltip. A
+JSON or YAML file holding the taxonomy mapping also works; its top level is
+a mapping, as in the config. A file whose top level is a list stops the
+config from loading, with an error that names the file. `show_codes:
+true` shows each entry as `<code> <label>`. The answer stores each entry's
+text, so two entries with the same text, such as an "Other" under two
+topics, would be one answer. Such a file is refused unless `show_codes:
+true` makes the entries distinct. Give `taxonomy` or `taxonomy_file`, not
+both. See [Content analysis](../../guides/content-analysis.md).
+
 ## Output Format
 
 Selected labels are stored as a comma-separated string of leaf and/or parent node names:

@@ -1,0 +1,69 @@
+/* Interlinear glossed text (annotation_type: interlinear_gloss). Theme tokens
+   only, so it follows light and dark mode. */
+form.interlinear-gloss, .interlinear-gloss fieldset, .interlinear-gloss .igt-root {
+    width: 100%; min-width: 0; box-sizing: border-box; }
+.interlinear-gloss .igt-title { font-weight: 600; margin-bottom: 0.4rem; }
+.interlinear-gloss .igt-instructions,
+.interlinear-gloss .igt-keys,
+.interlinear-gloss .igt-loading { color: var(--muted-foreground); margin: 0 0 0.5rem; }
+.interlinear-gloss .igt-keys { font-size: 0.8rem; margin: 0.5rem 0 0; }
+.interlinear-gloss .igt-error { color: var(--destructive-text, var(--destructive)); margin: 0; }
+
+.interlinear-gloss .igt-summary { margin: 0 0 0.5rem; font-size: 0.85rem; color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
+.interlinear-gloss .igt-summary.igt-summary-bad { color: var(--destructive-text, var(--destructive)); }
+
+/* The columns: one per word, wrapping onto further lines like printed IGT. */
+.interlinear-gloss .igt-words { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap;
+    gap: 0.75rem 0.5rem; align-items: flex-start; max-width: 100%; }
+.interlinear-gloss .igt-word { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0;
+    max-width: 100%; padding: 0.35rem; border: 1px solid transparent; border-radius: 0.5rem; }
+.interlinear-gloss .igt-cell { display: block; min-height: 1.6rem; line-height: 1.6rem; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+.interlinear-gloss .igt-source { font-weight: 600; font-style: italic; padding: 0 0.4rem; }
+.interlinear-gloss .igt-head { padding-right: 0.25rem; }
+.interlinear-gloss .igt-head .igt-cell { font-size: 0.75rem; color: var(--muted-foreground); font-style: normal;
+    font-weight: 500; text-align: right; padding: 0; }
+.interlinear-gloss .igt-head .igt-head-label { min-height: 2rem; line-height: 2rem; }
+.interlinear-gloss .igt-head .igt-render { min-height: 1.4rem; line-height: 1.4rem; }
+
+.interlinear-gloss .igt-input { box-sizing: border-box; height: 2rem; max-width: 100%; min-width: 0;
+    padding: 0.15rem 0.4rem; border: 1px solid var(--input, var(--border)); border-radius: 0.375rem;
+    background: var(--card); color: var(--card-foreground, var(--foreground)); font: inherit; }
+.interlinear-gloss .igt-input::placeholder { color: var(--muted-foreground); opacity: 0.8; }
+.interlinear-gloss .igt-input:focus-visible,
+.interlinear-gloss .igt-translation:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.interlinear-gloss .igt-input[aria-invalid="true"] { border-color: var(--destructive); }
+
+/* The gloss as it would print: category labels in small caps. */
+.interlinear-gloss .igt-render { min-height: 1.4rem; line-height: 1.4rem; padding: 0 0.4rem; font-size: 0.9rem;
+    color: var(--muted-foreground); }
+.interlinear-gloss .igt-cat { font-variant-caps: all-small-caps; letter-spacing: 0.03em; }
+
+/* Per-word status. Misaligned is marked by the border, the message and
+   aria-invalid, not by colour alone. */
+.interlinear-gloss .igt-word[data-status="misaligned"] { border-color: var(--destructive);
+    background: var(--destructive-tint, transparent); }
+.interlinear-gloss .igt-word[data-status="misaligned"] .igt-source::before { content: "≠ "; font-style: normal;
+    color: var(--destructive-text, var(--destructive)); }
+.interlinear-gloss .igt-issue { margin: 0; max-width: 16rem; font-size: 0.75rem; line-height: 1.3;
+    white-space: normal; overflow-wrap: anywhere; }
+.interlinear-gloss .igt-issue:empty { display: none; }
+.interlinear-gloss .igt-issue > span { display: block; }
+.interlinear-gloss .igt-issue-error { color: var(--destructive-text, var(--destructive)); }
+.interlinear-gloss .igt-issue-note { color: var(--muted-foreground); }
+.interlinear-gloss .igt-issue-warn { color: var(--warning-text, var(--muted-foreground)); }
+
+.interlinear-gloss .igt-translation-row { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.75rem; }
+.interlinear-gloss .igt-translation-row label { font-size: 0.85rem; font-weight: 500; }
+.interlinear-gloss .igt-translation { box-sizing: border-box; width: 100%; padding: 0.4rem 0.5rem; resize: vertical;
+    border: 1px solid var(--input, var(--border)); border-radius: 0.375rem; background: var(--card);
+    color: var(--card-foreground, var(--foreground)); font: inherit; }
+
+/* Phones: the row-label column would take a third of the width. The
+   placeholders and aria-labels name the lines instead. */
+@media (max-width: 560px) {
+    .interlinear-gloss .igt-head { display: none; }
+    .interlinear-gloss .igt-word { padding: 0.25rem; }
+    .interlinear-gloss .igt-input { height: 2.25rem; font-size: 16px; }
+}

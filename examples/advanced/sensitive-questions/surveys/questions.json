@@ -1,0 +1,33 @@
+[
+  {
+    "name": "lists",
+    "annotation_type": "list_experiment",
+    "description": "Here is a list of things some people have done in the last year. How many of them have you done?",
+    "items": [
+      "Gone to a live music concert",
+      "Bought a book in a shop",
+      "Volunteered for a local group"
+    ],
+    "sensitive_item": "Driven a car after drinking alcohol",
+    "treatment": {"factor": "list_group", "level": "treatment"},
+    "label_requirement": {"required": true}
+  },
+  {
+    "name": "cheating_crosswise",
+    "annotation_type": "randomized_response",
+    "method": "crosswise",
+    "description": "Read both statements. Do not say which is true.",
+    "question": "I have copied someone else's work and handed it in as my own.",
+    "nonsensitive_statement": "My mother was born in January, February or March.",
+    "nonsensitive_prevalence": 0.25,
+    "label_requirement": {"required": true}
+  },
+  {
+    "name": "tax_forced",
+    "annotation_type": "randomized_response",
+    "method": "forced_response",
+    "description": "This question uses a private random rule.",
+    "question": "In the last five years, have you left income off a tax return on purpose?",
+    "label_requirement": {"required": true}
+  }
+]
