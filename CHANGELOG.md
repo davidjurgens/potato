@@ -4,7 +4,246 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
-### Features
+## [2.12.0] - Experiments, Survey Import and Formats from Other Fields
+
+This release adds runtime phases (jsPsych timelines, a headphone check and
+external tasks as pages of a study), experiment flow (conditions, page
+skipping, screen-outs, counterbalancing), timed trials, self-paced reading
+and listening tests; survey import from seven tools; and annotation types and
+formats for survey experiments, content analysis, ego networks, cultural
+domain analysis, incentivized elicitation, interlinear glossing, digital
+humanities, camera traps, bioacoustics, maps, protein structures and genome
+loci. 76 annotation types (61 in 2.11.1), 27 display types (24), 60 export
+formats (32) and 38 import formats (20) plus seven survey formats.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+### Runtime phases and experiments
+
+- **Runtime phases.** A phase page can run a task instead of questions:
+  `type: jspsych` (a jsPsych 8.3.0 timeline; jsPsych and 15 plugins ship with
+  Potato, and `extensions: [mouse-tracking]` loads the mouse-tracking
+  extension 1.2.0), `type: headphone_check` and `type: external`. Every
+  runtime phase takes `show_when`, `exit_when` and counterbalancing, runs
+  under a Content-Security-Policy that allows requests only to the Potato
+  server, cannot be skipped, and stores its runs in `project.sqlite` (table
+  `runtime_runs`). Shared keys: `extra_scripts`, `assets_dir`,
+  `expose_answers`, `save`, `allow_rerun`, `max_data_mb`,
+  `csp.extra_sources`. `--format runtime` exports runs, trials, interaction
+  events and raw data for every runtime; `--format jspsych` for jsPsych pages
+  only. The WebGazer extension is not shipped (it needs `'unsafe-eval'`).
+- **Headphone check.** `test: huggins | antiphase | both`, `trials`
+  (default 6), `pass_threshold` (default 5), `on_fail: screen_out`
+  (default) or `continue`. The server makes the sounds, picks each trial's
+  target, serves each trial's three sounds as one WAV from
+  `/runtime/<page>/stimulus/<n>.wav`, and scores responses against its own
+  record; posted `target`, `correct` or `scored` values, repeat answers and
+  answers to sounds never fetched are ignored. The page answers
+  `<page>_passed` and `<page>_correct`.
+- **External tasks.** `url` with `{participant}`, `{return_url}`, `{run_id}`
+  and `{condition.<factor>}` placeholders, `return_params`, `description`,
+  `button_text`, `new_tab`. With `return_secret` (16+ characters) the return
+  must carry `sig`, an HMAC-SHA256 over the run id and the percent-encoded
+  returned parameters sorted by name; a missing or wrong `sig` gets 409 and
+  leaves the page unfinished. `url` must be `https://`, or `http` only for
+  `localhost`, `127.0.0.1` or `[::1]`.
+- **Conditions.** `conditions.factors` with `assignment` (`balanced`,
+  `random`, `round_robin`), `balance_on` (`assigned`, `completed`),
+  `max_per_cell` and weighted `cells`; `condition.<factor>` in
+  `display_logic`, `show_when` and `exit_when`;
+  `batch_assignment.group_by_condition` gives each cell its own items.
+- **Wording per condition.** `{condition.<factor>}` in item text, question
+  wording or option labels is replaced, HTML-escaped, by the participant's
+  level, on both page-render paths and in `/api/current_instance`,
+  `/api/instance_data` and `/api/spans/<id>`; span offsets count the filled
+  text. `data-condition-only="factor=level"` removes an element for everyone
+  outside that level. Exports write the raw item text.
+- **Page rules and order.** `show_when` skips a phase page; `exit_when`
+  screens a participant out with `message` or the crowdsourcing platform's
+  screen-out outcome, and a screened-out participant cannot go back.
+  `phases.counterbalance` (`random` or a Williams `latin_square`, balanced
+  within each condition cell) and `randomize_questions` (`pin_first`,
+  `pin_last`). Everything is recorded in `flow_record`; `potato validate`
+  checks page rules against the phase files.
+- **Nested display logic.** `all`, `any` and `not` groups, up to 8 levels,
+  in `display_logic`, page `show_when` and `exit_when`, evaluated the same way
+  in Python and the browser. New operators `count_gt`, `count_lt` and
+  `count_equals`. Validation errors give a path such as `show_when[1].any[0]`.
+- **Timed trials.** `trial_timing`: fixation, stimulus duration, deadline,
+  ITI and key-to-label RT from the frame the stimulus appeared, with
+  server-side plausibility flags. A timeout finishes the item for the
+  participant without counting toward the item's quota and is not graded as
+  an attention-check failure.
+- **Self-paced reading and maze.** `trial_timing.presentation` with `mode`
+  `moving_window`, `centered`, `cumulative` or `maze` (`field`,
+  `region_separator`, `advance_key`, `question_field`, `distractor_field`,
+  `maze_keys`, `on_error`, `mask_char`). Regions are recorded per trial with
+  a new `completed` outcome, and the CSV/TSV exports add `regions.<fmt>`.
+  Examples: `examples/advanced/self-paced-reading/`,
+  `examples/advanced/maze-task/`.
+- **Listening tests.** `annotation_type: listening_test` with `method`
+  `mushra` (default), `bs1116`, `acr`, `dcr`, `ccr`, `abx` or `p835`. The page
+  gets slot names and opaque audio URLs from `/api/listening/plan` and
+  `/api/listening/audio/...`; the stimulus, reference and condition fields
+  are not sent to the page, `/media/` refuses the stimulus files, and WAV,
+  FLAC and MP3 responses carry random padding. MUSHRA low-pass `anchors` are
+  generated from PCM WAV references. `--format listening_test` writes
+  ratings, a per-condition summary, ABX tests and MUSHRA post-screening. No
+  P.808 clips or ITU texts are bundled. Examples:
+  `examples/audio/listening-test-mushra/`,
+  `examples/audio/listening-test-p808/`.
+- **Cloze** (`annotation_type: cloze`): fixed `text` or per-item
+  `source_field`/`answer_field` passages; the answer key is not sent to the
+  browser, and the CSV/TSV export scores each blank (`scoring`:
+  `case_insensitive`, `exact`, `normalized`).
+- **LexTALE.** `lextale: {answer_field, word, nonword}` on a radio scheme;
+  the answer field is kept off the page, and `--format lextale` writes
+  `lextale.csv` per participant. The item lists are not bundled.
+- **Ibex and PCIbex import** (`-f ibex`): SPR, maze, rating and key trials,
+  with Latin-square lists as a `list` condition and one data file per list;
+  `IMPORT_REPORT.md` lists what was not translated. A missing stimulus column
+  or zero items is an error and writes nothing.
+- The CSV/TSV exports write `participants.<fmt>` and `trials.<fmt>`, also
+  for a study with no item labels.
+
+### Survey import and survey experiments
+
+- **Survey import.** `potato import` reads Qualtrics (`qualtrics`, `.qsf`),
+  SurveyJS (`surveyjs`), LimeSurvey (`limesurvey`, `.lss`), XLSForm
+  (`xlsform`), REDCap data dictionaries (`redcap`), Beiwe (`beiwe`) and
+  Network Canvas (`network_canvas`) into survey pages, with the source's
+  logic as nested `display_logic`, page `show_when` and `exit_when`.
+  Qualtrics randomizers become `phases.counterbalance` or a `conditions`
+  factor. `-o DIR` writes a new project; `--into CONFIG` writes a merged copy
+  (`<config>.with-<source>.yaml`) and never changes the original; also
+  `--survey-slot`, `--survey-language`, `--prefix`. `IMPORT_REPORT.md` lists
+  what was not carried over; a rule that translates only in part is left out
+  so the question stays visible. See *Survey Import*.
+- **List experiments and randomized response.** `list_experiment` (`items`,
+  `sensitive_item`, `treatment: {factor, level}`; the control group's page
+  does not contain the sensitive item) and `randomized_response`
+  (`method: forced_response | crosswise`). `--format survey_experiments`
+  writes `survey_experiments.csv` with estimates, standard errors and 95%
+  intervals. Example: `examples/advanced/sensitive-questions/`.
+- **`taxonomy_file`** on `hierarchical_multiselect`: a CSV (`code`, `label`,
+  `parent`, optional `description`), JSON or YAML codebook; `show_codes`
+  shows codes beside labels. Duplicate codes, unknown parents, loops and
+  repeated labels (unless `show_codes` separates them) are refused. The CAP
+  codebook and Manifesto data are not bundled.
+- **`reliability` export.** Krippendorff's alpha per scheme with a bootstrap
+  interval (`--option bootstrap=N`, `--option seed`), percent agreement, and
+  the level of measurement (nominal, ordinal, interval, MASI). Example:
+  `examples/classification/codebook-content-analysis/`.
+
+### Networks, cultural domains and incentives
+
+- **Ego networks** (`ego_network`): `stages` of `name_generator`,
+  `name_interpreter`, `dyad_census` and `sociogram`. `--format ego_network`
+  writes `egos.csv`, `alters.csv`, `edges.csv` and GraphML per network,
+  leaving alter names out unless `--option export_names=true`. Network
+  Canvas protocols import as pages with `ego_network` schemes. Example:
+  `examples/advanced/ego-network/`.
+- **Free lists and triad tests** (`free_list`, `triad_test` with `design`
+  `auto`, `complete`, `steiner` or `sample`). `--format cultural_domain`
+  writes Smith's S and Sutrop's CSI salience, pile-sort co-occurrence (from
+  `card_sort`), triad similarity and a cultural consensus model. Example:
+  `examples/advanced/cultural-domain/`.
+- **Incentivized elicitation.** `price_list` (`holt_laury` and
+  `time_preference` presets, or `rows`), `bdm` and `belief_elicitation`
+  (`point` or `bins`), paid by an `incentives:` block (`mpl_random_row`,
+  `bdm`, `bsr`; `pay: one_random_item | all | sum`; `max_bonus`;
+  `only_finished`). Draws are made at export time from `incentives.seed`
+  and written out; a placeholder seed is warned about. `--format incentives`
+  writes `bonuses.csv` and `bonuses_prolific.csv`.
+  `/admin/api/crowd/incentive_bonuses` gives a dry run, pays through Prolific
+  only when `expected_total` matches it, records paid batches in
+  `<task_dir>/incentive_payments.json`, and answers 409 to a batch that pays
+  anyone already paid unless the body has `"repeat": true`. A participant
+  whose paid decision has no outcome yet is listed as pending. Example:
+  `examples/advanced/incentivized-elicitation/`.
+
+### Linguistics, humanities and citizen science
+
+- **Interlinear glossed text** (`interlinear_gloss`) with Leipzig alignment
+  checks and `abbreviations`. Import `flextext` and `toolbox`; export
+  `flextext`, `toolbox` and `igt` (`igt.txt` and gb4e `igt.tex`). Example:
+  `examples/span/interlinear-gloss/`.
+- **Praat and ELAN project import** (`-f textgrid`, `-f eaf`): one item per
+  file in a `tiered_annotation` scheme, intervals as pre-annotations, media
+  with the same name copied in.
+- **Zooniverse import** (`-f zooniverse`): workflow export, classification
+  CSV and optional subject CSV; `--zooniverse-workflow`,
+  `--zooniverse-subjects`, `--workflow-id`, `--workflow-version`, and
+  `--keep-annotators` for volunteers' answers.
+- **IIIF** (`-f iiif`, Presentation 3 and 2.x best-effort, from a file or
+  URL; export `iiif_annotations`), **W3C Web Annotation** (`-f
+  web_annotation`; export `web_annotation`), **PAGE XML** (`-f page_xml`,
+  `--page-xml-mode lines|regions`; export `page_xml`) and **TEI** (`-f tei`,
+  `--tei-unit`; export `tei`). New `image_region` display for line
+  correction. Local files named in an import must sit inside the folders it
+  reads from; others are refused and counted. Examples:
+  `examples/image/iiif-manifest/`, `examples/text/htr-line-correction/`.
+
+### Ecology and maps
+
+- **Camera traps.** Import `megadetector` (`--md-threshold`, default 0.2;
+  `--sequences`) and `coco_camera_traps`; export `megadetector`,
+  `camtrap_dp` and `darwin_core`. The classifier score is kept as
+  `attributes.classification_confidence`. Example:
+  `examples/image/camera-trap-review/`.
+- **Spectrogram annotation** (`spectrogram_annotation`). Import `raven`,
+  `audacity_labels` and `birdnet` (BirdNET-Analyzer output; Potato does not
+  run BirdNET and bundles no models); export `raven` and `audacity_labels`.
+  Example: `examples/audio/bioacoustics-boxes/`.
+- **Maps** (`geo_annotation`, `task: draw | pin | classify_region`) over a
+  GeoJSON outline, a georeferenced image, a GeoTIFF or XYZ tiles. A scheme
+  must name its `basemap`; external tiles need `attribution`, and an item's
+  basemap may use an external host only if the scheme's basemap names it.
+  Export `geojson` and `geo_overlap`. OpenLayers 10.9.0 and geotiff.js 3.0.5
+  are bundled. Examples: `examples/image/geo-annotation/`,
+  `examples/advanced/dialect-map/`.
+
+### Protein structures and genome loci
+
+- **`protein_structure` display**: mmCIF, BinaryCIF or PDB (optionally
+  gzipped, read up to 200 MB) in 3Dmol.js 2.5.5 or Mol* 5.12.0
+  (`engine: molstar`, after `potato vendor fetch molstar`); `color_by`,
+  `plddt`, `pae_field`, and a residue table that works without WebGL.
+- **`genome_locus` display**: igv.js 3.8.9 with a local FASTA `reference`
+  and BAM, CRAM, VCF, BED, GFF/GTF, bigBed, bigWig, bedGraph and WIG tracks;
+  remote references and tracks need `allow_remote: true`.
+- **`viewer_selection`** stores residues or variants picked in a viewer as
+  the scheme's value; it has no exporter of its own. Examples:
+  `examples/advanced/protein-binding-site/`, `examples/advanced/variant-review/`.
+
+### Exports and vendored libraries
+
+- New exports `web_annotation` (`web_annotations.jsonld`), `data_package`
+  (Frictionless Data Package v2 over the CSV export) and `psych_ds`.
+- **`potato vendor list|fetch|verify|path`** installs large libraries at a
+  pinned, hash-checked version (`fetch --for-config CONFIG` fetches what one
+  study needs). Mol* is the only one; nothing is fetched implicitly. Bundled
+  libraries now carry their licence files (geotiff.js's LERC, igv.js's
+  DOMPurify, pdf.js).
+
+### Security
+
+- `/media/` responses carry `X-Content-Type-Options: nosniff`, and HTML,
+  SVG, XML and similar documents get `Content-Security-Policy: sandbox`.
+  Error responses (403, 404, 405, 416) carry `nosniff` too.
+- `potato import` skips local files outside the input folder (absolute
+  paths, `file://`, `../`, symlinks out) with a warning, instead of copying
+  them into `media/` or reading them into the data file. The check runs
+  where every importer's media is copied, and importers that read from
+  other folders (`--image-dir`, `--texts`, the folder above a PAGE `page/`
+  folder, a fetched IIIF manifest) declare them.
+- DEBUG logging no longer writes the submitted password, request headers
+  (session cookie, `X-API-Key`), session values or participants' answers;
+  the routes log field names only.
+
+### Other features
 
 - **Multi-frame (enhanced) DICOM volumes.** A directory holding one
   multi-frame file reads as a volume, with each frame placed from its
@@ -347,6 +586,19 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixes
 
+- `incentive_bonuses` takes `"skip_paid": true` to pay only participants no
+  recorded batch has paid; the dry run lists `already_paid` and
+  `unpaid_total`.
+- Ibex list values other than `L1`…`Ln` (`List1`) import as lists of those
+  names instead of dropping their rows; Message, Form and Html screens are
+  reported as not imported.
+- A `taxonomy_file` whose top level is a list is refused with an error that
+  names the file and the shape it needs.
+- The `cultural_domain` export is offered only when there are answers it can
+  use, and an export that would write nothing fails with a message naming
+  `--option consensus_schemes`.
+- A `url_direct` login counts as a Prolific id for bonuses whatever the case
+  of `login.url_argument` (`prolific_pid` works).
 - **Interpolation filled in slivers.** Between two volume outlines that do not
   overlap, the slices next to the empty middle came out as a few pixels each.
   A blended slice under a tenth of the smaller painted outline now counts as
@@ -477,6 +729,66 @@ All notable changes to the Potato annotation platform are documented in this fil
   directory form worked. An XML file now goes to the XML importers, with or
   without `-f`. A JSON file that starts with a UTF-8 byte-order mark also
   imports now, instead of failing to parse.
+- **`grid_view` beside another required scheme is refused at validation.**
+  An item labelled in the grid counts as done and is not shown on the normal
+  page again, so the other scheme went unanswered on every grid item and the
+  study finished anyway.
+- The grid page receives `ui.theme`: a forced theme applies there, and under
+  `auto` it has the same toggle as the annotation page.
+- An unknown `annotation_type` names the installed plugin that provides it
+  ("add `plugins: [counter]`") instead of only listing built-in types.
+- `potato validate` checks `volume_annotation` values (`tools`, `views`,
+  `brush_size`, `window_presets`, `default_window`, `display_tags`), which
+  the generator otherwise turned into an error card on every page.
+- Media errors no longer show the server's absolute file paths.
+- **A slider with a fractional step stored whole numbers.** The slider read
+  its value with `parseInt`, so a 0-1 slider with step 0.1 stored only 0 or
+  1. It now keeps the step's decimals, and snaps to steps counted from
+  `min_value`.
+- **A survey-only study exported no phase answers.** With no item
+  annotations the CSV/TSV export skipped phase answers and listed a file it
+  never wrote. It now writes phase answers, authenticity, participants and
+  trials, and says that `annotations.<fmt>` was not written.
+- **Imported dropdown answers were dropped.** `select` answers in a project
+  written by `potato import` are now saved, and an importer's media files are
+  copied into the new project.
+- **ELAN time slots without a time read as 0.0,** which gave segments that
+  ended before they started. They are now interpolated from the neighbouring
+  slots, in transcript ingestion as well as the new EAF import.
+- `potato import` reports a file that is not UTF-8 as an error instead of a
+  traceback.
+
+### Documentation
+
+- Amazon Mechanical Turk closed on 30 September 2026. The MTurk and
+  crowdsourcing pages say so; an MTurk config still loads, so an archived
+  study's server starts and its annotations export. The CloudResearch
+  Connect and SONA entries describe the shipped providers.
+- New guides: Coming from jsPsych, Qualtrics, REDCap, ODK, Network Canvas,
+  Ibex and Zooniverse; Content Analysis, Cultural Domain Analysis,
+  Perceptual Dialectology, Digital Humanities Formats, Camera Traps,
+  Bioacoustics, Structural Biology, Genomics and Linguistic Fieldwork.
+
+### Compatibility
+
+- `defusedxml` is now a required dependency. The FLExText, PAGE XML, TEI and
+  LimeSurvey importers use it to refuse XML entity expansion.
+- Annotator pages follow the browser's light or dark setting (`ui.theme`
+  defaults to `auto`); `ui.theme: light` keeps them light.
+- In the browser, `equals` against a multiselect answer no longer matches a
+  single selected option (use `contains`). On the server, `matches` on an
+  unanswered question is now false, as it already was in the browser. In
+  both, `length_*` on a multiselect counts options instead of characters.
+- `potato import` without `-f` tries the survey importers first. A COCO file
+  whose images carry `seq_id` imports as `coco_camera_traps`, an `http(s)`
+  input goes to the IIIF importer, and tab-separated `.txt` files shaped like
+  Raven or Audacity tables go to the bioacoustics importers.
+- `/media/` serves `.gz`, `.bz2`, `.xz`, `.br` and `.Z` files as
+  `application/octet-stream` without `Content-Encoding`, so the browser no
+  longer inflates them; HTML opened from `/media/` runs no scripts.
+- `/api/spans/<id>` answers 403 after a screen-out, and during the login,
+  consent, prestudy and instructions phases, so item text is not served
+  before a screening page is passed.
 
 ## [2.11.1] - Debug Without --host, Image Classifiers and Prelabels After a Restart
 

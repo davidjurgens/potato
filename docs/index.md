@@ -268,6 +268,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.12.0](releasenotes/v2.12.0.md) - Experiments, Survey Import and Formats from Other Fields
 - [v2.11.1](releasenotes/v2.11.1.md) - Debug Without --host, Image Classifiers and Prelabels After a Restart
 - [v2.11.0](releasenotes/v2.11.0.md) - The Labeling Engine
 - [v2.10.3](releasenotes/v2.10.3.md) - Agreement, Deploy Button and Pyodide Fixes
