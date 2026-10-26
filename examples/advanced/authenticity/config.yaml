@@ -82,6 +82,4 @@ annotation_schemes:
       - persuasive
       - alarmist
 
-base_html_template: default
-header_file: default
 site_dir: default

@@ -45,6 +45,9 @@ class InteractionTracker {
         this.debugMode = false;
         const cfg = (typeof window !== 'undefined' && window.interactionTrackingConfig) || {};
         this.enabled = cfg.enabled !== false;
+        // false on a phase page outside interaction_tracking.phases: nothing
+        // is sent, not even the timing marks (there is no item to time).
+        this.record = cfg.record !== false;
 
         // Don't auto-init - wait for explicit init call or DOMContentLoaded
         if (document.readyState === 'loading') {
@@ -452,6 +455,11 @@ class InteractionTracker {
      * @param {boolean} isFinal - Whether this is a final flush (page unload)
      */
     async flush(isFinal) {
+        if (!this.record) {
+            this.events = [];
+            this.focusTime = {};
+            return;
+        }
         if (this.events.length === 0 && Object.keys(this.focusTime).length === 0) {
             return;
         }

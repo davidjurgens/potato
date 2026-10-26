@@ -100,6 +100,4 @@ annotation_schemes:
     multiline: true
     rows: 4
 
-base_html_template: default
-header_file: default
 site_dir: default

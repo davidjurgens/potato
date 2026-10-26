@@ -2478,9 +2478,14 @@ class AdminDashboard:
             # loads, saves and activity marks, and scroll depth is not
             # recorded. Low interaction and no-scroll would then score every
             # annotator as suspicious for ordinary work, so they are unknown
-            # and drop out of the score like any other unmeasured rate.
-            from potato.server_utils.config_module import get_interaction_tracking_config
-            ambient_tracked = get_interaction_tracking_config(config).get("enabled", True)
+            # and drop out of the score like any other unmeasured rate. The same
+            # holds when interaction_tracking.phases leaves out annotation.
+            from potato.server_utils.config_module import (
+                get_interaction_tracking_config, tracker_active_in_phase)
+            ambient_tracked = (
+                get_interaction_tracking_config(config).get("enabled", True)
+                and tracker_active_in_phase(config, "interaction_tracking",
+                                            UserPhase.ANNOTATION, "annotation"))
 
             for user_id in users:
                 user_state = usm.get_user_state(user_id)
@@ -3064,6 +3069,12 @@ class AdminDashboard:
             return {"enabled": False, "reason": "authenticity is not enabled"}
 
         from potato.interaction_tracking import PHASE_PAGE_SENTINEL
+        from potato.server_utils.config_module import tracker_active_in_phase
+        # With authenticity.phases leaving out annotation, no annotated item
+        # has a record by design; counting them as paradata_missing would
+        # raise every annotator's risk.
+        annotation_tracked = tracker_active_in_phase(
+            config, "authenticity", UserPhase.ANNOTATION, "annotation")
 
         usm = get_user_state_manager()
         flag_totals = Counter()
@@ -3113,7 +3124,7 @@ class AdminDashboard:
                 annotated = set(user_state.get_annotated_instance_ids())
             except Exception:
                 annotated = set()
-            missing = len(annotated - recorded_ids)
+            missing = len(annotated - recorded_ids) if annotation_tracked else 0
             if not items and not annotated:
                 continue
             if missing:

@@ -3662,6 +3662,10 @@
           "description": "Schemes to record. Empty means every geometry schema",
           "type": "array"
         },
+        "phases": {
+          "description": "Record only on these phases: phase types (consent, prestudy, instructions, training, annotation, poststudy) or phase names from `phases.order`. Elsewhere the script is not loaded and the server drops its posts. Omit it to record on every page. The recording notice stays on every page",
+          "type": "array"
+        },
         "store_events": {
           "default": true,
           "description": "Write raw event streams. Does nothing at summary fidelity",
@@ -3910,6 +3914,10 @@
           "description": "Absences from the page shorter than this are not counted",
           "type": "integer"
         },
+        "phases": {
+          "description": "Record only on these phases: phase types (consent, prestudy, instructions, training, annotation, poststudy) or phase names from `phases.order`. Elsewhere the script is not loaded and the server drops its posts. Omit it to record on every page. The recording notice stays on every page",
+          "type": "array"
+        },
         "track_pointer": {
           "default": true,
           "description": "Record pointer movement totals and clicks that land with no movement in between. false removes the pointermove listener",
@@ -3984,7 +3992,7 @@
       "type": "string"
     },
     "base_html_template": {
-      "description": "Base template every page extends",
+      "description": "Ignored. Every page renders through the built-in base_template_v2.html, so nothing reads this key -- `potato validate` reports it",
       "type": "string"
     },
     "batch_assignment": {
@@ -5223,6 +5231,10 @@
           "default": true,
           "description": "Record the click, focus, scroll and key stream. When false, item loads, saves, navigation and an activity mark with no target or detail are still recorded, so time per item (Throughput tab, adjudication, dashboard) keeps working. AI-assistant usage and the annotation change trail are recorded either way",
           "type": "boolean"
+        },
+        "phases": {
+          "description": "Record only on these phases: phase types (consent, prestudy, instructions, training, annotation, poststudy) or phase names from `phases.order`. Elsewhere items keep only the timing marks, as with `enabled: false`, so time per item still works, and consent and survey pages keep nothing. Omit it to record on every page. The recording notice stays on every page",
+          "type": "array"
         }
       },
       "type": "object"
@@ -5422,6 +5434,10 @@
             10000
           ],
           "description": "Pause buckets the summary counts against. Must be positive integers",
+          "type": "array"
+        },
+        "phases": {
+          "description": "Record only on these phases: phase types (consent, prestudy, instructions, training, annotation, poststudy) or phase names from `phases.order`. Elsewhere the script is not loaded and the server drops its posts. Omit it to record on every page. The recording notice stays on every page",
           "type": "array"
         },
         "store_events": {

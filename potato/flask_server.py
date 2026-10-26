@@ -3204,6 +3204,32 @@ def _render_conditions(usm, user_state):
         return None
 
 
+def _tracker_page_flags(config, phase, page, interaction_tracking_client_config,
+                        phase_page=False):
+    """Which paradata trackers load on this page (each block's ``phases`` list).
+
+    Returns ``authenticity_active``, ``keystroke_logging_active`` and
+    ``annotation_telemetry_active`` for the template. The recording notices do
+    not read them: a notice stays on every page, so the participant reads it
+    before consenting. The interaction tracker always loads, because time per
+    item depends on it; outside its phases it gets ``enabled: false`` and sends
+    only the timing marks, as with ``interaction_tracking.enabled: false``. On
+    a ``phase_page`` (consent, surveys) it also gets ``record: false`` and
+    sends nothing. The server drops those posts anyway, but the flush when
+    "next" is clicked lands after the phase changed, so on the annotation
+    page it would be judged by annotation's ``phases`` and kept.
+    """
+    from potato.server_utils.config_module import tracker_active_in_phase
+    if not tracker_active_in_phase(config, "interaction_tracking", phase, page):
+        interaction_tracking_client_config["enabled"] = False
+        if phase_page:
+            interaction_tracking_client_config["record"] = False
+    return {
+        f"{name}_active": tracker_active_in_phase(config, name, phase, page)
+        for name in ("authenticity", "keystroke_logging", "annotation_telemetry")
+    }
+
+
 def get_current_page_html(config, username):
     """
     Returns the HTML for the current page that the user is on.
@@ -3298,6 +3324,9 @@ def get_current_page_html(config, username):
     context['authenticity_client_config'] = get_authenticity_client_config(config)
     context['interaction_tracking_client_config'] = (
         get_interaction_tracking_client_config(config))
+    context.update(_tracker_page_flags(
+        config, phase, page, context['interaction_tracking_client_config'],
+        phase_page=phase not in (UserPhase.ANNOTATION, UserPhase.TRAINING)))
 
     # The participant's between-subjects condition, so a question's
     # display_logic can test condition.<factor> in the browser too.
@@ -4067,6 +4096,8 @@ def render_page_with_annotations(username: str):
         get_authenticity_client_config, get_interaction_tracking_client_config)
     authenticity_client_config = get_authenticity_client_config(config)
     interaction_tracking_client_config = get_interaction_tracking_client_config(config)
+    tracker_page_flags = _tracker_page_flags(
+        config, phase, page, interaction_tracking_client_config)
     # The participant's between-subjects condition (display_logic can test it).
     potato_conditions = _render_conditions(get_user_state_manager(),
                                            get_user_state_manager().get_user_state(username))
@@ -4222,6 +4253,7 @@ def render_page_with_annotations(username: str):
         annotation_telemetry_client_config=annotation_telemetry_client_config,
         authenticity_client_config=authenticity_client_config,
         interaction_tracking_client_config=interaction_tracking_client_config,
+        **tracker_page_flags,
         potato_conditions=potato_conditions,
         boundary_client_config=boundary_client_config,
         # Truth Serum (surprisingly-popular scoring)

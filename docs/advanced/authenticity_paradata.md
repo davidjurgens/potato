@@ -122,6 +122,49 @@ The default notice reads:
 
 The notice is rendered by the server, so it appears even if scripts are blocked.
 
+### Recording only in some phases
+
+By default the tracker records on every page, the consent page included. If
+consent is the legal basis for the paradata, set `phases` so that the tracker
+starts only after consent:
+
+```yaml
+authenticity:
+  enabled: true
+  phases: [annotation]           # phase types or names from phases.order
+keystroke_logging:
+  enabled: true
+  phases: [annotation, poststudy]
+interaction_tracking:
+  phases: [annotation, poststudy]  # the general tracker is on by default
+```
+
+A value is a phase type (`consent`, `prestudy`, `instructions`, `training`,
+`annotation`, `poststudy`) or a phase name from `phases.order`. A phase name
+selects one page when a study has two pages of the same type. `null` or no
+key means every page. An unknown value is a startup error that lists the
+valid values.
+
+On other pages the script is not loaded. The server also drops a post from
+another phase and answers 200, because a cached page or an old tab can still
+post. One exception: after annotation, a post for one of the annotator's items
+still counts as annotation. This post is the final flush of the last item,
+which arrives after "next" moved the annotator on. The notice stays on every
+page, so the participant can read it before consent. If `phases` leaves out
+`annotation`, the admin panel does not count annotated items as
+`paradata_missing`.
+
+The same key exists on `keystroke_logging`, `annotation_telemetry` and
+`interaction_tracking`. The general interaction tracker is on by default, so a
+study that must record nothing before consent sets `phases` on it too. Outside
+its phases, the tracker sends only item loads, saves, navigation and the
+`activity` mark, as with `enabled: false`. The server keeps these marks for
+items, so time per item stays correct. On consent and survey pages it sends
+nothing. The answers on those pages are still saved, with the record of when
+each one was changed, because they are the participant's responses and not
+paradata. If its `phases` leaves out `annotation`, the admin suspicion
+score treats the low-interaction and no-scroll rates as unknown.
+
 ### The general interaction tracker
 
 The older, always-on [behavioral tracker](behavioral_tracking.md) (clicks, focus,
