@@ -6902,9 +6902,9 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `analytics` |  | object |  | Cost and latency analytics over ingested traces: optional per-model pricing, and the thresholds that raise a regression alert | `pricing`, `thresholds` |
-| `annotation_telemetry` |  | object |  | The drawing-process analogue of keystroke_logging: content-blind telemetry on geometry schemas -- when someone draws, zooms, revises and accepts AI suggestions, never what or where -- and the rubber-stamping screening built on it | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_ms`, `include_schemas`, `store_events` |
+| `annotation_telemetry` |  | object |  | The drawing-process analogue of keystroke_logging: content-blind telemetry on geometry schemas -- when someone draws, zooms, revises and accepts AI suggestions, never what or where -- and the rubber-stamping screening built on it | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_ms`, `include_schemas`, `phases`, `store_events` |
 | `annotator_dashboard` |  | boolean or object | `False` | Read-only progress page at /progress. Shows project totals and the requesting annotator's own stats, never another annotator's identity. A bare `true` is accepted as shorthand for `{enabled: true}` | `enabled`, `show_active_annotators`, `show_personal_progress`, `show_project_progress` |
-| `authenticity` |  | object |  | Page-level, content-blind authenticity paradata on every task type: leaving the page, copying the item, pasting text that did not come from the page, a narrowed window, and automation signals. Counts and durations only -- copied and pasted text never leaves the browser | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `flush_interval_ms`, `min_away_ms`, `track_pointer` |
+| `authenticity` |  | object |  | Page-level, content-blind authenticity paradata on every task type: leaving the page, copying the item, pasting text that did not come from the page, a narrowed window, and automation signals. Counts and durations only -- copied and pasted text never leaves the browser | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `flush_interval_ms`, `min_away_ms`, `phases`, `track_pointer` |
 | `boundary_probing` |  | object |  | Boundary Lab. After a label is chosen, shows counterfactual edits of the item and asks whether they flip it -- which maps the decision boundary and exports as a contrast set | `ai_support`, `debounce_ms`, `enabled`, `include_invariance`, `precomputed_key`, `probes_per_item`, `rationale_on_flip`, `schema`, `sources` |
 | `bws_config` |  | object |  | Best-worst scaling. Builds the tuples annotators compare and scores the results into a ranking. Its presence is what enables BWS | `min_item_appearances`, `num_tuples`, `scoring`, `seed`, `tuple_size` |
 | `category_assignment` |  | object |  | Route items to annotators by the item's category, optionally gated on a qualification the annotator earned in training | `category_key`, `dynamic`, `enabled`, `fallback`, `qualification` |
@@ -6914,8 +6914,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `embeddings` |  | object |  | The project-wide embedder shared by the corpus map, diversity ordering and duplicate detection. `backend` (auto by default), plus `model`, `source_field`, `cache_dir`, `media_root`; anything else is passed through to the backend. A custom backend needs `entrypoint` ('module.path:callable') or `endpoint` (an HTTP URL) |  |
 | `event_template` |  | object |  | Cross-document event registry: admin-defined slots that annotators fill with evidence drawn from many documents | `allow_annotator_create`, `enabled`, `name`, `seed_events`, `slots` |
 | `ibws_config` |  | object |  | Iterative best-worst scaling: re-generates tuples each round, concentrating comparisons where the ranking is still uncertain | `max_rounds`, `scoring_method`, `seed`, `tuple_size`, `tuples_per_item_per_round` |
-| `interaction_tracking` |  | object |  | The general behavioural tracker (clicks, focus, scroll, shortcut keys) that feeds the admin Behavioral tab. On by default | `disclose_to_annotators`, `disclosure_text`, `enabled` |
-| `keystroke_logging` |  | object |  | Content-blind typing dynamics on free-text fields -- when someone pauses, revises or pastes, never which keys -- and the composed/transcribed/pasted detection built on them | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
+| `interaction_tracking` |  | object |  | The general behavioural tracker (clicks, focus, scroll, shortcut keys) that feeds the admin Behavioral tab. On by default | `disclose_to_annotators`, `disclosure_text`, `enabled`, `phases` |
+| `keystroke_logging` |  | object |  | Content-blind typing dynamics on free-text fields -- when someone pauses, revises or pastes, never which keys -- and the composed/transcribed/pasted detection built on them | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `phases`, `store_events` |
 | `mace` |  | object |  | MACE competence estimation: infers per-annotator reliability and a predicted label per item from the disagreement pattern alone | `enabled`, `min_annotations_per_item`, `min_items`, `num_iters`, `num_restarts`, `trigger_every_n` |
 | `plugins` |  | array |  | Installed plugins to load, by name. A plugin adds annotation or display types; `potato plugins` lists the installed ones. Plugins run as Python inside the server, so only listed ones load |  |
 | `pocket` |  | object |  | Pocket Mode: the phone-sized annotation surface at /pocket, served as a PWA with an offline queue | `auto_redirect`, `batch_size`, `enabled` |
@@ -47346,6 +47346,12 @@ Focus time and scroll depth are not recorded, so the admin suspicion score leave
 the low-interaction and no-scroll rates (they come back as `null`) and
 `aggregate_stats.interaction_tracking_enabled` is `false`.
 
+To record only in some phases, set `phases`, for example
+`phases: [annotation, poststudy]`. Outside these phases, item pages behave as
+with `enabled: false`, and the server keeps nothing from consent and survey
+pages. See [Recording only in some
+phases](authenticity_paradata.md#recording-only-in-some-phases).
+
 !!! note "Signs of AI use or automation on any task type"
     Leaving the page, copying the item, pasting outside text and automation signals
     are recorded by a separate opt-in feature. See
@@ -47787,6 +47793,7 @@ keystroke_logging:
   pause_thresholds_ms: [500, 1000, 2000, 5000, 10000]
   disclose_to_annotators: true  # show a recording notice on every page
   disclosure_text: null         # null = built-in notice; set a string to override
+  phases: null                  # null = every page; or a list such as [annotation]
   detection:
     enabled: true
     calibrate: false            # use project-fitted thresholds
@@ -47807,6 +47814,7 @@ keystroke_logging:
 | `pause_thresholds_ms` | `[500,1000,2000,5000,10000]` | Pause counts are reported at each. |
 | `disclose_to_annotators` | `true` | Render the recording notice described below. Turning it off logs a warning. |
 | `disclosure_text` | `null` | Replace the built-in notice wording. `null` uses the default. |
+| `phases` | `null` | Record only on these phase types or `phases.order` names. Elsewhere the script is not loaded and the server drops posts. The notice stays on every page. See [Recording only in some phases](authenticity_paradata.md#recording-only-in-some-phases). |
 
 ### The recording notice
 
@@ -48940,11 +48948,16 @@ annotation_telemetry:
   idle_ms: 120000            # gap above which time is idle, not active
   flush_interval_ms: 10000
   disclose_to_annotators: true
+  phases: null               # null = every page; or a list such as [annotation]
   detection:
     enabled: true
     calibrate: false         # fit thresholds from this project's own data
     thresholds: {}
 ```
+
+`phases` limits recording to the listed phase types or `phases.order` names.
+See [Recording only in some
+phases](authenticity_paradata.md#recording-only-in-some-phases).
 
 `fidelity: summary` derives every feature but persists no raw stream. Use it when
 you want the numbers without keeping a replayable record of each annotator's
@@ -49215,6 +49228,45 @@ The default notice reads:
 > text from elsewhere — not what you copy or paste.
 
 The notice is rendered by the server, so it appears even if scripts are blocked.
+
+### Recording only in some phases
+
+By default the tracker records on every page, the consent page included. If
+consent is the legal basis for the paradata, set `phases` so that the tracker
+starts only after consent:
+
+```yaml
+authenticity:
+  enabled: true
+  phases: [annotation]           # phase types or names from phases.order
+keystroke_logging:
+  enabled: true
+  phases: [annotation, poststudy]
+interaction_tracking:
+  phases: [annotation, poststudy]  # the general tracker is on by default
+```
+
+A value is a phase type (`consent`, `prestudy`, `instructions`, `training`,
+`annotation`, `poststudy`) or a phase name from `phases.order`. A phase name
+selects one page when a study has two pages of the same type. `null` or no
+key means every page. On other pages the script is not loaded. The server also
+drops a post from another phase and answers 200, because a cached page or an
+old tab can still post. One exception: after annotation, a post for one of the
+annotator's items still counts as annotation. This post is the final flush of
+the last item, which arrives after "next" moved the annotator on. The notice
+stays on every page, so the participant can read it before consent. An unknown
+value is a startup error that lists the valid values. If `phases` leaves out
+`annotation`, the admin panel does not count annotated items as
+`paradata_missing`.
+
+The same key exists on `keystroke_logging`, `annotation_telemetry` and
+`interaction_tracking`. The general interaction tracker is on by default, so a
+study that must record nothing before consent sets `phases` on it too. Outside
+its phases, the tracker sends only item loads, saves, navigation and the
+`activity` mark, as with `enabled: false`. The server keeps these marks for
+items, so time per item stays correct, and keeps nothing for consent and
+survey pages. If its `phases` leaves out `annotation`, the admin suspicion
+score treats the low-interaction and no-scroll rates as unknown.
 
 ### The general interaction tracker
 

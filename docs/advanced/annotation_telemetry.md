@@ -59,11 +59,16 @@ annotation_telemetry:
   idle_ms: 120000            # gap above which time is idle, not active
   flush_interval_ms: 10000
   disclose_to_annotators: true
+  phases: null               # null = every page; or a list such as [annotation]
   detection:
     enabled: true
     calibrate: false         # fit thresholds from this project's own data
     thresholds: {}
 ```
+
+`phases` limits recording to the listed phase types or `phases.order` names.
+See [Recording only in some
+phases](authenticity_paradata.md#recording-only-in-some-phases).
 
 `fidelity: summary` derives every feature but persists no raw stream. Use it when
 you want the numbers without keeping a replayable record of each annotator's

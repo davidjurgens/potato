@@ -1824,6 +1824,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Replace the default notice. Must be non-empty; omit it to keep the default",
         type="string", category=FEATURES,
     ),
+    "keystroke_logging.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere the script is not loaded and the server "
+        "drops its posts. Omit it to record on every page. The recording "
+        "notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
+    ),
     "keystroke_logging.detection": _D(
         "Rule-based flags: `enabled`, `calibrate`, `on_external_insert` "
         "(allow, warn, block or flag) and `thresholds`. Thresholds are scored "
@@ -1872,6 +1880,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "annotation_telemetry.disclosure_text": _D(
         "Replace the default notice", type="string", category=FEATURES,
+    ),
+    "annotation_telemetry.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere the script is not loaded and the server "
+        "drops its posts. Omit it to record on every page. The recording "
+        "notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
     ),
     "annotation_telemetry.detection": _D(
         "Rubber-stamping detection: `enabled`, `calibrate` and `thresholds`",
@@ -1997,6 +2013,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Replace the default notice with your own wording",
         type="string", category=FEATURES,
     ),
+    "authenticity.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere the script is not loaded and the server "
+        "drops its posts. Omit it to record on every page. The recording "
+        "notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
+    ),
     "authenticity.detection": _D(
         "Server-side flags: `enabled` and `thresholds` (keys such as "
         "`away_from_task.min_events`, `copy_then_away.min_away_ms`). "
@@ -2024,6 +2048,15 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "interaction_tracking.disclosure_text": _D(
         "Replace the default notice with your own wording",
         type="string", category=FEATURES,
+    ),
+    "interaction_tracking.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere items keep only the timing marks, as with "
+        "`enabled: false`, so time per item still works, and consent and "
+        "survey pages keep nothing. Omit it to record on every page. The "
+        "recording notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
     ),
     "annotator_dashboard": _D(
         "Read-only progress page at /progress. Shows project totals and the "

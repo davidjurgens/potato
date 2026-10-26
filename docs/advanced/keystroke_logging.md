@@ -129,6 +129,7 @@ keystroke_logging:
   pause_thresholds_ms: [500, 1000, 2000, 5000, 10000]
   disclose_to_annotators: true  # show a recording notice on every page
   disclosure_text: null         # null = built-in notice; set a string to override
+  phases: null                  # null = every page; or a list such as [annotation]
   detection:
     enabled: true
     calibrate: false            # use project-fitted thresholds
@@ -149,6 +150,7 @@ keystroke_logging:
 | `pause_thresholds_ms` | `[500,1000,2000,5000,10000]` | Pause counts are reported at each. |
 | `disclose_to_annotators` | `true` | Render the recording notice described below. Turning it off logs a warning. |
 | `disclosure_text` | `null` | Replace the built-in notice wording. `null` uses the default. |
+| `phases` | `null` | Record only on these phase types or `phases.order` names. Elsewhere the script is not loaded and the server drops posts. The notice stays on every page. See [Recording only in some phases](authenticity_paradata.md#recording-only-in-some-phases). |
 
 ### The recording notice
 

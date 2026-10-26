@@ -4,6 +4,20 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### New features
+
+- **Paradata trackers can be limited to some phases.** `authenticity`,
+  `keystroke_logging`, `annotation_telemetry` and `interaction_tracking`
+  accept `phases`, a list of phase types or `phases.order` names. Outside
+  these phases the script is not loaded and the server drops its posts, so
+  a study can start recording only after consent. Without the key nothing
+  changes. The recording notice stays on every page. Outside its phases,
+  `interaction_tracking` keeps only the timing events of items, as with
+  `enabled: false`, and nothing from consent and survey pages. The final
+  flush of the last item still counts as annotation. An unknown phase is a
+  startup error. With `phases` that leave out annotation, the admin panel
+  does not count the missing data against annotators.
+
 ## [2.12.1] - Display Logic, Export and Listening-Test Fixes
 
 Fixes for bugs found in 2.12.0 after it was published, and two corrections

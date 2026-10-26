@@ -9139,6 +9139,32 @@ def generate_random_word_highlights(text: str, rng, probability: float,
 # Behavioral Tracking API Endpoints
 # =============================================================================
 
+def _tracked_in_current_phase(block_name, user_state, instance_id=None):
+    """False when ``<block_name>.phases`` leaves out the phase a post came from.
+
+    The page already omits the tracker there; this catches a page rendered
+    before the phase changed. One exception: after annotation, a post for one
+    of the annotator's items is the final flush of the last item, which
+    arrives after "next" moved the annotator on. It counts as annotation, or
+    that item's data would be lost. Before annotation an item id gets no such
+    exception (items are assigned at registration, before consent). An
+    unknown phase counts as untracked when ``phases`` is set, since the key
+    exists to keep data out.
+    """
+    from potato.server_utils.config_module import tracker_active_in_phase
+    try:
+        phase, page = user_state.get_current_phase_and_page()
+    except Exception:
+        phase, page = None, None
+    try:
+        if (phase in (UserPhase.POSTSTUDY, UserPhase.DONE) and instance_id
+                and instance_id in user_state.get_assigned_instance_ids()):
+            phase, page = UserPhase.ANNOTATION, "annotation"
+    except Exception:
+        pass
+    return tracker_active_in_phase(config, block_name, phase, page)
+
+
 @app.route("/api/track_interactions", methods=["POST"])
 def track_interactions():
     """
@@ -9170,9 +9196,20 @@ def track_interactions():
     # stream). What survives is what time-per-item needs -- item loads, saves,
     # navigation and content-free activity marks -- so active_time_ms() and the
     # throughput, adjudication and dashboard timings built on it stay non-zero.
+    # Outside interaction_tracking.phases an item is treated the same way, and
+    # a phase page (consent, surveys) keeps nothing: time per item is measured
+    # on items only, and the key exists to record nothing before consent.
     from potato.server_utils.config_module import get_interaction_tracking_config
-    from potato.interaction_tracking import TIMING_EVENT_TYPES
-    tracking_on = get_interaction_tracking_config(config).get("enabled", True)
+    from potato.interaction_tracking import PHASE_PAGE_SENTINEL, TIMING_EVENT_TYPES
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+    in_phase = _tracked_in_current_phase(
+        "interaction_tracking", user_state, data.get('instance_id'))
+    if not in_phase and normalize_instance_id(data.get('instance_id')) == PHASE_PAGE_SENTINEL:
+        return jsonify({"status": "phase_not_tracked", "events_recorded": 0})
+    tracking_on = (get_interaction_tracking_config(config).get("enabled", True)
+                   and in_phase)
     if not tracking_on:
         kept = []
         for event in data.get('events') or []:
@@ -9190,10 +9227,6 @@ def track_interactions():
     # navigation events landed in it.
     instance_id = normalize_instance_id(data.get('instance_id'))
     events = data.get('events', [])
-
-    user_state = get_user_state(username)
-    if not user_state:
-        return jsonify({"error": "User state not found"}), 404
 
     # Get or create behavioral data for this instance
     bd = get_or_create_behavioral_data(
@@ -9528,6 +9561,12 @@ def track_typing():
     if not user_state:
         return jsonify({"error": "User state not found"}), 404
 
+    # A page rendered before the phase changed (a cached page, an old tab) can
+    # still post. 200, not an error, so the tracker does not retry.
+    if not _tracked_in_current_phase("keystroke_logging", user_state,
+                                     data.get("instance_id")):
+        return jsonify({"status": "phase_not_tracked", "sessions_recorded": 0})
+
     sessions = data.get('sessions') or []
     if not isinstance(sessions, list):
         return jsonify({"error": "'sessions' must be a list"}), 400
@@ -9721,6 +9760,11 @@ def track_annotation_telemetry():
     if not user_state:
         return jsonify({"error": "User state not found"}), 404
 
+    # Same as track_typing: drop a post from outside annotation_telemetry.phases.
+    if not _tracked_in_current_phase("annotation_telemetry", user_state,
+                                     data.get("instance_id")):
+        return jsonify({"status": "phase_not_tracked", "sessions_recorded": 0})
+
     sessions = data.get('sessions') or []
     if not isinstance(sessions, list):
         return jsonify({"error": "'sessions' must be a list"}), 400
@@ -9908,6 +9952,12 @@ def track_authenticity():
     user_state = get_user_state(session['username'])
     if not user_state:
         return jsonify({"error": "User state not found"}), 404
+
+    # Before the instance check, so a stale consent page gets a 200 and stops,
+    # not a 403. Nothing is stored and no write is scheduled.
+    if not _tracked_in_current_phase("authenticity", user_state,
+                                     data.get("instance_id")):
+        return jsonify({"status": "phase_not_tracked", "persisted": False})
 
     try:
         _phase, _page = user_state.get_current_phase_and_page()

@@ -792,7 +792,8 @@
     <!-- Authenticity paradata (page-leave, item copy, external paste and
          automation signals on every task type), conditional. Loads after
          interaction_tracker.js because it hooks setInstanceId. -->
-    {% if authenticity_client_config and authenticity_client_config.enabled %}
+    {% if authenticity_client_config and authenticity_client_config.enabled
+          and authenticity_active | default(true) %}
     <script type="text/javascript">
         window.authenticityConfig = {{ authenticity_client_config | tojson }};
     </script>
@@ -801,7 +802,8 @@
     <!-- Keystroke logging / typing dynamics on free-text fields (conditional).
          Loads after interaction_tracker.js because it hooks setInstanceId to
          cut typing sessions on the same navigation boundary. -->
-    {% if keystroke_logging_enabled | default(false) %}
+    {% if keystroke_logging_enabled | default(false)
+          and keystroke_logging_active | default(true) %}
     <script type="text/javascript">
         window.keystrokeConfig = {{ keystroke_client_config | tojson }};
     </script>
@@ -811,7 +813,8 @@
          (conditional). Loads after interaction_tracker.js for the same reason
          as the keystroke tracker: it hooks setInstanceId so both behavioural
          subsystems cut their sessions on the same navigation boundary. -->
-    {% if annotation_telemetry_enabled | default(false) %}
+    {% if annotation_telemetry_enabled | default(false)
+          and annotation_telemetry_active | default(true) %}
     <script type="text/javascript">
         window.annotationTelemetryConfig = {{ annotation_telemetry_client_config | tojson }};
     </script>

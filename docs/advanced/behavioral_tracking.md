@@ -212,6 +212,12 @@ Focus time and scroll depth are not recorded, so the admin suspicion score leave
 the low-interaction and no-scroll rates (they come back as `null`) and
 `aggregate_stats.interaction_tracking_enabled` is `false`.
 
+To record only in some phases, set `phases`, for example
+`phases: [annotation, poststudy]`. Outside these phases, item pages behave as
+with `enabled: false`, and the server keeps nothing from consent and survey
+pages. See [Recording only in some
+phases](authenticity_paradata.md#recording-only-in-some-phases).
+
 !!! note "Signs of AI use or automation on any task type"
     Leaving the page, copying the item, pasting outside text and automation signals
     are recorded by a separate opt-in feature. See

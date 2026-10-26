@@ -421,7 +421,7 @@ KNOWN_CONFIG_KEYS = {
         "enabled", "fidelity", "include_schemas", "exclude_schemas",
         "store_events", "classify_paste_source", "idle_session_ms",
         "flush_interval_ms", "pause_thresholds_ms", "disclose_to_annotators",
-        "disclosure_text", "detection",
+        "disclosure_text", "detection", "phases",
     },
     # Annotation telemetry: content-blind drawing dynamics on geometry schemas,
     # and the rubber-stamping screening built on them. Validated in detail by
@@ -429,17 +429,18 @@ KNOWN_CONFIG_KEYS = {
     "annotation_telemetry": {
         "enabled", "fidelity", "include_schemas", "exclude_schemas",
         "store_events", "idle_ms", "flush_interval_ms",
-        "disclose_to_annotators", "disclosure_text", "detection",
+        "disclose_to_annotators", "disclosure_text", "detection", "phases",
     },
     # Authenticity paradata: page-level, content-blind signals of outsourced or
     # automated work (leaving the page, copying the item, external pastes,
     # webdriver) for every task type. Validated by validate_authenticity_config().
     "authenticity": {
         "enabled", "flush_interval_ms", "min_away_ms", "track_pointer",
-        "disclose_to_annotators", "disclosure_text", "detection",
+        "disclose_to_annotators", "disclosure_text", "detection", "phases",
     },
     # The always-on interaction tracker (clicks, focus, scroll, shortcut keys).
-    "interaction_tracking": {"enabled", "disclose_to_annotators", "disclosure_text"},
+    "interaction_tracking": {"enabled", "disclose_to_annotators", "disclosure_text",
+                             "phases"},
     # Incentive payments for price_list / bdm / belief_elicitation answers.
     # Validated by potato.incentives.validate_incentives_config().
     "incentives": {"enabled", "currency", "rules", "pay", "max_bonus", "seed", "only_finished"},
@@ -2139,6 +2140,7 @@ def validate_keystroke_logging_config(config_data: Dict[str, Any]) -> None:
             "keystroke_logging.disclosure_text must be a non-empty string "
             "(omit it to use the default notice)"
         )
+    errors += _validate_tracker_phases("keystroke_logging", ks, config_data)
 
     for int_key in ("idle_session_ms", "flush_interval_ms"):
         if int_key in ks and not isinstance(ks[int_key], int):
@@ -2338,6 +2340,7 @@ def validate_annotation_telemetry_config(config_data: Dict[str, Any]) -> None:
             "annotation_telemetry.disclosure_text must be a non-empty string "
             "(omit it to use the default notice)"
         )
+    errors += _validate_tracker_phases("annotation_telemetry", at, config_data)
 
     detection = at.get("detection")
     if detection is not None:
@@ -2512,6 +2515,7 @@ def validate_authenticity_config(config_data: Dict[str, Any]) -> None:
             "authenticity", au,
             ("enabled", "track_pointer", "disclose_to_annotators"),
             ("flush_interval_ms", "min_away_ms"))
+        errors += _validate_tracker_phases("authenticity", au, config_data)
         detection = au.get("detection")
         if detection is not None:
             if not isinstance(detection, dict):
@@ -2545,6 +2549,7 @@ def validate_authenticity_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError("interaction_tracking must be a mapping")
         errors += _validate_disclosure_block(
             "interaction_tracking", it, ("enabled", "disclose_to_annotators"), ())
+        errors += _validate_tracker_phases("interaction_tracking", it, config_data)
 
     if errors:
         raise ConfigValidationError(
@@ -2620,6 +2625,57 @@ def _disclosure_text(block: Dict[str, Any], default_text: str,
     if isinstance(custom, str) and custom.strip():
         return custom.strip()
     return default_text
+
+
+#: Phase types a tracker's ``phases`` list can name (the UserPhase values whose
+#: pages render through base_template_v2.html). A phase name from
+#: ``phases.order`` is accepted too, for a study with two pages of one type.
+TRACKER_PHASE_TYPES = ("consent", "prestudy", "instructions", "training",
+                       "annotation", "poststudy")
+
+
+def _validate_tracker_phases(name: str, block: Dict[str, Any],
+                             config_data: Dict[str, Any]) -> List[str]:
+    """Errors for ``<name>.phases``.
+
+    Always an error, not a ``--strict`` warning: a typo such as ``concent``
+    would otherwise switch the tracker off on every page without a word.
+    """
+    value = block.get("phases")
+    if value is None:            # absent or null: every page
+        return []
+    if (not isinstance(value, list) or not value
+            or not all(isinstance(p, str) for p in value)):
+        return [f"{name}.phases must be a non-empty list of phase types or "
+                "phase names (omit it to record on every page)"]
+    valid = set(TRACKER_PHASE_TYPES)
+    phases_cfg = config_data.get("phases")
+    if isinstance(phases_cfg, dict):
+        valid.update(k for k, v in phases_cfg.items() if isinstance(v, dict))
+        if isinstance(phases_cfg.get("order"), list):
+            valid.update(p for p in phases_cfg["order"] if isinstance(p, str))
+    unknown = [p for p in value if p not in valid]
+    if unknown:
+        return [f"{name}.phases names unknown phase(s) "
+                + ", ".join(repr(p) for p in unknown)
+                + "; valid values are " + ", ".join(sorted(valid))]
+    return []
+
+
+def tracker_active_in_phase(config_data: Dict[str, Any], block_name: str,
+                            phase: Any, page: Any) -> bool:
+    """Whether the ``block_name`` tracker records on this phase and page.
+
+    ``phase`` is a UserPhase (or its value) and ``page`` the phase name from
+    ``phases.order``. Without a ``phases`` list the tracker records on every
+    page, as it did before the key existed. Used both to leave the script off
+    the page and to drop posts from a page rendered before the phase changed.
+    """
+    block = (config_data or {}).get(block_name)
+    allowed = block.get("phases") if isinstance(block, dict) else None
+    if allowed is None:
+        return True
+    return getattr(phase, "value", phase) in allowed or page in allowed
 
 
 def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
