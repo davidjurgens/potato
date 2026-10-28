@@ -259,10 +259,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="array", category=ANNOT,
     ),
     "phases": _D(
-        "Per-phase configuration (consent, instructions, training, annotation, "
-        "post-study). Either a list of phase objects or a mapping with an "
-        "`order` key. Phase-level annotation_schemes replace the top-level list "
-        "rather than adding to it",
+        "Per-phase configuration. Either a list of phase objects or a mapping "
+        "with an `order` key. Page types: consent, prestudy, instructions, "
+        "training, annotation and poststudy, plus the runtime pages jspsych, "
+        "headphone_check and external (oTree, Empirica, hosted surveys). "
+        "`counterbalance` (a list of {pages, method: random | latin_square}) "
+        "orders groups of pages per participant. Phase-level "
+        "annotation_schemes replace the top-level list rather than adding to "
+        "it",
         type="array|object", category=ANNOT,
     ),
     "surveyflow": _D(

@@ -54,6 +54,9 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Structural Biology](guides/structural-biology.md) - Marking residues on protein structures
 - [Genomics](guides/genomics-variant-review.md) - Reviewing variant calls in igv.js
 - [Coming from Ibex and PCIbex](guides/coming-from-ibex.md) - Import an Ibex or PCIbex experiment with its Latin-square lists
+- [Coming from jsPsych](guides/coming-from-jspsych.md) - Run a jsPsych timeline inside a Potato study, and what maps to what
+- [Coming from Qualtrics](guides/coming-from-qualtrics.md), [REDCap](guides/coming-from-redcap.md), [ODK and KoboToolbox](guides/coming-from-odk.md) and [Network Canvas](guides/coming-from-network-canvas.md) - Import a questionnaire and its logic
+- [Linguistic Fieldwork](guides/linguistic-fieldwork.md) - Interlinear glossing with FLEx and Toolbox files
 
 ## Getting Started
 
@@ -120,6 +123,7 @@ over prose when writing a config or calling the API.
 - [Protein Structures](annotation-types/science/protein_structures.md) - Residue selection in 3Dmol.js or Mol*, with pLDDT colouring
 - [Genome Loci](annotation-types/science/genome_loci.md) - A locus in igv.js with reads, calls and features
 - [Spectrogram Annotation](annotation-types/multimedia/spectrogram_annotation.md) - Time-frequency boxes on audio
+- [Listening Tests](annotation-types/multimedia/listening_tests.md) - MUSHRA, BS.1116, ACR, DCR, CCR, P.835 and ABX audio tests
 - [Extractive QA](annotation-types/text/extractive_qa.md) - SQuAD-style answer span highlighting
 - [Rubric Evaluation](annotation-types/measurement/rubric_eval.md) - Multi-criteria rubric grid for LLM evaluation
 - [Text Edit / Post-Edit](annotation-types/text/text_edit.md) - Inline text editing with diff tracking
@@ -158,7 +162,9 @@ over prose when writing a config or calling the API.
 - [Category Assignment](advanced/category_assignment.md) - Category-based item assignment
 - [Surveyflow](workflow/surveyflow.md) - Pre/post annotation surveys
 - **[Experiment Flow](workflow/experiment_flow.md)** - Between-subjects conditions, page branching and screen-outs, counterbalanced page order, randomized question order
+- **[Runtime Phases](workflow/runtime_phases.md)** - jsPsych timelines, a headphone check, and tasks on other servers (oTree, Empirica) as pages of a study
 - **[jsPsych Phase](workflow/jspsych_phase.md)** - Run a jsPsych timeline as one page of a Potato study, with its data stored and exported
+- [Self-Paced Reading](workflow/self_paced_reading.md) - Self-paced reading and the Maze task, with reading times per region
 - **[Timed Trials](workflow/timed_trials.md)** - Fixation, stimulus duration, deadlines and key-to-label reaction times on annotation items
 - [Annotation Filtering](workflow/annotation_filtering.md) - Filter data based on prior annotations
 - [Survey Instruments](advanced/survey_instruments.md) - 55 pre-built validated psychological instruments
@@ -192,6 +198,7 @@ over prose when writing a config or calling the API.
 - [Signal-Based Triage Queue](agent-evaluation/triage_queue.md) - Prioritize the queue by a quality signal (errors / low score first)
 - [Hotkey Review Mode](guides/hotkey_review_mode.md) - Keyboard-driven review queue with auto-advance on completion
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
+- [Interactive Agent Chat](agent-evaluation/interactive_chat.md) - Annotators chat with an agent through `agent_proxy`, then rate the conversation
 - [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
@@ -278,6 +285,9 @@ over prose when writing a config or calling the API.
 - [Migration CLI](tools/migration_cli.md) - Upgrade v1 configs to v2
 - [Debugging Guide](tools/debugging_guide.md) - Debug flags and troubleshooting
 - [Simulator](tools/simulator.md) - Annotation simulation tool
+- [Import CLI](tools/import_cli.md) - Turn an existing annotation dataset into a runnable project
+- [Importing Surveys](tools/survey_import.md) - Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe and Network Canvas questionnaires as survey pages
+- [MCP Server](tools/mcp_server.md) - Lets coding agents list types, validate configs and build tasks
 - [API Reference](api-reference/api_reference.md) - REST API endpoints documentation
 
 ## Productivity Features
@@ -3385,7 +3395,7 @@ participant and exported with the rest.
 | Writing process | `keystroke_logging` | Content-blind keystroke timing on free-text fields |
 | Prolific URL variables, completion redirect | `login.type: url_direct` (or `prolific`) and `completion_code` | Completion and screen-out codes; `login.type: prolific` adds API monitoring |
 | SONA | `crowdsourcing.sona` | Automatic credit |
-| `jsPsych.data.get().csv()` | `python -m potato.export` | 41 formats, including CSV, JSONL, Parquet, Psych-DS and Frictionless Data Package. The CSV/TSV export adds `participants`, `trials` and `regions` tables |
+| `jsPsych.data.get().csv()` | `python -m potato.export` | 60 formats, including CSV, JSONL, Parquet, Psych-DS and Frictionless Data Package. The CSV/TSV export adds `participants`, `trials` and `regions` tables |
 | JATOS, Pavlovia, Cognition.run | `potato deploy`, Hugging Face Spaces | Potato is the server |
 | `simulation` mode | `python -m potato.simulator` | Simulated annotators against a running server |
 
@@ -5683,7 +5693,6 @@ Example:
 ```yaml
 site_dir: default          # Use default templates
 customjs: null            # No custom JavaScript
-custom_ds: "default"      # Use default dataset handling
 ```
 
 ### Validation Requirements
@@ -5708,8 +5717,7 @@ Potato validates your configuration to ensure:
 ### Core Settings
 
 ```yaml
-# Server identification
-server_name: My Annotation Task
+# Task name, shown to annotators and in the browser title
 annotation_task_name: Sentiment Analysis Task
 
 # Root directory for your task's design and output
@@ -5720,8 +5728,7 @@ port: 8000
 ```
 
 **Key Options:**
-- **`server_name`**: Display name for the server (shown in browser title)
-- **`annotation_task_name`**: Name of the annotation task (shown to annotators)
+- **`annotation_task_name`**: Name of the annotation task, shown in the page header and the browser title
 - **`port`**: Port number for the server (default: 8000)
 - **`task_dir`**: The root directory for the task. All custom layout, data, and annotations will be placed in this directory. When set to `.` or a relative path, it is resolved relative to the config file's directory (not the current working directory). Using `task_dir: .` is recommended for portable configurations.
 
@@ -6246,17 +6253,15 @@ Potato supports multiple strategies for assigning items to annotators.
 
 ```yaml
 assignment_strategy: random  # Options: random, fixed_order, least_annotated, max_diversity
-
-# Alternative: nested configuration
-assignment:
-  strategy: random
-  max_annotations_per_item: 3
-  random_seed: 1234
+max_annotations_per_item: 3  # -1 for unlimited
+random_seed: 1234            # seed for random assignment (default 1234)
 ```
+
+These are top-level keys. Potato does not read a nested `assignment:` block.
 
 ### Available Strategies
 
-All eleven values of `assignment_strategy`, as defined by `AssignmentStrategy`
+All thirteen values of `assignment_strategy`, as defined by `AssignmentStrategy`
 in `potato/item_state_management.py`:
 
 | Strategy | What it does |
@@ -6272,6 +6277,8 @@ in `potato/item_state_management.py`:
 | `priority` | Serves items by a triage signal, errors and low scores first ([triage queue](../agent-evaluation/triage_queue.md)) |
 | `psychometric` | Routes items by expected information gain under a live IRT model, so confident items stop consuming annotation budget ([psychometrics](../advanced/psychometrics.md)) |
 | `llm_confidence` | **Not implemented.** Accepted by the config validator, but the assignment code falls back to random selection |
+| `model_review` | Serves prelabelled items least-confident first, for review of model output ([model review](../ai-intelligence/model_review.md)) |
+| `engine` | Serves the labeling engine's requests (calibration, verification, audit, adjudication) in its priority order ([labeling engine](../labeling-engine/overview.md)) |
 
 ### Legacy Assignment Configuration
 
@@ -6307,18 +6314,23 @@ phases:
 
 ```yaml
 ui:
-  show_progress: true
-  show_instructions: true
-  allow_navigation: true
-  allow_editing: true
+  theme: auto                 # auto, light or dark
+  max_instance_height: 400    # cap the instance text height, in pixels
 ```
 
 ### Keyboard Shortcuts
 
 ```yaml
 horizontal_key_bindings: true
-sequential_key_binding: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    labels: [positive, negative, neutral]
+    sequential_key_binding: true   # per scheme: keys 1, 2, 3
 ```
+
+`sequential_key_binding` belongs on an annotation scheme, not at the top level.
 
 ## AI Support
 
@@ -6606,7 +6618,6 @@ Here's a complete configuration file that demonstrates most features:
 ```yaml
 # Basic Configuration
 port: 8000
-server_name: Comprehensive Annotation Task
 annotation_task_name: Multi-Modal Text Analysis
 
 data_files:
@@ -6692,10 +6703,7 @@ annotation_schemes:
     step: 1
 
 ui:
-  show_progress: true
-  show_instructions: true
-  allow_navigation: true
-  allow_editing: true
+  theme: auto
 
 server:
   port: 8000
@@ -6704,10 +6712,7 @@ server:
 require_password: true
 persist_sessions: false
 
-assignment:
-  strategy: least_annotated
-  max_annotations_per_item: 3
-  random_seed: 1234
+random_seed: 1234
 
 site_dir: default
 customjs: null
@@ -6820,7 +6825,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `annotation_schemes` |  | array |  | The questions annotators answer. Each entry needs an annotation_type from the schema registry plus a name and description |  |
-| `phases` |  | array or object |  | Per-phase configuration (consent, instructions, training, annotation, post-study). Either a list of phase objects or a mapping with an `order` key. Phase-level annotation_schemes replace the top-level list rather than adding to it |  |
+| `phases` |  | array or object |  | Per-phase configuration. Either a list of phase objects or a mapping with an `order` key. Page types: consent, prestudy, instructions, training, annotation and poststudy, plus the runtime pages jspsych, headphone_check and external (oTree, Empirica, hosted surveys). `counterbalance` (a list of {pages, method: random \| latin_square}) orders groups of pages per participant. Phase-level annotation_schemes replace the top-level list rather than adding to it |  |
 | `pre_annotation` |  | object |  | Seed annotations to show as a starting point for each item | `agreement_metrics`, `allow_modification`, `enabled`, `field`, `highlight_low_confidence`, `predictions_file`, `show_confidence` |
 | `surveyflow` |  | object |  | Survey pages shown before and after annotation |  |
 | `training` |  | object |  | Qualification phase annotators must pass before real items | `allow_retry`, `annotation_schemes`, `data_file`, `enabled`, `failure_action`, `feedback`, `passing_criteria` |
@@ -7213,9 +7218,9 @@ You can find example data files
 currently support four different document formats:
 
 -   Text: body is the document plaintext
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.csv))
 -   Image, Video, or GIF: body is the filepath
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-as-input.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-label-example.json))
 -   Dialogue or a list of text: body is a list of comma-seperated
     documents and potato will automatically display the list of text
     horizontally.
@@ -7226,14 +7231,13 @@ currently support four different document formats:
 -   Html files
     - Put the .html files in a folder ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html_data)),
     - Then put the relatiev paths to these htmls as normal text input ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html-as-input.json))
--   Best-Worst Scaling: body is a comma-separated list of documents to
-    order
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json))
--   Custom Arguments: body is one of the above + extra fields for
-    whatever custom arguments you want to enter
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json)
-    \-- in this `kwargs` and `other_kwargs` are the custom endpoints for
-    a Likert scale)
+-   Best-Worst Scaling: one item per record; Potato groups the pool into
+    tuples using `bws_config` (see [Best-Worst Scaling](../annotation-types/comparison/bws.md))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/sentiment-pool.jsonl))
+-   Extra fields: a record can carry fields beyond the id and text, for
+    display fields or display logic to read
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-label-example.json),
+    with `gifs` and `gifs_path` fields)
 -   Annotating Document A in context of Document B: body is document A +
     extra `context` field with the body of document B
     ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/))
@@ -11872,25 +11876,19 @@ annotation_codebook_url: "https://docs.google.com/document/d/example"
 # Hide navigation bar (for crowdworking)
 hide_navbar: false
 
-# HTML layout template
-html_layout: "default"  # Options: default, fixed_keybinding, kwargs, or custom path
+# Custom HTML for the annotation form area (optional)
+task_layout: "templates/my_layout.html"
 ```
 
-### Available Layout Templates
+### Layouts
 
-- **`default`**: General-purpose layout for most annotation tasks
-- **`fixed_keybinding`**: Shows keyboard shortcuts prominently
-- **`kwargs`**: Specialized layout for Likert scales with custom endpoints
-- **Custom path**: Point to your own HTML template file
+Without `task_layout`, Potato generates the annotation form from
+`annotation_schemes`. Set `task_layout` to an HTML file in your project to
+replace that form with your own markup. It applies to the annotation page
+only. A phase page takes its own `task_layout` inside its `phases:` entry.
+See [Layout Customization](../configuration/layout_customization.md).
 
-### Surveyflow Layout
-
-Use different layouts for survey pages vs annotation pages:
-
-```yaml
-html_layout: "templates/annotation-layout.html"
-surveyflow_html_layout: "default"
-```
+`html_layout` and `surveyflow_html_layout` are legacy keys and have no effect.
 
 ## Best Practices
 
@@ -12328,7 +12326,7 @@ still ignored. When an option appears in both places, `display_options` wins.
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
 | `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |
-| `interactive_chat` | Interactive agent chat with post-interaction trace display | Yes |
+| `interactive_chat` | Interactive agent chat with post-interaction trace display; needs an `agent_proxy` block, see [Interactive Agent Chat](../agent-evaluation/interactive_chat.md) | Yes |
 | `pairwise` | Side-by-side comparison | No |
 | `code` | Syntax-highlighted source code | Yes |
 | `spreadsheet` | Tabular data (Excel/CSV) | Yes (row/cell) |
@@ -16094,7 +16092,7 @@ visual_display:
 
 See the complete working example at:
 - Config: `examples/span/span-linking/config.yaml`
-- Data: `examples/span/span-linking/data/span-linking-example.json`
+- Data: `examples/span/span-linking/data.json`
 
 To run:
 ```bash
@@ -20436,7 +20434,7 @@ For dependent tiers:
 Export to ELAN Annotation Format for use in ELAN:
 
 ```bash
-python -m potato.export --format eaf --input annotations.json --output ./eaf_output/
+python -m potato.export -c config.yaml -f eaf -o ./eaf_output/
 ```
 
 The EAF export:
@@ -20450,7 +20448,7 @@ The EAF export:
 Export to Praat TextGrid format:
 
 ```bash
-python -m potato.export --format textgrid --input annotations.json --output ./textgrid_output/
+python -m potato.export -c config.yaml -f textgrid -o ./textgrid_output/
 ```
 
 The TextGrid export:
@@ -26445,8 +26443,9 @@ Users automatically progress through enabled phases in this order.
 Pages can be skipped by earlier answers (`show_when`), end the study for a
 participant (`exit_when`), be counterbalanced, or randomize their questions.
 Participants can be assigned to between-subjects conditions. See
-[Experiment Flow](experiment_flow.md). A page can also run a jsPsych timeline;
-see [jsPsych Phase](jspsych_phase.md).
+[Experiment Flow](experiment_flow.md). A page can also run a jsPsych timeline,
+Potato's headphone check, or a task on another server such as oTree or
+Empirica; see [Runtime Phases](runtime_phases.md).
 
 ## Back Navigation
 
@@ -26864,6 +26863,7 @@ ui_configuration:
 
 - [Conditional Logic](../configuration/conditional_logic.md) - Show/hide survey questions based on prior answers
 - [Experiment Flow](experiment_flow.md) - Page branching, screen-outs, conditions, counterbalancing
+- [Runtime Phases](runtime_phases.md) - jsPsych timelines, the headphone check, and external tasks as phase pages
 - [jsPsych Phase](jspsych_phase.md) - Run a jsPsych timeline as a phase page
 - [Training Phase](training_phase.md) - Configure qualification training with feedback
 - [Category-Based Assignment](../advanced/category_assignment.md) - Assign tasks based on training performance
@@ -27193,6 +27193,10 @@ These keys apply to every runtime phase:
 | `allow_rerun` | `false` | Whether returning to a finished page runs the task again |
 | `max_data_mb` | `10` | Largest run the server accepts |
 | `csp.extra_sources` | `[]` | `https://` origins the page may load fonts, images or scripts from |
+
+A jsPsych page can also list `answers`: values its timeline records that
+`show_when` and `exit_when` on that page or a later one can test. See
+[Answers page rules can test](jspsych_phase.md#answers-page-rules-can-test).
 
 ## Headphone check
 
@@ -29413,10 +29417,11 @@ hide_navbar: true  # Hides the entire navbar including navigation
 
 ### Custom Navigation Layout
 
-For custom navigation layouts, modify the HTML template:
+For a custom layout of the annotation form, point `task_layout` at your own
+HTML file ([Layout Customization](../configuration/layout_customization.md)):
 
 ```yaml
-html_layout: "path/to/custom_layout.html"
+task_layout: "templates/custom_layout.html"
 ```
 
 ## How Status is Determined
@@ -30935,10 +30940,11 @@ answer sent back to them as a score or feedback; see
   multi-field span pipeline.
 
   ```yaml
-  fields:
-    - key: trace
-      type: eval_trace
-      span_target: true        # enable span highlighting across the panes
+  instance_display:
+    fields:
+      - key: trace
+        type: eval_trace
+        span_target: true      # enable span highlighting across the panes
   annotation_schemes:
     - annotation_type: span
       name: error_spans
@@ -31428,8 +31434,11 @@ python -m potato.trace_converter -i traces.json --auto-detect -o data/converted.
 Export annotations for ML training pipelines:
 
 ```bash
-python -m potato.export -f coding_eval -o exports/ --types prm,preference,swebench,code_review
+python -m potato.export -c config.yaml -f coding_eval -o exports/ \
+    --option types=prm,preference,swebench,code_review
 ```
+
+Leave out `--option types=...` to write all four.
 
 | Format | Output | Use Case |
 |--------|--------|----------|
@@ -35173,6 +35182,159 @@ python potato/flask_server.py start examples/agent-traces/live-agent-evaluation/
 
 ---
 
+<!-- source: docs/agent-evaluation/interactive_chat.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/interactive_chat/
+
+# Interactive Agent Chat
+
+An annotator talks to an agent, clicks **Finish & Annotate**, and then rates
+the conversation they just had. Two pieces of config do this:
+
+- an `agent_proxy` block, which connects Potato to the agent backend;
+- an `instance_display` field of `type: interactive_chat`, which puts the chat
+  panel on the page.
+
+With only the proxy and no `interactive_chat` field, the server starts and
+loads the chat scripts, but the annotator has no panel to type in.
+
+## Example
+
+From `examples/agent-testing/interactive-agent-test/`:
+
+```yaml
+agent_proxy:
+  type: echo                 # echo, http, openai, subprocess_coding, docker_coding
+  responses:
+    - "I understand your request. Let me look into that for you."
+    - "Here's what I recommend based on my research."
+  sandbox:
+    max_steps: 20
+    max_session_seconds: 600
+    request_timeout_seconds: 60
+    rate_limit_per_minute: 10
+
+instance_display:
+  fields:
+    - key: task_description
+      type: text
+      label: "Task Description"
+    - key: conversation
+      type: interactive_chat
+      label: "Agent Interaction"
+      display_options:
+        show_turn_numbers: true
+        per_turn_ratings:
+          speakers: ["Agent"]
+          schemes:
+            - schema_name: turn_helpfulness
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Unhelpful", "Helpful"]
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent successfully complete the task?"
+    labels: [success, partial, failure]
+```
+
+The data file gives each item a task and an empty conversation:
+
+```json
+{"id": "task_1", "task_description": "Book a round-trip flight from New York to London.", "conversation": null}
+```
+
+Run it:
+
+```bash
+python potato/flask_server.py start examples/agent-testing/interactive-agent-test/config.yaml -p 8000
+```
+
+## From chat to annotation
+
+1. While the field's value is empty, the field shows a chat panel with
+   **Send** and **Finish & Annotate** buttons. The agent's session starts with
+   the item's `task_description` field as the task, or its `text` field when
+   there is no `task_description`.
+2. Each message goes to the proxy, within the `sandbox` limits listed below.
+3. **Finish & Annotate** writes the conversation into the item under the
+   field's `key`, as `speaker`/`text`/`timestamp` turns with the speakers
+   `User` and `Agent` (`System (Error)` for a failed call), and reloads the page.
+4. The field then renders the conversation like a `dialogue` field, with any
+   per-turn ratings, and the annotator fills in the annotation schemes.
+
+The conversation is kept in the server's memory with the item. Potato does not
+write it to the annotation output, and it is gone after a restart. The item
+holds one conversation, so a second annotator on the same item sees the first
+annotator's finished chat instead of a new panel.
+
+## `interactive_chat` field options
+
+Set these under the field's `display_options`.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `placeholder_text` | `Start chatting with the agent to begin the task.` | Text in the empty chat panel |
+| `per_turn_ratings` | none | Rating widgets under each turn of the finished conversation, as in [per-turn dialogue ratings](../annotation-types/instance_display.md#per-turn-dialogue-ratings) |
+| `show_turn_numbers` | `true` | Number the turns of the finished conversation |
+| `alternating_shading` | `true` | Shade alternate turns |
+
+The field also takes `span_target: true`, so annotators can highlight text in
+the finished conversation.
+
+## `agent_proxy` options
+
+| Key | Applies to | Default | Description |
+|-----|-----------|---------|-------------|
+| `type` | all | required | `echo`, `http`, `openai`, `subprocess_coding` or `docker_coding` |
+| `enabled` | all | `true` | `false` turns the proxy off without deleting the block |
+| `sandbox.max_steps` | all | 20 | Messages allowed per session |
+| `sandbox.max_session_seconds` | all | 600 | Session length limit |
+| `sandbox.request_timeout_seconds` | all | 60 | Timeout for one call to the backend |
+| `sandbox.rate_limit_per_minute` | all | 10 | Messages per annotator per minute |
+| `responses` | `echo` | built-in list | Replies to cycle through, for testing without a model |
+| `url` | `http` | required | Endpoint that receives a JSON POST per message |
+| `headers` | `http` | `{}` | Extra request headers |
+| `message_key` | `http` | `message` | Request field that carries the annotator's message |
+| `response_key` | `http` | `response` | Response field that holds the agent's reply |
+| `session_id_key` | `http` | `session_id` | Request field that carries the session id |
+| `send_history` | `http` | `false` | Also send the conversation so far |
+| `history_key` | `http` | `messages` | Request field for the history |
+| `api_key` | `openai` | `OPENAI_API_KEY` | Key, or `${ENV_VAR}`. Not needed with a `base_url` |
+| `base_url` | `openai` | OpenAI | An OpenAI-compatible server (vLLM, Ollama and others) |
+| `model` | `openai` | `gpt-4o` | Model name |
+| `system_prompt` | `openai` | empty | System message sent before the task |
+| `temperature` | `openai` | 0.7 | Sampling temperature |
+| `max_tokens` | `openai` | 1024 | Reply length limit |
+| `llm.*` | coding | `endpoint_type: ollama` | Model that plans each step: `endpoint_type`, `model`, `base_url`, `api_key`, `temperature` (0.2), `max_tokens` (800) |
+| `execution.per_step_timeout` | coding | 8 | Seconds allowed for one code step |
+| `execution.max_output_chars` | coding | 4000 | Output kept from each step |
+| `execution.starter_files` | coding | `{}` | Files to put in the workspace, as `{path: content}` |
+| `docker.image` | `docker_coding` | `python:3.11-slim` | Container image |
+| `docker.memory` | `docker_coding` | `512m` | Memory limit |
+| `docker.cpus` | `docker_coding` | 1.0 | CPU limit |
+| `docker.network` | `docker_coding` | `none` | Container network |
+
+The `openai` connection settings (`api_key`, `base_url`, `model`,
+`system_prompt`, `temperature`, `max_tokens`) can also go under `ai_config`
+inside the block. The flat form wins when both are given.
+
+`subprocess_coding` runs the agent's code as a local subprocess in a temporary
+directory, with a reduced environment and a per-step timeout. That is not a
+security boundary. Use `docker_coding` for anything you do not trust. The
+examples `coding-agent-live-test` and `coding-agent-docker-test` under
+`examples/agent-testing/` show both.
+
+## Related
+
+- [Live Agent Interaction](live_agent.md): watch and steer a browsing agent
+- [Turn-Level Annotation](turn_level_annotation.md): per-turn schemes on finished conversations
+- [Coding Agent Annotation](coding_agent_annotation.md)
+
+
+---
+
 <!-- source: docs/agent-evaluation/agent_task_recipes.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/agent_task_recipes/
 
@@ -35247,6 +35409,28 @@ How did the agent use its available context/memory?
 The `context_attribution` schema shares its turn-tagging + cross-turn-link
 machinery with `consensus_tracking`; both store
 `[{"turn": i, "act": ..., "ref": j, "agent_id": ...}]`.
+
+```yaml
+instance_display:
+  fields:
+    - key: conversation
+      type: dialogue
+      display_options:
+        show_turn_numbers: true
+
+annotation_schemes:
+  - annotation_type: context_attribution
+    name: memory_use
+    description: "How did the agent use its context?"
+    turns_key: conversation
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `turns_key` | `conversation` | Instance field that holds the list of turns |
+| `acts` | `[used_context_correctly, hallucinated_context, ignored_context]` | Tags the annotator can put on a turn |
+| `linked_acts` | `[used_context_correctly, hallucinated_context]` | Tags that then ask the annotator to click the source turn. A tag not listed here is stored without a `ref` |
+| `hint` | A sentence explaining the three default tags | HTML shown above the turns. Change it when you change `acts` |
 
 ## Building Your Own Recipe
 
@@ -46369,21 +46553,20 @@ assignment_strategy: random
 max_annotations_per_user: 10    # -1 for unlimited
 max_annotations_per_item: 3     # -1 for unlimited
 
-# Optional: nested configuration
-assignment:
-  strategy: random
-  max_annotations_per_item: 3
-  random_seed: 1234
+# Seed for random assignment (default 1234)
+random_seed: 1234
 ```
+
+All three are top-level keys. Potato does not read a nested `assignment:` block.
 
 ### Configuration Options Reference
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `diversity_clustering`, `batch`, `active_learning`, `llm_confidence` |
+| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `active_learning`, `category_based`, `diversity_clustering`, `batch`, `priority`, `psychometric`, `model_review`, `engine`, `llm_confidence` (not implemented; falls back to random) |
 | `max_annotations_per_user` | integer | Maximum annotations per user (-1 = unlimited) |
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
-| `assignment.random_seed` | integer | Seed for reproducible random assignment |
+| `random_seed` | integer | Seed for reproducible random assignment (default 1234) |
 
 ### Reclaiming Abandoned Assignments
 
@@ -57090,7 +57273,7 @@ python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 Takes the same options as CoNLL-2003, and with several annotators writes
 `annotations.<annotator>.conllu` for each.
 
-### Segmentation Masks (mask)
+### Segmentation Masks (mask_png)
 
 Export brush/fill mask annotations as PNG images, one per label per image.
 
@@ -57118,7 +57301,7 @@ copied**, and no class-mapping file is written.
 
 **Usage:**
 ```bash
-python -m potato.export -c config.yaml -f mask -o ./mask_export/
+python -m potato.export -c config.yaml -f mask_png -o ./mask_export/
 ```
 
 ### Parquet (parquet)
@@ -57736,6 +57919,24 @@ all.
 data. It merges unanimous agreements with adjudicated decisions into one
 dataset, which this exporter does not; use it when you want that merge.
 
+### Other formats
+
+These formats are documented on the page of the feature that produces them.
+
+| Format | Writes | Documented in |
+|--------|--------|---------------|
+| `labelme` | LabelMe JSON, one `.json` per image | [CV format matrix](format_matrix.md#export) |
+| `cvat` | CVAT XML 1.1 for images | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `darwin` | V7 Darwin JSON v2, one `.json` per item | [CV format matrix](format_matrix.md#export) |
+| `cityscapes` | Cityscapes polygons (`*_gtFine_polygons.json`) | [CV format matrix](format_matrix.md#export) |
+| `davis` | DAVIS / YouTube-VOS indexed PNG masks, one per frame | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `mot` | MOTChallenge tracking ground truth (`seqinfo.ini` and `gt/gt.txt`) | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `episode_jsonl` | Per-frame JSONL for embodied episodes (phase, progress reward, outcome), keyed by episode id and frame index | [Embodied episodes](../annotation-types/embodied/episodes.md) |
+| `keystrokes` | Keystroke event streams and typing-dynamics features, without the typed text | [Keystroke logging](../advanced/keystroke_logging.md) |
+| `annotation_telemetry` | Drawing event streams and annotation-process features | [Annotation telemetry](../advanced/annotation_telemetry.md) |
+| `labeling_engine` | Every item's label with its provenance, the quality certificate and the model-call log | [Labeling engine CLI and API](../labeling-engine/cli-and-api.md) |
+| `trajectory_correction` | Corrected agent trajectories as SFT targets and DPO preference pairs | [Trajectory correction](../agent-evaluation/trajectory_correction.md) |
+
 ## Programmatic Export
 
 Use the export registry directly in Python:
@@ -57985,7 +58186,7 @@ the gap, and the import counts such gaps.
 | `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
-| `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
+| `mask_png` | — | ✅ | ✅ | — | One RGBA PNG per (image, label): mask pixels in the label's colour at alpha 200, the rest transparent |
 | `web_annotation` | ✅ `xywh` fragment | ✅ SVG selector | ❌ | ❌ | W3C Web Annotation JSON-LD for IIIF viewers, Annotorious and Hypothesis; text spans as quote and position selectors. Pixels when the image size is known, else percent |
 | `iiif_annotations` | ✅ `canvas#xywh` | ✅ SVG selector | ❌ | ✅ PointSelector | One AnnotationPage per canvas in canvas coordinates, plus a manifest copy that references them; polylines and ellipses as SVG. See [Digital humanities](../guides/digital-humanities.md) |
 | `page_xml` | ✅ as a 4-point polygon | ✅ `Coords` | ❌ | ❌ | Edits the project's copy of each PAGE XML file in place: corrected line text, or moved, added and removed regions and lines |
@@ -62691,7 +62892,7 @@ Next, you'll need to specify what annotators annotate:
 
 There are a few other settings you can configure:
 
-- Choose an existing [HTML template](../annotation-types/schemas_and_templates.md#available-layout-templates) for the annotation task or create a new one
+- Optional: Replace the generated annotation form with your own HTML using [`task_layout`](../annotation-types/schemas_and_templates.md#layouts)
 - Optional: Specify privacy and access [settings](../auth-users/user_and_collaboration.md) for the task
 - Optional: Update the YAML file with the [UI and layout configuration](../configuration/configuration.md#ui-and-layout-configuration)
 - Optional: Set up [active learning](../ai-intelligence/active_learning_guide.md)

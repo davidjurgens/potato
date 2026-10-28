@@ -116,7 +116,7 @@ visual_display:
 
 See the complete working example at:
 - Config: `examples/span/span-linking/config.yaml`
-- Data: `examples/span/span-linking/data/span-linking-example.json`
+- Data: `examples/span/span-linking/data.json`
 
 To run:
 ```bash

@@ -63,7 +63,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `annotation_schemes` |  | array |  | The questions annotators answer. Each entry needs an annotation_type from the schema registry plus a name and description |  |
-| `phases` |  | array or object |  | Per-phase configuration (consent, instructions, training, annotation, post-study). Either a list of phase objects or a mapping with an `order` key. Phase-level annotation_schemes replace the top-level list rather than adding to it |  |
+| `phases` |  | array or object |  | Per-phase configuration. Either a list of phase objects or a mapping with an `order` key. Page types: consent, prestudy, instructions, training, annotation and poststudy, plus the runtime pages jspsych, headphone_check and external (oTree, Empirica, hosted surveys). `counterbalance` (a list of {pages, method: random \| latin_square}) orders groups of pages per participant. Phase-level annotation_schemes replace the top-level list rather than adding to it |  |
 | `pre_annotation` |  | object |  | Seed annotations to show as a starting point for each item | `agreement_metrics`, `allow_modification`, `enabled`, `field`, `highlight_low_confidence`, `predictions_file`, `show_confidence` |
 | `surveyflow` |  | object |  | Survey pages shown before and after annotation |  |
 | `training` |  | object |  | Qualification phase annotators must pass before real items | `allow_retry`, `annotation_schemes`, `data_file`, `enabled`, `failure_action`, `feedback`, `passing_criteria` |

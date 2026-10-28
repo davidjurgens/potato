@@ -23,9 +23,9 @@ You can find example data files
 currently support four different document formats:
 
 -   Text: body is the document plaintext
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.csv))
 -   Image, Video, or GIF: body is the filepath
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-as-input.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-label-example.json))
 -   Dialogue or a list of text: body is a list of comma-seperated
     documents and potato will automatically display the list of text
     horizontally.
@@ -36,14 +36,13 @@ currently support four different document formats:
 -   Html files
     - Put the .html files in a folder ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html_data)),
     - Then put the relatiev paths to these htmls as normal text input ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html-as-input.json))
--   Best-Worst Scaling: body is a comma-separated list of documents to
-    order
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json))
--   Custom Arguments: body is one of the above + extra fields for
-    whatever custom arguments you want to enter
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json)
-    \-- in this `kwargs` and `other_kwargs` are the custom endpoints for
-    a Likert scale)
+-   Best-Worst Scaling: one item per record; Potato groups the pool into
+    tuples using `bws_config` (see [Best-Worst Scaling](../annotation-types/comparison/bws.md))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/sentiment-pool.jsonl))
+-   Extra fields: a record can carry fields beyond the id and text, for
+    display fields or display logic to read
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-label-example.json),
+    with `gifs` and `gifs_path` fields)
 -   Annotating Document A in context of Document B: body is document A +
     extra `context` field with the body of document B
     ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/))

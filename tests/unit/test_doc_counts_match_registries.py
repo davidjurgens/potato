@@ -231,6 +231,10 @@ CLAIMS = [
     ("docs/comparison.md",
      r"\| Export formats \| (\d+) \| Multiple",
      "export_formats"),
+    # The jsPsych migration guide said 41 while the registry had 60.
+    ("docs/guides/coming-from-jspsych.md",
+     r"`python -m potato.export` \| (\d+) formats",
+     "export_formats"),
     ("docs/comparison.md",
      r"Export annotations in (\d+) formats",
      "export_formats"),

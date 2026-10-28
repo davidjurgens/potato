@@ -164,10 +164,11 @@ answer sent back to them as a score or feedback; see
   multi-field span pipeline.
 
   ```yaml
-  fields:
-    - key: trace
-      type: eval_trace
-      span_target: true        # enable span highlighting across the panes
+  instance_display:
+    fields:
+      - key: trace
+        type: eval_trace
+        span_target: true      # enable span highlighting across the panes
   annotation_schemes:
     - annotation_type: span
       name: error_spans

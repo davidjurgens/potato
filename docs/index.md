@@ -36,6 +36,9 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Structural Biology](guides/structural-biology.md) - Marking residues on protein structures
 - [Genomics](guides/genomics-variant-review.md) - Reviewing variant calls in igv.js
 - [Coming from Ibex and PCIbex](guides/coming-from-ibex.md) - Import an Ibex or PCIbex experiment with its Latin-square lists
+- [Coming from jsPsych](guides/coming-from-jspsych.md) - Run a jsPsych timeline inside a Potato study, and what maps to what
+- [Coming from Qualtrics](guides/coming-from-qualtrics.md), [REDCap](guides/coming-from-redcap.md), [ODK and KoboToolbox](guides/coming-from-odk.md) and [Network Canvas](guides/coming-from-network-canvas.md) - Import a questionnaire and its logic
+- [Linguistic Fieldwork](guides/linguistic-fieldwork.md) - Interlinear glossing with FLEx and Toolbox files
 
 ## Getting Started
 
@@ -102,6 +105,7 @@ over prose when writing a config or calling the API.
 - [Protein Structures](annotation-types/science/protein_structures.md) - Residue selection in 3Dmol.js or Mol*, with pLDDT colouring
 - [Genome Loci](annotation-types/science/genome_loci.md) - A locus in igv.js with reads, calls and features
 - [Spectrogram Annotation](annotation-types/multimedia/spectrogram_annotation.md) - Time-frequency boxes on audio
+- [Listening Tests](annotation-types/multimedia/listening_tests.md) - MUSHRA, BS.1116, ACR, DCR, CCR, P.835 and ABX audio tests
 - [Extractive QA](annotation-types/text/extractive_qa.md) - SQuAD-style answer span highlighting
 - [Rubric Evaluation](annotation-types/measurement/rubric_eval.md) - Multi-criteria rubric grid for LLM evaluation
 - [Text Edit / Post-Edit](annotation-types/text/text_edit.md) - Inline text editing with diff tracking
@@ -140,7 +144,9 @@ over prose when writing a config or calling the API.
 - [Category Assignment](advanced/category_assignment.md) - Category-based item assignment
 - [Surveyflow](workflow/surveyflow.md) - Pre/post annotation surveys
 - **[Experiment Flow](workflow/experiment_flow.md)** - Between-subjects conditions, page branching and screen-outs, counterbalanced page order, randomized question order
+- **[Runtime Phases](workflow/runtime_phases.md)** - jsPsych timelines, a headphone check, and tasks on other servers (oTree, Empirica) as pages of a study
 - **[jsPsych Phase](workflow/jspsych_phase.md)** - Run a jsPsych timeline as one page of a Potato study, with its data stored and exported
+- [Self-Paced Reading](workflow/self_paced_reading.md) - Self-paced reading and the Maze task, with reading times per region
 - **[Timed Trials](workflow/timed_trials.md)** - Fixation, stimulus duration, deadlines and key-to-label reaction times on annotation items
 - [Annotation Filtering](workflow/annotation_filtering.md) - Filter data based on prior annotations
 - [Survey Instruments](advanced/survey_instruments.md) - 55 pre-built validated psychological instruments
@@ -174,6 +180,7 @@ over prose when writing a config or calling the API.
 - [Signal-Based Triage Queue](agent-evaluation/triage_queue.md) - Prioritize the queue by a quality signal (errors / low score first)
 - [Hotkey Review Mode](guides/hotkey_review_mode.md) - Keyboard-driven review queue with auto-advance on completion
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
+- [Interactive Agent Chat](agent-evaluation/interactive_chat.md) - Annotators chat with an agent through `agent_proxy`, then rate the conversation
 - [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
@@ -260,6 +267,9 @@ over prose when writing a config or calling the API.
 - [Migration CLI](tools/migration_cli.md) - Upgrade v1 configs to v2
 - [Debugging Guide](tools/debugging_guide.md) - Debug flags and troubleshooting
 - [Simulator](tools/simulator.md) - Annotation simulation tool
+- [Import CLI](tools/import_cli.md) - Turn an existing annotation dataset into a runnable project
+- [Importing Surveys](tools/survey_import.md) - Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe and Network Canvas questionnaires as survey pages
+- [MCP Server](tools/mcp_server.md) - Lets coding agents list types, validate configs and build tasks
 - [API Reference](api-reference/api_reference.md) - REST API endpoints documentation
 
 ## Productivity Features

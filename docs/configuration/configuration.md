@@ -140,7 +140,6 @@ Example:
 ```yaml
 site_dir: default          # Use default templates
 customjs: null            # No custom JavaScript
-custom_ds: "default"      # Use default dataset handling
 ```
 
 ### Validation Requirements
@@ -165,8 +164,7 @@ Potato validates your configuration to ensure:
 ### Core Settings
 
 ```yaml
-# Server identification
-server_name: My Annotation Task
+# Task name, shown to annotators and in the browser title
 annotation_task_name: Sentiment Analysis Task
 
 # Root directory for your task's design and output
@@ -177,8 +175,7 @@ port: 8000
 ```
 
 **Key Options:**
-- **`server_name`**: Display name for the server (shown in browser title)
-- **`annotation_task_name`**: Name of the annotation task (shown to annotators)
+- **`annotation_task_name`**: Name of the annotation task, shown in the page header and the browser title
 - **`port`**: Port number for the server (default: 8000)
 - **`task_dir`**: The root directory for the task. All custom layout, data, and annotations will be placed in this directory. When set to `.` or a relative path, it is resolved relative to the config file's directory (not the current working directory). Using `task_dir: .` is recommended for portable configurations.
 
@@ -703,17 +700,15 @@ Potato supports multiple strategies for assigning items to annotators.
 
 ```yaml
 assignment_strategy: random  # Options: random, fixed_order, least_annotated, max_diversity
-
-# Alternative: nested configuration
-assignment:
-  strategy: random
-  max_annotations_per_item: 3
-  random_seed: 1234
+max_annotations_per_item: 3  # -1 for unlimited
+random_seed: 1234            # seed for random assignment (default 1234)
 ```
+
+These are top-level keys. Potato does not read a nested `assignment:` block.
 
 ### Available Strategies
 
-All eleven values of `assignment_strategy`, as defined by `AssignmentStrategy`
+All thirteen values of `assignment_strategy`, as defined by `AssignmentStrategy`
 in `potato/item_state_management.py`:
 
 | Strategy | What it does |
@@ -729,6 +724,8 @@ in `potato/item_state_management.py`:
 | `priority` | Serves items by a triage signal, errors and low scores first ([triage queue](../agent-evaluation/triage_queue.md)) |
 | `psychometric` | Routes items by expected information gain under a live IRT model, so confident items stop consuming annotation budget ([psychometrics](../advanced/psychometrics.md)) |
 | `llm_confidence` | **Not implemented.** Accepted by the config validator, but the assignment code falls back to random selection |
+| `model_review` | Serves prelabelled items least-confident first, for review of model output ([model review](../ai-intelligence/model_review.md)) |
+| `engine` | Serves the labeling engine's requests (calibration, verification, audit, adjudication) in its priority order ([labeling engine](../labeling-engine/overview.md)) |
 
 ### Legacy Assignment Configuration
 
@@ -764,18 +761,23 @@ phases:
 
 ```yaml
 ui:
-  show_progress: true
-  show_instructions: true
-  allow_navigation: true
-  allow_editing: true
+  theme: auto                 # auto, light or dark
+  max_instance_height: 400    # cap the instance text height, in pixels
 ```
 
 ### Keyboard Shortcuts
 
 ```yaml
 horizontal_key_bindings: true
-sequential_key_binding: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    labels: [positive, negative, neutral]
+    sequential_key_binding: true   # per scheme: keys 1, 2, 3
 ```
+
+`sequential_key_binding` belongs on an annotation scheme, not at the top level.
 
 ## AI Support
 
@@ -1063,7 +1065,6 @@ Here's a complete configuration file that demonstrates most features:
 ```yaml
 # Basic Configuration
 port: 8000
-server_name: Comprehensive Annotation Task
 annotation_task_name: Multi-Modal Text Analysis
 
 data_files:
@@ -1149,10 +1150,7 @@ annotation_schemes:
     step: 1
 
 ui:
-  show_progress: true
-  show_instructions: true
-  allow_navigation: true
-  allow_editing: true
+  theme: auto
 
 server:
   port: 8000
@@ -1161,10 +1159,7 @@ server:
 require_password: true
 persist_sessions: false
 
-assignment:
-  strategy: least_annotated
-  max_annotations_per_item: 3
-  random_seed: 1234
+random_seed: 1234
 
 site_dir: default
 customjs: null

@@ -37,6 +37,10 @@ These keys apply to every runtime phase:
 | `max_data_mb` | `10` | Largest run the server accepts |
 | `csp.extra_sources` | `[]` | `https://` origins the page may load fonts, images or scripts from |
 
+A jsPsych page can also list `answers`: values its timeline records that
+`show_when` and `exit_when` on that page or a later one can test. See
+[Answers page rules can test](jspsych_phase.md#answers-page-rules-can-test).
+
 ## Headphone check
 
 A screening page for listening studies: it checks that the participant is

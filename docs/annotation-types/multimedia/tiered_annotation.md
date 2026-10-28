@@ -264,7 +264,7 @@ For dependent tiers:
 Export to ELAN Annotation Format for use in ELAN:
 
 ```bash
-python -m potato.export --format eaf --input annotations.json --output ./eaf_output/
+python -m potato.export -c config.yaml -f eaf -o ./eaf_output/
 ```
 
 The EAF export:
@@ -278,7 +278,7 @@ The EAF export:
 Export to Praat TextGrid format:
 
 ```bash
-python -m potato.export --format textgrid --input annotations.json --output ./textgrid_output/
+python -m potato.export -c config.yaml -f textgrid -o ./textgrid_output/
 ```
 
 The TextGrid export:

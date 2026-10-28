@@ -1287,25 +1287,19 @@ annotation_codebook_url: "https://docs.google.com/document/d/example"
 # Hide navigation bar (for crowdworking)
 hide_navbar: false
 
-# HTML layout template
-html_layout: "default"  # Options: default, fixed_keybinding, kwargs, or custom path
+# Custom HTML for the annotation form area (optional)
+task_layout: "templates/my_layout.html"
 ```
 
-### Available Layout Templates
+### Layouts
 
-- **`default`**: General-purpose layout for most annotation tasks
-- **`fixed_keybinding`**: Shows keyboard shortcuts prominently
-- **`kwargs`**: Specialized layout for Likert scales with custom endpoints
-- **Custom path**: Point to your own HTML template file
+Without `task_layout`, Potato generates the annotation form from
+`annotation_schemes`. Set `task_layout` to an HTML file in your project to
+replace that form with your own markup. It applies to the annotation page
+only. A phase page takes its own `task_layout` inside its `phases:` entry.
+See [Layout Customization](../configuration/layout_customization.md).
 
-### Surveyflow Layout
-
-Use different layouts for survey pages vs annotation pages:
-
-```yaml
-html_layout: "templates/annotation-layout.html"
-surveyflow_html_layout: "default"
-```
+`html_layout` and `surveyflow_html_layout` are legacy keys and have no effect.
 
 ## Best Practices
 

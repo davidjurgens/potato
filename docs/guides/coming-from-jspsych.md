@@ -56,7 +56,7 @@ participant and exported with the rest.
 | Writing process | `keystroke_logging` | Content-blind keystroke timing on free-text fields |
 | Prolific URL variables, completion redirect | `login.type: url_direct` (or `prolific`) and `completion_code` | Completion and screen-out codes; `login.type: prolific` adds API monitoring |
 | SONA | `crowdsourcing.sona` | Automatic credit |
-| `jsPsych.data.get().csv()` | `python -m potato.export` | 41 formats, including CSV, JSONL, Parquet, Psych-DS and Frictionless Data Package. The CSV/TSV export adds `participants`, `trials` and `regions` tables |
+| `jsPsych.data.get().csv()` | `python -m potato.export` | 60 formats, including CSV, JSONL, Parquet, Psych-DS and Frictionless Data Package. The CSV/TSV export adds `participants`, `trials` and `regions` tables |
 | JATOS, Pavlovia, Cognition.run | `potato deploy`, Hugging Face Spaces | Potato is the server |
 | `simulation` mode | `python -m potato.simulator` | Simulated annotators against a running server |
 

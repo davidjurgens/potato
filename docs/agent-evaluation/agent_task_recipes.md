@@ -70,6 +70,28 @@ The `context_attribution` schema shares its turn-tagging + cross-turn-link
 machinery with `consensus_tracking`; both store
 `[{"turn": i, "act": ..., "ref": j, "agent_id": ...}]`.
 
+```yaml
+instance_display:
+  fields:
+    - key: conversation
+      type: dialogue
+      display_options:
+        show_turn_numbers: true
+
+annotation_schemes:
+  - annotation_type: context_attribution
+    name: memory_use
+    description: "How did the agent use its context?"
+    turns_key: conversation
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `turns_key` | `conversation` | Instance field that holds the list of turns |
+| `acts` | `[used_context_correctly, hallucinated_context, ignored_context]` | Tags the annotator can put on a turn |
+| `linked_acts` | `[used_context_correctly, hallucinated_context]` | Tags that then ask the annotator to click the source turn. A tag not listed here is stored without a `ref` |
+| `hint` | A sentence explaining the three default tags | HTML shown above the turns. Change it when you change `acts` |
+
 ## Building Your Own Recipe
 
 1. Pick a display: `dialogue`, `agent_trace`, `multi_agent_discussion`,

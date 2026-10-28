@@ -281,8 +281,11 @@ python -m potato.trace_converter -i traces.json --auto-detect -o data/converted.
 Export annotations for ML training pipelines:
 
 ```bash
-python -m potato.export -f coding_eval -o exports/ --types prm,preference,swebench,code_review
+python -m potato.export -c config.yaml -f coding_eval -o exports/ \
+    --option types=prm,preference,swebench,code_review
 ```
+
+Leave out `--option types=...` to write all four.
 
 | Format | Output | Use Case |
 |--------|--------|----------|

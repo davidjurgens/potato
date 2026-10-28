@@ -20,8 +20,9 @@ Users automatically progress through enabled phases in this order.
 Pages can be skipped by earlier answers (`show_when`), end the study for a
 participant (`exit_when`), be counterbalanced, or randomize their questions.
 Participants can be assigned to between-subjects conditions. See
-[Experiment Flow](experiment_flow.md). A page can also run a jsPsych timeline;
-see [jsPsych Phase](jspsych_phase.md).
+[Experiment Flow](experiment_flow.md). A page can also run a jsPsych timeline,
+Potato's headphone check, or a task on another server such as oTree or
+Empirica; see [Runtime Phases](runtime_phases.md).
 
 ## Back Navigation
 
@@ -439,6 +440,7 @@ ui_configuration:
 
 - [Conditional Logic](../configuration/conditional_logic.md) - Show/hide survey questions based on prior answers
 - [Experiment Flow](experiment_flow.md) - Page branching, screen-outs, conditions, counterbalancing
+- [Runtime Phases](runtime_phases.md) - jsPsych timelines, the headphone check, and external tasks as phase pages
 - [jsPsych Phase](jspsych_phase.md) - Run a jsPsych timeline as a phase page
 - [Training Phase](training_phase.md) - Configure qualification training with feedback
 - [Category-Based Assignment](../advanced/category_assignment.md) - Assign tasks based on training performance

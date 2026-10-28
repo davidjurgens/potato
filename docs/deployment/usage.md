@@ -36,7 +36,7 @@ Next, you'll need to specify what annotators annotate:
 
 There are a few other settings you can configure:
 
-- Choose an existing [HTML template](../annotation-types/schemas_and_templates.md#available-layout-templates) for the annotation task or create a new one
+- Optional: Replace the generated annotation form with your own HTML using [`task_layout`](../annotation-types/schemas_and_templates.md#layouts)
 - Optional: Specify privacy and access [settings](../auth-users/user_and_collaboration.md) for the task
 - Optional: Update the YAML file with the [UI and layout configuration](../configuration/configuration.md#ui-and-layout-configuration)
 - Optional: Set up [active learning](../ai-intelligence/active_learning_guide.md)

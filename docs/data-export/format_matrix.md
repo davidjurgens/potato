@@ -97,7 +97,7 @@ the gap, and the import counts such gaps.
 | `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
-| `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
+| `mask_png` | — | ✅ | ✅ | — | One RGBA PNG per (image, label): mask pixels in the label's colour at alpha 200, the rest transparent |
 | `web_annotation` | ✅ `xywh` fragment | ✅ SVG selector | ❌ | ❌ | W3C Web Annotation JSON-LD for IIIF viewers, Annotorious and Hypothesis; text spans as quote and position selectors. Pixels when the image size is known, else percent |
 | `iiif_annotations` | ✅ `canvas#xywh` | ✅ SVG selector | ❌ | ✅ PointSelector | One AnnotationPage per canvas in canvas coordinates, plus a manifest copy that references them; polylines and ellipses as SVG. See [Digital humanities](../guides/digital-humanities.md) |
 | `page_xml` | ✅ as a 4-point polygon | ✅ `Coords` | ❌ | ❌ | Edits the project's copy of each PAGE XML file in place: corrected line text, or moved, added and removed regions and lines |

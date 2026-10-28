@@ -160,6 +160,7 @@ nav:
         - Persona Simulation (multi-turn): agent-evaluation/persona_simulation.md
         - Triage Queue: agent-evaluation/triage_queue.md
         - Live Agent Interaction: agent-evaluation/live_agent.md
+        - Interactive Agent Chat: agent-evaluation/interactive_chat.md
         - Agent Task Recipes: agent-evaluation/agent_task_recipes.md
         - Turn-Level Annotation: agent-evaluation/turn_level_annotation.md
         - Multi-Agent Discussion: agent-evaluation/multi_agent_discussion.md

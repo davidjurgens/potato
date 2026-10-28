@@ -266,21 +266,20 @@ assignment_strategy: random
 max_annotations_per_user: 10    # -1 for unlimited
 max_annotations_per_item: 3     # -1 for unlimited
 
-# Optional: nested configuration
-assignment:
-  strategy: random
-  max_annotations_per_item: 3
-  random_seed: 1234
+# Seed for random assignment (default 1234)
+random_seed: 1234
 ```
+
+All three are top-level keys. Potato does not read a nested `assignment:` block.
 
 ### Configuration Options Reference
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `diversity_clustering`, `batch`, `active_learning`, `llm_confidence` |
+| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `active_learning`, `category_based`, `diversity_clustering`, `batch`, `priority`, `psychometric`, `model_review`, `engine`, `llm_confidence` (not implemented; falls back to random) |
 | `max_annotations_per_user` | integer | Maximum annotations per user (-1 = unlimited) |
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
-| `assignment.random_seed` | integer | Seed for reproducible random assignment |
+| `random_seed` | integer | Seed for reproducible random assignment (default 1234) |
 
 ### Reclaiming Abandoned Assignments
 

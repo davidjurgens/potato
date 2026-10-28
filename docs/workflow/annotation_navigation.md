@@ -93,10 +93,11 @@ hide_navbar: true  # Hides the entire navbar including navigation
 
 ### Custom Navigation Layout
 
-For custom navigation layouts, modify the HTML template:
+For a custom layout of the annotation form, point `task_layout` at your own
+HTML file ([Layout Customization](../configuration/layout_customization.md)):
 
 ```yaml
-html_layout: "path/to/custom_layout.html"
+task_layout: "templates/custom_layout.html"
 ```
 
 ## How Status is Determined

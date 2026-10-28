@@ -1,5 +1,5 @@
 # Documentation build requirements (Read the Docs builds from this file).
 # Top-level deps only; pip resolves a compatible set. Material ships its own
 # search + pymdown-extensions, so no separate pins are needed.
-mkdocs>=1.6
+mkdocs>=1.6,<2  # Material warns that MkDocs 2.0 breaks its plugins and themes
 mkdocs-material>=9.5

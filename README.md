@@ -29,7 +29,7 @@ Or run from source (recommended to get the `examples/`):
 
 ```bash
 git clone https://github.com/davidjurgens/potato.git
-cd potato && pip install -r requirements.txt
+cd potato && pip install -r requirements.txt && pip install -e .
 python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
 ```
 
@@ -68,6 +68,9 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation, and diarized transcripts synced to their audio ([docs](docs/annotation-types/multimedia/audio_dialogue.md)) |
 | **Documents** | PDF, Word, Markdown, code, and spreadsheets with coordinate mapping ([docs](docs/annotation-types/format_support.md)) |
+| **3D & Volumes** | Lidar and photogrammetry point clouds with 3D boxes and per-point segments; CT and MR volumes (DICOM, NIfTI) with label masks painted in linked axial, coronal and sagittal views ([point clouds](docs/annotation-types/spatial/point_cloud.md), [volumes](docs/annotation-types/multimedia/volume_annotation.md)) |
+| **Maps** | Labelled points, lines and polygons drawn on a map, pinned places, and labelled regions of an outline map ([docs](docs/annotation-types/spatial/geo_annotation.md)) |
+| **Science viewers** | Protein structures with residue selection, genome loci in igv.js for variant review, and spectrograms with time-frequency boxes for bioacoustics ([proteins](docs/annotation-types/science/protein_structures.md), [genomes](docs/annotation-types/science/genome_loci.md), [spectrograms](docs/annotation-types/multimedia/spectrogram_annotation.md)) |
 
 ### Annotation Schemes
 
@@ -80,6 +83,10 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | Free text | Open-ended responses with validation |
 | Triage | Rapid accept/reject/skip curation ([docs](docs/annotation-types/triage.md)) |
 | Conditional logic | Adaptive forms that respond to prior answers ([docs](docs/configuration/conditional_logic.md)) |
+| Interlinear glossing | Morpheme segmentation, glosses and a free translation for each sentence ([docs](docs/annotation-types/text/interlinear_gloss.md)) |
+| Ego networks | A respondent names people, answers questions about each, links who knows whom, and places them on a map ([docs](docs/annotation-types/structured/ego_network.md)) |
+| Listening tests | MUSHRA, BS.1116, ACR, DCR, CCR, P.835 and ABX audio tests ([docs](docs/annotation-types/multimedia/listening_tests.md)) |
+| Measurement | Visual analogue scales, semantic differentials, constant-sum, price lists, belief elicitation and other survey measures ([docs](docs/annotation-types/measurement/vas.md)) |
 
 ---
 
@@ -144,6 +151,18 @@ Enable it with `qda_mode`, which turns these features on together; see the [QDA 
 
 ---
 
+## Experiments & Surveys
+
+| Capability | Description |
+|------------|-------------|
+| **Experiment flow** | Assign participants to conditions, show or skip pages by condition, screen participants out, counterbalance page order, and randomize questions ([docs](docs/workflow/experiment_flow.md)) |
+| **Runtime phases** | Run a jsPsych timeline, a headphone check, or a task on another server (oTree, Empirica, a hosted survey) as a page of the study ([docs](docs/workflow/runtime_phases.md)) |
+| **Survey import** | `potato import` turns a Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe or Network Canvas questionnaire into Potato survey pages, with their show/hide logic ([docs](docs/tools/survey_import.md)) |
+| **Survey instruments** | A library of validated questionnaires (personality, mental health, affect, demographics) to drop into pre- and post-study pages ([docs](docs/advanced/survey_instruments.md)) |
+| **Self-paced reading** | Self-paced reading and the Maze task, with a reading time for each region ([docs](docs/workflow/self_paced_reading.md)) |
+
+---
+
 ## AI-Powered Annotation
 
 ### LLM Label Suggestions
@@ -194,7 +213,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Workflow | Description |
 |----------|-------------|
 | **Multi-annotator** | Multiple annotators per item with overlap control and agreement metrics |
-| **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/administration/admin_dashboard.md)) |
+| **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/administration/adjudication.md)) |
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
 | **Crowdsourcing** | Nine crowd providers: Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, the legacy `url_direct` login, and MTurk for archived studies (MTurk closed on September 30, 2026) ([docs](docs/deployment/crowdsourcing.md), [choosing a platform](docs/deployment/crowdsourcing-platforms.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
@@ -259,6 +278,14 @@ Ready-to-use templates organized by type in [`examples/`](examples/):
 | [QDA](examples/advanced/qda-mode-example/) | Qualitative analysis: living codebook, in-vivo coding, memos, cases |
 | [AI-Assisted](examples/ai-assisted/) | LLM suggestions, Ollama integration |
 | [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA, medical review |
+| [Text](examples/text/) | Correcting handwritten-text recognition, line by line |
+| [Conversation](examples/conversation/) | ConvoKit corpora, threaded forums, conversation trees |
+| [Spatial](examples/spatial/) | Lidar cuboids (KITTI), lidar sequences, depth-map evaluation |
+| [Embodied](examples/embodied/) | Robot episodes in LeRobot format |
+| [Labeling Engine](examples/labeling-engine/) | Certified machine labels for text, images and agent traces |
+| [Crowdsourcing](examples/crowdsourcing/) | Prolific, CloudResearch Connect, SONA, Microworkers, expert invites, generic panels |
+| [Agent Testing](examples/agent-testing/) | Chat with a live agent, or a coding agent in a subprocess or Docker, then rate it |
+| [Plugins](examples/plugins/) | A minimal plugin package that adds a display type |
 
 ### Live Demos on HuggingFace
 

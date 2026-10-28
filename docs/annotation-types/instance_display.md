@@ -82,7 +82,7 @@ still ignored. When an option appears in both places, `display_options` wins.
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
 | `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |
-| `interactive_chat` | Interactive agent chat with post-interaction trace display | Yes |
+| `interactive_chat` | Interactive agent chat with post-interaction trace display; needs an `agent_proxy` block, see [Interactive Agent Chat](../agent-evaluation/interactive_chat.md) | Yes |
 | `pairwise` | Side-by-side comparison | No |
 | `code` | Syntax-highlighted source code | Yes |
 | `spreadsheet` | Tabular data (Excel/CSV) | Yes (row/cell) |

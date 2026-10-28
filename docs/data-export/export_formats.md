@@ -421,7 +421,7 @@ python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 Takes the same options as CoNLL-2003, and with several annotators writes
 `annotations.<annotator>.conllu` for each.
 
-### Segmentation Masks (mask)
+### Segmentation Masks (mask_png)
 
 Export brush/fill mask annotations as PNG images, one per label per image.
 
@@ -449,7 +449,7 @@ copied**, and no class-mapping file is written.
 
 **Usage:**
 ```bash
-python -m potato.export -c config.yaml -f mask -o ./mask_export/
+python -m potato.export -c config.yaml -f mask_png -o ./mask_export/
 ```
 
 ### Parquet (parquet)
@@ -1066,6 +1066,24 @@ all.
 `python -m potato.adjudication_export` is the older, separate CLI for the same
 data. It merges unanimous agreements with adjudicated decisions into one
 dataset, which this exporter does not; use it when you want that merge.
+
+### Other formats
+
+These formats are documented on the page of the feature that produces them.
+
+| Format | Writes | Documented in |
+|--------|--------|---------------|
+| `labelme` | LabelMe JSON, one `.json` per image | [CV format matrix](format_matrix.md#export) |
+| `cvat` | CVAT XML 1.1 for images | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `darwin` | V7 Darwin JSON v2, one `.json` per item | [CV format matrix](format_matrix.md#export) |
+| `cityscapes` | Cityscapes polygons (`*_gtFine_polygons.json`) | [CV format matrix](format_matrix.md#export) |
+| `davis` | DAVIS / YouTube-VOS indexed PNG masks, one per frame | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `mot` | MOTChallenge tracking ground truth (`seqinfo.ini` and `gt/gt.txt`) | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `episode_jsonl` | Per-frame JSONL for embodied episodes (phase, progress reward, outcome), keyed by episode id and frame index | [Embodied episodes](../annotation-types/embodied/episodes.md) |
+| `keystrokes` | Keystroke event streams and typing-dynamics features, without the typed text | [Keystroke logging](../advanced/keystroke_logging.md) |
+| `annotation_telemetry` | Drawing event streams and annotation-process features | [Annotation telemetry](../advanced/annotation_telemetry.md) |
+| `labeling_engine` | Every item's label with its provenance, the quality certificate and the model-call log | [Labeling engine CLI and API](../labeling-engine/cli-and-api.md) |
+| `trajectory_correction` | Corrected agent trajectories as SFT targets and DPO preference pairs | [Trajectory correction](../agent-evaluation/trajectory_correction.md) |
 
 ## Programmatic Export
 
