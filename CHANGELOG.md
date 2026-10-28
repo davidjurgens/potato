@@ -20,6 +20,13 @@ All notable changes to the Potato annotation platform are documented in this fil
   does not count the missing data against annotators.
   ([#177](https://github.com/davidjurgens/potato/issues/177),
   [#178](https://github.com/davidjurgens/potato/pull/178), by @Eyecatch3r)
+- **jsPsych pages can report answers to page rules.** `answers: [agree]` on
+  a `type: jspsych` page takes `agree` from the last trial that recorded it,
+  as a survey question or a data field, and makes it `<page>_agree`, which
+  `show_when` and `exit_when` can test. A consent page written in jsPsych can
+  now screen out a participant who declines. Before, its `exit_when` had
+  nothing from the run to test
+  ([#177](https://github.com/davidjurgens/potato/issues/177)).
 
 ### Bug fixes
 

@@ -28,6 +28,7 @@ phases:
 | `extra_scripts` | `[]` | More `.js` files from the task directory, such as plugins Potato does not ship, loaded after `plugins` and before the timeline |
 | `assets_dir` | none | A folder of stimuli the timeline can load (images, audio, video, text, CSS, fonts) |
 | `expose_answers` | `[]` | Survey questions from earlier pages whose answers the timeline receives. Each must be asked on an earlier page; answers arrive as strings, numbers included (`"30"`) |
+| `answers` | `[]` | Values the timeline records that page rules can test, as `<page>_<name>`. See [Answers page rules can test](#answers-page-rules-can-test) |
 | `save` | `on_finish` | `incremental` also stores each trial as it finishes, so a closed tab keeps the trials done so far |
 | `allow_rerun` | `false` | Whether returning to a finished page runs the task again |
 | `max_data_mb` | `10` | Largest run the server accepts |
@@ -115,6 +116,43 @@ Every trial gets `potato_user`, `potato_page`, `potato_run_id`,
 ```
 
 Preload stimuli with the `preload` plugin, as in any jsPsych experiment.
+
+## Answers page rules can test
+
+`answers` lists values the timeline records. When the run finishes, each one
+takes its value from the last trial that recorded it, either as a survey
+question with that `name` (the value is in the trial's `response`) or as a
+data field (`data: {agree: 'No'}` on a trial, or set in its `on_finish`). It
+becomes the answer `<page>_<name>`, which `show_when` and `exit_when` on this
+page or a later one can test. A name that no trial recorded stays unanswered.
+
+This lets a consent page written in jsPsych screen out a participant who
+declines:
+
+```yaml
+phases:
+  order: [consent, annotation]
+  consent:
+    type: jspsych
+    timeline: tasks/consent.js
+    plugins: [survey-multi-choice]
+    answers: [agree]
+    exit_when:
+      show_when:
+        - {schema: consent_agree, operator: equals, value: "No"}
+      message: "Thank you. You chose not to take part."
+```
+
+```javascript
+window.potatoTimeline = [{
+    type: jsPsychSurveyMultiChoice,
+    questions: [{name: 'agree', prompt: 'Do you agree to take part?',
+                 options: ['Yes', 'No'], required: true}]
+}];
+```
+
+A participant who answers "No" sees the screened-out page with the message.
+The run's data is stored first, as with any `exit_when` on a jsPsych page.
 
 ## When the timeline ends
 
