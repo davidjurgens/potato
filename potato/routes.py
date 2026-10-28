@@ -7776,14 +7776,16 @@ def update_instance():
 
         # Trigger active-learning retraining check. When enough new annotations
         # have accumulated, this queues a background train + reorder of the
-        # unlabeled pool; never allowed to break the save.
-        try:
-            from potato.active_learning_manager import get_active_learning_manager
-            al_mgr = get_active_learning_manager()
-            if al_mgr and al_mgr.config.enabled:
-                al_mgr.check_and_trigger_training()
-        except Exception as e:
-            logger.debug("Active learning trigger skipped: %s", e)
+        # unlabeled pool; never allowed to break the save. Match the startup
+        # gate so a disabled feature does not import sklearn on the first save.
+        if config.get('active_learning', {}).get('enabled', False):
+            try:
+                from potato.active_learning_manager import get_active_learning_manager
+                al_mgr = get_active_learning_manager()
+                if al_mgr and al_mgr.config.enabled:
+                    al_mgr.check_and_trigger_training()
+            except Exception as e:
+                logger.debug("Active learning trigger skipped: %s", e)
 
         # Same trigger point for the model-training subsystem's auto-retrain.
         # Kept separate from active learning on purpose: one answers "what
