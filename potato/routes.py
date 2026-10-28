@@ -793,6 +793,16 @@ def home():
     return render_template("error.html", message="Invalid application state")
 
 
+def _resume_authenticated_login_phase(username):
+    """Resume an existing state that never advanced past authentication."""
+    manager = get_user_state_manager()
+    user_state = manager.get_user_state(username)
+    if user_state is not None and user_state.get_phase() == UserPhase.LOGIN:
+        # Use the configured flow so consent/instructions are not skipped.
+        manager.advance_phase(username)
+        manager.save_user_state(user_state)
+
+
 @app.route("/auth", methods=["GET", "POST"])
 def auth():
     """
@@ -819,6 +829,7 @@ def auth():
     """
     # Check if user is already logged in
     if 'username' in session and get_user_state_manager().has_user(session['username']):
+        _resume_authenticated_login_phase(session['username'])
         logger.debug(f"User {session['username']} already logged in, redirecting to annotate")
         return redirect(url_for("annotate"))
 
@@ -875,6 +886,7 @@ def auth():
                 else:
                     usm.advance_phase(user_id)
                 return redirect(url_for("annotate"))
+            _resume_authenticated_login_phase(user_id)
             return redirect(url_for("annotate"))
         else:
             logger.warning(f"Login failed for user: {user_id}")
