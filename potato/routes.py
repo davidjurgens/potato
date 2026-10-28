@@ -39,6 +39,7 @@ Key Features:
 from __future__ import annotations
 
 import json
+import math
 import re
 import logging
 import traceback
@@ -9165,6 +9166,43 @@ def _tracked_in_current_phase(block_name, user_state, instance_id=None):
     return tracker_active_in_phase(config, block_name, phase, page)
 
 
+def _interaction_batch_error(data):
+    """Validate the entire batch before creating or changing a user's bucket."""
+    def finite_number(value):
+        if type(value) not in (int, float):
+            return False
+        try:
+            return math.isfinite(value)
+        except OverflowError:
+            # JSON integers are unbounded; timing arithmetic uses floats.
+            return False
+
+    events = data.get('events', [])
+    if not isinstance(events, list):
+        return "'events' must be a list of objects"
+    for event in events:
+        if not isinstance(event, dict):
+            return "'events' must be a list of objects"
+        for key in ('event_type', 'target'):
+            if key in event and not isinstance(event[key], str):
+                return f"Event '{key}' must be a string"
+        if not isinstance(event.get('metadata', {}), dict):
+            return "Event 'metadata' must be an object"
+        for key in ('timestamp', 'client_timestamp'):
+            value = event.get(key)
+            if value is not None and (not finite_number(value) or value < 0):
+                return f"Event '{key}' must be a finite non-negative number"
+
+    focus_time = data.get('focus_time', {})
+    if not isinstance(focus_time, dict):
+        return "'focus_time' must be an object"
+    if any(not finite_number(value) or value < 0 for value in focus_time.values()):
+        return "Focus durations must be finite non-negative numbers"
+    if 'scroll_depth' in data and not finite_number(data['scroll_depth']):
+        return "'scroll_depth' must be a finite number"
+    return None
+
+
 @app.route("/api/track_interactions", methods=["POST"])
 def track_interactions():
     """
@@ -9186,10 +9224,13 @@ def track_interactions():
         return jsonify({"error": "Not authenticated"}), 401
 
     username = session['username']
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
+    if not isinstance(data, dict) or not data:
+        return jsonify({"error": "Expected a non-empty JSON object"}), 400
+    error = _interaction_batch_error(data)
+    if error:
+        return jsonify({"error": error}), 400
 
     # interaction_tracking.enabled: false is enforced here, not only in the
     # browser (a page rendered before the switch may still post the full
@@ -9291,7 +9332,10 @@ def track_interactions():
 
     # Update scroll depth
     if 'scroll_depth' in data:
-        scroll_depth = data['scroll_depth']
+        # scrollTop has subpixel precision while scrollHeight is rounded;
+        # browser overscroll can also cross either edge. Keep valid events
+        # and focus time, but store this observational percentage in range.
+        scroll_depth = max(0, min(100, data['scroll_depth']))
         if hasattr(bd, 'update_scroll_depth'):
             bd.update_scroll_depth(scroll_depth)
         elif hasattr(bd, 'scroll_depth_max'):
