@@ -5836,6 +5836,15 @@ def agent_chat_send():
     try:
         sandbox = _get_agent_sandbox()
 
+        # A chat finished before a restart has no in-memory session left, but
+        # its transcript is stored; starting a new one would overwrite it.
+        from potato import agent_chat_store
+        from potato.agent_proxy import get_agent_session_manager
+        if get_agent_session_manager().get_session(username, instance_id) is None:
+            task_dir, project = agent_chat_store.store_location(config)
+            if agent_chat_store.get_transcript(task_dir, project, username, instance_id):
+                return jsonify({"error": "Chat session already finished"}), 400
+
         # Get or create session
         agent_session = _get_or_create_agent_session(username, instance_id)
 
@@ -5886,7 +5895,7 @@ def agent_chat_send():
 
 @app.route("/agent_chat/finish", methods=["POST"])
 def agent_chat_finish():
-    """Finish the chat and write conversation data to the item."""
+    """Finish the chat and store the conversation for this user and item."""
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
@@ -5922,17 +5931,25 @@ def agent_chat_finish():
                 "timestamp": msg.timestamp,
             })
 
-        # Write conversation into item data
-        item_data = item.get_data()
-        # Find the conversation field key from instance_display config
-        conv_key = "conversation"
-        display_fields = config.get("instance_display", {}).get("fields", [])
-        for field in display_fields:
-            if field.get("type") == "interactive_chat":
-                conv_key = field.get("key", "conversation")
-                break
-
-        item_data[conv_key] = conversation
+        # Store the conversation against THIS user and item. It used to be
+        # written into the shared item's data, so every other annotator of the
+        # item was shown this conversation in place of a chat of their own,
+        # and the transcript was lost on restart and absent from exports. The
+        # page render overlays it for this user only
+        # (agent_chat_store.with_user_transcript).
+        from potato import agent_chat_store
+        task_dir, project = agent_chat_store.store_location(config)
+        agent_chat_store.save_transcript(
+            task_dir,
+            project=project,
+            user_id=username,
+            instance_id=instance_id,
+            field_key=agent_chat_store.chat_field_key(config) or "conversation",
+            conversation=conversation,
+            step_count=agent_session.step_count,
+            started_at=agent_session.started_at,
+            proxy_type=(config.get("agent_proxy") or {}).get("type"),
+        )
 
         # Mark session as finished
         agent_session.finished = True
@@ -9190,6 +9207,13 @@ def _interaction_batch_error(data):
         except OverflowError:
             # JSON integers are unbounded; timing arithmetic uses floats.
             return False
+
+    # The id keys the behavioral bucket; a list or object would be str()'d
+    # into a new bucket named after its repr.
+    instance_id = data.get('instance_id')
+    if instance_id is not None and (
+            isinstance(instance_id, bool) or not isinstance(instance_id, (str, int))):
+        return "'instance_id' must be a string"
 
     events = data.get('events', [])
     if not isinstance(events, list):

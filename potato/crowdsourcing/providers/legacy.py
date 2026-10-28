@@ -84,7 +84,8 @@ class LegacyUrlDirectProvider(CrowdProvider):
 
     def completion_action(self, identity, outcome):
         code = self._code_for_outcome(self.config.get('completion', {}) or {}, outcome)
-        submit_to = identity.extra.get('turkSubmitTo') if identity else None
+        submit_to = normalize_submit_url(
+            identity.extra.get('turkSubmitTo') if identity else None)
         assignment_id = identity.extra.get('assignmentId') if identity else None
 
         if submit_to and assignment_id:
@@ -94,7 +95,7 @@ class LegacyUrlDirectProvider(CrowdProvider):
             return CompletionAction(
                 kind="post_form",
                 code=code,
-                form_action=normalize_submit_url(submit_to),
+                form_action=submit_to,
                 form_fields=fields,
                 platform_label="MTurk",
             )

@@ -71,16 +71,36 @@ python potato/flask_server.py start examples/agent-testing/interactive-agent-tes
    the item's `task_description` field as the task, or its `text` field when
    there is no `task_description`.
 2. Each message goes to the proxy, within the `sandbox` limits listed below.
-3. **Finish & Annotate** writes the conversation into the item under the
-   field's `key`, as `speaker`/`text`/`timestamp` turns with the speakers
-   `User` and `Agent` (`System (Error)` for a failed call), and reloads the page.
+3. **Finish & Annotate** stores the conversation for this annotator and this
+   item, as `speaker`/`text`/`timestamp` turns with the speakers `User` and
+   `Agent` (`System (Error)` for a failed call), and reloads the page.
 4. The field then renders the conversation like a `dialogue` field, with any
    per-turn ratings, and the annotator fills in the annotation schemes.
 
-The conversation is kept in the server's memory with the item. Potato does not
-write it to the annotation output, and it is gone after a restart. The item
-holds one conversation, so a second annotator on the same item sees the first
-annotator's finished chat instead of a new panel.
+### Storage and export
+
+When an annotator clicks **Finish & Annotate**, Potato stores the conversation
+for that annotator and that item in the project database
+(`<task_dir>/project.sqlite`, table `agent_chat_transcripts`). The page then
+shows that annotator their own conversation in place of the chat panel. Every
+other annotator assigned the same item still gets an empty chat panel and has
+a conversation of their own. A finished chat cannot be reopened, and its
+stored conversation survives a server restart. A chat that is never finished
+is not stored.
+
+Exports include the conversation:
+
+- `jsonl`: the annotator's record for the item carries an `agent_chat` object
+  with `field`, `proxy_type`, `step_count`, `started_at`, `finished_at` and
+  `conversation` (a list of `{speaker, text, timestamp}` turns). Records exist
+  only for items the annotator labeled.
+- `csv` and `tsv`: a sidecar file, `agent_chat_turns.csv` or
+  `agent_chat_turns.tsv`, has one row per turn with the columns `user_id`,
+  `instance_id`, `field`, `turn_index`, `speaker`, `text`, `timestamp`,
+  `proxy_type`, `step_count`, `started_at`, `finished_at`. It also covers
+  chats on items the annotator did not label.
+
+Adjudicators see the item without any annotator's conversation.
 
 ## `interactive_chat` field options
 

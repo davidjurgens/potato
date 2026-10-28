@@ -19,6 +19,7 @@ import html
 import logging
 
 from .base import BaseDisplay, css_length, display_text
+from potato.server_utils.html_sanitizer import strip_active_content
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ class SpreadsheetDisplay(BaseDisplay):
         if isinstance(data, dict):
             # Pre-extracted FormatOutput data
             if "rendered_html" in data:
-                return self._wrap_content(data["rendered_html"], options, field_key)
+                return self._wrap_content(strip_active_content(data["rendered_html"]), options, field_key)
 
             # Extract from metadata. `columns` is accepted alongside
             # `headers`: {columns, rows} is the obvious spelling and the one a

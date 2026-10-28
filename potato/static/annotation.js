@@ -3456,10 +3456,16 @@ function restoreExtractiveQaAnnotations() {
                 if (container && data.start >= 0 && data.end > data.start) {
                     var text = container.textContent;
                     var color = container.dataset.highlightColor || '#FFEB3B';
-                    container.innerHTML = text.substring(0, data.start) +
-                        '<span class="eqa-highlight" style="background-color:' + color + '">' +
-                        text.substring(data.start, data.end) + '</span>' +
-                        text.substring(data.end);
+                    // textContent has decoded the passage's entities, so it
+                    // must go back in as text, not markup.
+                    var mark = document.createElement('span');
+                    mark.className = 'eqa-highlight';
+                    mark.style.backgroundColor = color;
+                    mark.textContent = text.substring(data.start, data.end);
+                    container.replaceChildren(
+                        document.createTextNode(text.substring(0, data.start)),
+                        mark,
+                        document.createTextNode(text.substring(data.end)));
                 }
             }
         } catch (e) {

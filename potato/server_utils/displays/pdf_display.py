@@ -21,6 +21,7 @@ import json
 import logging
 
 from .base import BaseDisplay, css_length
+from potato.server_utils.html_sanitizer import strip_active_content
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +326,7 @@ class PDFDisplay(BaseDisplay):
 
         # Check if this is FormatOutput-style content
         if "rendered_html" in content:
-            inner_html = content["rendered_html"]
+            inner_html = strip_active_content(content["rendered_html"])
         elif "text" in content:
             # Fall back to plain text
             inner_html = f'<pre class="pdf-extracted-text">{html.escape(content["text"])}</pre>'
@@ -340,7 +341,7 @@ class PDFDisplay(BaseDisplay):
         if "metadata" in content:
             meta = content["metadata"]
             if "total_pages" in meta:
-                metadata_html = f'<div class="pdf-metadata">Pages: {meta["total_pages"]}</div>'
+                metadata_html = f'<div class="pdf-metadata">Pages: {html.escape(str(meta["total_pages"]))}</div>'
 
         return f'''
             <div class="pdf-display pdf-extracted"
@@ -539,7 +540,7 @@ class PDFDisplay(BaseDisplay):
         if "rendered_html" in content:
             # Content has pre-rendered HTML
             parts.append('<div class="pdf-pages-container">')
-            parts.append(content["rendered_html"])
+            parts.append(strip_active_content(content["rendered_html"]))
             parts.append('</div>')
         else:
             # Render pages from metadata
@@ -550,8 +551,8 @@ class PDFDisplay(BaseDisplay):
                 parts.append(
                     f'<div class="pdf-page-wrapper" '
                     f'data-page="{i}" '
-                    f'data-page-width="{page_width}" '
-                    f'data-page-height="{page_height}">'
+                    f'data-page-width="{html.escape(str(page_width))}" '
+                    f'data-page-height="{html.escape(str(page_height))}">'
                 )
                 parts.append(f'<div class="pdf-page-number">Page {i}</div>')
                 parts.append('<div class="pdf-page-content-bbox">')

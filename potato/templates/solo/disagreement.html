@@ -161,7 +161,7 @@
         <div class="label-buttons">
             {% for label in labels %}
             {% if label != disagreement.human_label and label != disagreement.llm_label %}
-            <button type="button" class="label-btn" data-label="{{ label }}" onclick="selectOtherLabel('{{ label }}')">{{ label }}</button>
+            <button type="button" class="label-btn" data-label="{{ label }}" onclick='selectOtherLabel({{ label|tojson }})'>{{ label }}</button>
             {% endif %}
             {% endfor %}
         </div>
@@ -214,9 +214,9 @@
 
         // Set value
         if (type === 'human') {
-            document.getElementById('resolution-value').value = '{{ disagreement.human_label if disagreement else "" }}';
+            document.getElementById('resolution-value').value = {{ (disagreement.human_label if disagreement else "")|tojson }};
         } else if (type === 'llm') {
-            document.getElementById('resolution-value').value = '{{ disagreement.llm_label if disagreement else "" }}';
+            document.getElementById('resolution-value').value = {{ (disagreement.llm_label if disagreement else "")|tojson }};
         }
 
         // Hide other options if not "other"

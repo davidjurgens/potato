@@ -994,7 +994,7 @@
         tbody.innerHTML = rows
           .map((u) => `
                 <tr${u.used_touch_device ? ' class="admin-row-flagged"' : ""}>
-                    <td>${u.username}</td>
+                    <td>${escapeHtml(u.username)}</td>
                     <td>${u.last_device || "—"}${u.used_touch_device ? " 📱" : ""}</td>
                     <td>${u.mobile_visits}</td>
                     <td>${u.tablet_visits}</td>
@@ -1023,7 +1023,7 @@
           .map(
             (annotator) => `
                 <tr>
-                    <td>${annotator.user_id}</td>
+                    <td>${escapeHtml(annotator.user_id)}</td>
                     <td><span class="status-badge status-${annotator.phase.toLowerCase()}">${
               annotator.phase
             }</span></td>
@@ -1271,11 +1271,11 @@
             (question) => `
                 <div class="question-card">
                     <div class="question-header">
-                        <h3 class="question-title">${question.name}</h3>
-                        <span class="question-type">${question.type}</span>
+                        <h3 class="question-title">${escapeHtml(question.name)}</h3>
+                        <span class="question-type">${escapeHtml(question.type)}</span>
                     </div>
 
-                    <p class="question-description">${question.description}</p>
+                    <p class="question-description">${escapeHtml(question.description)}</p>
 
                     <div class="question-stats">
                         <div class="question-stat">
@@ -1431,7 +1431,7 @@
           html += "<h5>Most Common Words</h5>";
           html += '<div class="common-words">';
           common_words.forEach(([word, count]) => {
-            html += `<span class="word-tag">${word}<span class="count">(${count})</span></span>`;
+            html += `<span class="word-tag">${escapeHtml(word)}<span class="count">(${escapeHtml(count)})</span></span>`;
           });
           html += "</div>";
         }
@@ -1481,7 +1481,7 @@
         if (analysis.most_common && analysis.most_common.length > 0) {
           html += "<p><strong>Most common labels:</strong> ";
           html += analysis.most_common
-            .map(([label, count]) => `${label} (${count})`)
+            .map(([label, count]) => `${escapeHtml(label)} (${escapeHtml(count)})`)
             .join(", ");
           html += "</p>";
         }
@@ -1539,22 +1539,22 @@
         const awaiting = submissions.filter((s) => s.status === "AWAITING REVIEW");
         const submissionRows = submissions.slice(0, 50).map((s) => `
           <tr>
-            <td>${s.participant_id || ""}</td>
-            <td>${s.status || ""}</td>
+            <td>${escapeHtml(s.participant_id || "")}</td>
+            <td>${escapeHtml(s.status || "")}</td>
             <td>${s.started_at ? s.started_at.substring(0, 16) : ""}</td>
             <td>
               ${s.status === "AWAITING REVIEW" ? `
-                <button class="shadcn-button" onclick="crowdApprove('${s.id}')">Approve</button>
-                <button class="shadcn-button" onclick="crowdReject('${s.id}')">Reject</button>
+                <button class="shadcn-button" onclick="crowdApprove(${escapeHtml(JSON.stringify(String(s.id)))})">Approve</button>
+                <button class="shadcn-button" onclick="crowdReject(${escapeHtml(JSON.stringify(String(s.id)))})">Reject</button>
               ` : ""}
             </td>
           </tr>`).join("");
 
         panel.innerHTML = `
           <div class="question-card">
-            <h3>Prolific Study: ${study.name || studyId}</h3>
+            <h3>Prolific Study: ${escapeHtml(study.name || studyId)}</h3>
             <p>
-              Status: <strong>${study.status}</strong> ·
+              Status: <strong>${escapeHtml(study.status)}</strong> ·
               Places: ${study.places_taken || 0}/${study.total_available_places || 0} ·
               Reward: ${study.reward != null ? study.reward : "?"}
             </p>
@@ -1727,10 +1727,10 @@
 
         // Show study IDs or HIT IDs
         if (platformKey === "prolific" && platformData.study_ids && platformData.study_ids.length > 0) {
-          html += `<p><strong>Study IDs:</strong> ${platformData.study_ids.join(", ")}</p>`;
+          html += `<p><strong>Study IDs:</strong> ${escapeHtml(platformData.study_ids.join(", "))}</p>`;
         }
         if (platformKey === "mturk" && platformData.hit_ids && platformData.hit_ids.length > 0) {
-          html += `<p><strong>HIT IDs:</strong> ${platformData.hit_ids.join(", ")}</p>`;
+          html += `<p><strong>HIT IDs:</strong> ${escapeHtml(platformData.hit_ids.join(", "))}</p>`;
         }
 
         // Workers table
@@ -1770,7 +1770,7 @@
 
           html += `
                   <tr>
-                    <td>${worker.worker_id}</td>
+                    <td>${escapeHtml(worker.worker_id)}</td>
                     <td><span class="status-badge ${phaseClass}">${worker.phase.replace("Phase.", "")}</span></td>
                     <td>${worker.total_annotations}</td>
                     <td>${formatTime(Math.round(worker.total_seconds || 0))}</td>
@@ -1780,9 +1780,9 @@
           `;
 
           if (platformKey === "prolific") {
-            html += `<td>${worker.session_id || "N/A"}</td>`;
+            html += `<td>${escapeHtml(worker.session_id || "N/A")}</td>`;
           } else if (platformKey === "mturk") {
-            html += `<td>${worker.assignment_id || "N/A"}</td>`;
+            html += `<td>${escapeHtml(worker.assignment_id || "N/A")}</td>`;
           }
 
           html += `</tr>`;
@@ -2271,7 +2271,7 @@
             <h4>Interaction Types</h4>
             <div class="common-words">
               ${Object.entries(data.interaction_types).map(([type, count]) =>
-                `<span class="word-tag">${type}<span class="count">(${count})</span></span>`
+                `<span class="word-tag">${escapeHtml(type)}<span class="count">(${escapeHtml(count)})</span></span>`
               ).join('')}
             </div>
           </div>
@@ -2279,7 +2279,7 @@
             <h4>Change Sources</h4>
             <div class="common-words">
               ${Object.entries(data.change_sources).map(([source, count]) =>
-                `<span class="word-tag">${source}<span class="count">(${count})</span></span>`
+                `<span class="word-tag">${escapeHtml(source)}<span class="count">(${escapeHtml(count)})</span></span>`
               ).join('')}
             </div>
           </div>
@@ -2291,7 +2291,7 @@
                                 user.suspicion_score > 0.3 ? "color: var(--warning-text);" : "";
           return `
             <tr>
-              <td>${user.user_id}</td>
+              <td>${escapeHtml(user.user_id)}</td>
               <td>${user.total_instances}</td>
               <td>${user.avg_time_sec == null ? 'n/a' : user.avg_time_sec.toFixed(1)}</td>
               <td>${user.instances_with_interaction_log === 0
@@ -2458,8 +2458,8 @@
         tbody.innerHTML = scores.map((row, i) => `
           <tr>
             <td>${row.rank || i + 1}</td>
-            <td><code>${row.item_id || ''}</code></td>
-            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${row.text || ''}</td>
+            <td><code>${escapeHtml(row.item_id || '')}</code></td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(row.text || '')}</td>
             <td><strong>${typeof row.score === 'number' ? row.score.toFixed(4) : row.score || ''}</strong></td>
             <td>${row.best_count !== undefined ? row.best_count : ''}</td>
             <td>${row.worst_count !== undefined ? row.worst_count : ''}</td>
@@ -2553,7 +2553,7 @@
 
             return `
               <tr>
-                <td>${uid}</td>
+                <td>${escapeHtml(uid)}</td>
                 <td>
                   <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <div style="flex: 1; background: var(--muted); border-radius: 4px; height: 8px; overflow: hidden;">
@@ -2612,8 +2612,8 @@
 
                       return `
                         <tr>
-                          <td>${id}</td>
-                          <td><strong>${preds[id]}</strong></td>
+                          <td>${escapeHtml(id)}</td>
+                          <td><strong>${escapeHtml(preds[id])}</strong></td>
                           <td>
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                               <div style="flex: 1; max-width: 100px; background: var(--muted); border-radius: 4px; height: 6px; overflow: hidden;">
@@ -2716,7 +2716,7 @@
 
         // Load embedding-viz.js if not already loaded
         if (typeof initEmbeddingVisualization === 'undefined') {
-          await loadScript('/static/js/embedding-viz.js');
+          await loadScript('/static/js/embedding-viz.js?v=2');
         }
 
         // Initialize the visualization

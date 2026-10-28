@@ -835,7 +835,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=49"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=50"></script>
     {% if trial_timing_client_config %}
     <!-- Timed trials: fixation, stimulus duration, deadline, key-to-label RT.
          After annotation.js, whose navigation and save it drives. -->
@@ -910,7 +910,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=55"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=56"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -933,7 +933,7 @@
 
     {% if frontend_assets.deepzoom | default(false) %}
     <script src="{{ url_for('static', filename='vendor/openseadragon-5.0.1.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='deepzoom-viewer.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='deepzoom-viewer.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Interactive segmentation. Loaded only when a schema configures the
@@ -1063,12 +1063,12 @@
 
     <!-- Multi-document event annotation manager -->
     {% if frontend_assets.multi_document_event | default(false) %}
-    <script src="{{ url_for('static', filename='multi-document-event.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='multi-document-event.js') }}?v=7"></script>
     {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
     {% if frontend_assets.entity_linking | default(false) %}
-    <script src="{{ url_for('static', filename='entity-linking.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='entity-linking.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Coreference chain manager -->
@@ -1182,7 +1182,7 @@
     <!-- Web Agent Trace Viewer (overlays + step navigation) -->
     {% if frontend_assets.web_agent_viewer | default(false) %}
     <script src="{{ url_for('static', filename='web-agent-overlays.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='web-agent-viewer.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='web-agent-viewer.js') }}?v=2"></script>
     {% endif %}
     {% if frontend_assets.web_agent_playback | default(false) %}
     <script src="{{ url_for('static', filename='web-agent-playback.js') }}?v=2"></script>
@@ -1194,7 +1194,7 @@
     <!-- Live Agent Viewer (real-time agent interaction) -->
     {% if live_agent_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/live-agent.css') }}?v=2">
-    <script src="{{ url_for('static', filename='live-agent-viewer.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='live-agent-viewer.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Instance height limit functionality -->
@@ -1293,7 +1293,7 @@
                 one to add it to your queue.</div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='search.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='search.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Universal Codebook tray, rendered only when a codebook is configured.
@@ -1390,7 +1390,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=17"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=18"></script>
     {% endif %}
     {% endif %}
 </body>

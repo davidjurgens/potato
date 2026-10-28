@@ -12,8 +12,9 @@ Tests:
 8. Multiple messages accumulate in the chat panel
 
 Note: Uses pytest-native class (not unittest.TestCase) so tests run in
-definition order. Tests that call finish (mutating shared item data) are
-placed LAST to avoid polluting items for earlier tests.
+definition order. Tests that call finish are placed LAST. A finished chat is
+stored per user and item, so it no longer reaches other users' pages, but
+the ordering is kept in case tests share a user.
 """
 
 import json

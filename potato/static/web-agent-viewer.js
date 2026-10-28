@@ -272,7 +272,7 @@ class WebAgentViewer {
 
         const coords = step.coordinates || {};
         if (coords.x !== undefined || coords.y !== undefined) {
-            html += `<div class="step-coords"><strong>Coords:</strong> (${coords.x || 0}, ${coords.y || 0})</div>`;
+            html += `<div class="step-coords"><strong>Coords:</strong> (${this._escapeHtml(String(coords.x || 0))}, ${this._escapeHtml(String(coords.y || 0))})</div>`;
         }
 
         const typed = step.typed_text || step.value || '';

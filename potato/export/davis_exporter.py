@@ -31,6 +31,7 @@ from .cv_utils import (
     extract_image_annotations,
     blank_item_warning,
     get_image_dimensions,
+    grouped_objects_record,
     normalize_annotation_object,
     polygons_to_rle,
 )
@@ -107,7 +108,7 @@ class DAVISExporter(BaseExporter):
         for instance_id, objects in sorted(by_image.items()):
             item = context.items.get(instance_id, {})
             width, height = get_image_dimensions(
-                item, config=context.config, annotation=ann)
+                item, config=context.config, annotation=grouped_objects_record(objects))
             if width <= 0 or height <= 0:
                 warnings.append(
                     f"{instance_id} has no image dimensions; skipped.")

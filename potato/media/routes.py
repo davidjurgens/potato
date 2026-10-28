@@ -106,7 +106,14 @@ def media_proxy(filepath: str):
     # mid-study should see the new one. Flask still sends Last-Modified/ETag, so
     # a prefetched copy revalidates with a 304 instead of re-downloading.
     if suffix in IMAGE_PASSTHROUGH or suffix in VIDEO_PASSTHROUGH:
-        return send_file(resolved)
+        response = send_file(resolved)
+        # Same rule as routes.serve_media: media is project data, possibly
+        # from someone else's export, so an SVG opened directly must not run
+        # script as this site. An <img> of it is unaffected.
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        if suffix in (".svg", ".svgz"):
+            response.headers["Content-Security-Policy"] = "sandbox"
+        return response
 
     output_dir = _config().get("output_annotation_dir") or _config().get(
         "task_dir", ".")

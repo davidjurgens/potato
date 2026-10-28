@@ -322,8 +322,12 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
             continue
 
         # Special handling for href/src attributes — block dangerous URLs
-        if attr_name in ('href', 'src'):
-            if any(p.search(attr_value) for p in DANGEROUS_PATTERNS):
+        if attr_name in ('href', 'src', 'srcset', 'poster'):
+            # Browsers drop ASCII tab/CR/LF anywhere in a URL and leading
+            # control characters and spaces, so `java<TAB>script:` is still a
+            # javascript: URL. Match against the URL as the browser reads it.
+            url_as_parsed = re.sub(r'[\x00-\x20\x7f]', '', attr_value)
+            if any(p.search(url_as_parsed) for p in DANGEROUS_PATTERNS):
                 logger.warning(f"Blocked dangerous pattern in {attr_name} attribute")
                 continue
 
@@ -449,6 +453,58 @@ def escape_for_attribute(text: str) -> str:
         .replace('`', '&#96;')
         .replace('$', '&#36;')
     )
+
+
+#: Tags whose content is itself code or a nested document: dropped whole.
+_ACTIVE_TAGS = {
+    'script', 'style', 'iframe', 'frame', 'frameset', 'object', 'embed',
+    'applet', 'svg', 'math', 'template', 'noscript', 'link', 'meta', 'base',
+    'form', 'input', 'button', 'textarea', 'select', 'option', 'xmp',
+    'noembed', 'noframes', 'plaintext', 'portal',
+}
+_URL_ATTRS = {'href', 'src', 'srcset', 'poster', 'action', 'formaction',
+              'xlink:href', 'background', 'cite', 'data', 'ping'}
+
+
+def strip_active_content(markup: str) -> str:
+    """Pre-rendered display HTML with everything executable removed.
+
+    For the ``rendered_html`` that the code, PDF and spreadsheet displays
+    accept from an item. That markup is normally produced by Potato's format
+    handlers, but an item can supply the dict itself, so it is not trusted.
+    ``sanitize_html`` would also strip the ``data-*`` attributes those
+    displays position by, so this keeps structure and attributes and removes
+    only what can run: script-bearing elements, ``on*`` handlers, ``srcdoc``,
+    and URLs with a javascript:/vbscript:/data: scheme.
+    """
+    if not markup:
+        return ""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(str(markup), "html.parser")
+    for tag in soup.find_all(True):
+        if tag.decomposed:
+            continue
+        if tag.name.lower() in _ACTIVE_TAGS:
+            tag.decompose()
+            continue
+        for attr in list(tag.attrs):
+            name = attr.lower()
+            value = tag.attrs[attr]
+            if isinstance(value, list):
+                value = " ".join(value)
+            if name.startswith('on') or name in ('srcdoc', 'formaction'):
+                del tag.attrs[attr]
+            elif name in _URL_ATTRS:
+                url_as_parsed = re.sub(r'[\x00-\x20\x7f]', '', str(value))
+                if any(p.search(url_as_parsed) for p in DANGEROUS_PATTERNS):
+                    del tag.attrs[attr]
+            elif name == 'style':
+                cleaned = _sanitize_style(str(value))
+                if cleaned:
+                    tag.attrs[attr] = cleaned
+                else:
+                    del tag.attrs[attr]
+    return str(soup)
 
 
 # Register as Jinja2 filter

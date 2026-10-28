@@ -26,6 +26,45 @@ logger = logging.getLogger(__name__)
 
 web_proxy_bp = Blueprint('web_proxy', __name__)
 
+#: Scripts and forms run, but in an opaque origin: no access to this site's
+#: cookies, storage or same-origin APIs.
+_PROXY_SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups allow-modals"
+
+
+#: Path prefix that carries a proxy token in rewritten URLs.
+_TOKEN_PREFIX = "_pt_"
+_TOKEN_SALT = "potato-web-proxy"
+_TOKEN_MAX_AGE = 12 * 60 * 60
+
+
+def _token_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(current_app.secret_key, salt=_TOKEN_SALT)
+
+
+def _proxy_token() -> str:
+    """A signed, expiring token that authorizes proxy requests, and nothing else.
+
+    The sandboxed proxied page has an opaque origin, so the browser does not
+    send the session cookie (SameSite=Lax) with its image, stylesheet and
+    link requests. The token in each rewritten URL stands in for it. The
+    proxied page can read its own URL, so the token names no user.
+    """
+    return _token_serializer().dumps("proxy")
+
+
+def _split_token(url: str):
+    """``(token is valid, url without the token segment)``."""
+    if not url.startswith(_TOKEN_PREFIX):
+        return False, url
+    token, _, rest = url[len(_TOKEN_PREFIX):].partition("/")
+    try:
+        from itsdangerous import BadSignature
+        valid = _token_serializer().loads(token, max_age=_TOKEN_MAX_AGE) == "proxy"
+    except BadSignature:
+        return False, rest
+    return valid, rest
+
 
 def _login_required(f):
     """Require user authentication for web proxy routes."""
@@ -84,7 +123,6 @@ def _validate_url(target_url: str) -> tuple:
 
 
 @web_proxy_bp.route('/api/web_agent/proxy/<path:url>')
-@_login_required
 def proxy(url):
     """
     Reverse proxy endpoint that fetches and serves external web content.
@@ -92,6 +130,10 @@ def proxy(url):
     Strips framing restrictions and rewrites URLs to maintain proxy routing.
     """
     import requests as req_lib
+
+    token_ok, url = _split_token(url)
+    if 'username' not in session and not token_ok:
+        return redirect(url_for('login'))
 
     # Reconstruct the full URL (path may have been split)
     target_url = url
@@ -146,7 +188,7 @@ def proxy(url):
         # For HTML content, rewrite URLs and inject recording script
         if 'text/html' in content_type:
             body = resp.text
-            body = _rewrite_urls(body, resp.url)
+            body = _rewrite_urls(body, resp.url, _proxy_token())
             body = _inject_recorder_script(body)
 
             # Build response, stripping frame restrictions
@@ -166,6 +208,15 @@ def proxy(url):
 
         # Set permissive CSP
         proxy_resp.headers['X-Frame-Options'] = 'ALLOWALL'
+        # The proxied page is someone else's HTML served from this server's
+        # origin. Without a sandbox its scripts run as this site, with the
+        # viewer's session: a link to the proxy sent to an admin would act as
+        # the admin. `sandbox` without allow-same-origin gives the page an
+        # opaque origin. The recorder only talks to it through postMessage,
+        # which still works. Applied to every proxied type: an SVG or XHTML
+        # document runs script too.
+        proxy_resp.headers['Content-Security-Policy'] = _PROXY_SANDBOX_CSP
+        proxy_resp.headers['X-Content-Type-Options'] = 'nosniff'
 
         return proxy_resp
 
@@ -223,8 +274,13 @@ def check_frameable():
         return {'frameable': False, 'reason': str(e)}
 
 
-def _rewrite_urls(html_content: str, base_url: str) -> str:
-    """Rewrite relative URLs in HTML to route through proxy."""
+def _rewrite_urls(html_content: str, base_url: str, token: str = "") -> str:
+    """Rewrite relative URLs in HTML to route through proxy.
+
+    With ``token``, each rewritten URL carries it, so requests from the
+    sandboxed page authenticate without the session cookie.
+    """
+    prefix = "/api/web_agent/proxy/" + (f"{_TOKEN_PREFIX}{token}/" if token else "")
     parsed_base = urlparse(base_url)
     base_origin = f"{parsed_base.scheme}://{parsed_base.netloc}"
 
@@ -247,7 +303,7 @@ def _rewrite_urls(html_content: str, base_url: str) -> str:
         else:
             abs_url = urljoin(base_url, url_val)
 
-        proxy_url = f"/api/web_agent/proxy/{abs_url}"
+        proxy_url = f"{prefix}{abs_url}"
         return f'{attr}={quote_char}{proxy_url}{quote_char}'
 
     pattern = r'(href|src|action)=(["\'])(.*?)\2'

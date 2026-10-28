@@ -256,6 +256,17 @@ def extract_image_annotations(annotation: dict) -> List[Tuple[str, List[dict]]]:
     return results
 
 
+def grouped_objects_record(objects: List[dict]) -> dict:
+    """An annotation-shaped record holding one image's grouped objects.
+
+    Exporters that group objects by image size each image after the grouping
+    loop. They used to pass that loop's last annotation record, so an image
+    whose size came from a mask's RLE took the size of whichever image was
+    annotated last. This record holds the image's own objects instead.
+    """
+    return {"image_annotations": {"_grouped": list(objects or [])}}
+
+
 def has_image_annotation_record(annotation: dict) -> bool:
     """True when an annotator reviewed this image, whatever they drew.
 

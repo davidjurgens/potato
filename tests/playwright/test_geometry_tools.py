@@ -216,3 +216,41 @@ class TestGeometryTools(BasePlaywrightTest):
         original = {a["type"]: a for a in before}
         assert by_type["ellipse"]["coordinates"] == original["ellipse"]["coordinates"]
         assert by_type["polyline"]["coordinates"] == original["polyline"]["coordinates"]
+
+
+class TestLandmarkDoesNotDrift(BasePlaywrightTest):
+    """A landmark moved right on every save and restore.
+
+    The stored point was read from the centre of the landmark's group (its
+    circle plus its label text) instead of the circle, so each round trip
+    shifted it by about half the label's width, and a fresh landmark was drawn
+    a few pixels up and left of the click.
+    """
+
+    def test_landmark_holds_its_point_over_three_round_trips(self, page, geometry_server):
+        self.register_and_login(page, geometry_server)
+        page.goto(f"{geometry_server.base_url}/annotate")
+        self.image_manager_ready(page, "shapes")
+        self.click_points_on_image(page, "shapes", "landmark", [(0.40, 0.50)],
+                                   label="cell")
+        first = [a for a in self.read_annotation_data(page, "shapes")
+                 if a.get("type") == "landmark"]
+        assert len(first) == 1
+        x, y = first[0]["coordinates"]["x"], first[0]["coordinates"]["y"]
+        assert abs(x - 0.40) < TOL and abs(y - 0.50) < TOL, (x, y)
+
+        for round_trip in range(3):
+            self.wait_for_debounce(page)
+            self.click_next(page)
+            self.image_manager_ready(page, "shapes")
+            self.click_prev(page)
+            self.image_manager_ready(page, "shapes")
+            page.wait_for_function(
+                "() => (document.getElementById('input-shapes') || {}).value")
+            got = [a for a in self.read_annotation_data(page, "shapes")
+                   if a.get("type") == "landmark"]
+            assert len(got) == 1, f"round trip {round_trip + 1}: {got}"
+            gx, gy = got[0]["coordinates"]["x"], got[0]["coordinates"]["y"]
+            assert abs(gx - x) < TOL and abs(gy - y) < TOL, (
+                f"round trip {round_trip + 1}: stored ({x:.4f}, {y:.4f}), "
+                f"restored ({gx:.4f}, {gy:.4f})")

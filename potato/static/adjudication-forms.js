@@ -252,10 +252,10 @@ window.AdjudicationForms = (function () {
             var colorClass = getAnnotatorColor(uid);
 
             html += '<div class="adj-likert-dot ' + colorClass + '" style="left:' + pct + '%;" ' +
-                'data-annotator="' + uid + '" data-value="' + val + '" ' +
-                'title="' + uid + ': ' + val + '">' +
+                'data-annotator="' + escapeHtml(uid) + '" data-value="' + escapeHtml(val) + '" ' +
+                'title="' + escapeHtml(uid) + ': ' + escapeHtml(val) + '">' +
                 '</div>';
-            html += '<div class="adj-likert-dot-label" style="left:' + pct + '%">' + uid + ': ' + val + '</div>';
+            html += '<div class="adj-likert-dot-label" style="left:' + pct + '%">' + escapeHtml(uid) + ': ' + escapeHtml(val) + '</div>';
         });
 
         html += '</div>';
@@ -294,13 +294,13 @@ window.AdjudicationForms = (function () {
             var timing = getTimingMs(behavioralData, userId);
             var timeStr = formatTime(timing);
 
-            html += '<div class="adj-text-response" data-annotator="' + userId + '">';
+            html += '<div class="adj-text-response" data-annotator="' + escapeHtml(userId) + '">';
             html += '<div class="adj-text-response-header">';
             html += '<label class="adj-text-select-label">' +
-                '<input type="checkbox" class="adj-text-select-cb" data-annotator="' + userId + '" data-schema="' + schemaName + '">' +
+                '<input type="checkbox" class="adj-text-select-cb" data-annotator="' + escapeHtml(userId) + '" data-schema="' + schemaName + '">' +
                 '</label>';
             html += '<span class="adj-annotator-name">' +
-                userId + '</span>';
+                escapeHtml(userId) + '</span>';
             if (timeStr) {
                 html += '<span class="adj-annotator-timing"><i class="fas fa-clock"></i> ' + timeStr + '</span>';
             }
@@ -332,10 +332,13 @@ window.AdjudicationForms = (function () {
         return renderLikertForm(schema, annotations, behavioralData, config);
     }
 
+    // Escapes quotes too: callers put the result in attribute values
+    // (data-annotator, title, src) as well as element bodies, and the
+    // usernames and item fields it receives are not the researcher's.
     function escapeHtml(text) {
-        var div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text === null || text === undefined ? '' : text)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     /**
@@ -370,19 +373,19 @@ window.AdjudicationForms = (function () {
             html += '<div class="adj-span-annotator-group">';
             html += '<div class="adj-span-annotator-header">';
             html += createIdentityChip(userId, timing);
-            html += '<button type="button" class="adj-span-adopt-all-btn" data-annotator="' + userId +
+            html += '<button type="button" class="adj-span-adopt-all-btn" data-annotator="' + escapeHtml(userId) +
                 '" data-schema="' + schemaName + '"><i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
 
             schemaSpans.forEach(function(span, idx) {
                 var spanTitle = span.title || span.name || '';
                 var spanText = spanTitle || ('chars ' + span.start + '-' + span.end);
-                html += '<div class="adj-span-item" data-span-idx="' + idx + '" data-annotator="' + userId + '">';
+                html += '<div class="adj-span-item" data-span-idx="' + idx + '" data-annotator="' + escapeHtml(userId) + '">';
                 html += '<span class="adj-span-label-badge ' + colorClass + '">' +
                     escapeHtml(span.name || 'span') + '</span>';
                 html += '<span class="adj-span-text">' + escapeHtml(spanText) + '</span>';
                 html += '<button type="button" class="adj-span-adopt-btn" ' +
-                    'data-annotator="' + userId + '" data-span-idx="' + idx +
+                    'data-annotator="' + escapeHtml(userId) + '" data-span-idx="' + idx +
                     '" data-schema="' + schemaName + '">' +
                     '<i class="fas fa-check"></i> Adopt</button>';
                 html += '</div>';
@@ -473,19 +476,21 @@ window.AdjudicationForms = (function () {
         var shapes = '';
         objects.forEach(function(obj, idx) {
             var c = obj.coordinates;
+            // Annotator-submitted JSON: only numbers may reach the markup.
+            var n = function (v) { var x = Number(v); return isFinite(x) ? x : 0; };
             var common = 'stroke-width="0.006" vector-effect="non-scaling-stroke" ' +
                 'data-idx="' + idx + '"';
             if (obj.type === 'mask') {
                 shapes += '<rect class="adj-shape adj-shape-mask" x="0.02" y="0.02" ' +
                     'width="0.96" height="0.96" stroke-dasharray="0.02 0.02" ' + common + '></rect>';
             } else if (Array.isArray(c)) {
-                var pts = c.map(function(p) { return p.x + ',' + p.y; }).join(' ');
+                var pts = c.map(function(p) { return n(p && p.x) + ',' + n(p && p.y); }).join(' ');
                 shapes += '<polygon class="adj-shape" points="' + pts + '" ' + common + '></polygon>';
             } else if (c && c.width !== undefined) {
-                shapes += '<rect class="adj-shape" x="' + c.x + '" y="' + c.y + '" width="' + c.width +
-                    '" height="' + c.height + '" ' + common + '></rect>';
+                shapes += '<rect class="adj-shape" x="' + n(c.x) + '" y="' + n(c.y) + '" width="' + n(c.width) +
+                    '" height="' + n(c.height) + '" ' + common + '></rect>';
             } else if (c && c.x !== undefined) {
-                shapes += '<circle class="adj-shape adj-shape-point" cx="' + c.x + '" cy="' + c.y +
+                shapes += '<circle class="adj-shape adj-shape-point" cx="' + n(c.x) + '" cy="' + n(c.y) +
                     '" r="0.015" ' + common + '></circle>';
             }
         });
@@ -518,7 +523,7 @@ window.AdjudicationForms = (function () {
             html += '<div class="adj-complex-annotator-group ' + colorClass + '">';
             html += '<div class="adj-complex-annotator-header">';
             html += createIdentityChip(userId, getTimingMs(behavioralData, userId));
-            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
+            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + escapeHtml(userId) +
                 '" data-schema="' + schemaName + '" data-type="image">' +
                 '<i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
@@ -528,7 +533,7 @@ window.AdjudicationForms = (function () {
             objects.forEach(function(obj, idx) {
                 var label = obj.label || obj.type || 'annotation';
                 html += '<div class="adj-complex-item">';
-                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
+                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + escapeHtml(userId) +
                     '" data-idx="' + idx + '" data-schema="' + schemaName + '" data-type="image">';
                 html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(label) + '</span>';
                 html += ' <span class="adj-complex-detail">' + escapeHtml(describeShape(obj)) + '</span>';
@@ -573,7 +578,7 @@ window.AdjudicationForms = (function () {
             html += '<div class="adj-complex-annotator-group ' + colorClass + '">';
             html += '<div class="adj-complex-annotator-header">';
             html += createIdentityChip(userId, getTimingMs(behavioralData, userId));
-            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
+            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + escapeHtml(userId) +
                 '" data-schema="' + schemaName + '" data-type="' + mediaType + '">' +
                 '<i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
@@ -583,7 +588,7 @@ window.AdjudicationForms = (function () {
                 var startT = formatMediaTime(seg.start_time || seg.startTime || 0);
                 var endT = formatMediaTime(seg.end_time || seg.endTime || 0);
                 html += '<div class="adj-complex-item">';
-                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
+                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + escapeHtml(userId) +
                     '" data-idx="' + idx + '" data-schema="' + schemaName + '" data-type="' + mediaType + '">';
                 html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(label) + '</span>';
                 html += ' <span class="adj-complex-detail">' + startT + ' - ' + endT + '</span>';
@@ -599,7 +604,7 @@ window.AdjudicationForms = (function () {
                         var kfLabel = kf.label || 'keyframe';
                         var kfTime = formatMediaTime(kf.time || 0);
                         html += '<div class="adj-complex-item">';
-                        html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
+                        html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + escapeHtml(userId) +
                             '" data-idx="kf-' + idx + '" data-schema="' + schemaName + '" data-type="keyframe">';
                         html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(kfLabel) + '</span>';
                         html += ' <span class="adj-complex-detail">@ ' + kfTime + '</span>';

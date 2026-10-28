@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "c77db3d87ad113d7",
-    "version": "49"
+    "sha256": "1c6755d7fbd8cd0c",
+    "version": "50"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -44,8 +44,8 @@
     "version": "6"
   },
   "codebook.js": {
-    "sha256": "097bf544478be842",
-    "version": "17"
+    "sha256": "73bbd6fce063cc89",
+    "version": "18"
   },
   "coding-trace.css": {
     "sha256": "4bca924e005a6ca3",
@@ -128,8 +128,8 @@
     "version": "1"
   },
   "deepzoom-viewer.js": {
-    "sha256": "3460c245a4e260fe",
-    "version": "1"
+    "sha256": "0a1d929044b5af5d",
+    "version": "2"
   },
   "depth-viewer.css": {
     "sha256": "e8775174ac8f510c",
@@ -168,8 +168,8 @@
     "version": "1"
   },
   "entity-linking.js": {
-    "sha256": "c3ea7f6df2f1cd4a",
-    "version": "2"
+    "sha256": "b7003775f05eaf79",
+    "version": "3"
   },
   "episode-timeline.css": {
     "sha256": "7a4f9db2b01a4f68",
@@ -220,8 +220,8 @@
     "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "22dacc9e32b8833b",
-    "version": "55"
+    "sha256": "44a32bb3673cef18",
+    "version": "56"
   },
   "incentive-elicitation.css": {
     "sha256": "20183e12b6f6efa0",
@@ -276,8 +276,8 @@
     "version": "3"
   },
   "live-agent-viewer.js": {
-    "sha256": "fd3a2f51e3383b10",
-    "version": "2"
+    "sha256": "9f44f03c600dd2f9",
+    "version": "3"
   },
   "live-coding-agent-viewer.js": {
     "sha256": "4e3e4daffd673849",
@@ -308,8 +308,8 @@
     "version": "3"
   },
   "multi-document-event.js": {
-    "sha256": "e41b3239c9740446",
-    "version": "6"
+    "sha256": "b7e3b282e8447060",
+    "version": "7"
   },
   "object-attributes.js": {
     "sha256": "3d2caba2c3ef1d3a",
@@ -388,8 +388,8 @@
     "version": "1"
   },
   "search.js": {
-    "sha256": "a964fce2b19dc807",
-    "version": "3"
+    "sha256": "59e757aba4f55482",
+    "version": "4"
   },
   "segment-questions.js": {
     "sha256": "b36087cf0e27b508",
@@ -564,7 +564,7 @@
     "version": "1"
   },
   "web-agent-viewer.js": {
-    "sha256": "f71fc56115e7d605",
-    "version": "1"
+    "sha256": "ff6c36b304093aa5",
+    "version": "2"
   }
 }

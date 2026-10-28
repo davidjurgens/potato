@@ -368,7 +368,7 @@ class DocumentDisplay(BaseDisplay):
             indent_class = f"outline-level-{level}"
             parts.append(
                 f'<li class="{indent_class}">'
-                f'<a href="#" data-offset="{offset}" class="outline-link">'
+                f'<a href="#" data-offset="{html.escape(str(offset), quote=True)}" class="outline-link">'
                 f'{html.escape(title)}'
                 f'</a></li>'
             )
@@ -385,18 +385,20 @@ class DocumentDisplay(BaseDisplay):
         info_items = []
 
         if "format" in metadata:
-            info_items.append(f"Format: {metadata['format'].upper()}")
+            info_items.append(f"Format: {html.escape(str(metadata['format']).upper())}")
 
         if "paragraph_count" in metadata or "paragraphs" in metadata:
             count = len(metadata.get("paragraphs", [])) or metadata.get("paragraph_count", 0)
             if count:
-                info_items.append(f"Paragraphs: {count}")
+                info_items.append(f"Paragraphs: {html.escape(str(count))}")
 
         if "line_count" in metadata:
-            info_items.append(f"Lines: {metadata['line_count']}")
+            info_items.append(f"Lines: {html.escape(str(metadata['line_count']))}")
 
         if "char_count" in metadata:
-            info_items.append(f"Characters: {metadata['char_count']:,}")
+            _chars = metadata['char_count']
+            info_items.append("Characters: " + (f"{_chars:,}" if isinstance(_chars, int)
+                                                else html.escape(str(_chars))))
 
         if not info_items:
             return ""

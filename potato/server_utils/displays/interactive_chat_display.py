@@ -5,9 +5,11 @@ Renders either a live chat panel (when conversation data is null/empty)
 or a completed dialogue (when conversation data is populated).
 
 Before the annotator finishes chatting, this shows the chat UI.
-After clicking "Finish & Annotate", the route writes the conversation
-into the item data, and this display renders the completed conversation
-using DialogueDisplay (which supports per-turn ratings).
+After clicking "Finish & Annotate", the route stores the conversation for
+that annotator and item (potato/agent_chat_store.py), the page render puts
+it on that annotator's view of the item only, and this display renders the
+completed conversation using DialogueDisplay (which supports per-turn
+ratings). Every other annotator of the item still gets an empty panel.
 """
 
 import html

@@ -34,8 +34,9 @@ def create_agent_chat_config(test_dir, max_steps=5):
     """Create a config with agent_proxy and interactive_chat display."""
     abs_test_dir = os.path.abspath(test_dir)
 
-    # Create enough test data items so each test gets a fresh item
-    # (the finish route writes conversation data to shared item_data)
+    # Create enough test data items so each test gets a fresh item. (Finished
+    # chats are stored per user and item; the isolation is covered in
+    # test_agent_chat_transcript_isolation.py.)
     tasks = [
         "Book a flight to London.",
         "Find a hotel in Paris.",

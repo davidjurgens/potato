@@ -701,18 +701,18 @@
                 `<input type="checkbox" class="el-result-checkbox" ${isLinked ? 'checked' : ''}>` : '';
 
             return `
-                <div class="el-result-item ${linkedClass}" data-entity-id="${entity.entity_id}"
-                     data-kb-source="${entity.kb_source}" data-label="${escapeHtml(entity.label)}">
+                <div class="el-result-item ${linkedClass}" data-entity-id="${escapeHtml(String(entity.entity_id ?? ''))}"
+                     data-kb-source="${escapeHtml(String(entity.kb_source ?? ''))}" data-label="${escapeHtml(entity.label)}">
                     <div class="el-result-header">
                         ${checkbox}
                         <span class="el-result-label">${escapeHtml(entity.label)}</span>
-                        <span class="el-result-id">${entity.entity_id}</span>
+                        <span class="el-result-id">${escapeHtml(String(entity.entity_id ?? ''))}</span>
                         ${linkedBadge}
                     </div>
                     ${entity.description ? `<div class="el-result-desc">${escapeHtml(entity.description)}</div>` : ''}
                     ${entity.aliases && entity.aliases.length > 0 ?
                         `<div class="el-result-aliases">Also: ${entity.aliases.slice(0, 3).map(a => escapeHtml(a)).join(', ')}</div>` : ''}
-                    ${entity.url ? `<a href="${entity.url}" target="_blank" class="el-result-link">View in KB</a>` : ''}
+                    ${safeHttpUrl(entity.url) ? `<a href="${escapeHtml(safeHttpUrl(entity.url))}" target="_blank" rel="noopener noreferrer" class="el-result-link">View in KB</a>` : ''}
                 </div>
             `;
         }).join('');
@@ -907,11 +907,21 @@
     /**
      * Escape HTML special characters
      */
+    // Quotes too: results go into data-* attributes, and KB labels are
+    // publicly editable (Wikidata).
     function escapeHtml(text) {
         if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /** A KB link only if it is http(s); anything else is dropped. */
+    function safeHttpUrl(url) {
+        try {
+            const u = new URL(String(url), window.location.href);
+            return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+        } catch (e) {
+            return '';
+        }
     }
 
     // Initialize when DOM is ready

@@ -482,7 +482,11 @@ def render_display_container(
         Complete HTML for the display container
     """
     class_str = " ".join(css_classes)
-    attr_str = " ".join(f'data-{k}="{v}"' for k, v in data_attrs.items())
+    # Values can be item data (a media URL, a code language, a format name),
+    # so they are attribute-escaped here once for every display.
+    attr_str = " ".join(
+        f'data-{html_module.escape(str(k), quote=True)}="{html_module.escape(str(v), quote=True)}"'
+        for k, v in data_attrs.items())
 
     parts = []
     parts.append(f'<div class="{class_str}" {attr_str}>')

@@ -50,6 +50,7 @@ from .cv_utils import (
     extract_image_annotations,
     blank_item_warning,
     get_image_dimensions,
+    grouped_objects_record,
     normalize_annotation_object,
 )
 
@@ -123,7 +124,7 @@ class MOTExporter(BaseExporter):
             width = height = 0
             for frame, _instance_id, objects, item in sorted(frames):
                 w, h = get_image_dimensions(
-                    item, config=context.config, annotation=ann)
+                    item, config=context.config, annotation=grouped_objects_record(objects))
                 width, height = width or w, height or h
                 for obj in objects:
                     obj_type = obj.get("type", "")

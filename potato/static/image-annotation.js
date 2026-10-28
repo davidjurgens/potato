@@ -1209,6 +1209,36 @@ class ImageAnnotationManager {
         return true;
     }
 
+    /**
+     * Under deep zoom, make the fabric canvas exactly the size of the
+     * OpenSeadragon element beneath it.
+     *
+     * Both layers start at the wrapper's top-left corner and share one
+     * transform, so they agree only if they are also the same size. The
+     * canvas used to keep its constructor fallback height of 600 while the
+     * OpenSeadragon element is the wrapper's inner box (496 by default), and
+     * that 600 was then handed to OpenSeadragon's viewport as its container
+     * size. OpenSeadragon drew a 600-tall frame into a 496-tall element, so
+     * the slide was squashed vertically, the home view fitted the slide's
+     * width with its bottom cut off, and every shape drew lower than the
+     * tissue it outlines, by more the further down the slide it was.
+     *
+     * OpenSeadragon measures its own element and is the source of truth for
+     * the size; fabric follows it. Returns whether it changed anything.
+     */
+    _syncCanvasToDeepZoomHost() {
+        if (!this.canvas || !this.deepZoom) return false;
+        const size = this.deepZoom.hostSize();
+        if (!size) return false;
+        if (size.width === this.canvas.getWidth()
+                && size.height === this.canvas.getHeight()) {
+            return false;
+        }
+        this.canvas.setDimensions({ width: size.width, height: size.height });
+        this._resizeMaskCanvas();
+        return true;
+    }
+
     _fitImageToCanvas() {
         if (!this.image) return;
         this._syncCanvasHeightToWrapper();
@@ -1287,7 +1317,20 @@ class ImageAnnotationManager {
         const width = this._resizeContainer.clientWidth;
         // Ignore no-op and zero-width callbacks: a hidden container reports 0,
         // and resizing to 0 would destroy the layout.
-        if (!width || Math.abs(width - this.canvas.getWidth()) < 2) return;
+        if (!width) return;
+
+        // Deep zoom: the shapes are stored in image pixels and OpenSeadragon
+        // drives the transform, so a resize moves nothing on the canvas and
+        // needs no rebuild. The canvas takes the OpenSeadragon element's size
+        // (height as well as width; a height-only change matters here) and
+        // the transform is read again. OpenSeadragon resizes its own viewport
+        // from its own element.
+        if (this.deepZoom && !this._canvasMessage) {
+            this.deepZoom.resize();
+            return;
+        }
+
+        if (Math.abs(width - this.canvas.getWidth()) < 2) return;
 
         // A canvas showing a message has no image and no annotations to relay
         // out; it needs the message re-wrapped for the new width and nothing
@@ -1303,13 +1346,7 @@ class ImageAnnotationManager {
 
         this.canvas.setWidth(width);
 
-        if (this.deepZoom) {
-            // OpenSeadragon lays itself out; the placeholder must NOT be
-            // refitted, because in this mode it is the image's natural size at
-            // the origin and refitting it would rescale every coordinate.
-            this.deepZoom.resize(width, this.canvas.getHeight());
-            this._resizeMaskCanvas();
-        } else if (this.image) {
+        if (this.image && !this.deepZoom) {
             this._fitImageToCanvas();
             this._resizeMaskCanvas();
         }
@@ -2994,6 +3031,32 @@ class ImageAnnotationManager {
     }
 
     /**
+     * A landmark's point in canvas (image) coordinates: the centre of its
+     * circle, wherever the group holding the circle and its label sits.
+     */
+    _landmarkPoint(obj) {
+        if (obj && obj.type === 'group' && obj.getObjects) {
+            const circle = obj.getObjects().find(o => o.type === 'circle');
+            if (circle) {
+                // A grouped object's left/top are relative to the group's
+                // centre; the circle's origin is its centre.
+                const p = fabric.util.transformPoint(
+                    new fabric.Point(circle.left, circle.top), obj.calcTransformMatrix());
+                return { x: p.x, y: p.y };
+            }
+        }
+        if (obj && obj.originX === 'center') return { x: obj.left, y: obj.top };
+        return { x: obj.left + 8, y: obj.top + 8 };
+    }
+
+    /** Move a landmark group so its circle's centre is at (x, y). */
+    _placeLandmark(group, x, y) {
+        const at = this._landmarkPoint(group);
+        group.set({ left: group.left + (x - at.x), top: group.top + (y - at.y) });
+        group.setCoords();
+    }
+
+    /**
      * Add a landmark point.
      */
     _addLandmark(pointer) {
@@ -3037,6 +3100,7 @@ class ImageAnnotationManager {
         });
 
         group.annotationData = landmark.annotationData;
+        this._placeLandmark(group, pointer.x, pointer.y);
 
         this.canvas.add(group);
         this._saveState();
@@ -4152,13 +4216,14 @@ class ImageAnnotationManager {
                 });
             }
 
-            case 'landmark':
-                if (obj.type === 'group') {
-                    const centerX = obj.left + obj.width / 2;
-                    const centerY = obj.top + obj.height / 2;
-                    return normalize(centerX, centerY);
-                }
-                return normalize(obj.left + 8, obj.top + 8);
+            case 'landmark': {
+                // The point is the circle's centre. The group's centre is not
+                // it: the group also holds the label text to the right, so
+                // reading the group's centre moved the point right by half
+                // the text's width on every save and restore.
+                const at = this._landmarkPoint(obj);
+                return normalize(at.x, at.y);
+            }
 
             case 'freeform':
                 // Serialize path data.
@@ -4369,6 +4434,7 @@ class ImageAnnotationManager {
                     selectable: true,
                     hasControls: false,
                 });
+                this._placeLandmark(obj, lpos.x, lpos.y);
                 break;
 
             case 'freeform':

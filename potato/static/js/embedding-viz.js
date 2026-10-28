@@ -306,7 +306,7 @@ class EmbeddingVizManager {
 
     let previewContent = "";
     if (point.preview_type === "image") {
-      previewContent = `<img src="${point.preview}" alt="Preview" class="preview-image">`;
+      previewContent = `<img src="${this.escapeHtml(point.preview)}" alt="Preview" class="preview-image">`;
     } else {
       previewContent = `<div class="preview-text">${this.escapeHtml(
         point.preview
@@ -315,12 +315,12 @@ class EmbeddingVizManager {
 
     previewPanel.innerHTML = `
       <div class="preview-header">
-        <strong>${point.instance_id}</strong>
+        <strong>${this.escapeHtml(point.instance_id)}</strong>
         ${
           point.label
             ? `<span class="preview-label" style="background-color: ${
-                this.data.label_colors[point.label]
-              }">${point.label}</span>`
+                this.escapeHtml(this.data.label_colors[point.label])
+              }">${this.escapeHtml(point.label)}</span>`
             : '<span class="preview-label unannotated">Unannotated</span>'
         }
       </div>
@@ -328,7 +328,7 @@ class EmbeddingVizManager {
         ${previewContent}
       </div>
       <div class="preview-meta">
-        <span>Annotations: ${point.annotation_count}</span>
+        <span>Annotations: ${this.escapeHtml(point.annotation_count)}</span>
       </div>
     `;
   }
@@ -353,7 +353,7 @@ class EmbeddingVizManager {
             <span class="selection-count">${this.currentSelection.length} items</span>
           </div>
           <div class="selection-preview">
-            ${this.currentSelection.slice(0, 5).join(", ")}
+            ${this.escapeHtml(this.currentSelection.slice(0, 5).join(", "))}
             ${this.currentSelection.length > 5 ? "..." : ""}
           </div>
           <div class="selection-actions">
@@ -384,7 +384,7 @@ class EmbeddingVizManager {
               </button>
             </div>
             <div class="queued-selection-preview">
-              ${sel.instance_ids.slice(0, 3).join(", ")}
+              ${this.escapeHtml(sel.instance_ids.slice(0, 3).join(", "))}
               ${sel.instance_ids.length > 3 ? "..." : ""}
             </div>
           </div>
@@ -587,8 +587,7 @@ class EmbeddingVizManager {
    */
   embedderCard(embedder) {
     if (!embedder) return "";
-    const escape = (value) => String(value == null ? "" : value)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const escape = (value) => this.escapeHtml(value);
     const field = embedder.source_field
       ? ` · <code>${escape(embedder.source_field)}</code>` : "";
     return `
@@ -652,9 +651,11 @@ class EmbeddingVizManager {
    * Escape HTML for safe display
    */
   escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+    // Quotes too: results go into attributes (src, title, style) as well as
+    // text, and ids, previews and majority labels come from the data.
+    return String(text === null || text === undefined ? "" : text)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 }
 

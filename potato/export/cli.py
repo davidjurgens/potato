@@ -44,6 +44,20 @@ def _typing_summaries(user_state: dict, instance_id: str) -> dict:
     return bd.get("typing_summaries") or {}
 
 
+def _agent_chat_record(row: Optional[dict]) -> dict:
+    """An ``agent_chat_store`` row as it travels on an annotation record."""
+    if not row:
+        return {}
+    return {
+        "field": row.get("field_key"),
+        "proxy_type": row.get("proxy_type"),
+        "step_count": row.get("step_count", 0),
+        "started_at": row.get("started_at"),
+        "finished_at": row.get("finished_at"),
+        "conversation": row.get("conversation") or [],
+    }
+
+
 def _authenticity_summary(user_state: dict, instance_id: str) -> dict:
     """The merged authenticity summary and verdict for one instance, or {}.
 
@@ -164,6 +178,16 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
     from potato.annotator_origin import parse_machine_annotators
     roster = parse_machine_annotators(config)
 
+    # Finished agent chats (interactive_chat), stored per user and item in the
+    # project database rather than in user_state.json. One query for the whole
+    # export; empty without opening the database when the display has no chat.
+    try:
+        from potato.agent_chat_store import transcripts_by_user_instance
+        agent_chats = transcripts_by_user_instance(config or {})
+    except Exception as e:
+        logger.warning(f"Could not read agent chat transcripts: {e}")
+        agent_chats = {}
+
     for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
         span_times = {} if uses_mysql(config) else _span_times(os.path.join(output_dir, user_dir))
@@ -227,6 +251,11 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
                 "_origin": _annotator_origin(user_state, instance_id, roster),
                 # When each span was last saved, keyed "schema:start:end".
                 "_span_times": span_times.get(instance_id, {}),
+                # This annotator's finished agent chat on this item, if any.
+                # The JSONL exporter writes it inline; CSV/TSV write it as
+                # the agent_chat_turns sidecar.
+                "_agent_chat": _agent_chat_record(
+                    agent_chats.get((str(user_id), str(instance_id)))),
             }
 
             # Process span data.

@@ -51,7 +51,7 @@ class RuntimeExporter(BaseExporter):
     """Exports runs and trial data from runtime phase pages."""
 
     format_name = "runtime"
-    description = "Trial data from runtime phase pages (jsPsych, OSWeb, PsychoJS, lab.js, ...)"
+    description = "Trial data from runtime phase pages (jsPsych, headphone check, external tasks)"
     file_extensions = [".csv", ".json"]
     #: Restrict to one runtime (None: every runtime the project uses).
     kind: Optional[str] = None

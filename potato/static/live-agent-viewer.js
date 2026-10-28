@@ -579,7 +579,7 @@
       const colors = this._getActionColors(actionType);
       let html = "";
 
-      html += `<div class="live-agent-action-badge" style="background:${colors.badge};border:1px solid ${colors.border};color:${colors.border};">${actionType}</div>`;
+      html += `<div class="live-agent-action-badge" style="background:${colors.badge};border:1px solid ${colors.border};color:${colors.border};">${this._escapeHtml(String(actionType))}</div>`;
 
       if (step.observation) {
         html += `<div style="margin-top:8px;color:light-dark(#555, #c4c4c4);"><strong>Observation:</strong> ${this._escapeHtml(step.observation)}</div>`;

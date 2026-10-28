@@ -360,7 +360,8 @@ class InstanceDisplayRenderer:
             return rendered
         except ValueError as e:
             logger.error(f"Error rendering field '{key}': {e}")
-            return f'<div class="display-error">Error rendering field "{key}": {e}</div>'
+            return (f'<div class="display-error">Error rendering field '
+                    f'"{html_module.escape(str(key))}": {html_module.escape(str(e))}</div>')
 
     def _with_turn_schemes(self, field: Dict[str, Any]) -> Dict[str, Any]:
         """Return a field config copy carrying its bound turn-level schemes.
@@ -592,7 +593,8 @@ class InstanceDisplayRenderer:
                     data)
             except ValueError as e:
                 logger.error(f"Error rendering field '{key}': {e}")
-                result["display_fields"][key] = f'<div class="display-error">Error: {e}</div>'
+                result["display_fields"][key] = (
+                    f'<div class="display-error">Error: {html_module.escape(str(e))}</div>')
 
         return result
 

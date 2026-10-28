@@ -17,11 +17,20 @@ Usage:
 from typing import Dict, Any, List, Optional
 import html
 import logging
+import re
 
 from .base import BaseDisplay, css_length
+from potato.server_utils.html_sanitizer import strip_active_content
 
 logger = logging.getLogger(__name__)
 
+
+
+def _clean_language(value):
+    """A language name safe for an attribute and a CSS class, or None."""
+    if value is None:
+        return None
+    return re.sub(r"[^\w+#.-]", "", str(value)) or None
 
 class CodeDisplay(BaseDisplay):
     """
@@ -65,13 +74,16 @@ class CodeDisplay(BaseDisplay):
         if isinstance(data, dict):
             # Pre-extracted FormatOutput data
             if "rendered_html" in data:
-                return self._wrap_content(data["rendered_html"], options, field_key)
+                return self._wrap_content(strip_active_content(data["rendered_html"]), options, field_key)
 
             code = data.get("text", "")
-            language = data.get("metadata", {}).get("language", options.get("language"))
+            # The language lands in attributes and a class name, whether it
+            # comes from the item or from the config.
+            language = _clean_language(
+                data.get("metadata", {}).get("language", options.get("language")))
         elif isinstance(data, str):
             code = data
-            language = options.get("language")
+            language = _clean_language(options.get("language"))
         else:
             return f'<div class="code-error">Unsupported content type</div>'
 
@@ -107,8 +119,8 @@ class CodeDisplay(BaseDisplay):
             styles.append("overflow-x: auto")
 
         style_str = "; ".join(styles) if styles else ""
-        language = language or options.get("language") or "text"
-        theme = options.get("theme", "default")
+        language = _clean_language(language or options.get("language")) or "text"
+        theme = _clean_language(options.get("theme", "default")) or "default"
 
         return f'''
             <div class="code-display code-theme-{theme}"
@@ -232,11 +244,11 @@ class CodeDisplay(BaseDisplay):
         if field_config.get("span_target"):
             classes.append("span-target-code")
 
-        language = options.get("language")
+        language = _clean_language(options.get("language"))
         if language:
             classes.append(f"language-{language}")
 
-        theme = options.get("theme", "default")
+        theme = _clean_language(options.get("theme", "default")) or "default"
         classes.append(f"code-theme-{theme}")
 
         return classes

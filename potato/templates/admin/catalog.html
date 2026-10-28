@@ -199,7 +199,7 @@
       if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); return; }
       st.className = "cat-status"; st.textContent = r.data.results.length + (L.catalog_status_results_suffix || " result(s)");
       const rows = r.data.results.map(h =>
-        `<tr><td class="cat-mono">${h.instance_id}</td><td class="cat-score">${h.score.toFixed(3)}` +
+        `<tr><td class="cat-mono">${esc(h.instance_id)}</td><td class="cat-score">${h.score.toFixed(3)}` +
         `<span class="cat-bar" style="width:${Math.max(0, Math.round(h.score*80))}px"></span></td></tr>`).join("");
       document.getElementById("results").innerHTML = r.data.results.length
         ? `<table class="cat-table"><thead><tr><th scope="col">{{ ui_lang.catalog_th_instance|default('Instance') }}</th><th scope="col">{{ ui_lang.catalog_th_similarity|default('Similarity') }}</th></tr></thead><tbody>${rows}</tbody></table>`

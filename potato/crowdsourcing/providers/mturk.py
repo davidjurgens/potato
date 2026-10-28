@@ -16,12 +16,30 @@ from potato.crowdsourcing.base import (
 PREVIEW_ASSIGNMENT_ID = 'ASSIGNMENT_ID_NOT_AVAILABLE'
 
 
+#: The hosts MTurk sends as turkSubmitTo (production and the worker sandbox).
+MTURK_SUBMIT_HOSTS = frozenset({'www.mturk.com', 'workersandbox.mturk.com'})
+
+
 def normalize_submit_url(turk_submit_to):
     """MTurk sends turkSubmitTo as a bare origin; the ExternalQuestion submit
-    endpoint is /mturk/externalSubmit on that host."""
-    if turk_submit_to and '/mturk/externalSubmit' not in turk_submit_to:
-        return turk_submit_to.rstrip('/') + '/mturk/externalSubmit'
-    return turk_submit_to
+    endpoint is /mturk/externalSubmit on that host.
+
+    The value arrives as a URL parameter and becomes a form action, so only
+    MTurk's own hosts are accepted; anything else is refused (None). A
+    javascript: action would run script when the worker submits, and any
+    other host would make the done page post the worker to it.
+    """
+    if not turk_submit_to:
+        return turk_submit_to
+    from urllib.parse import urlparse
+    parsed = urlparse(str(turk_submit_to).strip())
+    if (parsed.scheme.lower() != 'https'
+            or (parsed.hostname or '').lower() not in MTURK_SUBMIT_HOSTS
+            or parsed.username or parsed.password or parsed.port not in (None, 443)):
+        return None
+    # Rebuilt from the parsed host: appending to the raw value kept any
+    # query, fragment or path the parameter carried.
+    return f"https://{parsed.hostname.lower()}/mturk/externalSubmit"
 
 
 class MTurkProvider(CrowdProvider):
@@ -58,7 +76,8 @@ class MTurkProvider(CrowdProvider):
     def completion_action(self, identity, outcome):
         completion = self.config.get('completion', {}) or {}
         code = self._code_for_outcome(completion, outcome)
-        submit_to = identity.extra.get('turkSubmitTo') if identity else None
+        submit_to = normalize_submit_url(
+            identity.extra.get('turkSubmitTo') if identity else None)
         assignment_id = identity.session_id if identity else None
         if submit_to and assignment_id:
             fields = {'assignmentId': assignment_id}
@@ -67,7 +86,7 @@ class MTurkProvider(CrowdProvider):
             return CompletionAction(
                 kind="post_form",
                 code=code,
-                form_action=normalize_submit_url(submit_to),
+                form_action=submit_to,
                 form_fields=fields,
                 platform_label=self.platform_label(),
             )

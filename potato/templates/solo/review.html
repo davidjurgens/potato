@@ -52,7 +52,7 @@
         <h4>Select the correct label:</h4>
         <div class="label-buttons">
             {% for label in labels %}
-            <button type="button" class="label-btn" data-label="{{ label }}" onclick="selectCorrection('{{ label }}')">{{ label }}</button>
+            <button type="button" class="label-btn" data-label="{{ label }}" onclick='selectCorrection({{ label|tojson }})'>{{ label }}</button>
             {% endfor %}
         </div>
     </div>

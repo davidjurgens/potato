@@ -210,7 +210,7 @@ class ProteinStructureDisplay(ViewerDisplay):
                        f' <span class="pv-count">{len(members)} residues</span></div>'
                        f'<div class="pv-res-strip" role="group" aria-labelledby="{chain_id}">')
             for n, r in enumerate(members):
-                number = f"{r.resi}{r.icode}"
+                number = html.escape(f"{r.resi}{r.icode}", quote=True)
                 tick = n == 0 or r.resi % 10 == 0
                 band = plddt_band(r.b, scale) if cfg.get("plddt") else None
                 attrs = (f'data-chain="{html.escape(r.chain, quote=True)}" data-resi="{r.resi}" '

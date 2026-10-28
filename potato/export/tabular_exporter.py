@@ -265,6 +265,9 @@ class JSONLExporter(BaseExporter):
                     "spans": _spans_with_text(ann, context),
                     "links": ann.get("links", {}),
                 })
+                if ann.get("_agent_chat"):
+                    # This annotator's own finished interactive_chat.
+                    record["agent_chat"] = ann["_agent_chat"]
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
         files_written = [out_file] if context.annotations else []
@@ -574,6 +577,54 @@ def _write_typing_dynamics(context: ExportContext, output_path: str,
     return out_file
 
 
+AGENT_CHAT_TURN_COLUMNS = [
+    "user_id", "instance_id", "field", "turn_index", "speaker", "text",
+    "timestamp", "proxy_type", "step_count", "started_at", "finished_at",
+]
+
+
+def _write_agent_chat_turns(context: ExportContext, output_path: str,
+                            fmt_name: str, delimiter: str) -> Optional[str]:
+    """Write finished interactive_chat conversations, one row per turn.
+
+    Read from the project database (``agent_chat_store``), not from the
+    annotation records, so a chat on an item the annotator then left
+    unlabelled is still exported. None when there are no transcripts.
+    """
+    try:
+        from potato.agent_chat_store import transcripts_by_user_instance
+        transcripts = transcripts_by_user_instance(context.config or {})
+    except Exception as e:
+        logger.warning("Could not read agent chat transcripts: %s", e)
+        return None
+    if not transcripts:
+        return None
+
+    out_file = os.path.join(output_path, f"agent_chat_turns.{fmt_name}")
+    with open(out_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=AGENT_CHAT_TURN_COLUMNS,
+                                delimiter=delimiter, extrasaction="ignore")
+        writer.writeheader()
+        for (_user, _inst), row in sorted(transcripts.items()):
+            for i, turn in enumerate(row.get("conversation") or []):
+                if not isinstance(turn, dict):
+                    continue
+                writer.writerow({
+                    "user_id": row.get("user_id", ""),
+                    "instance_id": row.get("instance_id", ""),
+                    "field": row.get("field_key", ""),
+                    "turn_index": i,
+                    "speaker": turn.get("speaker", ""),
+                    "text": turn.get("text", ""),
+                    "timestamp": turn.get("timestamp", ""),
+                    "proxy_type": row.get("proxy_type") or "",
+                    "step_count": row.get("step_count", 0),
+                    "started_at": row.get("started_at") or "",
+                    "finished_at": row.get("finished_at") or "",
+                })
+    return out_file
+
+
 def _write_delimited(context: ExportContext, output_path: str,
                      fmt_name: str, delimiter: str) -> ExportResult:
     """Write annotations as a delimited file (CSV or TSV)."""
@@ -622,6 +673,9 @@ def _write_delimited(context: ExportContext, output_path: str,
     authenticity_file = _write_authenticity(context, output_path, fmt_name, delimiter)
     if authenticity_file:
         files_written.append(authenticity_file)
+    agent_chat_file = _write_agent_chat_turns(context, output_path, fmt_name, delimiter)
+    if agent_chat_file:
+        files_written.append(agent_chat_file)
     # Experiment designs: who was in which condition and what they were
     # shown (participants), and the timed-trial records (trials).
     from .experiment_sidecars import write_participants, write_regions, write_trials

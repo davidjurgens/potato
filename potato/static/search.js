@@ -14,10 +14,11 @@
 
     function el(id) { return document.getElementById(id); }
 
+    // Quotes too: callers put the result in attribute values as well as text.
     function esc(s) {
-        var d = document.createElement("div");
-        d.textContent = s == null ? "" : String(s);
-        return d.innerHTML;
+        return (s == null ? "" : String(s))
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     // FTS5 marks the matched term with the STX/ETX sentinels (see

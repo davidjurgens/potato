@@ -145,11 +145,16 @@ def _generate_extractive_qa_layout_internal(annotation_scheme):
                 highlightSpan.style.backgroundColor = container.dataset.highlightColor || '#FFEB3B';
                 range.surroundContents(highlightSpan);
             }} catch(e) {{
-                // If surroundContents fails (cross-element selection), use simple approach
-                container.innerHTML = passageText.substring(0, start) +
-                    '<span class="eqa-highlight" style="background-color:' + (container.dataset.highlightColor || 'light-dark(#FFEB3B, #4f4917)') + '">' +
-                    passageText.substring(start, end) + '</span>' +
-                    passageText.substring(end);
+                // If surroundContents fails (cross-element selection), use simple approach.
+                // passageText is decoded text, so it goes back as text nodes.
+                var mark = document.createElement('span');
+                mark.className = 'eqa-highlight';
+                mark.style.backgroundColor = container.dataset.highlightColor || 'light-dark(#FFEB3B, #4f4917)';
+                mark.textContent = passageText.substring(start, end);
+                container.replaceChildren(
+                    document.createTextNode(passageText.substring(0, start)),
+                    mark,
+                    document.createTextNode(passageText.substring(end)));
             }}
 
             selection.removeAllRanges();

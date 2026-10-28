@@ -27,6 +27,10 @@
   const R = 6;
 
   const el = (role) => document.querySelector(`[data-role="${role}"]`);
+  // Doc ids, snippets and cluster labels come from the corpus, not the config.
+  const esc = (v) => String(v === null || v === undefined ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
   async function api(url, opts) {
     const res = await fetch(url, {
@@ -222,7 +226,7 @@
       }
       this.canvas.style.cursor = "pointer";
       const rect = this.canvas.getBoundingClientRect();
-      this.tooltip.innerHTML = `<b>${p.doc_id}</b><br>${(p.snippet || "").slice(0, 120)}`;
+      this.tooltip.innerHTML = `<b>${esc(p.doc_id)}</b><br>${esc((p.snippet || "").slice(0, 120))}`;
       this.tooltip.style.display = "block";
       let tx = this._sx(p.x) + 12;
       let ty = this._sy(p.y) + 12;
@@ -236,10 +240,10 @@
         .map(
           (c) => `
         <li class="cm-cluster-row${this.filterCluster === c.id ? " cm-active" : ""}"
-            data-cid="${c.id}">
+            data-cid="${esc(c.id)}">
           <span class="cm-swatch" style="background:${this.clusterColor(c.id)}"></span>
-          <span class="cm-cluster-label">${c.label || "cluster " + c.id}</span>
-          <span class="cm-cluster-size">${c.size}</span>
+          <span class="cm-cluster-label">${esc(c.label || "cluster " + c.id)}</span>
+          <span class="cm-cluster-size">${esc(c.size)}</span>
         </li>`
         )
         .join("");
@@ -288,9 +292,9 @@
         this.knnListEl.innerHTML = neighbors
           .map(
             (n) => `
-          <li class="cm-knn-row" data-doc="${n.doc_id}">
+          <li class="cm-knn-row" data-doc="${esc(n.doc_id)}">
             <span class="cm-knn-score">${n.score.toFixed(2)}</span>
-            <span class="cm-knn-snippet">${(n.snippet || n.doc_id).slice(0, 70)}</span>
+            <span class="cm-knn-snippet">${esc(String(n.snippet || n.doc_id).slice(0, 70))}</span>
           </li>`
           )
           .join("");

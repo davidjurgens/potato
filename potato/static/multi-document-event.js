@@ -42,10 +42,9 @@
     return res.status === 204 ? null : res.json();
   }
 
+  // Quotes too: slot values typed by any annotator go into value="...".
   function esc(s) {
-    const d = document.createElement("div");
-    d.textContent = s == null ? "" : String(s);
-    return d.innerHTML;
+    return (s == null ? "" : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   // Character offsets of the current selection within `root` (its textContent).

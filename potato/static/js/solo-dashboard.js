@@ -578,7 +578,7 @@ class SoloDashboard {
         <td>${p.percent}%</td>
         <td>
           <button class="suggest-btn"
-                  onclick="soloDashboard.suggestGuideline('${this._esc(p.predicted_label)}','${this._esc(p.actual_label)}')">
+                  onclick="soloDashboard.suggestGuideline(${this._jsArg(p.predicted_label)},${this._jsArg(p.actual_label)})">
             Suggest Fix
           </button>
         </td>
@@ -657,7 +657,7 @@ class SoloDashboard {
       ${rootCauseHtml}
       ${examplesHtml}
       <button class="suggest-btn" style="margin-top: 0.75rem; width: 100%;"
-              onclick="soloDashboard.suggestGuideline('${this._esc(predicted)}','${this._esc(actual)}')">
+              onclick="soloDashboard.suggestGuideline(${this._jsArg(predicted)},${this._jsArg(actual)})">
         Suggest Guideline Fix
       </button>`;
   }
@@ -748,7 +748,7 @@ class SoloDashboard {
         <td>
           <label class="lf-toggle">
             <input type="checkbox" ${checked}
-                   onchange="soloDashboard.toggleLabelingFunction('${this._esc(fn.id)}')">
+                   onchange="soloDashboard.toggleLabelingFunction(${this._jsArg(fn.id)})">
             <span class="slider"></span>
           </label>
         </td>
@@ -1330,10 +1330,19 @@ class SoloDashboard {
     if (el) el.textContent = value;
   }
 
+  // Quotes too: results go into title attributes, and the rule and pattern
+  // text is model output.
   _esc(text) {
-    const d = document.createElement('div');
-    d.textContent = text;
-    return d.innerHTML;
+    return String(text === null || text === undefined ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // A JS string literal for an inline handler attribute. The browser decodes
+  // the attribute's entities before it parses the JS, so HTML escaping alone
+  // lets a quote end the string; JSON-quote first, then HTML-escape.
+  _jsArg(value) {
+    return this._esc(JSON.stringify(String(value === null || value === undefined ? '' : value)));
   }
 
   destroy() {

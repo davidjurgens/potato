@@ -1182,7 +1182,7 @@ Sends a message to the agent and returns a response.
 POST /agent_chat/finish
 ```
 
-Finishes the chat and writes conversation data to the item.
+Finishes the chat and stores the conversation for the current annotator and item. Other annotators of the same item are not affected.
 
 ### Get Agent Chat Status
 ```http

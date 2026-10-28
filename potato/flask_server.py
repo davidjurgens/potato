@@ -3715,6 +3715,22 @@ def _strip_cloze_answers(record):
     return strip_answer_fields(config, record)
 
 
+def _json_script_elements(values: dict) -> str:
+    """One ``<script type="application/json">`` element per key.
+
+    The values carry item data, which the researcher imported but did not
+    write, so a field can contain ``</script>``. ``script_safe_json`` escapes
+    ``<``, ``>`` and ``&`` so no value can close its element, and the id is
+    attribute-escaped.
+    """
+    from html import escape as _attr
+    from potato.server_utils.json import script_safe_json
+    return "".join(
+        f'<script id="{_attr(str(key), quote=True)}" type="application/json"> '
+        f'{script_safe_json(value)} </script>'
+        for key, value in values.items())
+
+
 def render_page_with_annotations(username: str):
     '''
     When annotating, shows the current instance to the user with any annotations
@@ -3943,13 +3959,7 @@ def render_page_with_annotations(username: str):
         except Exception as e:
             logger.debug(f"Cohort site-file selection skipped: {e}")
 
-    var_elems_html = "".join(
-        map(lambda item : (
-            f'<script id="{item[0]}" ' +
-            ' type="application/json"> ' +
-            f' {easy_json(item[1])} </script>'
-        ), var_elems.items())
-    )
+    var_elems_html = _json_script_elements(var_elems)
 
     custom_js = ""
     if config.get("customjs") and config.get("customjs_hostname"):
@@ -4145,11 +4155,19 @@ def render_page_with_annotations(username: str):
     has_instance_display = "instance_display" in config
     display_html = ""
     display_template_vars = {}
+    # The item as THIS annotator sees it: an `interactive_chat` field carries
+    # their own finished conversation (stored per user, never on the shared
+    # item), and stays empty -- a fresh chat panel -- for everyone else.
+    user_item_data = item.get_data()
+    if has_instance_display:
+        from potato.agent_chat_store import with_user_transcript
+        user_item_data = with_user_transcript(config, user_item_data,
+                                              username, instance_id)
 
     if has_instance_display:
         try:
             display_renderer = get_instance_display_renderer(config)
-            display_template_vars = display_renderer.get_template_variables(item.get_data())
+            display_template_vars = display_renderer.get_template_variables(user_item_data)
             display_html = display_template_vars.get("display_html", "")
             logger.debug(f"Instance display rendered: {len(display_html)} chars")
         except Exception as e:
@@ -4189,7 +4207,7 @@ def render_page_with_annotations(username: str):
         # normalized "_transcripts" index attached here, so they accept every
         # format the audio_dialogue display does (see transcripts/binding.py).
         instance_record=enrich_transcript_record(
-            _strip_machine_fields(item_data if instance_image else item.get_data(),
+            _strip_machine_fields(item_data if instance_image else user_item_data,
                                   username, instance_id),
             config, base_dir=config.get("task_dir")
         ),

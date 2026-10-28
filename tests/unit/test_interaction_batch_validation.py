@@ -156,3 +156,24 @@ def test_authentication_is_checked_before_the_payload(tracking):
     response = client.post("/api/track_interactions", json=["invalid"])
     assert response.status_code == 401
     assert state.instance_id_to_behavioral_data == before
+
+
+@pytest.mark.parametrize("instance_id", [["item1"], {"id": "item1"}, True, 1.5])
+def test_instance_id_must_be_a_scalar_id(tracking, instance_id):
+    """A list or object id was str()'d into a new bucket keyed by its repr."""
+    client, state = tracking
+    before = copy.deepcopy(state.instance_id_to_behavioral_data)
+    response = client.post("/api/track_interactions", json={
+        "instance_id": instance_id,
+        "events": [{"event_type": "click", "timestamp": 101}]})
+    assert response.status_code == 400
+    assert state.instance_id_to_behavioral_data == before
+
+
+@pytest.mark.parametrize("instance_id", ["item1", 7, None])
+def test_string_int_and_missing_ids_are_accepted(tracking, instance_id):
+    client, _state = tracking
+    response = client.post("/api/track_interactions", json={
+        "instance_id": instance_id,
+        "events": [{"event_type": "click", "timestamp": 101}]})
+    assert response.status_code == 200, response.get_json()

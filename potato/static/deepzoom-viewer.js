@@ -40,6 +40,10 @@
     /** Where the tile routes live. Mirrors potato/media/routes.py. */
     const TILE_BASE = '/media/tiles';
 
+    /** OpenSeadragon events that mean the annotator moved the view. */
+    const NAVIGATION_EVENTS = ['canvas-drag', 'canvas-scroll', 'canvas-pinch',
+        'canvas-key', 'navigator-click', 'navigator-drag', 'navigator-scroll'];
+
     class DeepZoomBackend {
         /**
          * @param {object} manager - the ImageAnnotationManager being backed
@@ -53,6 +57,20 @@
             this.viewer = null;
             this.contentSize = null;
             this._onViewportChange = () => this.syncTransform();
+
+            // Whether the view is still the home view, so a container resize
+            // should fit the whole slide again rather than keep the zoom.
+            //
+            // OpenSeadragon's own resize keeps the zoom level, which is right
+            // once the annotator has navigated and wrong before. The viewer is
+            // built while the page is still being laid out, so it opens into
+            // a 1x1 element and homes there; a wide slide in a square box fits
+            // by width, and keeping that zoom at the real size left the home
+            // view as wide as the box with the slide's bottom cut off.
+            this._followHome = true;
+            this._rehome = false;
+            this._onResize = () => { if (this._followHome) this._rehome = true; };
+            this._onNavigate = () => { this._followHome = false; };
         }
 
         /** True when the library is actually present. */
@@ -132,7 +150,13 @@
                     }
                     this.viewer.addHandler('update-viewport', this._onViewportChange);
                     this.viewer.addHandler('animation', this._onViewportChange);
-                    this.viewer.addHandler('resize', this._onViewportChange);
+                    // Only flags a re-home. OpenSeadragon raises `resize` before
+                    // it restores the old zoom, so homing here would be undone;
+                    // the next `update-viewport` does it after.
+                    this.viewer.addHandler('resize', this._onResize);
+                    for (const name of NAVIGATION_EVENTS) {
+                        this.viewer.addHandler(name, this._onNavigate);
+                    }
                     // The opening `goHome` is an animation, so the transform
                     // at this instant is the pre-animation one. `animation`
                     // fires per frame and corrects it, but only while the
@@ -170,8 +194,21 @@
          */
         syncTransform() {
             const canvas = this.manager && this.manager.canvas;
+            // The transform below maps image pixels to OpenSeadragon's element,
+            // so it is only right on the fabric canvas when the two are the
+            // same size. Checked here, on every viewport change, so a layout
+            // change OpenSeadragon has already reacted to cannot leave the
+            // shapes drawn against a stale canvas size.
+            if (this.manager && typeof this.manager._syncCanvasToDeepZoomHost === 'function') {
+                this.manager._syncCanvasToDeepZoomHost();
+            }
             const item = this.viewer && this.viewer.world.getItemAt(0);
             if (!canvas || !item || !global.OpenSeadragon) return;
+
+            if (this._rehome) {
+                this._rehome = false;
+                this.viewer.viewport.goHome(true);
+            }
 
             const origin = item.imageToViewerElementCoordinates(
                 new global.OpenSeadragon.Point(0, 0));
@@ -187,19 +224,37 @@
             }
         }
 
-        /** Match the overlay to the viewer's element. */
-        resize(width, height) {
-            if (this.viewer && this.viewer.viewport) {
-                this.viewer.viewport.resize(
-                    new global.OpenSeadragon.Point(width, height), false);
-                this.viewer.viewport.applyConstraints();
-            }
+        /**
+         * The OpenSeadragon element's layout size, or null before layout.
+         *
+         * This is the size both layers must have. OpenSeadragon sizes its
+         * drawing canvas from its viewport's container size, and its own
+         * ResizeObserver keeps that equal to this element.
+         */
+        hostSize() {
+            const width = this.host ? this.host.clientWidth : 0;
+            const height = this.host ? this.host.clientHeight : 0;
+            return (width > 0 && height > 0) ? { width, height } : null;
+        }
+
+        /**
+         * Match the overlay to the viewer's element after a layout change.
+         *
+         * The viewport is left to OpenSeadragon, which measures its own
+         * element. This used to pass the fabric canvas's size to
+         * `viewport.resize`, and when that differed from the element (600 vs
+         * 496 by default) OpenSeadragon drew a frame of the wrong height into
+         * its element: the slide was squashed and the shapes no longer sat
+         * on it.
+         */
+        resize() {
             this.syncTransform();
         }
 
         /** Multiply the current zoom. Used by the toolbar's +/- buttons. */
         zoomBy(factor) {
             if (!this.viewer) return;
+            this._followHome = false;
             this.viewer.viewport.zoomBy(factor);
             this.viewer.viewport.applyConstraints();
         }
@@ -207,6 +262,7 @@
         /** Fit the whole image in view. */
         zoomFit() {
             if (!this.viewer) return;
+            this._followHome = true;
             this.viewer.viewport.goHome();
         }
 
@@ -215,6 +271,7 @@
             if (!this.viewer || !this.contentSize) return;
             const item = this.viewer.world.getItemAt(0);
             if (!item) return;
+            this._followHome = false;
             this.viewer.viewport.zoomTo(
                 item.imageToViewportZoom(1), null, true);
             this.viewer.viewport.applyConstraints();
@@ -223,6 +280,7 @@
         /** Forward a wheel event the overlay swallowed. */
         forwardWheel(event) {
             if (!this.viewer) return;
+            this._followHome = false;
             const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2;
             const rect = this.host.getBoundingClientRect();
             const point = this.viewer.viewport.pointFromPixel(
@@ -250,7 +308,10 @@
             if (this.viewer) {
                 this.viewer.removeHandler('update-viewport', this._onViewportChange);
                 this.viewer.removeHandler('animation', this._onViewportChange);
-                this.viewer.removeHandler('resize', this._onViewportChange);
+                this.viewer.removeHandler('resize', this._onResize);
+                for (const name of NAVIGATION_EVENTS) {
+                    this.viewer.removeHandler(name, this._onNavigate);
+                }
                 this.viewer.removeHandler('animation-finish', this._onViewportChange);
                 this.viewer.destroy();
                 this.viewer = null;

@@ -30,6 +30,7 @@ from .cv_utils import (
     extract_image_annotations,
     blank_item_warning,
     get_image_dimensions,
+    grouped_objects_record,
     get_image_filename,
     normalize_annotation_object,
 )
@@ -91,7 +92,7 @@ class CVATExporter(BaseExporter):
         for index, (instance_id, objects) in enumerate(sorted(by_image.items())):
             item = context.items.get(instance_id, {})
             width, height = get_image_dimensions(
-                item, config=context.config, annotation=ann)
+                item, config=context.config, annotation=grouped_objects_record(objects))
             file_name = get_image_filename(item, context.config) or instance_id
 
             image_elem = SubElement(root, "image", {
