@@ -2,7 +2,7 @@
   "info": {
     "description": "Generated from the live Flask url_map \u2014 see potato/server_utils/openapi_spec.py.\n\nMost endpoints are session-authenticated: POST /auth with `username` and `password` as form data, then reuse the session cookie. `x-potato-auth` records the decorators guarding an operation, and `x-potato-requires-config` marks operations that only exist when the named config is enabled.\n\nResponse schemas are intentionally not modelled; this spec is an authoritative index of what exists, not a payload contract.",
     "title": "Potato HTTP API",
-    "version": "2.12.1"
+    "version": "2.12.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3854,7 +3854,7 @@
             "description": "Authentication required"
           }
         },
-        "summary": "Finish the chat and write conversation data to the item.",
+        "summary": "Finish the chat and store the conversation for this user and item.",
         "tags": [
           "core"
         ],
@@ -7679,7 +7679,7 @@
           "web_proxy"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type web_agent_trace or web_agent_recorder"
       }
