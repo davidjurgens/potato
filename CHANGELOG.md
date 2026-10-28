@@ -4,6 +4,20 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+## [2.12.3] - Clean Rebuild of 2.12.2
+
+2.12.3 has the same code as 2.12.2. The 2.12.2 wheel and source package on
+PyPI were built from a working copy that also held unreleased, unfinished
+features, so they do not match the v2.12.2 tag. 2.12.3 is built from its tag.
+If you installed 2.12.2 from PyPI, upgrade. The 2.12.2 Docker image was built
+from the tag and is not affected.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+For what changed since 2.12.1, see the [2.12.2 release notes](docs/releasenotes/v2.12.2.md).
+
 ## [2.12.2] - Security Fixes, Per-Annotator Chats and Paradata Phases
 
 This release fixes a stored cross-site scripting bug present in every 2.x

@@ -278,6 +278,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.12.3](releasenotes/v2.12.3.md) - Clean Rebuild of 2.12.2
 - [v2.12.2](releasenotes/v2.12.2.md) - Security Fixes, Per-Annotator Chats and Paradata Phases
 - [v2.12.1](releasenotes/v2.12.1.md) - Display Logic, Export and Listening-Test Fixes
 - [v2.12.0](releasenotes/v2.12.0.md) - Experiments, Survey Import and Formats from Other Fields
