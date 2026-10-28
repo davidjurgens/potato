@@ -3304,7 +3304,16 @@ class ItemStateManager:
                         if iid not in seen and not user_state.has_annotated(iid)]
             return pending
 
-        for iid in self.remaining_instance_ids:
+        candidates = self.remaining_instance_ids
+        if getattr(self, "assignment_strategy", None) == AssignmentStrategy.BATCH:
+            # Other cohorts and unrostered items cannot be assigned to this
+            # participant. Use the same read-only eligibility lookup as the
+            # batch allocator, without pinning an automatic cohort here.
+            candidates, _ = self._batch_candidate_ids_for_user(user_state.get_user_id())
+
+        for iid in candidates:
+            if iid not in self.remaining_instance_ids:
+                continue
             if iid in assigned:
                 continue
             if self._item_is_saturated(iid):
