@@ -486,7 +486,6 @@ ui_language.iaa_band_moderate
 ui_language.iaa_band_poor
 ui_language.iaa_band_strong
 ui_language.iaa_band_substantial
-ui_language.iaa_band_weak
 ui_language.iaa_empty_state
 ui_language.iaa_fully_aligned_items
 ui_language.iaa_items

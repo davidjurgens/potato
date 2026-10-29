@@ -10,6 +10,13 @@ All notable changes to the Potato annotation platform are documented in this fil
   n/a over 0 items, however many annotators had marked spans, because the
   report expected saved spans grouped by scheme and they are stored one entry
   per span. The report now reads them as stored.
+- The agreement badges on `/admin/iaa` and the dashboard called anything
+  from 0.6 up *strong*, beside a legend that calls 0.6 to 0.8 *substantial*.
+  They now use the legend's words: *substantial* from 0.6 to 0.8, *strong*
+  above 0.8 and *poor* below 0.2, and the dashboard's badges follow
+  `ui_language`. The JSON `band` field can now be `substantial`. The
+  `ui_language` key `iaa_band_weak` is gone; *poor* comes from
+  `iaa_band_poor`.
 - `/admin/api/agreement` compared multiselect answers as whole sets, so
   {neutrophil, T cell} against {neutrophil} was complete disagreement and the
   kappas could come out negative for annotators who mostly agreed. Multi-label

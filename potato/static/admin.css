@@ -743,7 +743,8 @@
   font-weight: 600;
 }
 
-.agreement-value.band-strong { color: var(--success-text); }
+.agreement-value.band-strong,
+.agreement-value.band-substantial { color: var(--success-text); }
 .agreement-value.band-weak { color: var(--destructive-text); }
 
 .agreement-band {
@@ -755,7 +756,8 @@
   font-weight: 500;
 }
 
-.agreement-band.band-strong { background: var(--success-tint); color: var(--success-text); }
+.agreement-band.band-strong,
+.agreement-band.band-substantial { background: var(--success-tint); color: var(--success-text); }
 .agreement-band.band-weak { background: var(--destructive-tint); color: var(--destructive-text); }
 
 /* System information: a definition list in the page font, replacing

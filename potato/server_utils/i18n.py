@@ -256,7 +256,6 @@ UI_LANG_DEFAULTS = {
     'iaa_th_metric': 'Metric',
     'iaa_th_value': 'Value',
     'iaa_na': 'n/a',
-    'iaa_band_weak': 'weak',
     'iaa_agreement': 'agreement',
     'iaa_items': 'items',
     'iaa_annotators': 'annotators',

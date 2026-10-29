@@ -113,6 +113,13 @@ class TestBanding:
         assert P.band_for("detection.alpha", 0.05) == "weak"
         assert P.band_for("detection.alpha", 0.45) == ""
 
+    def test_bands_follow_the_legend(self):
+        """The legend reads 0.6-0.8 substantial and >0.8 strong."""
+        assert P.band_for("cohens_kappa", 0.6) == "substantial"
+        assert P.band_for("cohens_kappa", 0.7) == "substantial"
+        assert P.band_for("cohens_kappa", 0.8) == "substantial"
+        assert P.band_for("cohens_kappa", 0.81) == "strong"
+
     def test_nan_is_not_banded(self):
         assert P.band_for("alpha", float("nan")) == ""
 
@@ -356,7 +363,7 @@ class TestPresentAgainstAnEpisodeReport:
                         "reward": {"reward_icc": 0.5, "reward_coverage": 0.9}}}}}
         rows = {r["name"]: r for r in P.present(report)["schemas"]["ep"]["rows"]}
         assert rows["phases.mean_agreement"]["display"] == "0.720"
-        assert rows["outcome.outcome_alpha"]["band"] == "strong"
+        assert rows["outcome.outcome_alpha"]["band"] == "substantial"
         assert rows["reward.reward_coverage"]["band"] == ""   # coverage
         assert P.present(report)["schemas"]["ep"]["sweep"] is None
 

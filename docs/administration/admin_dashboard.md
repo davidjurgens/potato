@@ -76,7 +76,7 @@ The Overview tab holds project-wide counts and progress.
 - **Open issues**: Shown when [memos](../advanced/memos.md) are on: issues raised from the Notes panel that are still open, and how many are resolved
 - **Over-collected**: Shown only when some items hold more annotations than the per-item cap
 
-**Agreement:** One number per schema, computed over items that have two or more annotators. The measure is Krippendorff's alpha where the schema has one. Otherwise it is the first chance-corrected coefficient in the schema's list, then a correlation, then raw overlap such as mean Jaccard. Percent agreement is never used here. Values of 0.6 and above are labelled *strong*, values below 0.2 *weak*. The full table is at **Full report**, which opens `/admin/iaa`.
+**Agreement:** One number per schema, computed over items that have two or more annotators. The measure is Krippendorff's alpha where the schema has one. Otherwise it is the first chance-corrected coefficient in the schema's list, then a correlation, then raw overlap such as mean Jaccard. Percent agreement is never used here. Values from 0.6 to 0.8 are labelled *substantial*, above 0.8 *strong*, and below 0.2 *poor*, as in the scale legend on `/admin/iaa`. The full table is at **Full report**, which opens `/admin/iaa`.
 
 **System Information:** Task name, assignment limits ("No limit" when unset), assignment strategy and debug mode.
 
@@ -382,7 +382,7 @@ Headers: X-API-Key: admin_api_key
 ```
 
 One row per schema: `schema`, `annotation_type`, `metric` (the measure
-chosen, or `null`), `value`, `display`, `band` (`strong`, `weak` or empty),
+chosen, or `null`), `value`, `display`, `band` (`strong`, `substantial`, `weak` or empty),
 `n_items`, `n_annotators`, and `note` when no measure could be computed.
 `n_overlap_items` counts the items with two or more annotators.
 

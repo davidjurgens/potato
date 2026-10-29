@@ -162,7 +162,12 @@ _SWEEP_KEYS = frozenset({"sweep", "sweep_parameter", "sweep_parameter_label"})
 
 
 def band_for(name: str, value: Any) -> str:
-    """``"strong"``, ``"weak"``, or ``""`` — the empty string meaning unbanded."""
+    """``"strong"`` (above 0.8), ``"substantial"`` (0.6 to 0.8), ``"weak"``
+    (below 0.2), or ``""`` for the bands between and for unbanded measures.
+
+    The names follow the scale legend on /admin/iaa. A 0.65 used to be
+    badged "strong" beside a legend that calls 0.6 to 0.8 substantial.
+    """
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return ""
     if isinstance(value, float) and math.isnan(value):
@@ -171,8 +176,10 @@ def band_for(name: str, value: Any) -> str:
         return ""
     if str(name).rsplit(".", 1)[-1] in _UNBANDED_RAW:
         return ""
-    if value >= 0.6:
+    if value > 0.8:
         return "strong"
+    if value >= 0.6:
+        return "substantial"
     if value < 0.2:
         return "weak"
     return ""

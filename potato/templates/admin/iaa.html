@@ -350,9 +350,9 @@
                   <tr>
                     <td>{{ row.name }}</td>
                     <td class="iaa-metric-value
-                        {% if row.band == 'strong' %}iaa-metric-good{% elif row.band == 'weak' %}iaa-metric-poor{% endif %}">
+                        {% if row.band in ('strong', 'substantial') %}iaa-metric-good{% elif row.band == 'weak' %}iaa-metric-poor{% endif %}">
                       {% if row.is_text %}<span class="iaa-metric-text">{{ row.display }}</span>{% elif row.display %}{{ row.display }}{% endif %}
-                      {% if row.band %}{% set band_label = ui_lang.iaa_band_strong|default('strong') if row.band == 'strong' else ui_lang.iaa_band_weak|default('weak') %}<span class="iaa-band" aria-hidden="true">{{ band_label }}</span><span class="sr-only"> &mdash; {{ band_label }} {{ ui_lang.iaa_agreement|default('agreement') }}</span>{% endif %}
+                      {% if row.band %}{% set band_label = {'strong': ui_lang.iaa_band_strong|default('strong'), 'substantial': ui_lang.iaa_band_substantial|default('substantial'), 'weak': ui_lang.iaa_band_poor|default('poor')}[row.band] %}<span class="iaa-band" aria-hidden="true">{{ band_label }}</span><span class="sr-only"> &mdash; {{ band_label }} {{ ui_lang.iaa_agreement|default('agreement') }}</span>{% endif %}
                       {% if row.context %}<span class="iaa-metric-context">{{ row.context }}</span>{% endif %}
                       {% if row.note %}<span class="iaa-metric-note">{{ row.note }}</span>{% endif %}
                     </td>
@@ -395,7 +395,7 @@
                   </th>
                   {% for cell in row.cells %}
                   <td class="iaa-metric-value
-                      {% if cell.band == 'strong' %}iaa-metric-good{% elif cell.band == 'weak' %}iaa-metric-poor{% endif %}">
+                      {% if cell.band in ('strong', 'substantial') %}iaa-metric-good{% elif cell.band == 'weak' %}iaa-metric-poor{% endif %}">
                     {{ cell.display }}{% if cell.footnote %}<sup class="iaa-footnote-ref">{{ cell.footnote }}</sup><span class="sr-only"> &mdash; {{ cell.note }}</span>{% endif %}
                   </td>
                   {% endfor %}

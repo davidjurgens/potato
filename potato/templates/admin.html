@@ -930,7 +930,12 @@
             box.innerHTML = `<p class="admin-muted">No item has two or more annotators yet, so there is nothing to compare. Agreement appears here once items are annotated by more than one person.</p>`;
             return;
           }
-          const bandText = { strong: "strong", weak: "weak" };
+          // The words of the /admin/iaa scale legend, in the interface language.
+          const bandText = {
+            strong: {{ (ui_lang.iaa_band_strong|default('strong'))|tojson }},
+            substantial: {{ (ui_lang.iaa_band_substantial|default('substantial'))|tojson }},
+            weak: {{ (ui_lang.iaa_band_poor|default('poor'))|tojson }},
+          };
           box.innerHTML = `
             <div class="admin-table-container admin-table-flat">
               <table class="admin-table">
