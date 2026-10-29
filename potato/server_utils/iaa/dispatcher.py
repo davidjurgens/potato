@@ -61,6 +61,8 @@ _KIND_BY_TYPE = {
     # whose values are label names) or scored only the first sub-answer and
     # called it the scheme (constant_sum, soft_label). See `_aggregate_matrix`.
     "multirate": SchemaKind.MATRIX,
+    # {criterion: score}, the multirate shape; it had no kind and was skipped.
+    "rubric_eval": SchemaKind.MATRIX,
     "constant_sum": SchemaKind.MATRIX,
     "soft_label": SchemaKind.MATRIX,
     # {"Formal__Informal": "3", ...}: one sub-answer per adjective pair.

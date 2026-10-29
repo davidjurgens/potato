@@ -188,7 +188,11 @@ def test_counterbalanced_block_randomizer(result):
 
 
 def test_show_one_of_n_embedded_data_is_a_condition(result):
-    assert result.conditions == {"factors": {"frame": ["gain", "loss"]}, "assignment": "balanced"}
+    # The consent screener can end the survey before the randomizer, so
+    # balance counts finishers rather than everyone assigned on arrival.
+    assert result.conditions == {"factors": {"frame": ["gain", "loss"]}, "assignment": "balanced",
+                                 "balance_on": "completed"}
+    assert any("before its randomizer" in w for w in result.warnings)
     gain, loss = _page(result, "Gain_frame"), _page(result, "Loss_frame")
     assert _holds(gain.show_when, {"condition.frame": "gain"})
     assert not _holds(gain.show_when, {"condition.frame": "loss"})

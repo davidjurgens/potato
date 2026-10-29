@@ -87,6 +87,10 @@ batch_assignment:
     - {name: list_b, data_file: data/list_b.jsonl}
 ```
 
+Every participant on a list sees its items in file order. Add
+`randomize_within_list: true` under `batch_assignment` to give each one their
+own order, seeded per participant so a reload keeps it.
+
 Item IDs must be unique across all data files, including the files of
 different groups. The server will not start when two lists share an ID, so a
 stimulus that appears in both lists needs a distinct ID in each (for example

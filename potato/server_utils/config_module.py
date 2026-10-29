@@ -224,6 +224,7 @@ KNOWN_CONFIG_KEYS = {
     },
     "batch_assignment": {
         "groups", "annotator_key", "auto_assign_annotators", "group_by_condition",
+        "randomize_within_list",
     },
     "diversity_ordering": {
         "enabled", "model_name", "num_clusters", "items_per_cluster",

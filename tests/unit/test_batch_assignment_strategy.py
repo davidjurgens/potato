@@ -660,3 +660,27 @@ def test_batch_assignment_config_validation_requires_instances_or_file():
                 }
             )
         )
+
+
+def test_randomize_within_list_gives_each_participant_their_own_order():
+    """Everyone on a list saw its items in file order."""
+    items = [f"s{n}" for n in range(8)]
+    config = _config(batch_assignment={"randomize_within_list": True, "groups": [
+        {"name": "list_a", "annotators": [f"r{n}" for n in range(6)], "instances": items}]})
+    ism = _manager_with_items(config, items)
+    orders = []
+    for n in range(6):
+        reader = _user(f"r{n}")
+        assert ism.assign_instances_to_user(reader) == len(items)
+        assert sorted(reader.instance_id_ordering) == sorted(items)
+        orders.append(tuple(reader.instance_id_ordering))
+    assert len(set(orders)) > 1, "every reader got the same order"
+
+
+def test_without_randomize_within_list_the_file_order_is_kept():
+    items = [f"s{n}" for n in range(8)]
+    ism = _manager_with_items(_config(batch_assignment={"groups": [
+        {"name": "list_a", "annotators": ["r0"], "instances": items}]}), items)
+    reader = _user("r0")
+    ism.assign_instances_to_user(reader)
+    assert reader.instance_id_ordering == items

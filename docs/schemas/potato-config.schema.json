@@ -4313,7 +4313,12 @@
           "description": "A `conditions` factor whose levels name the auto-assigned groups. Each participant gets the group of their assigned level, so each condition can carry its own items",
           "type": "string"
         },
-        "groups": {}
+        "groups": {},
+        "randomize_within_list": {
+          "default": false,
+          "description": "Give each participant their group's items in their own order, seeded per participant, instead of file order",
+          "type": "boolean"
+        }
       },
       "type": "object"
     },

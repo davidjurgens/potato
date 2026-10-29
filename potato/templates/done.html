@@ -66,8 +66,8 @@
         </div>
 
         <h1 class="potato-page-title">Thank You!</h1>
-        <p class="potato-page-subtitle">
-            You have completed the annotation task and your responses are saved.
+        <p class="potato-page-subtitle" id="done-message">
+            {% if ended_early %}{{ ended_early }}{% else %}You have completed the annotation task and your responses are saved.{% endif %}
         </p>
 
         {% set has_platform_action = action and action.kind in ['redirect', 'post_form'] %}
@@ -78,7 +78,7 @@
                 {{ completion_code }}
             </div>
             <p class="code-hint">
-                <i class="fas fa-copy me-1"></i> Click to copy your completion code
+                <i class="fas fa-copy me-1"></i> Click to copy your {% if ended_early %}code{% else %}completion code{% endif %}
             </p>
         </div>
         {% endif %}
@@ -113,7 +113,7 @@
         {% else %}
         <div class="potato-alert potato-alert-info" style="text-align: left;">
             <i class="fas fa-info-circle me-2"></i>
-            {% if action and action.message %}{{ action.message }}{% else %}Copy the code above and paste it in your crowdsourcing platform to receive credit.{% endif %}
+            {% if action and action.message %}{{ action.message }}{% elif ended_early %}Copy the code above and paste it in your crowdsourcing platform.{% else %}Copy the code above and paste it in your crowdsourcing platform to receive credit.{% endif %}
         </div>
         {% endif %}
         {% else %}

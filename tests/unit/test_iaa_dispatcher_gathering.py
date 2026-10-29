@@ -361,3 +361,13 @@ class TestControl:
         """The old behaviour returned NaN; assert NaN would fail these tests."""
         assert not (math.nan == pytest.approx(1.0))
         assert not (math.nan == pytest.approx(0.0))
+
+
+def test_rubric_eval_is_scored():
+    """rubric_eval had no kind, so /admin/iaa skipped it."""
+    scheme = {"annotation_type": "rubric_eval", "name": "rubric",
+              "criteria": [{"name": "clarity"}, {"name": "accuracy"}]}
+    same = {"i1": {("rubric", "clarity"): "4", ("rubric", "accuracy"): "2"},
+            "i2": {("rubric", "clarity"): "1", ("rubric", "accuracy"): "5"}}
+    metrics = run_report({"a": same, "b": same}, scheme)
+    assert metrics.get("n_items") == 2

@@ -42,6 +42,20 @@ All notable changes to the Potato annotation platform are documented in this fil
   annotators and gives each annotator's sensitivity and specificity per label
   in the JSON report. For image masks it is still a Python call, and the docs
   now say so.
+- With a crowd provider, a participant screened out by `exit_when` (or failing
+  training) saw "You have completed the annotation task and your responses
+  are saved" beside the screen-out code, and the rule's `message` was never
+  shown. The done page now shows the message instead.
+- A Qualtrics survey whose screener can end it before the randomizer
+  imported with `balance_on: assigned`, so people turned away at the screener
+  counted toward a cell. The importer writes `balance_on: completed` then and
+  says so in the warnings.
+- `/admin/iaa` skipped `rubric_eval`; it is scored per criterion like
+  `multirate`. The `reliability` export skipped `pairwise`; a binary scheme
+  gets a nominal row and a scale scheme an interval one, in data order.
+- A `text_edit` line left unchanged saved nothing on Next, so the progress
+  counter did not move and an export could not tell a line someone checked
+  from one nobody opened. Next now saves it as accepted, with edit distance 0.
 - `balance_on: completed` counted only finished participants, so everyone who
   started together counted toward no cell: 12 readers arriving at once split
   8 and 4 across two lists. Participants still in progress now count until
@@ -204,6 +218,9 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Added
 
+- **`batch_assignment.randomize_within_list`**: each participant gets their
+  list's items in their own order, seeded per participant, where everyone on a
+  list used to see the file order.
 - **`item_properties.private_keys`**: item fields the annotator's browser never
   receives, for keeping a comparison blind (the model behind each response,
   say). They are kept in exports.

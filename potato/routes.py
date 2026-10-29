@@ -8376,9 +8376,21 @@ def done():
             mturk_submit_url = action.form_action
             mturk_assignment_id = action.form_fields.get('assignmentId')
 
+    # A participant who did not finish (screened out, or failed training) is
+    # told so with the platform's code: done.html said "You have completed the
+    # annotation task" to them too, and the exit_when message went unshown.
+    ended_early = None
+    if provider is not None and screen_out:
+        ended_early = (screen_out.get("message")
+                       or "You are not eligible for this study. Thank you for your time.")
+    elif provider is not None and training_failed:
+        ended_early = ("You did not pass the qualification questions, so the task did "
+                       "not start. Thank you for your time.")
+
     # Show the completion page
     return render_template("done.html",
                           title=config.get("annotation_task_name", "Annotation Platform"),
+                          ended_early=ended_early,
                           action=action,
                           completion_code=completion_code,
                           prolific_redirect_url=prolific_redirect_url,

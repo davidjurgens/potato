@@ -53,6 +53,10 @@ annotation_schemes:
 }
 ```
 
+Pressing Next on a line left as it was saves it as accepted: `edited_text`
+equals `original_text` and both distances are 0. A line nobody reached has no
+record, so the two can be told apart.
+
 ## UI Description
 
 1. **Source text block**: Read-only display of the original text (gray background)

@@ -52,7 +52,7 @@ per question:
 
 | Column | Meaning |
 |---|---|
-| `level` | Level of measurement: nominal (radio, select), ordinal (likert), interval (number, slider, VAS), MASI (multiselect and hierarchical multiselect, with partial credit for overlapping sets), positional (span; see below) |
+| `level` | Level of measurement: nominal (radio, select, binary pairwise), ordinal (likert), interval (number, slider, VAS, pairwise scale), MASI (multiselect and hierarchical multiselect, with partial credit for overlapping sets), positional (span; see below) |
 | `alpha` | Krippendorff's alpha over the units coded by two or more coders |
 | `ci95_low`, `ci95_high` | A percentile bootstrap interval, resampling units with replacement (`bootstrap` resamples, default 1000, seeded) |
 | `percent_agreement` | Share of coder pairs on a unit that gave the same answer |

@@ -41,7 +41,17 @@ from .base import BaseExporter, ExportContext, ExportResult
 
 LEVELS = {"radio": "nominal", "select": "nominal", "likert": "ordinal", "number": "interval",
           "slider": "interval", "vas": "interval", "multiselect": "masi",
-          "hierarchical_multiselect": "masi", "span": "positional"}
+          "hierarchical_multiselect": "masi", "span": "positional",
+          # Binary pairwise is nominal over the chosen letter (in data order:
+          # the loader applies the recorded order); scale mode is interval.
+          "pairwise": "nominal"}
+
+
+def _level(scheme: dict) -> str:
+    if (scheme.get("annotation_type") == "pairwise"
+            and (scheme.get("mode") or "binary") == "scale"):
+        return "interval"
+    return LEVELS[scheme["annotation_type"]]
 COLUMNS = ["schema", "level", "alpha", "ci95_low", "ci95_high", "percent_agreement",
            "units", "coders", "pairable_values"]
 
@@ -57,6 +67,14 @@ def _value(scheme: dict, labels: Any):
     if kind == "multiselect":
         chosen = frozenset(k for k, v in labels.items() if v not in (None, "", False))
         return chosen or None
+    if kind == "pairwise":
+        if (scheme.get("mode") or "binary") == "scale":
+            try:
+                return float(labels.get("scale_value"))
+            except (TypeError, ValueError):
+                return None
+        chosen = labels.get("selection")
+        return str(chosen) if chosen not in (None, "") else None
     if kind in ("radio", "select"):
         for k, v in labels.items():
             if v not in (None, "", False):
@@ -176,7 +194,9 @@ class ReliabilityExporter(BaseExporter):
     file_extensions = [".csv", ".md"]
 
     def _schemes(self, context):
-        return [s for s in context.schemas or [] if s.get("annotation_type") in LEVELS]
+        return [s for s in context.schemas or [] if s.get("annotation_type") in LEVELS
+                and not (s.get("annotation_type") == "pairwise"
+                         and (s.get("mode") or "binary") == "multi_dimension")]
 
     @staticmethod
     def _span_row(context, scheme, reps, seed, undefined_notes):
@@ -235,7 +255,7 @@ class ReliabilityExporter(BaseExporter):
         out_rows = []
         undefined_notes = []
         for scheme in self._schemes(context):
-            name, level = scheme["name"], LEVELS[scheme["annotation_type"]]
+            name, level = scheme["name"], _level(scheme)
             if level == "positional":
                 out_rows.append(self._span_row(context, scheme, reps, seed, undefined_notes))
                 continue
@@ -294,6 +314,12 @@ class ReliabilityExporter(BaseExporter):
             f.write(f"\nIntervals: percentile bootstrap over units, {reps} resamples.\n")
             for note in undefined_notes:
                 f.write(f"\n{note}.\n")
+            skipped = [s.get("name") for s in context.schemas or []
+                       if s.get("annotation_type") == "pairwise"
+                       and (s.get("mode") or "binary") == "multi_dimension"]
+            if skipped:
+                f.write(f"\nNot scored here: {', '.join(skipped)} (multi_dimension pairwise; "
+                        "see /admin/iaa).\n")
         return ExportResult(success=True, format_name=self.format_name,
                             files_written=[csv_path, md_path], warnings=undefined_notes,
                             stats={"num_schemes": len(out_rows)})

@@ -192,3 +192,27 @@ def test_a_span_past_the_text_is_named():
     assert note.startswith("codes: 1 span(s)") and "d1" in note
     clean = ReliabilityExporter().export(_span_ctx(out, SPAN_ANNS), out, {"bootstrap": 0})
     assert not any("past the" in w for w in clean.warnings)
+
+
+def test_pairwise_gets_a_row():
+    """The reliability export skipped pairwise schemes."""
+    schemes = [{"name": "pref", "annotation_type": "pairwise", "items_key": "r"},
+               {"name": "how", "annotation_type": "pairwise", "mode": "scale"},
+               {"name": "dims", "annotation_type": "pairwise", "mode": "multi_dimension"}]
+    picks = ["A", "B", "A", "A", "B", "B"]
+    anns = []
+    for i, pick in enumerate(picks):
+        for user in ("x", "y"):
+            other = pick if (user == "x" or i != 2) else ("B" if pick == "A" else "A")
+            anns.append({"instance_id": f"i{i}", "user_id": user,
+                         "labels": {"pref": {"selection": other},
+                                    "how": {"scale_value": str(i - 2)}}})
+    out = create_test_directory("reliability_pairwise")
+    ctx = ExportContext(config={}, annotations=anns, items={}, schemas=schemes, output_dir=out)
+    assert ReliabilityExporter().export(ctx, out, {"bootstrap": 50}).success
+    rows = {r["schema"]: r for r in csv.DictReader(open(os.path.join(out, "reliability.csv")))}
+    assert rows["pref"]["level"] == "nominal" and rows["pref"]["units"] == "6"
+    assert float(rows["pref"]["percent_agreement"]) == pytest.approx(100 * 5 / 6, abs=0.001)
+    assert rows["how"]["level"] == "interval" and float(rows["how"]["alpha"]) == pytest.approx(1.0)
+    assert "dims" not in rows
+    assert "Not scored here: dims" in open(os.path.join(out, "reliability.md")).read()

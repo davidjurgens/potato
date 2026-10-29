@@ -331,6 +331,19 @@ class QualtricsImporter:
         if self.factors:
             result.conditions = {"factors": {f: list(v) for f, v in self.factors.items()},
                                  "assignment": self.assignment or "balanced"}
+            # Qualtrics assigns at the randomizer, usually after the screener;
+            # Potato assigns on arrival. Balancing on everyone assigned would
+            # count the people the screener turns away, so count finishers (and
+            # those still in progress) instead.
+            first = getattr(self, "randomizer_page", None) or 0
+            screens = [i for i, page in enumerate(result.pages[:first]) if page.exit_when]
+            screens += [before for before, _p, _m, _w in self.exits if before <= first]
+            if screens:
+                result.conditions["balance_on"] = "completed"
+                result.warnings.append(
+                    "the survey can screen participants out before its randomizer, but Potato "
+                    "assigns a condition on arrival, so conditions.balance_on is 'completed': "
+                    "screened-out and abandoned participants do not count toward a cell")
         if self.languages:
             result.skip("survey", "translations",
                         f"{', '.join(sorted(self.languages))}: only the main language is imported")
@@ -489,6 +502,9 @@ class QualtricsImporter:
             return True
         factor = self.factor_names.take(_IDENT_RE.sub("_", field_name).strip("_"), "factor")
         self.factor_of[field_name] = factor
+        if getattr(self, "randomizer_page", None) is None:
+            # Pages before it can screen people out before they have a cell.
+            self.randomizer_page = len(self.result.pages)
         self.factors[factor] = levels
         method = "balanced" if even else "random"
         if self.assignment and self.assignment != method:

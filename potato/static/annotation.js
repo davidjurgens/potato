@@ -2052,6 +2052,11 @@ async function navigateToNext(options = {}) {
         return;
     }
 
+    // A text_edit line the annotator left as it was is an answer: accepted
+    // unchanged. Only typing wrote the record, so Next on a correct line saved
+    // nothing and the export could not tell it from a line nobody opened.
+    recordAcceptedTextEdits();
+
     // Client-side required field validation
     hasAttemptedForwardValidation = true;
     if (!bypassRequired && !validateRequiredFields({ showErrors: true })) {
@@ -6407,6 +6412,24 @@ function populateExtractiveQa(form, schemaName, data, instanceText) {
             passageEl.textContent = passageText;
         }
     }
+}
+
+/**
+ * Record each text_edit field still showing its untouched source as accepted
+ * (edit distance 0). A field with a record already is left alone.
+ */
+function recordAcceptedTextEdits() {
+    document.querySelectorAll('.shadcn-text-edit-container').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        const hidden = form.querySelector('.text-edit-data-input');
+        const editor = form.querySelector('.text-edit-textarea');
+        const source = schema && document.getElementById(schema + '-source-text');
+        if (!hidden || !editor || !source || hidden.value) return;
+        if (!source.textContent || editor.value !== source.textContent) return;
+        if (typeof window.textEditOnInput === 'function') {
+            window.textEditOnInput(schema);
+        }
+    });
 }
 
 function populateTextEdit(form, schemaName, data) {

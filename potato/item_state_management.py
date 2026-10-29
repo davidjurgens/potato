@@ -1158,6 +1158,10 @@ class ItemStateManager:
         # participant gets the group of their assigned level, so a condition
         # can carry its own stimulus set.
         self.batch_group_by_condition = self.batch_assignment_config.get('group_by_condition')
+        # Each participant gets their list in their own order. Every reader
+        # on a list used to see its items in file order.
+        self.batch_randomize_within_list = bool(
+            self.batch_assignment_config.get('randomize_within_list', False))
         self.batch_user_to_instance_ids: Dict[str, List[str]] = defaultdict(list)
         self.batch_auto_groups: List[Dict[str, object]] = []
         self.batch_auto_user_to_group: Dict[str, int] = {}
@@ -1482,6 +1486,10 @@ class ItemStateManager:
             if user_id in self._item_batch_annotators(instance_id):
                 candidate_ids.append(instance_id)
                 seen.add(instance_id)
+
+        if self.batch_randomize_within_list and candidate_ids:
+            from potato.server_utils.presentation_order import order_seed
+            random.Random(order_seed(str(user_id), "__batch_list__", "order")).shuffle(candidate_ids)
 
         return candidate_ids, rollback_group_index
 

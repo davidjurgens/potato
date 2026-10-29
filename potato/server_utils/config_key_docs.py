@@ -524,6 +524,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "can carry its own items",
         type="string", category=ASSIGN, see_also=("conditions",),
     ),
+    "batch_assignment.randomize_within_list": _D(
+        "Give each participant their group's items in their own order, seeded "
+        "per participant, instead of file order",
+        type="boolean", default=False, category=ASSIGN,
+        see_also=("batch_assignment.group_by_condition",),
+    ),
     "random_seed": _D(
         "Seed for assignment shuffling, so an ordering can be reproduced",
         type="integer", category=ASSIGN,
