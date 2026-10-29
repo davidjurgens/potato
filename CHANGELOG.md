@@ -53,6 +53,12 @@ All notable changes to the Potato annotation platform are documented in this fil
 - `/admin/iaa` skipped `rubric_eval`; it is scored per criterion like
   `multirate`. The `reliability` export skipped `pairwise`; a binary scheme
   gets a nominal row and a scale scheme an interval one, in data order.
+- The export command read only JSON data files, so a project whose
+  `data_files` are CSV or TSV exported with "Loaded 0 items" and every
+  exporter that needs the item text lost it. CSV, TSV and parquet are read
+  with the server's parser. A `.CSV` data file (Excel on Windows writes the
+  extension in capitals) was refused at boot; extensions are compared
+  case-insensitively.
 - A cuboid's class could not be changed in the point-cloud viewer: the class
   buttons and keys set only the class of the next object. With an object the
   annotator selected they relabel it, and in a sequence the whole track. A

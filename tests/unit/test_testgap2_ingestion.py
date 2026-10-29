@@ -101,6 +101,13 @@ class TestDelimitedFilesKeepCellsVerbatim:
         assert {i: v["text"] for i, v in items.items()} == {
             "1": '"quoted start', "2": "second", "3": '"third" ok'}
 
+    def test_an_upper_case_csv_extension_loads(self, boot):
+        """Excel on Windows writes `.CSV`; data_files compared the extension
+        case-sensitively and refused it."""
+        d = _fresh_dir("tg2_csv_upper")
+        path = _write(d, "items.CSV", "id,text\n1,one\n")
+        assert list(boot({"data_files": [path]}, d)) == ["1"]
+
     def test_a_quoted_csv_cell_keeps_its_comma_and_newline(self, boot):
         d = _fresh_dir("tg2_csv_quoted")
         path = _write(d, "items.csv", 'id,text\n1,"a, b\nc"\n2,ok\n')

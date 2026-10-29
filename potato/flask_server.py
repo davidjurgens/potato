@@ -705,7 +705,9 @@ def load_instance_data(config: dict):
         if not data_fname:
             logger.warning(f"Skipping data_files entry with no path: {data_file_entry}")
             continue
-        fmt = data_fname.split(".")[-1]
+        # Lower-cased: Excel on Windows writes `.CSV`, and data_sources and
+        # data_directory already accept it.
+        fmt = data_fname.split(".")[-1].lower()
         if fmt not in ["csv", "tsv", "json", "jsonl", "parquet"]:
             raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
 

@@ -118,3 +118,21 @@ class TestConvoKitProvenanceSurvives:
         write(tmp_path, "d.json", dumper(items))
         loaded = load_items_from_data_files(config_for("d.json"), str(tmp_path))
         assert loaded["convo:c0"]["_convokit"]["conversation_id"] == "c0"
+
+
+class TestDelimitedFiles:
+    """The export loader read JSON only: a CSV-backed project exported with
+    "Loaded 0 items"."""
+
+    def test_csv_and_tsv_rows_are_items(self, tmp_path):
+        write(tmp_path, "d.csv", "id,text\na,first row\nb,\"second, with a comma\"\n")
+        write(tmp_path, "e.tsv", "id\ttext\nc\tthird\n")
+        config = config_for("d.csv")
+        config["data_files"] = ["d.csv", "e.tsv"]
+        items = load_items_from_data_files(config, str(tmp_path))
+        assert set(items) == {"a", "b", "c"}
+        assert items["b"]["text"] == "second, with a comma"
+
+    def test_an_upper_case_extension_is_read(self, tmp_path):
+        write(tmp_path, "d.CSV", "id,text\na,first\n")
+        assert set(load_items_from_data_files(config_for("d.CSV"), str(tmp_path))) == {"a"}

@@ -520,7 +520,30 @@ def load_items_from_data_files(config: dict, config_dir: str) -> dict:
             logger.warning(f"Data file not found: {path}")
             continue
 
-        with open(path, "r") as f:
+        encoding = (data_file_entry.get("encoding", "utf-8")
+                    if isinstance(data_file_entry, dict) else "utf-8")
+        fmt = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+        if fmt in ("csv", "tsv", "parquet"):
+            # The parser the server uses at boot. Only JSON was read here, so a
+            # CSV-backed project exported with "Loaded 0 items" and every
+            # exporter that needs the item text lost it.
+            try:
+                if fmt == "parquet":
+                    import pandas as pd
+                    records = pd.read_parquet(path).to_dict(orient="records")
+                else:
+                    from potato.data_sources.parsing import parse_delimited, read_text
+                    records = parse_delimited(read_text(path, encoding),
+                                              "," if fmt == "csv" else "\t", path)
+            except Exception as e:
+                logger.warning(f"Could not read data file {path}: {e}")
+                continue
+            for position, item in enumerate(records, 1):
+                if isinstance(item, dict):
+                    items[str(item.get(id_key, f"item_{position}"))] = item
+            continue
+
+        with open(path, "r", encoding=encoding) as f:
             content = f.read()
 
         # A whole-file JSON array is as legal a Potato data file as JSON Lines
@@ -549,7 +572,6 @@ def load_items_from_data_files(config: dict, config_dir: str) -> dict:
             try:
                 item = json.loads(line)
             except json.JSONDecodeError:
-                # CSV/TSV rows and stray text land here.
                 logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
                 continue
             if isinstance(item, dict):
