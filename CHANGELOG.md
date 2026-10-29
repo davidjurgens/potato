@@ -4,6 +4,16 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+## [2.13.1] - Pairwise Order, Agreement and Export Fixes
+
+Fixes for bugs found in 2.13.0 and earlier, and a few new settings. The
+upgrade notes in the [release notes](docs/releasenotes/v2.13.1.md) list the
+changes that can affect existing scripts and configs.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
 ### Fixed
 
 - With `randomize_order` on a `pairwise` scheme, the page stores the letter

@@ -296,6 +296,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.13.1](releasenotes/v2.13.1.md) - Pairwise Order, Agreement and Export Fixes
 - [v2.13.0](releasenotes/v2.13.0.md) - Science Viewers, Scheduled Sessions and Consensus
 - [v2.12.3](releasenotes/v2.12.3.md) - Clean Rebuild of 2.12.2
 - [v2.12.2](releasenotes/v2.12.2.md) - Security Fixes, Per-Annotator Chats and Paradata Phases
@@ -73379,6 +73380,130 @@ python scripts/generate_llms_full.py --check
 
 Run them after adding an annotation type, a display type, a config key, or a
 route. See [Testing](../guides/testing.md) for the drift tests that enforce this.
+
+
+---
+
+<!-- source: docs/releasenotes/v2.13.1.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.13.1/
+
+# Release Notes: v2.13.1 — Pairwise Order, Agreement and Export Fixes
+
+Fixes for bugs found in 2.13.0 and earlier, and a few new settings. The full
+list is in the
+[changelog](https://github.com/davidjurgens/potato/blob/master/CHANGELOG.md).
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## Upgrade notes
+
+- **Randomized pairwise answers are now read in data order.** With
+  `randomize_order`, the page stores the letter of the card the annotator saw.
+  Agreement, every export, adjudication, adaptive escalation, paper mode and
+  the labeling engine used to read that letter as if it were the data's, so
+  two annotators who preferred the same response could disagree. They now
+  apply the recorded order. Stored data is unchanged; agreement numbers and
+  exports of randomized pairwise studies will change when you rerun them.
+- **`krippendorff_alpha_u` is now `positional_alpha`** in the `/admin/iaa`
+  report and in `potato.server_utils.iaa.span`. It was never Krippendorff's
+  unitizing alpha. Scripts that read the old key need the new one.
+- **`validate --strict` fails on more configs.** Keys that are accepted but
+  read by nothing now warn (`surveyflow`, `automatic_assignment`, top-level
+  `prestudy` and three `active_learning` keys), and so do unknown keys inside
+  dict labels; `key_binding` is pointed at `key_value`. Dict labels on
+  `text`, `multirate`, `pairwise` and `pure_display`, which rendered as a
+  Python dict or raised, are now validation errors.
+- **A config needs an annotation phase.** `potato validate` reports an error
+  without one. No annotation schemes used to crash the server at startup, and leaving `annotation` out of
+  `phases.order` ran it after the debrief. For a study with nothing to
+  annotate, add one item and a radio scheme with a single label such as
+  Finish; a `pure_display` item never completes.
+
+## Security
+
+- The media proxy (`/api/audio/proxy`) and waveform downloads connected with
+  no TLS server name and with certificate checks off. They now send the
+  hostname and verify the certificate against it. A URL with a literal IP
+  address now needs a certificate that names that IP, as a browser would.
+
+## Agreement and adjudication
+
+- Span agreement at `/admin/iaa` was always empty. Span agreement also kept
+  only the longest of overlapping spans, so a coder who applied two
+  overlapping codes agreed perfectly with one who applied only the longer.
+  Both are fixed.
+- `/admin/api/agreement` scores multiselect with Krippendorff's alpha (MASI)
+  and mean Jaccard instead of comparing whole sets.
+- `rubric_eval` and `interlinear_gloss` are scored at `/admin/iaa`, and the
+  `reliability` export covers `pairwise` and span schemes.
+- The agreement badges use the legend's words: *substantial* from 0.6 to 0.8,
+  *strong* above 0.8 and *poor* below 0.2. The `ui_language` key
+  `iaa_band_weak` is gone; *poor* comes from `iaa_band_poor`.
+- Adaptive escalation counts a blank as a different answer once the annotator
+  has left the item, compares pairwise answers by the choice, and withdraws a
+  boost when a later save restores agreement before anyone beyond the
+  original cap has the item.
+- STAPLE runs in the volume agreement report on items with three or more
+  annotators.
+
+## Exports and imports
+
+- The export command reads CSV, TSV and parquet data files, and a `.CSV` file
+  is accepted at boot.
+- KITTI: 2D boxes clip at the last pixel, tracking labels keep six decimals,
+  and an imported box keeps its own truncation unless someone edited it.
+- Camtrap DP uses profile 1.0.2 and sets `gbifIngestion` on packages of
+  single images, without which GBIF's converter found no occurrences. Camtrap
+  DP and Darwin Core write one reviewer per item, and Darwin Core
+  `associatedMedia` is an http(s) URL instead of the server's `/media/` path.
+- TextGrid and EAF write every annotator, TextGrid escapes quotes the way
+  Praat reads them, and EAF keeps parent links, constraints and participants.
+- QDPX exports validate against the REFI-QDA schema when a source has both
+  passages and whole-source codes, and QDPX imports keep each span's coder.
+- BirdNET `nocall` rows are left out, the MegaDetector importer reads
+  coordinates, and the Raven export gives boxes a reviewer drew or resized
+  confidence 1.0 and adds a `Box Source` column.
+
+## Annotation tools
+
+- Image boxes and point-cloud cuboids can be relabeled: select one and press a
+  label. In a point-cloud sequence the whole track changes.
+- A closed polygon on a 3D volume paints its region into the label's mask, so
+  it reaches the NIfTI and DICOM SEG exports and Dice.
+- On a spectrogram covered by detector boxes, a drag draws a new box instead
+  of moving a detection.
+- `display_logic` works on pages with a pairwise scheme, `text_edit` saves an
+  unchanged line as accepted on Next, and `video_annotation` reads
+  `tracking_options`.
+- Span label `key_value` shortcuts work, and a radio or multiselect label with
+  a duplicate `key_value` is shown without a shortcut instead of dropped.
+
+## Studies and surveys
+
+- `required: true` on a survey question is enforced by the server, so an
+  `exit_when` screen-out on it runs.
+- A participant screened out with a crowd provider sees the rule's message
+  instead of "You have completed the annotation task".
+- `balance_on: completed` counts participants still in progress for
+  `conditions.in_progress_minutes` (default 60).
+- Conjoint profiles are drawn at random by the server and saved with the
+  choice.
+
+## New settings
+
+- **`assignment_hold_minutes`**: when an annotator runs out of work, items
+  other annotators hold but have not reached move to them instead of being
+  shared, so an `overlap_sample` study double-codes only what it asks for.
+  Off by default. See [Heterogeneous coverage](../advanced/heterogeneous_coverage.md).
+- **`batch_assignment.randomize_within_list`**: each participant sees their
+  list's items in their own order.
+- **`item_properties.private_keys`**: item fields the annotator's browser
+  never receives, for keeping a comparison blind. They stay in exports.
+- **Point tiers** in `tiered_annotation` (`point: true`), which round-trip as
+  TextGrid `TextTier`.
+- `pre_annotation` is no longer reported as planned for removal.
 
 
 ---

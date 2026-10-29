@@ -278,6 +278,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.13.1](releasenotes/v2.13.1.md) - Pairwise Order, Agreement and Export Fixes
 - [v2.13.0](releasenotes/v2.13.0.md) - Science Viewers, Scheduled Sessions and Consensus
 - [v2.12.3](releasenotes/v2.12.3.md) - Clean Rebuild of 2.12.2
 - [v2.12.2](releasenotes/v2.12.2.md) - Security Fixes, Per-Annotator Chats and Paradata Phases
