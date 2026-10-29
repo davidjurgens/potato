@@ -45,7 +45,7 @@ Most of the tools below are very good at what they were built for, and several b
 | Crowdsourcing (Prolific, Connect, SONA and six more) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 60 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 71 | Multiple | 30+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
 | COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
@@ -97,7 +97,7 @@ Most annotation platforms report agreement as raw IoU, exact match, or percent a
 
 ### Breadth of Annotation Types
 
-Potato has 76 annotation schemas and 27 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
+Potato has 80 annotation schemas and 31 display types in one platform. The list includes text classification, n-ary events, entity linking, coreference chains, image and video geometry, 3D point clouds, depth maps, robot episodes, agent traces, and generative-video rollouts. Most tools cover one or two modalities; a Potato project can combine several in one task and measure agreement across all of them.
 
 ### AI and LLM Integration
 
@@ -131,7 +131,7 @@ Load data from 10 source types: local files, URLs, Google Drive, Dropbox, Amazon
 
 ### Export Format Coverage
 
-Export annotations in 60 formats and import from 38 (16 computer-vision formats, 6 text formats, and 16 whole-project formats). The whole-project formats are Label Studio and Argilla projects with their annotators and model suggestions, Zooniverse workflows with their classifications, Praat TextGrid and ELAN tiers, FLEx and Toolbox interlinear texts, Ibex and PCIbex experiments, IIIF manifests, PAGE XML, W3C Web Annotation, MegaDetector and COCO Camera Traps output, and Raven, Audacity and BirdNET selection tables. Surveys import from Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe and Network Canvas. Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes and DICOM SEG. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit, FLEx, Toolbox and interlinear glossed text, Raven and Audacity selection tables. Humanities: TEI, IIIF annotations, PAGE XML. Ecology: MegaDetector JSON, Camtrap DP, Darwin Core. Maps: GeoJSON, and per-label overlap across participants. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`) and TEI, which also export. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Interchange and repositories: W3C Web Annotation, Frictionless Data Package, Psych-DS. Experiments: runtime-phase and jsPsych trial data, listening-test ratings with MOS and BS.1534 screening, LexTALE scores. Social science: list-experiment and randomized-response estimates, Krippendorff's alpha per question, ego networks, cultural domain analysis (salience, similarity, consensus), and bonuses for incentivized questions. Study outputs: adjudicated labels with the decision log, and the labeling engine's labels with their certificate. Plus JSONL/CSV/TSV/Parquet.
+Export annotations in 71 formats and import from 40 (16 computer-vision formats, 6 text formats, and 18 whole-project formats). The whole-project formats are Label Studio and Argilla projects with their annotators and model suggestions, Zooniverse workflows with their classifications, Praat TextGrid and ELAN tiers, FLEx and Toolbox interlinear texts, Ibex and PCIbex experiments, IIIF manifests, PAGE XML, W3C Web Annotation, MegaDetector and COCO Camera Traps output, Raven, Audacity and BirdNET selection tables, and QuPath GeoJSON and ASAP XML whole-slide regions. Surveys import from Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe and Network Canvas. Computer vision: COCO (including RLE and panoptic), YOLO, Pascal VOC, CVAT XML, Darwin, LabelMe, KITTI (2D, and 3D from point clouds, including tracking), MOT (also from video tracks), DAVIS, Cityscapes, mask PNG, HuggingFace. Medical volumes: NIfTI label volumes, DICOM SEG and DICOM SR. Pathology: QuPath GeoJSON and ASAP XML regions. Microscopy: regions as GeoJSON, cell classes and OME-Zarr label images. Import-only: Labelbox, Open Images, VIA, WebDataset. Linguistics and audio: CoNLL-2003, CoNLL-U, EAF (ELAN), TextGrid (Praat), ConvoKit, FLEx, Toolbox and interlinear glossed text, Raven and Audacity selection tables. Humanities: TEI, IIIF annotations, PAGE XML. Ecology: MegaDetector JSON, Camtrap DP, Darwin Core. Maps: GeoJSON, and per-label overlap across participants. Text import: brat, CoNLL, doccano and Prodigy (import-only), and REFI-QDA (`.qdpx`) and TEI, which also export. Qualitative analysis: codebook and quotation report. Robotics and evaluation: per-frame episode JSONL, agent-eval, coding-agent eval, corrected trajectories (SFT and DPO), annotation telemetry and keystroke streams. Interchange and repositories: W3C Web Annotation, Frictionless Data Package, Psych-DS. Experiments: runtime-phase and jsPsych trial data, listening-test ratings with MOS and BS.1534 screening, LexTALE scores. Social science: list-experiment and randomized-response estimates, Krippendorff's alpha per question, ego networks, cultural domain analysis (salience, similarity, consensus), and bonuses for incentivized questions. Science: molecules (SMILES, InChIKey, SD file), spectrum peak tables, signal intervals and BIDS events, ontology terms. Study outputs: adjudicated labels with the decision log, the labeling engine's labels with their certificate, consensus across annotators, and scheduled-session records. Plus JSONL/CSV/TSV/Parquet.
 
 **Darwin is bidirectional**, which matters if you are leaving a platform rather than joining one: an import-only path lets you take work out once but never hand it back. See the [format matrix](data-export/format_matrix.md), which is generated from the registries and tested against them, so it cannot drift from what the code actually supports.
 
@@ -229,7 +229,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 60 formats of all kinds, so you can bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Potato imports 16 CV formats and exports 71 formats of all kinds, so you can bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -450,10 +450,10 @@ AWS-integrated annotation with built-in active learning and workforce management
 
 | Feature Category | Potato |
 |-----------------|:---:|
-| Annotation schemas | 76 |
-| Display types | 27 |
-| Export formats | 60 |
-| Import formats (16 CV, 6 text, 16 whole-project) | 38 |
+| Annotation schemas | 80 |
+| Display types | 31 |
+| Export formats | 71 |
+| Import formats (16 CV, 6 text, 18 whole-project) | 40 |
 | AI/LLM endpoint types | 15 |
 | Data source types | 10 |
 | Assignment strategies | 13 |

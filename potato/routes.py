@@ -11472,12 +11472,56 @@ def configure_routes(flask_app, app_config):
         register_listening_routes(app, config)
     except Exception as e:
         logger.warning("Could not register listening-test routes: %s", e)
+    # time_series display: decimated signal windows and interval_label pre-annotations.
+    try:
+        from potato.science.signal_routes import register_signal_routes
+        register_signal_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register signal routes: %s", e)
+    # Spectrum display: zoomed-in points and region integrals.
+    try:
+        from potato.science.spectrum_routes import register_spectrum_routes
+        register_spectrum_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register spectrum routes: %s", e)
+    # Multichannel microscopy: composited tiles, label rasters, cell tables.
+    try:
+        from potato.science.microscopy_routes import register_microscopy_routes
+        register_microscopy_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register microscopy routes: %s", e)
+    # FITS cutouts (fits_cutout display): cached PNGs.
+    try:
+        from potato.science.astro import register_astro_routes
+        register_astro_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register FITS cutout routes: %s", e)
     # Grounding evaluation: the current item's referring expressions.
     try:
         from potato.grounding.routes import register_grounding_routes
         register_grounding_routes(app, config)
     except Exception as e:
         logger.warning("Could not register grounding routes: %s", e)
+    # Ontology-backed labels: term search (file or proxied OLS4).
+    try:
+        from potato.ontology.routes import register_ontology_routes
+        register_ontology_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register ontology routes: %s", e)
+    # Scheduled sessions (waves, experience sampling, Delphi) and their
+    # notification thread, started here so both serving paths get it.
+    try:
+        from potato.scheduling.routes import register_scheduling_routes
+        register_scheduling_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register scheduling routes: %s", e)
+    try:
+        # KaTeX settings for every page built on the base template (both
+        # render paths); see potato/math_rendering.py.
+        from potato.math_rendering import register_math_context
+        register_math_context(app)
+    except Exception as e:
+        logger.warning("Could not register math rendering: %s", e)
     app.add_url_rule(
         "/screenshots/<path:filepath>",
         "serve_trace_screenshot",

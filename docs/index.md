@@ -55,8 +55,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 76 annotation types and 27 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 512 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 80 annotation types and 31 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 534 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -278,6 +278,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.13.0](releasenotes/v2.13.0.md) - Science Viewers, Scheduled Sessions and Consensus
 - [v2.12.3](releasenotes/v2.12.3.md) - Clean Rebuild of 2.12.2
 - [v2.12.2](releasenotes/v2.12.2.md) - Security Fixes, Per-Annotator Chats and Paradata Phases
 - [v2.12.1](releasenotes/v2.12.1.md) - Display Logic, Export and Listening-Test Fixes

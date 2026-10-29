@@ -1,0 +1,116 @@
+/* Multichannel microscopy (annotation_type: microscopy). Uses the page's theme
+   tokens, so it follows light and dark mode. The image itself stays on black
+   in both: fluorescence is read against a dark field. */
+form.microscopy, .microscopy fieldset, .microscopy .mic-root { width: 100%; min-width: 0; box-sizing: border-box; }
+.microscopy fieldset { border: 0; padding: 0; margin: 0; }
+.microscopy .mic-title { font-weight: 600; margin-bottom: 0.4rem; }
+.microscopy .mic-instructions { margin: 0 0 0.75rem; color: var(--muted-foreground); }
+.microscopy .mic-status, .microscopy .mic-note { color: var(--muted-foreground); font-size: 0.85rem; margin: 0; }
+.microscopy .mic-error { color: var(--destructive, #dc2626); margin: 0; }
+
+.microscopy .mic-layout { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; align-items: start; }
+.microscopy .mic-main { min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.microscopy .mic-side { min-width: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+
+.microscopy .mic-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.microscopy button.mic-tool,
+.microscopy button.mic-ch-reset,
+.microscopy button.mic-cell-class,
+.microscopy button.mic-cell-go,
+.microscopy button.mic-roi-go,
+.microscopy button.mic-remove,
+.microscopy button.mic-finish {
+    min-height: 2.25rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+    background: var(--card);
+    color: var(--card-foreground);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.microscopy button:hover:not(:disabled) { background: var(--secondary); }
+.microscopy button:focus-visible,
+.microscopy select:focus-visible,
+.microscopy input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.microscopy button.mic-tool[aria-pressed="true"],
+.microscopy button.mic-cell-class[aria-pressed="true"] {
+    border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); font-weight: 600; }
+.microscopy button:disabled { opacity: 0.45; cursor: not-allowed; }
+.microscopy .mic-class-label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; margin-left: auto; }
+.microscopy select, .microscopy input[type="number"] {
+    min-height: 2.25rem; padding: 0.2rem 0.4rem; border: 1px solid var(--border); border-radius: 0.4rem;
+    background: var(--card); color: var(--card-foreground); font: inherit; font-size: 0.85rem; }
+
+.microscopy .mic-viewer {
+    position: relative; width: 100%; max-height: 70vh; min-height: 240px;
+    background: #000; border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden;
+    touch-action: none;
+}
+.microscopy .mic-viewer:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.microscopy .mic-viewer.mic-drawing { cursor: crosshair; }
+.microscopy .mic-overlay { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
+.microscopy .mic-cell-layer { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
+.microscopy .mic-shapes { position: absolute; left: 0; top: 0; overflow: visible; }
+.microscopy .mic-roi, .microscopy .mic-temp {
+    fill: color-mix(in srgb, var(--mic-roi-color) 18%, transparent);
+    stroke: var(--mic-roi-color); stroke-width: var(--mic-stroke, 2);
+}
+.microscopy .mic-temp { fill: none; stroke-dasharray: calc(var(--mic-stroke, 2) * 3); }
+.microscopy circle.mic-roi { r: var(--mic-point-r, 6); fill: var(--mic-roi-color); stroke: #fff; }
+.microscopy .mic-roi-selected { stroke-width: calc(var(--mic-stroke, 2) * 2); }
+
+.microscopy .mic-under { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.microscopy .mic-hint { margin: 0; flex: 1 1 14rem; font-size: 0.85rem; color: var(--muted-foreground); }
+.microscopy .mic-planes { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+.microscopy .mic-plane-row { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; flex: 1 1 14rem;
+    white-space: nowrap; }
+.microscopy .mic-plane { flex: 1 1 auto; min-width: 6rem; }
+.microscopy .mic-plane-value, .microscopy .mic-ch-value { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--muted-foreground); }
+.microscopy .mic-plane-value { min-width: 3.5rem; }
+
+.microscopy .mic-section { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.6rem 0.7rem;
+    background: var(--card); color: var(--card-foreground); }
+.microscopy .mic-heading { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.5rem; }
+.microscopy .mic-count { font-weight: 400; color: var(--muted-foreground); }
+.microscopy .mic-channel { padding: 0.4rem 0; border-top: 1px solid var(--border); }
+.microscopy .mic-channel:first-of-type { border-top: 0; padding-top: 0; }
+.microscopy .mic-channel-off .mic-ch-limit { opacity: 0.55; }
+.microscopy .mic-ch-head { display: flex; align-items: center; gap: 0.4rem; }
+.microscopy .mic-ch-name { display: inline-flex; align-items: center; gap: 0.35rem; flex: 1 1 auto; min-width: 0;
+    font-size: 0.85rem; font-weight: 500; }
+.microscopy .mic-ch-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.microscopy .mic-ch-visible { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); }
+.microscopy .mic-ch-color { width: 2.25rem; height: 2rem; padding: 0.1rem; border: 1px solid var(--border);
+    border-radius: 0.35rem; background: var(--card); cursor: pointer; }
+.microscopy .mic-ch-limit { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 3.2rem; align-items: center;
+    gap: 0.4rem; font-size: 0.8rem; margin-top: 0.15rem; }
+.microscopy .mic-ch-limit-name { color: var(--muted-foreground); }
+.microscopy .mic-ch-limit input[type="range"] { width: 100%; min-width: 0; accent-color: var(--primary); }
+.microscopy .mic-ch-value { text-align: right; }
+
+.microscopy .mic-list { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-direction: column; gap: 0.3rem;
+    max-height: 14rem; overflow-y: auto; }
+.microscopy .mic-item { display: flex; align-items: center; gap: 0.35rem; }
+.microscopy .mic-item .mic-roi-go, .microscopy .mic-item .mic-cell-go { flex: 1 1 6rem; text-align: left; min-width: 0; }
+.microscopy .mic-item-selected .mic-roi-go { border-color: var(--primary); }
+.microscopy .mic-item select { max-width: 6.5rem; min-width: 0; }
+.microscopy button.mic-remove { min-width: 2.25rem; padding: 0.3rem 0.5rem; font-size: 1rem; line-height: 1; flex: none; }
+.microscopy .mic-empty { font-size: 0.85rem; color: var(--muted-foreground); }
+.microscopy .mic-swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 0.2rem; flex: none;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.microscopy .mic-selected { font-size: 0.85rem; margin-bottom: 0.4rem; min-height: 1.2em; }
+.microscopy .mic-cell-classes { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
+.microscopy .mic-cell-class { display: inline-flex; align-items: center; gap: 0.35rem; }
+.microscopy .mic-cell-find { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.microscopy .mic-cell-find input { width: 5rem; }
+
+@media (max-width: 900px) {
+    .microscopy .mic-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+    /* Most images are near square; a tall narrow viewer is mostly black bars. */
+    .microscopy .mic-viewer { max-height: min(55vh, 92vw); }
+    .microscopy .mic-class-label { margin-left: 0; }
+}

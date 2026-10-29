@@ -34,3 +34,29 @@ register(Bundle(
     ),
     approx_mb=5.3,
 ))
+
+
+# RDKit.js MinimalLib (BSD-3-Clause), behind the chemical_structure scheme's
+# InChI/InChIKey and RDKit checks and the molecule display's `engine: rdkit`.
+# The npm tarball holds only the loader script, the WebAssembly module, its
+# typings and a README, so it is fetched whole (verified against the
+# registry's integrity) and the two runtime files are kept. The package has
+# no LICENSE file; the licence comes from the RDKit repository at the
+# matching release tag.
+register(Bundle(
+    name="rdkit",
+    version="2026.3.6",
+    license="BSD-3-Clause",
+    homepage="https://www.rdkit.org/docs/JSMol.html",
+    description="RDKit.js MinimalLib (chemical_structure InChIKey and checks; "
+                "molecule display, engine: rdkit)",
+    tarball="https://registry.npmjs.org/@rdkit/rdkit/-/rdkit-2026.3.6.tgz",
+    integrity="sha512-JkMi2PfVjRFuy3ZCDAoTUJeTGyNsgtmq4hDUduLnnbobxsOfSydfpa6lhZGYYaisfMSEAgE1iAT95W4ZsUCMrA==",
+    include=("dist/RDKit_minimal.js", "dist/RDKit_minimal.wasm"),
+    files=(
+        BundleFile("https://raw.githubusercontent.com/rdkit/rdkit/Release_2026_03_6/license.txt",
+                   "LICENSE",
+                   "daeb8d194502cbcf34c05c39541a0d02be65bc9bada5b891c1974cd24e9fca30"),
+    ),
+    approx_mb=7.4,
+))

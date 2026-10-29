@@ -1,0 +1,9 @@
+[
+  {
+    "name": "read_instructions",
+    "description": "In each round you rate every criterion from 1 to 9. From the second round you will see how the panel rated it last time. You may change your rating or keep it.",
+    "annotation_type": "radio",
+    "labels": ["I understand"],
+    "label_requirement": {"required": true}
+  }
+]

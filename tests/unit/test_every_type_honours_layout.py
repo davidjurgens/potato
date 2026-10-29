@@ -77,6 +77,8 @@ PROBE_EXTRAS = {
     "price_list": {"preset": "holt_laury"},
     "triad_test": {"labels": ["alpha", "beta", "gamma"]},
     "viewer_selection": {"viewer_field": "structure"},
+    "peak_picking": {"viewer_field": "spectrum"},
+    "interval_label": {"signal_field": "signal", "labels": ["Wake", "N1"]},
 }
 
 

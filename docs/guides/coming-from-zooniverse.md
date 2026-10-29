@@ -60,8 +60,67 @@ classifications covering several subjects. Each is counted in the output.
 Volunteers who were not logged in appear as `anon_<id>`, so one person may
 show up as several.
 
+## Aggregating classifications
+
+The `consensus` export does the job of Zooniverse's aggregation reducers on a
+Potato project, whether the classifications came from Zooniverse or from your
+own annotators. Import with `--keep-annotators` so each volunteer's
+classifications are their own, then export:
+
+```bash
+potato import -i zooniverse-exports/ -o my-project --keep-annotators
+python -m potato.export -c my-project/config.yaml -f consensus -o consensus_out
+```
+
+| Zooniverse reducer | Potato output |
+|---|---|
+| `question_reducer`, `question_consensus_reducer` | `consensus_votes.csv` (count and fraction per answer) and `consensus_questions.csv` (top answer, its fraction, ties, status) |
+| `slider_reducer` | `consensus_numeric.csv` (n, mean, median, sd, min, max) |
+| `point_reducer_dbscan` | `consensus_points.csv` (cluster centre, size, annotators, spread, variances) |
+| `rectangle_reducer` / `shape_reducer_dbscan` | `consensus_boxes.csv` (median box, support, IoU), grouped differently: see [Boxes](../data-export/consensus_aggregation.md#boxes) |
+
+Point clustering is DBSCAN with the same rule for core points as
+`point_reducer_dbscan`, so with `eps_unit: pixels` and the same `eps` and
+`min_samples` it gives the same clusters and centres. Pixel distances need the
+image size; the importer writes `image_width` and `image_height` on each item
+from the size Zooniverse recorded with its classifications.
+
+Set the parameters in the project config:
+
+```yaml
+consensus_aggregation:
+  agreement_threshold: 0.8
+  min_classifiers: 3
+  points:
+    eps: 5
+    eps_unit: pixels
+    min_samples: 3
+  boxes:
+    iou_threshold: 0.5
+```
+
+Some differences from a Zooniverse project:
+
+- Zooniverse retires a subject after a number of classifications (the
+  workflow's retirement criteria). The export's `retired` / `needs_review`
+  flag reports agreement on each question and does not change assignment.
+  The imported config sets `max_annotations_per_item` to the most
+  classifications any subject received.
+- A volunteer who answered a drawing task without drawing anything is not
+  counted among that task's classifiers, since the importer does not keep an
+  empty drawing.
+- Volunteers who were not logged in may appear as several annotators (see
+  [Not imported](#not-imported)), which raises `n_classifiers`.
+- Polygons, lines, ellipses and freehand shapes are imported but not
+  aggregated; survey and transcription tasks are not imported.
+
+`examples/image/zooniverse-aggregation/` is a small imported workflow with
+five volunteers to try it on. The [Consensus aggregation](../data-export/consensus_aggregation.md)
+page has every option and column.
+
 ## Related
 
 - [Bringing a project into Potato](migrating-into-potato.md)
 - [Import CLI](../tools/import_cli.md)
 - [Display logic](../configuration/conditional_logic.md)
+- [Consensus aggregation](../data-export/consensus_aggregation.md)

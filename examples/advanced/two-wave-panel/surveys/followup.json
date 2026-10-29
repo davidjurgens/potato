@@ -1,0 +1,25 @@
+[
+  {
+    "name": "changed_view",
+    "annotation_type": "radio",
+    "description": "Since last week, has your view on any of the statements changed?",
+    "labels": ["No", "A little", "A lot"],
+    "required": true
+  },
+  {
+    "name": "trust_media",
+    "annotation_type": "likert",
+    "description": "How much do you trust news media today?",
+    "size": 5,
+    "min_label": "Not at all",
+    "max_label": "Completely",
+    "required": true
+  },
+  {
+    "name": "what_changed",
+    "annotation_type": "text",
+    "description": "If something changed your view, what was it? (optional)",
+    "multiline": true,
+    "max_length": 1000
+  }
+]

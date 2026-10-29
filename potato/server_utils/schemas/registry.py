@@ -376,7 +376,11 @@ def _register_builtin_schemas():
     from .text_edit import generate_text_edit_layout
     from .cloze import generate_cloze_layout
     from .listening_test import generate_listening_test_layout
+    from .interval_label import generate_interval_label_layout
+    from .microscopy import generate_microscopy_layout
     from .viewer_selection import generate_viewer_selection_layout
+    from .chemical_structure import generate_chemical_structure_layout
+    from .peak_picking import generate_peak_picking_layout
     from .spectrogram_annotation import generate_spectrogram_annotation_layout
     from .geo_annotation import generate_geo_annotation_layout
     from .ego_network import generate_ego_network_layout
@@ -415,7 +419,7 @@ def _register_builtin_schemas():
             name="radio",
             generator=generate_radio_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order", "lextale"],
+            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order", "lextale", "label_source"],
             supports_keybindings=True,
             single_select=True,
             description="Single-choice radio button selection"
@@ -424,7 +428,7 @@ def _register_builtin_schemas():
             name="multiselect",
             generator=generate_multiselect_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order"],
+            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order", "label_source"],
             supports_keybindings=True,
             description="Multiple-choice checkbox selection"
         ),
@@ -458,7 +462,7 @@ def _register_builtin_schemas():
             generator=generate_cloze_layout,
             required_fields=["name", "description"],
             optional_fields=["text", "source_field", "answer_field", "scoring",
-                             "input_width", "label_requirement"],
+                             "input_width", "label_requirement", "tolerance"],
             supports_keybindings=False,
             description="Fill-in-the-blank passage, scored against an answer key kept on the server"
         ),
@@ -529,6 +533,40 @@ def _register_builtin_schemas():
                         "features and locus in a genome_locus), with optional labels"
         ),
         SchemaDefinition(
+            name="chemical_structure",
+            generator=generate_chemical_structure_layout,
+            required_fields=["name", "description"],
+            optional_fields=["prefill_field", "prefill_format", "answer_field", "rdkit",
+                             "require_valid", "allow_empty", "editor_height",
+                             "show_identifiers", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Draw or correct a chemical structure (OpenChemLib editor); stores "
+                        "molfile V3000, canonical SMILES and, with RDKit.js, the InChIKey"
+        ),
+        SchemaDefinition(
+            name="peak_picking",
+            generator=generate_peak_picking_layout,
+            required_fields=["name", "description", "viewer_field"],
+            optional_fields=["peak_fields", "region_fields", "min_peaks", "max_peaks",
+                             "require_review", "allow_manual", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Peaks and integrated regions picked on a spectrum display, with "
+                        "suggested peaks to accept or reject and per-peak fields"
+        ),
+        SchemaDefinition(
+            name="interval_label",
+            generator=generate_interval_label_layout,
+            required_fields=["name", "description", "labels", "signal_field"],
+            optional_fields=["mode", "epoch_length", "channel_scope", "auto_advance",
+                             "allow_overlap", "next_key", "previous_key", "pre_annotations",
+                             "preannotation_field", "preannotation_labels",
+                             "require_all_epochs", "min_annotations", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Label intervals and point events on a time_series signal; free or fixed-epoch mode"
+        ),
+        SchemaDefinition(
             name="listening_test",
             generator=generate_listening_test_layout,
             required_fields=["name", "description"],
@@ -539,6 +577,18 @@ def _register_builtin_schemas():
                              "instructions", "label_requirement"],
             supports_keybindings=False,
             description="Listening tests: MUSHRA, BS.1116, ACR, DCR, CCR, ABX and P.835, with blinded stimuli"
+        ),
+        SchemaDefinition(
+            name="microscopy",
+            generator=generate_microscopy_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["image_key", "labels_key", "label_image", "cell_labels", "tools",
+                             "channels", "tile_size", "max_pixels", "label_max_side",
+                             "min_rois", "min_cells", "height", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Multichannel microscopy (OME-Zarr, OME-TIFF): channel contrast, "
+                        "z/t, ROIs and per-cell classes from a label image"
         ),
         SchemaDefinition(
             name="geo_annotation",
@@ -607,7 +657,7 @@ def _register_builtin_schemas():
             name="span",
             generator=generate_span_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking", "show_span_labels", "target_field", "columns", "displaying_score", "codebook"],
+            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking", "show_span_labels", "target_field", "columns", "displaying_score", "codebook", "label_source"],
             supports_keybindings=True,
             description="Text span annotation/highlighting with optional entity linking to knowledge bases"
         ),
@@ -639,7 +689,7 @@ def _register_builtin_schemas():
             name="image_annotation",
             generator=generate_image_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over", "viewer", "tiles", "segmentation", "instance_masks", "text_prompt", "skeletons", "mask_mode", "attributes"],
+            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over", "viewer", "tiles", "segmentation", "instance_masks", "text_prompt", "skeletons", "mask_mode", "attributes", "label_source"],
             supports_keybindings=True,
             description="Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
         ),

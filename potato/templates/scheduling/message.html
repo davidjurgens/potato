@@ -1,0 +1,9 @@
+{% extends "scheduling/base.html" %}
+{% block main_id %}schedule-message{% endblock %}
+{% block content %}
+<div class="potato-page-icon potato-page-icon-{{ 'error' if icon == 'error' else 'info' }}">
+    <i class="fas {{ 'fa-circle-exclamation' if icon == 'error' else 'fa-circle-info' }}" aria-hidden="true"></i>
+</div>
+<h1 class="potato-page-title sched-center">{{ title }}</h1>
+<p class="potato-page-subtitle sched-center" id="schedule-message-text">{{ text }}</p>
+{% endblock %}

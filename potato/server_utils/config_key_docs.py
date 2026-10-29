@@ -1775,6 +1775,34 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "thinkaloud.language": _D(
         "Language hint passed to Whisper", type="string", default="en", category=FEATURES,
     ),
+    "math": _D(
+        "Render LaTeX math ($...$, $$...$$, \\(...\\), \\[...\\]) in item text, "
+        "display fields and process_reward / trajectory_eval steps with KaTeX. "
+        "Span targets are left as source",
+        type="object", category=UI, see_also=("instance_display",),
+        example={"enabled": True},
+    ),
+    "math.enabled": _D(
+        "Turn math rendering on. Off by default, so text with dollar signs is "
+        "unchanged unless a project asks for it",
+        type="boolean", default=False, category=UI,
+    ),
+    "math.delimiters": _D(
+        "Which delimiters start math: any of $$, $, \\(, \\[. Drop $ for text "
+        "with prices in it",
+        type="array", default=["$$", "$", "\\(", "\\["], category=UI,
+        example=["$$", "\\(", "\\["],
+    ),
+    "math.fields": _D(
+        "instance_display field keys to render. Default: every field that is "
+        "not a span target",
+        type="array", category=UI, example=["problem", "solution"],
+    ),
+    "math.macros": _D(
+        "KaTeX macros available in every expression, as name -> expansion",
+        type="object", default={}, category=UI,
+        example={"\\R": "\\mathbb{R}"},
+    ),
     "keystroke_logging": _D(
         "Content-blind typing dynamics on free-text fields -- when someone "
         "pauses, revises or pastes, never which keys -- and the "
@@ -2323,6 +2351,51 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Endpoint override for the llm tier; falls back to the global ai_support "
         "block",
         type="object", category=FEATURES, see_also=("ai_support",),
+    ),
+    "consensus_aggregation": _D(
+        "Parameters of the `consensus` export: vote fractions per answer, point "
+        "clusters and consensus boxes across annotators",
+        type="object", category=PUBLISHING, see_also=("export_annotation_format",),
+    ),
+    "consensus_aggregation.agreement_threshold": _D(
+        "Share of classifiers the top answer needs for an item to be marked "
+        "retired; for multiselect, each option must be ticked or left unticked "
+        "by at least this share",
+        type="number", default=0.8, category=PUBLISHING, maximum=1,
+    ),
+    "consensus_aggregation.min_classifiers": _D(
+        "Items with fewer classifiers than this are marked needs_review",
+        type="integer", default=2, category=PUBLISHING, minimum=1,
+    ),
+    "consensus_aggregation.schemes": _D(
+        "Scheme names to aggregate; default every radio, select, likert, "
+        "multiselect, slider, number and image_annotation scheme",
+        type="array", category=PUBLISHING, example=["T0", "T1"],
+    ),
+    "consensus_aggregation.points": _D(
+        "DBSCAN parameters for clustering image_annotation points",
+        type="object", category=PUBLISHING,
+    ),
+    "consensus_aggregation.points.eps": _D(
+        "Neighbourhood radius for point clustering, in the unit eps_unit names",
+        type="number", default=0.02, category=PUBLISHING,
+    ),
+    "consensus_aggregation.points.eps_unit": _D(
+        "`fraction` (x as a share of the width, y of the height) or `pixels` "
+        "(needs the image size)",
+        type="string", default="fraction", category=PUBLISHING, example="pixels",
+    ),
+    "consensus_aggregation.points.min_samples": _D(
+        "Points within eps (the point itself included) needed to form a cluster",
+        type="integer", default=2, category=PUBLISHING, minimum=1,
+    ),
+    "consensus_aggregation.boxes": _D(
+        "Parameters for grouping bounding boxes across annotators",
+        type="object", category=PUBLISHING,
+    ),
+    "consensus_aggregation.boxes.iou_threshold": _D(
+        "Least IoU between any two boxes in one consensus group",
+        type="number", default=0.5, category=PUBLISHING, maximum=1,
     ),
     "corpus_map": _D(
         "Multi-document corpus map: embed, cluster, project with UMAP and build "
@@ -3604,6 +3677,83 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "incentives.only_finished": _D(
         "Draw and pay only for participants who reached the end of the study",
         type="boolean", default=True, category=INTEG,
+    ),
+
+    # ------------------------------------------------------------ schedule --
+    "schedule": _D(
+        "Sessions after the regular flow: waves, experience-sampling prompts "
+        "and Delphi rounds, computed per participant at enrolment (when they "
+        "finish the regular flow). See docs/workflow/scheduling.md",
+        type="object", category=WORKFLOW, see_also=("notifications",),
+    ),
+    "schedule.timezone": _D(
+        "IANA time zone used when the participant's browser reports none",
+        type="string", default="UTC", category=WORKFLOW, example="Europe/London",
+    ),
+    "schedule.seed": _D(
+        "Text mixed into the random prompt times, so a plan can be recomputed",
+        type="string", default="", category=WORKFLOW,
+    ),
+    "schedule.poll_seconds": _D(
+        "How often the background loop sends due messages and closes rounds",
+        type="number", default=30, category=WORKFLOW, minimum=1, maximum=3600,
+    ),
+    "schedule.scheduler": _D(
+        "Run the background loop. Off, nothing is sent until an admin presses "
+        "Send due messages now (or calls /admin/api/schedule/tick)",
+        type="boolean", default=True, category=WORKFLOW,
+    ),
+    "schedule.waves": _D(
+        "Follow-up sessions: name, title, offset (after enrolment), optional at "
+        "(local clock time), window, questions or questions_file, reminders, "
+        "completion_code, intro",
+        type="array", category=WORKFLOW,
+    ),
+    "schedule.experience_sampling": _D(
+        "Repeated short prompts: days, start_day, daily_window, signal "
+        "{per_day, min_gap} or interval {every} / {times}, expires_after, "
+        "questions or questions_file, reminders. See "
+        "docs/workflow/experience_sampling.md",
+        type="object", category=WORKFLOW,
+    ),
+    "schedule.delphi": _D(
+        "Delphi rounds: items or items_file, scale, comments, max_rounds, "
+        "round_length, gap, start, stop {iqr_at_most, median_change_at_most, "
+        "changed_share_below}, min_panel, reminders. See docs/workflow/delphi.md",
+        type="object", category=WORKFLOW,
+    ),
+    "notifications": _D(
+        "Messages for scheduled sessions: channels (log, smtp, twilio, "
+        "prolific), base_url, dry_run, contact consent and templates. "
+        "Credentials come from environment variables only",
+        type="object", category=INTEG, see_also=("schedule",),
+    ),
+    "notifications.dry_run": _D(
+        "Render and log every message without delivering it",
+        type="boolean", default=False, category=INTEG,
+    ),
+    "notifications.base_url": _D(
+        "Public address used in resume links. Required for any channel other "
+        "than log unless dry_run is on",
+        type="string", category=INTEG, example="https://study.example.org",
+    ),
+    "notifications.channels": _D(
+        "List of channels: {type: log}, {type: smtp, host, port, security, "
+        "from, username_env, password_env}, {type: twilio, account_sid_env, "
+        "auth_token_env, from_number or messaging_service_sid_env}, "
+        "{type: prolific, token_env, study_id}",
+        type="array", category=INTEG,
+    ),
+    "notifications.contact": _D(
+        "consent {question, value}: the phase-page question whose answer allows "
+        "contact (required with any channel); delete_after_study (default true)",
+        type="object", category=INTEG,
+    ),
+    "notifications.templates": _D(
+        "Override subject/body per message kind (before_open, open, reminder, "
+        "prompt, delphi_round) with {study}, {session}, {opens}, {closes}, "
+        "{time_left}, {link}, {stop_link}",
+        type="object", category=INTEG,
     ),
 
     # ------------------------------------------------------------- internal --

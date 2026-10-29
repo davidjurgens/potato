@@ -777,6 +777,13 @@ def _generate_internal(
     .prm-step-btns {{
         display: flex; gap: 6px; flex: 0 0 auto;
     }}
+    /* Phone width: the buttons go under the step text. Side by side, the
+       text column shrank to a word or two and rendered math was cut off. */
+    @media (max-width: 600px) {{
+        .prm-step-card:not(.prm-inline) {{ flex-wrap: wrap; }}
+        .prm-step-card:not(.prm-inline) .prm-step-text {{ flex: 1 1 calc(100% - 76px); min-width: 0; }}
+        .prm-step-card:not(.prm-inline) .prm-step-btns {{ margin-left: auto; }}
+    }}
     .prm-btn {{
         height: 36px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem);
         background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; font-size: 13px;

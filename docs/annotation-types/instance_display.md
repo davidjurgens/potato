@@ -78,6 +78,10 @@ still ignored. When an option appears in both places, `display_options` wins.
 | `gallery` | Scrollable gallery with captions. Images, plus video for URLs ending in `.mp4`, `.m4v`, `.webm`, `.ogv` or `.mov` (played with controls) | No |
 | `protein_structure` | **Protein structure** (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*: cartoon, pLDDT colouring, residue selection by click or residue table; see [Protein structures](science/protein_structures.md) | No |
 | `genome_locus` | **Genome locus** in igv.js: indexed FASTA, BAM/CRAM, VCF, BED/GFF3, bigWig from the media directory; see [Genome loci](science/genome_loci.md) | No |
+| `molecule` | **Molecule** from a SMILES string or molfile (OpenChemLib, or RDKit.js after `potato vendor fetch rdkit`): atom selection by click or atom list, fixed atom highlights; see [Chemical structures](science/chemical_structures.md) | No |
+| `spectrum` | **Spectrum** (NMR, IR, MS) in Plotly from JCAMP-DX, mzML or CSV, with zoom, peak picking and integration; see [Spectra](science/spectra.md) | No |
+| `fits_cutout` | **FITS cutouts**: one image, or science / reference / difference side by side, with an RA/Dec readout and a light curve; see [Astronomical images](science/astronomy.md) | No |
+| `time_series` | **Multi-channel signal** (EDF/EDF+, BDF, WFDB, CSV, Parquet) in uPlot: lanes or one axis, zoom, pan, an overview strip; labelled with `interval_label`; see [Time series](science/time_series.md) | No |
 | `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |

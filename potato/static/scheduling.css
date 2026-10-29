@@ -1,0 +1,96 @@
+/* Scheduled sessions: enrolment, status, session and Delphi pages, and the
+   admin schedule page. Theme tokens only, so the dark theme follows. */
+
+.sched-body { align-items: flex-start; }
+.sched-card { max-width: 640px; margin: 1rem 0; }
+.sched-card-delphi { max-width: 760px; }
+.sched-center { text-align: center; }
+.sched-hint { color: var(--muted-foreground); font-size: 0.9rem; margin: 0.25rem 0 1rem; }
+.sched-intro { margin: 0 0 1rem; }
+.sched-error { color: var(--destructive-text); font-size: 0.9rem; margin: 0.35rem 0 0; }
+.sched-plan { margin: 0 0 1.25rem; padding-left: 1.2rem; }
+.sched-plan li { margin-bottom: 0.35rem; }
+.sched-select { max-width: 100%; }
+.sched-contact { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem 0.25rem; margin: 0 0 1.25rem; }
+.sched-contact legend { float: none; width: auto; padding: 0 0.35rem; margin: 0; font-size: 1rem; }
+
+.sched-primary { background: var(--primary); color: var(--primary-foreground); border: 1px solid var(--primary); }
+.sched-primary:hover, .sched-primary:focus-visible { background: var(--secondary-color); color: var(--primary-foreground); }
+.sched-secondary { white-space: normal; height: auto; min-height: 2.75rem; padding-top: 0.4rem; padding-bottom: 0.4rem; text-align: left; }
+.sched-small { height: 2rem; font-size: 0.8rem; padding: 0 0.6rem; white-space: nowrap; }
+.sched-link { color: var(--primary); font-weight: 500; }
+.sched-link:focus-visible, .sched-option input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.sched-banner { display: flex; gap: 0.5rem; align-items: center; border-radius: var(--radius); padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-weight: 500; }
+.sched-banner-ok { background: var(--success-tint); color: var(--success-text); }
+.sched-banner-error { background: var(--destructive-tint); color: var(--destructive-text); }
+.sched-code { font-size: 1.05rem; margin-bottom: 1rem; }
+
+.sched-footer { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+/* Tables scroll sideways inside their own box; the page never clips them. */
+.sched-table-wrap { overflow-x: auto; max-width: 100%; margin: 0.5rem 0 1rem; -webkit-overflow-scrolling: touch; }
+.sched-table-wrap:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.sched-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+.sched-table th, .sched-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+.sched-table thead th { background: var(--muted); font-weight: 600; white-space: nowrap; }
+.sched-table tbody th { font-weight: 500; }
+.sched-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sched-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 0.8rem; white-space: nowrap; }
+.sched-muted { color: var(--muted-foreground); }
+.sched-detail { min-width: 14rem; }
+.sched-preview { white-space: pre-wrap; font-size: 0.75rem; max-width: 40rem; margin: 0.35rem 0 0; color: var(--foreground); background: var(--muted); padding: 0.4rem; border-radius: var(--radius); }
+
+.sched-status { display: inline-block; padding: 0.05rem 0.45rem; border-radius: var(--radius); font-size: 0.8rem; font-weight: 600; white-space: nowrap; background: var(--muted); color: var(--foreground); }
+.sched-status-answered, .sched-status-sent { background: var(--success-tint); color: var(--success-text); }
+.sched-status-open, .sched-status-started, .sched-status-pending, .sched-status-dry_run { background: var(--primary-tint); color: var(--foreground); }
+.sched-status-expired, .sched-status-skipped { background: var(--warning-tint); color: var(--warning-text); }
+.sched-status-missed, .sched-status-failed { background: var(--destructive-tint); color: var(--destructive-text); }
+
+/* Questions */
+.sched-question { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; margin: 0 0 1rem; background: var(--card); }
+.sched-question-error { border-color: var(--destructive); }
+.sched-question-text { float: left; width: 100%; font-size: 1rem; font-weight: 600; margin: 0 0 0.6rem; padding: 0; color: var(--foreground); }
+.sched-question-text + * { clear: both; }
+.sched-card .potato-form-input, .sched-card select.potato-form-input { background: var(--background); color: var(--foreground); border: 1px solid var(--input); }
+.sched-required { color: var(--destructive-text); }
+.sched-options { display: flex; flex-direction: column; gap: 0.35rem; }
+.sched-options-row { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.sched-option { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; min-height: 2rem; }
+.sched-options-row .sched-option { flex-direction: column; gap: 0.1rem; min-width: 2.25rem; text-align: center; font-size: 0.85rem; }
+.sched-option input { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); }
+.sched-scale-label { color: var(--muted-foreground); font-size: 0.8rem; max-width: 7rem; }
+.sched-slider { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.sched-slider input[type=range] { flex: 1 1 12rem; accent-color: var(--primary); }
+.sched-slider-value { min-width: 4rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.sched-slider input[data-touched="1"] ~ .sched-slider-value { color: var(--foreground); font-weight: 600; }
+.sched-number { max-width: 10rem; }
+.sched-comment-label { margin-top: 0.6rem; font-weight: 400; color: var(--muted-foreground); }
+
+/* Delphi feedback */
+.delphi-feedback { background: var(--muted); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin: 0 0 0.75rem; }
+.delphi-bar { position: relative; height: 0.9rem; margin: 0.4rem 0.45rem 0.5rem; border-radius: 0.45rem; background: var(--card); border: 1px solid var(--border); }
+.delphi-iqr { position: absolute; top: 0; bottom: 0; min-width: 3px; background: color-mix(in srgb, var(--primary) 35%, transparent); border-radius: 0.45rem; }
+.delphi-median { position: absolute; top: -0.25rem; bottom: -0.25rem; width: 3px; margin-left: -1.5px; background: var(--primary); border-radius: 2px; }
+.delphi-own { position: absolute; top: 50%; width: 0.8rem; height: 0.8rem; margin: -0.4rem 0 0 -0.4rem; border-radius: 50%; background: var(--card); border: 2px solid var(--foreground); }
+.delphi-numbers { margin: 0; font-size: 0.875rem; }
+.delphi-comments { margin-top: 0.4rem; font-size: 0.875rem; }
+.delphi-comments ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+.delphi-comments li { margin-bottom: 0.25rem; }
+
+/* Admin page */
+.sched-meta { color: var(--muted-foreground); font-size: 0.875rem; max-width: 80ch; line-height: 1.6; }
+.sched-section { margin-bottom: 1.5rem; min-width: 0; }
+.sched-metrics { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-bottom: 1rem; }
+.sched-metric { display: flex; flex-direction: column; }
+.sched-metric .label { font-size: 0.75rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.03em; }
+.sched-metric .value { font-size: 1.4rem; font-weight: 700; color: var(--heading-color); font-variant-numeric: tabular-nums; }
+.sched-empty { color: var(--muted-foreground); font-style: italic; }
+.sched-inline { display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; }
+.sched-admin main.dashboard { min-width: 0; }
+
+@media (max-width: 480px) {
+  .potato-page-center.sched-body { padding: 1rem; }
+  .sched-card { padding: 1.25rem; }
+  .sched-options-row .sched-option { min-width: 1.9rem; }
+}

@@ -35,6 +35,9 @@ def required_bundles(config: Dict[str, Any]) -> List[str]:
         names.extend(display_required_bundles(config))
     except ImportError:
         pass
+    # chemical_structure with `rdkit: true` (RDKit.js).
+    from potato.chemistry.structures import required_bundles as _chemistry_bundles
+    names.extend(_chemistry_bundles(config))
     return list(dict.fromkeys(names))
 
 

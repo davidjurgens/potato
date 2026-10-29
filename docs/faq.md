@@ -101,7 +101,7 @@ detectors or segmenters, and it does not serve models. See
 
 ## What annotation types does Potato support?
 
-76 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
+80 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
 best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).

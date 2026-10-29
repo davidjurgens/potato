@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -223,20 +224,27 @@ def to_nifti_bytes(labels_ijk: np.ndarray, volume) -> bytes:
 
 def to_dicom_seg(labels: Sequence[str], label_masks: Dict[str, np.ndarray], volume,
                  *, series_description: str = "Potato segmentation",
-                 annotator: Optional[str] = None) -> Any:
+                 annotator: Optional[str] = None,
+                 label_codes: Optional[Dict[str, Dict[str, Dict[str, str]]]] = None,
+                 sources: Optional[List[Any]] = None) -> Any:
     """A DICOM SEG (highdicom) referencing the DICOM series the volume came from.
+
+    One segment per label with voxels, numbered in label order from 1.
+    ``label_codes`` maps a label to its coded concepts (see
+    ``volume_annotation.dicom_codes``); a label without an entry gets the
+    generic SNOMED CT "Tissue" for category and type. Each segment's tracking
+    ID is the label name, and the SR export reuses its tracking UID.
 
     By DICOM's rules the SEG copies the patient and study modules from its
     source images, so it carries the same identifying data as the series.
     """
     import highdicom as hd
-    import pydicom
-    from pydicom.sr.coding import Code
     from potato.media.volumes import to_source_order
 
     if volume.kind != "dicom" or not volume.dicom_files:
         raise ValueError("DICOM SEG export needs a DICOM source")
-    sources = [pydicom.dcmread(path) for path in volume.dicom_files]
+    if sources is None:
+        sources = source_datasets(volume)
     # The patient and study modules' Type 2 attributes must be present, even
     # if empty; de-identified series often drop them. Filled on the in-memory
     # copies only.
@@ -260,13 +268,18 @@ def to_dicom_seg(labels: Sequence[str], label_masks: Dict[str, np.ndarray], volu
             stacked = in_file_order
         frames.append(stacked)
     pixel_array = np.stack(frames, axis=-1).astype(np.uint8)
-    tissue = Code("85756007", "SCT", "Tissue")
-    descriptions = [
-        hd.seg.SegmentDescription(
+    from potato.server_utils.schemas.volume_annotation import dicom_codes
+    descriptions = []
+    for n, label in enumerate(present, start=1):
+        codes = (label_codes or {}).get(label) or dicom_codes({"name": label})
+        region = codes.get("anatomic_region")
+        descriptions.append(hd.seg.SegmentDescription(
             segment_number=n, segment_label=label[:64],
-            segmented_property_category=tissue, segmented_property_type=tissue,
-            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.MANUAL)
-        for n, label in enumerate(present, start=1)]
+            segmented_property_category=_code(codes["category"]),
+            segmented_property_type=_code(codes["type"]),
+            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.MANUAL,
+            tracking_uid=hd.UID(), tracking_id=label[:64],
+            anatomic_regions=[_code(region)] if region else None))
     from potato import __version__ as potato_version
     seg = hd.seg.Segmentation(
         source_images=sources, pixel_array=pixel_array,
@@ -281,6 +294,102 @@ def to_dicom_seg(labels: Sequence[str], label_masks: Dict[str, np.ndarray], volu
         # the free-text description instead.
         content_description=(f"Annotator: {annotator}"[:64] if annotator else None))
     return seg
+
+
+def _code(concept: Dict[str, str]):
+    from highdicom.sr import CodedConcept
+    return CodedConcept(value=str(concept["code"]), scheme_designator=str(concept["scheme"]),
+                        meaning=str(concept["meaning"]))
+
+
+def source_datasets(volume) -> List[Any]:
+    """The volume's DICOM files, read once for both the SEG and the SR."""
+    import pydicom
+    return [pydicom.dcmread(path) for path in volume.dicom_files]
+
+
+def segment_volumes_mm3(label_masks: Dict[str, np.ndarray], volume) -> Dict[str, float]:
+    """Each label's volume in cubic millimetres: voxel count times voxel volume.
+
+    The voxel volume is the absolute determinant of the affine's 3x3 part, so
+    it holds for sheared and oblique grids as well as axis-aligned ones.
+    """
+    voxel = abs(float(np.linalg.det(np.asarray(volume.affine, dtype=float)[:3, :3])))
+    return {label: float(np.count_nonzero(mask)) * voxel
+            for label, mask in label_masks.items() if mask is not None}
+
+
+def person_name(username: str) -> str:
+    """A username as a DICOM person name: the family-name component only
+    (``ada`` becomes ``ada^``).
+
+    PN separates components with ``^`` and groups with ``=``, and a backslash
+    separates values, so all three are replaced.
+    """
+    text = re.sub(r"[\\^=]", "_", str(username or "")).strip() or "anonymous"
+    # The trailing caret marks a one-component name as intended.
+    return text[:63] + "^"
+
+
+def to_dicom_sr(seg, label_masks: Dict[str, np.ndarray], volume, sources: List[Any],
+                *, annotator: Optional[str] = None,
+                label_codes: Optional[Dict[str, Dict[str, Dict[str, str]]]] = None,
+                series_description: str = "Potato measurements") -> Any:
+    """A DICOM Comprehensive 3D SR holding a TID 1500 Measurement Report.
+
+    One TID 1411 "Volumetric ROI Measurements" group per segment of ``seg``,
+    each referencing that segment, typed with the label's coded concept,
+    tracked by the segment's tracking ID and UID, and holding one measurement:
+    the segment's volume in mm3 (SNOMED CT 118565006 "Volume", UCUM ``mm3``).
+    The annotator is the person observer (TID 1003): the username as both
+    the person name and the login name. The SEG and the source images are
+    the evidence.
+    """
+    import highdicom as hd
+    from pydicom.sr.codedict import codes
+
+    observer = hd.sr.ObserverContext(
+        observer_type=codes.DCM.Person,
+        observer_identifying_attributes=hd.sr.PersonObserverIdentifyingAttributes(
+            name=person_name(annotator), login_name=(str(annotator)[:64] if annotator else None)))
+    context = hd.sr.ObservationContext(observer_person_context=observer)
+    volumes = segment_volumes_mm3(label_masks, volume)
+    from potato.server_utils.schemas.volume_annotation import dicom_codes
+    groups = []
+    for segment in seg.SegmentSequence:
+        label = str(segment.SegmentLabel)
+        codes_for = (label_codes or {}).get(label) or dicom_codes({"name": label})
+        number = int(segment.SegmentNumber)
+        tracking = hd.sr.TrackingIdentifier(
+            uid=str(getattr(segment, "TrackingUID", "") or hd.UID()),
+            identifier=str(getattr(segment, "TrackingID", "") or label)[:64])
+        groups.append(hd.sr.VolumetricROIMeasurementsAndQualitativeEvaluations(
+            tracking_identifier=tracking,
+            # By series rather than per image: ReferencedSegment.from_segmentation
+            # reads per-frame segment identification, which highdicom moves to
+            # the shared functional groups when a SEG holds one segment.
+            referenced_segment=hd.sr.ReferencedSegment(
+                sop_class_uid=str(seg.SOPClassUID), sop_instance_uid=str(seg.SOPInstanceUID),
+                segment_number=number,
+                source_series=hd.sr.SourceSeriesForSegmentation(
+                    str(sources[0].SeriesInstanceUID))),
+            finding_type=_code(codes_for["type"]),
+            finding_category=_code(codes_for["category"]),
+            measurements=[hd.sr.Measurement(
+                name=codes.SCT.Volume, value=round(volumes.get(label, 0.0), 4),
+                unit=codes.UCUM.CubicMillimeter)]))
+    report = hd.sr.MeasurementReport(
+        observation_context=context,
+        procedure_reported=hd.sr.CodedConcept("363679005", "SCT", "Imaging procedure"),
+        imaging_measurements=groups)
+    from potato import __version__ as potato_version
+    return hd.sr.Comprehensive3DSR(
+        evidence=[seg, *sources], content=report,
+        series_instance_uid=hd.UID(), series_number=901,
+        sop_instance_uid=hd.UID(), instance_number=1,
+        manufacturer="Potato", is_complete=True, is_final=False, is_verified=False,
+        series_description=series_description[:64],
+        software_versions=str(potato_version))
 
 
 #: Type 2 attributes highdicom copies from the source into the SEG.

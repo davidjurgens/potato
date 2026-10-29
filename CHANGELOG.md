@@ -4,6 +4,103 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+## [2.13.0] - Science Viewers, Scheduled Sessions and Consensus
+
+This release adds viewers and formats for signals, chemistry, spectra,
+microscopy, astronomy and clinical imaging; ontology-backed labels; math
+rendering; consensus aggregation across annotators; and scheduled sessions
+with reminders, experience sampling and Delphi rounds. 80 annotation types
+(76 in 2.12.3), 31 display types (27) and 71 export formats (60).
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+### Science viewers
+
+- **Time series.** New `time_series` display (uPlot) and `interval_label`
+  scheme for multi-channel signals. Brush intervals, click events, or label
+  fixed epochs with keys; the server sends decimated windows only. Readers
+  for EDF/EDF+/BDF, WFDB (`signals` extra), CSV/Parquet and BIDS
+  `events.tsv`; exports `interval_label` (CSV/JSONL) and `bids_events`.
+  `signal_field` must name a `time_series` field, checked at startup.
+- **Chemical structures.** New `chemical_structure` scheme (OpenChemLib
+  editor; molfile V3000, canonical SMILES, InChIKey with
+  `potato vendor fetch rdkit`) and `molecule` display with atom selection for
+  `viewer_selection`. Answer keys (exact, ignore-stereo, substructure) are
+  graded server-side with the optional `chemistry` extra. New `chemistry`
+  export (CSV, SD file, selected atoms).
+- **Spectra.** New `spectrum` display (Plotly) and `peak_picking` scheme for
+  NMR, IR and MS: click to pick peaks, drag to integrate, accept or reject
+  suggested peaks. JCAMP-DX and CSV are read natively, and mzML with the
+  `spectra` extra. New `peak_table` export writes one row per peak, region
+  and rejected suggestion.
+- **Multichannel microscopy.** New `microscopy` scheme for OME-Zarr and
+  OME-TIFF images (`microscopy` extra): channel toggles, colours and contrast,
+  z and t, the file's resolution pyramid, regions with classes, and cell
+  classification from a label image. Tiles are composited on the server, so
+  the viewer needs no WebGL. The `microscopy` export writes QuPath-readable GeoJSON,
+  a cell CSV and OME-Zarr label images.
+- **Astronomy.** New `fits_cutout` display. FITS images are cut out and
+  scaled on the server (`astro` extra) and shown alone or as a
+  science/reference/difference triplet with shared zoom and crosshair, an
+  RA/Dec readout, and an optional light curve. Includes a transient-vetting
+  example with a Galaxy-Zoo-style host question tree.
+- **Clinical formats.** `volume_annotation` exports a DICOM SR (TID 1500)
+  with each segment's volume and the annotator as observer (`dicom_sr`), and
+  SEG segments carry per-label SNOMED/DCM codes from a `dicom:` key.
+  Whole-slide regions import from and export to QuPath GeoJSON and ASAP XML
+  in level-0 slide pixels (`qupath_geojson`, `asap_xml`).
+
+### Labels, math and aggregation
+
+- **Ontology-backed labels.** `label_source` on radio, multiselect, span and
+  image_annotation schemes adds a term search box. Terms come from a local
+  OBO 1.4 file or, with `allow_network: true`, from an OLS4 server through
+  Potato. Each pick stores `{obo_id, label, iri, ontology_version}`,
+  agreement compares `obo_id`, and `--format ontology_terms` exports one row
+  per term.
+- **Math rendering.** A top-level `math: {enabled: true}` block renders
+  `$…$`, `$$…$$`, `\(…\)` and `\[…\]` with a vendored copy of KaTeX 0.18.11
+  in item text, display fields, process_reward and trajectory_eval steps, and
+  cloze passages. Span targets keep the LaTeX source. Cloze gains
+  `scoring: numeric` (with `tolerance`) and `scoring: latex`.
+- **Consensus aggregation.** New `consensus` export: per-answer vote counts
+  and fractions with a retired/needs_review flag, DBSCAN clusters of image
+  points (pixel or image-fraction eps), and median consensus boxes grouped by
+  IoU, written as CSV and JSON. It is configured with a
+  `consensus_aggregation` block. Zooniverse imports now record each image's
+  size so imported drawings aggregate in pixels.
+
+### Scheduled sessions
+
+- A `schedule:` block for follow-up waves with windows, experience-sampling
+  prompts (random or fixed times, expiry, compliance and latency) and Delphi
+  rounds with controlled feedback and stopping criteria. A `notifications:`
+  block adds reminders by email (SMTP), SMS (Twilio) or Prolific message,
+  with credentials read from environment variables, consent-gated contact
+  details kept out of every export, signed resume links, an admin page at
+  `/admin/schedule` and a `schedule` export.
+
+### Fixed
+
+- `image_annotation`: shapes moved together after a rubber-band selection
+  were saved relative to the selection's centre instead of the image, so they
+  reloaded in the wrong place. A box drawn across an existing shape, such as a
+  region from `potato import`, was saved the same way, because the
+  rubber-band selection also ran while a drawing tool was armed. It now runs
+  only in select mode.
+- `potato import` prints `potato start` as the command to run the project it
+  wrote, and the generated README says the same.
+
+### Dependencies
+
+- New install extras: `signals` (wfdb, pyarrow), `chemistry` (rdkit),
+  `spectra` (pyteomics, psims, lxml), `microscopy` (zarr, tifffile), `astro`
+  (astropy). Vendored browser libraries: uPlot 1.6.32, OpenChemLib 9.25.0,
+  KaTeX 0.18.11. RDKit.js 2026.3.6 is fetched with `potato vendor fetch
+  rdkit`. See [Third-party components](docs/deployment/third_party_licenses.md).
+
 ## [2.12.3] - Clean Rebuild of 2.12.2
 
 2.12.3 has the same code as 2.12.2. The 2.12.2 wheel and source package on

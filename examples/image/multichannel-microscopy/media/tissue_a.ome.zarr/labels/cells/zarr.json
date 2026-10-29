@@ -1,0 +1,184 @@
+{
+  "attributes": {
+    "ome": {
+      "version": "0.5",
+      "multiscales": [
+        {
+          "name": "cells",
+          "axes": [
+            {
+              "name": "z",
+              "type": "space"
+            },
+            {
+              "name": "y",
+              "type": "space"
+            },
+            {
+              "name": "x",
+              "type": "space"
+            }
+          ],
+          "datasets": [
+            {
+              "path": "0",
+              "coordinateTransformations": [
+                {
+                  "type": "scale",
+                  "scale": [
+                    1.0,
+                    0.325,
+                    0.325
+                  ]
+                }
+              ]
+            },
+            {
+              "path": "1",
+              "coordinateTransformations": [
+                {
+                  "type": "scale",
+                  "scale": [
+                    1.0,
+                    0.65,
+                    0.65
+                  ]
+                }
+              ]
+            },
+            {
+              "path": "2",
+              "coordinateTransformations": [
+                {
+                  "type": "scale",
+                  "scale": [
+                    1.0,
+                    1.3,
+                    1.3
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "image-label": {
+        "colors": [
+          {
+            "label-value": 1,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 2,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 3,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 4,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 5,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 6,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 7,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 8,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 9,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 10,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 11,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "label-value": 12,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          }
+        ],
+        "source": {
+          "image": "../../"
+        }
+      }
+    }
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

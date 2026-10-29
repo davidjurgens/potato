@@ -1,0 +1,47 @@
+[
+  {
+    "id": "series-telescoping",
+    "problem": "Find the value of $$S = \\sum_{k=1}^{\\infty} \\frac{1}{k(k+1)}.$$",
+    "steps": [
+      "Split each term with partial fractions: $\\frac{1}{k(k+1)} = \\frac{1}{k} - \\frac{1}{k+1}$.",
+      "The partial sum telescopes: $$S_n = \\sum_{k=1}^{n} \\left(\\frac{1}{k} - \\frac{1}{k+1}\\right) = 1 - \\frac{1}{n+1}.$$",
+      "As $n \\to \\infty$, $\\frac{1}{n+1} \\to 0$, so $S = 1$."
+    ],
+    "answer_prompt": "The correct value of $S$ is [[]].",
+    "answer_key": "1"
+  },
+  {
+    "id": "integration-by-parts",
+    "problem": "Evaluate $\\displaystyle\\int_0^1 x e^{x}\\,dx$.",
+    "steps": [
+      "Integrate by parts with $u = x$ and $dv = e^{x}\\,dx$, so $du = dx$ and $v = e^{x}$.",
+      "Then $$\\int_0^1 x e^{x}\\,dx = \\Big[x e^{x}\\Big]_0^1 - \\int_0^1 e^{x}\\,dx.$$",
+      "The second integral is $\\Big[e^{x}\\Big]_0^1 = e - 1$.",
+      "So the value is $e - (e - 1) = -1$."
+    ],
+    "answer_prompt": "The correct value of the integral is [[]].",
+    "answer_key": "1"
+  },
+  {
+    "id": "pens-and-notebooks",
+    "problem": "A shop sells pens at \\$3 each and notebooks at \\$5 each. Ana buys 9 items and pays \\$31. How many notebooks did she buy?",
+    "steps": [
+      "Let $p$ be the number of pens and $n$ the number of notebooks. Then $p + n = 9$ and $3p + 5n = 31$.",
+      "Substitute $p = 9 - n$: $3(9 - n) + 5n = 31$, so $27 + 2n = 31$.",
+      "Hence $n = 2$ notebooks (and $p = 7$ pens, which cost \\$21)."
+    ],
+    "answer_prompt": "Ana bought [[]] notebooks.",
+    "answer_key": "2"
+  },
+  {
+    "id": "quadratic-root",
+    "problem": "Show that $x^2 - 5x + 6 = 0$ has two real roots and give the larger one.",
+    "steps": [
+      "The discriminant is $\\Delta = (-5)^2 - 4 \\cdot 1 \\cdot 6 = 1 > 0$, so there are two real roots.",
+      "By the quadratic formula, $x = \\frac{5 \\pm \\sqrt{1}}{2}$.",
+      "The roots are $x = 3$ and $x = 2$; the larger is $\\frac{6}{2} = 3$."
+    ],
+    "answer_prompt": "The larger root is [[]].",
+    "answer_key": "3"
+  }
+]

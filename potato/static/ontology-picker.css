@@ -1,0 +1,165 @@
+/* Ontology term picker (label_source). Theme tokens only, so dark mode follows. */
+
+.ontology-picker {
+    margin-top: 0.75rem;
+    max-width: 40rem;
+}
+
+.ontology-picker-label {
+    display: block;
+    font-weight: 500;
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+    color: var(--foreground);
+}
+
+.ontology-picker-box {
+    position: relative;
+}
+
+.ontology-picker-input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem; /* 16px keeps iOS from zooming on focus */
+    color: var(--foreground);
+    background: var(--background);
+    border: 1px solid var(--input, var(--border));
+    border-radius: var(--border-radius, 0.5rem);
+}
+
+.ontology-picker-input:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+    border-color: var(--ring);
+}
+
+.ontology-picker-results {
+    position: absolute;
+    z-index: 30;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    max-height: min(22rem, 50vh);
+    overflow-y: auto;
+    background: var(--popover, var(--card));
+    color: var(--popover-foreground, var(--card-foreground));
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius, 0.5rem);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.ontology-picker-results[hidden] {
+    display: none;
+}
+
+.ontology-picker-option {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-height: 2.75rem;
+    justify-content: center;
+    padding: 0.4rem 0.6rem;
+    border-radius: calc(var(--border-radius, 0.5rem) - 2px);
+    cursor: pointer;
+}
+
+.ontology-picker-option:hover {
+    background: var(--accent, var(--muted));
+}
+
+.ontology-picker-option[aria-selected="true"] {
+    background: var(--primary-tint, var(--accent));
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.ontology-result-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.ontology-result-label {
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.ontology-result-id,
+.ontology-term-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8em;
+    color: var(--muted-foreground);
+}
+
+.ontology-term-id {
+    margin-left: 0.4em;
+}
+
+.ontology-result-picked {
+    font-size: 0.75rem;
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.ontology-result-meta,
+.ontology-result-def {
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+    overflow-wrap: anywhere;
+}
+
+.ontology-result-def {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ontology-picker-hint {
+    margin: 0.3rem 0 0;
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+}
+
+.ontology-picker-status {
+    margin: 0.25rem 0 0;
+    min-height: 1.2em;
+    font-size: 0.85rem;
+    color: var(--foreground);
+}
+
+.ontology-picker-status.is-error {
+    color: var(--destructive-text, var(--destructive));
+}
+
+.ontology-term-option .ontology-term-label {
+    overflow-wrap: anywhere;
+}
+
+/* A span chip carries two spans (name, id); keep them on one line. */
+.shadcn-span-option.ontology-term-option .shadcn-span-label > span {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: baseline;
+}
+
+/* No keyboard on a touch screen: the key hint is noise there. */
+@media (pointer: coarse) {
+    .ontology-picker-keys {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .ontology-picker {
+        max-width: none;
+    }
+    .ontology-picker-results {
+        max-height: 45vh;
+    }
+}

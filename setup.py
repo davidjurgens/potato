@@ -99,6 +99,17 @@ _SAML_DEPS = ["python3-saml>=1.16"]
 # DICOM series and NIfTI volumes (volume_annotation): reading, NIfTI label
 # export, and DICOM SEG export.
 _VOLUME_DEPS = ["pydicom>=2.4", "nibabel>=5.0", "highdicom>=0.22"]
+# Chemistry: RDKit (BSD-3-Clause) grades chemical_structure answer keys and
+# fills InChI/InChIKey into the export. The browser side needs none of it.
+_CHEMISTRY_DEPS = ["rdkit>=2024.3"]
+# FITS images for the fits_cutout display (astronomy): astropy, BSD-3-Clause.
+_ASTRO_DEPS = ["astropy>=5.3"]
+# Multichannel microscopy (the `microscopy` schema): OME-Zarr through
+# zarr-python (MIT; v3 needs Python 3.11, and reads OME-Zarr 0.5), OME-TIFF
+# through tifffile (BSD-3-Clause).
+_MICROSCOPY_DEPS = ["zarr>=3.0; python_version>='3.11'",
+                    "zarr>=2.16,<3; python_version<'3.11'",
+                    "tifffile>=2023.1", "numpy>=1.21"]
 # The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
 # in "all": FiftyOne brings its own MongoDB and a large dependency tree.
 _FIFTYONE_DEPS = [
@@ -163,6 +174,12 @@ _DECISION_DEPS = [
 _DEPLOY_DEPS = [
     "paramiko>=3.0.0",
 ]
+# mzML mass spectra for the spectrum display (potato/science/converters/mzml.py).
+# pyteomics (Apache-2.0) reads mzML; from 5.0 it needs psims (Apache-2.0) for
+# PSI formats. JCAMP-DX and CSV spectra need neither.
+_SPECTRA_DEPS = ["pyteomics>=4.7", "psims>=1.3", "lxml>=4.9"]
+# time_series display: WFDB records (wfdb, MIT) and Parquet sensor tables (pyarrow, Apache-2.0).
+_SIGNAL_DEPS = ["wfdb>=4.1", "pyarrow>=12.0.0"]
 
 # What a hosted server needs to back its data up off the host and restore it
 # (potato/server_utils/backup), plus Authlib for SSO logins. Installed into the
@@ -176,7 +193,7 @@ _HOSTING_DEPS = [
 
 setup(
     name="potato-annotation",
-    version='2.12.3',
+    version='2.13.0',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",
@@ -232,6 +249,9 @@ setup(
         "wsi": _WSI_DEPS,
         "saml": _SAML_DEPS,
         "volumes": _VOLUME_DEPS,
+        "chemistry": _CHEMISTRY_DEPS,
+        "astro": _ASTRO_DEPS,
+        "microscopy": _MICROSCOPY_DEPS,
         "db": _DB_DEPS,
         "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,
@@ -244,6 +264,8 @@ setup(
         "vision": _VISION_DEPS,
         "transcribe": _TRANSCRIBE_DEPS,
         "decision": _DECISION_DEPS,
+        "signals": _SIGNAL_DEPS,
+        "spectra": _SPECTRA_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
         "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _MYSQL_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,

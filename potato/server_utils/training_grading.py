@@ -121,6 +121,14 @@ def check_training_answer(user_answer: Dict[str, Any],
                 return False
             continue
 
+        # A chemical structure key ({smiles | molfile | inchikey,
+        # substructure, ...}) is graded by structure, not by text.
+        from potato.chemistry.structures import answer_is_correct, is_answer_key
+        if is_answer_key(correct_value):
+            if not answer_is_correct(user_value, correct_value):
+                return False
+            continue
+
         # Handle multiselect/checkbox (list comparison)
         if isinstance(correct_value, list):
             if isinstance(user_value, list):

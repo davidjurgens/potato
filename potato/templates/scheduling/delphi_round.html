@@ -1,0 +1,63 @@
+{% extends "scheduling/base.html" %}
+{% block main_id %}schedule-delphi{% endblock %}
+{% block card_class %}sched-card-delphi{% endblock %}
+{% block content %}
+<h1 class="potato-page-title" id="schedule-heading">{{ s.title }}</h1>
+<p class="sched-hint">Open until <time datetime="{{ s.closes.iso }}" data-epoch="{{ s.closes.epoch }}">{{ s.closes.local }}</time>.
+    Rate each statement from {{ scale[0] }}{% if min_label %} ({{ min_label }}){% endif %} to {{ scale[-1] }}{% if max_label %} ({{ max_label }}){% endif %}.</p>
+{% if intro %}<p class="sched-intro">{{ intro }}</p>{% endif %}
+{% if round > 1 %}
+<p class="sched-hint" id="delphi-feedback-intro">Beside each statement is how the panel rated it in round {{ round - 1 }}: the median, the middle half of ratings (shaded), and your own rating. You may keep or change your rating.</p>
+{% endif %}
+{% if errors %}<div class="sched-banner sched-banner-error" role="alert" id="schedule-errors">Rate every statement before submitting.</div>{% endif %}
+{% set lo = scale[0] %}{% set hi = scale[-1] %}{% set span = (hi - lo) if hi > lo else 1 %}
+<form method="post" action="{{ url_for('schedule_session', session_id=s.id) }}" id="schedule-session-form"
+      data-started-url="{{ url_for('schedule_started', session_id=s.id) }}" novalidate>
+{% for it in items %}
+{% set fb = it.feedback %}{% set err = errors.get(it.id) %}
+<fieldset class="sched-question delphi-item{% if err %} sched-question-error{% endif %}" data-item="{{ it.id }}" {% if err %}aria-describedby="err-{{ it.id }}"{% endif %}>
+    <legend class="sched-question-text">{{ it.text }}</legend>
+    {% if fb %}
+    <div class="delphi-feedback" data-feedback-for="{{ it.id }}">
+        {% if fb.shown %}
+        <div class="delphi-bar" aria-hidden="true">
+            <span class="delphi-iqr" style="left: {{ ((fb.q1 - lo) / span * 100)|round(2) }}%; width: {{ ((fb.q3 - fb.q1) / span * 100)|round(2) }}%;"></span>
+            <span class="delphi-median" style="left: {{ ((fb.median - lo) / span * 100)|round(2) }}%;"></span>
+            {% if fb.own is not none %}<span class="delphi-own" style="left: {{ ((fb.own - lo) / span * 100)|round(2) }}%;"></span>{% endif %}
+        </div>
+        <p class="delphi-numbers">Panel median <strong class="delphi-median-value">{{ fmt(fb.median) }}</strong>,
+            middle half <span class="delphi-iqr-value">{{ fmt(fb.q1) }}–{{ fmt(fb.q3) }}</span>
+            ({{ fb.n }} rating{{ 's' if fb.n != 1 }}).
+            {% if fb.own is not none %}Your rating: <strong class="delphi-own-value">{{ fmt(fb.own) }}</strong>.{% else %}You did not rate this last round.{% endif %}</p>
+        {% if fb.comments %}
+        <details class="delphi-comments">
+            <summary>Comments from other panelists ({{ fb.comments|length }})</summary>
+            <ul>{% for c in fb.comments %}<li>{{ c }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+        {% else %}
+        <p class="delphi-numbers">Fewer than {{ min_panel }} panelists rated this last round, so no summary is shown.
+            {% if fb.own is not none %}Your rating: <strong class="delphi-own-value">{{ fmt(fb.own) }}</strong>.{% endif %}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% set chosen = (values.get('rating__' ~ it.id) or [''])[0] %}
+    <div class="sched-options sched-options-row delphi-scale" role="radiogroup" aria-label="Your rating">
+        {% for v in scale %}
+        <label class="sched-option">
+            <input type="radio" name="rating__{{ it.id }}" value="{{ v }}" {% if chosen == (v|string) %}checked{% endif %}
+                   aria-label="{{ v }}{% if loop.first and min_label %} ({{ min_label }}){% elif loop.last and max_label %} ({{ max_label }}){% endif %}">
+            <span>{{ v }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% if comments %}
+    <label class="potato-form-label sched-comment-label" for="comment-{{ it.id }}">Comment (optional; shown to the panel without your name)</label>
+    <textarea class="potato-form-input" id="comment-{{ it.id }}" name="comment__{{ it.id }}" rows="2" maxlength="2000">{{ (values.get('comment__' ~ it.id) or [''])[0] }}</textarea>
+    {% endif %}
+    {% if err %}<p class="sched-error" id="err-{{ it.id }}">{{ err }}</p>{% endif %}
+</fieldset>
+{% endfor %}
+<button type="submit" class="shadcn-button sched-primary" id="schedule-submit">Submit round {{ round }}</button>
+</form>
+{% endblock %}

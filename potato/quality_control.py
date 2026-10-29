@@ -1605,6 +1605,12 @@ class QualityControlManager:
             return geometry_answer_is_correct(
                 actual_value, expected_value, self._geometry_tolerance())
 
+        # A chemical structure key, graded by structure (same comparator as
+        # training answers). Before the dict branch: a key IS a dict.
+        from potato.chemistry.structures import answer_is_correct, is_answer_key
+        if is_answer_key(expected_value):
+            return answer_is_correct(actual_value, expected_value)
+
         if isinstance(expected_value, list):
             if not isinstance(actual_value, list):
                 actual_value = [actual_value]

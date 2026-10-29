@@ -20,6 +20,7 @@ from .camera_traps import COCOCameraTrapsImporter, MegaDetectorImporter
 from .bioacoustics import AudacityLabelsImporter, BirdNETImporter, RavenImporter
 from .iiif import IIIFImporter
 from .page_xml import PageXMLImporter
+from .pathology import ASAPImporter, QuPathImporter
 from .web_annotation import WebAnnotationImporter
 
 IMPORTERS = {
@@ -41,6 +42,8 @@ IMPORTERS = {
     "iiif": IIIFImporter(),
     "web_annotation": WebAnnotationImporter(),
     "page_xml": PageXMLImporter(),
+    "qupath_geojson": QuPathImporter(),
+    "asap_xml": ASAPImporter(),
 }
 
 #: Spellings people type for the same format.
@@ -68,6 +71,8 @@ ALIASES = {
     "hypothesis": "web_annotation",
     "page": "page_xml",
     "transkribus": "page_xml",
+    "qupath": "qupath_geojson",
+    "asap": "asap_xml",
 }
 
 

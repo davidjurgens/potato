@@ -1,0 +1,169 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Real/bogus vetting of transient candidates, with a Galaxy-Zoo-style
+# question tree about the host.
+#
+# Each item is one candidate from a difference-imaging pipeline. The annotator
+# sees the science, reference and difference cutouts side by side (shared
+# zoom and crosshair, RA/Dec under the cursor) and the candidate's light curve
+# underneath, then answers real / bogus / unsure with the R, B and U keys.
+# A real candidate opens questions about its host galaxy; each follow-up is
+# gated on the full path of answers that leads to it.
+#
+# Needs astropy:  pip install 'potato-annotation[astro]'
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/image/astronomy-real-bogus/config.yaml -p 8000
+#
+# The FITS files and light curves are synthetic. Regenerate them with:
+#   python examples/image/astronomy-real-bogus/generate_data.py
+
+port: 8000
+annotation_task_name: "Transient candidate vetting"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/candidates.json
+
+item_properties:
+  id_key: id
+  text_key: summary
+
+instance_display:
+  fields:
+    - key: summary
+      type: text
+      label: "Candidate"
+    - key: candidate
+      type: fits_cutout
+      label: "Cutouts"
+      display_options:
+        # Each item gives the position (ra/dec or x/y) and the size; these
+        # are the defaults for anything an item leaves out.
+        size: 48
+        interval: zscale
+        stretch: linear
+        panels:
+          - key: science
+            label: Science
+          - key: reference
+            label: Reference
+          - key: difference
+            label: Difference
+        light_curve_columns:
+          time: mjd
+          mag: mag
+          err: magerr
+          band: band
+          limit: limit
+        time_label: MJD
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: radio
+    humanize_labels: false
+    name: vetting
+    description: "Is this a real astrophysical transient?"
+    labels:
+      - name: "Real"
+        key_value: "r"
+      - name: "Bogus"
+        key_value: "b"
+      - name: "Unsure"
+        key_value: "u"
+    label_requirement:
+      required: true
+
+  - annotation_type: multiselect
+    humanize_labels: false
+    name: bogus_reason
+    description: "What makes it bogus? (select all that apply)"
+    labels:
+      - "Subtraction residual (dipole)"
+      - "Cosmic ray or hot pixel"
+      - "Satellite or asteroid trail"
+      - "Bad column or image edge"
+      - "Other"
+    display_logic:
+      show_when:
+        - schema: vetting
+          operator: equals
+          value: "Bogus"
+
+  # The host tree. A hidden question keeps its answer, so every condition
+  # repeats the whole path from the root: changing "Real" to "Bogus" hides
+  # the entire branch, not only its first question.
+  - annotation_type: radio
+    humanize_labels: false
+    name: host
+    description: "What is at the candidate's position in the reference image?"
+    labels:
+      - "Nothing (hostless)"
+      - "A galaxy"
+      - "A point source (star)"
+    display_logic:
+      show_when:
+        - schema: vetting
+          operator: equals
+          value: "Real"
+
+  - annotation_type: radio
+    humanize_labels: false
+    name: host_shape
+    description: "Is the galaxy simply smooth and rounded, or does it show a disk or features?"
+    labels:
+      - "Smooth"
+      - "Features or a disk"
+    display_logic:
+      show_when:
+        - all:
+            - schema: vetting
+              operator: equals
+              value: "Real"
+            - schema: host
+              operator: equals
+              value: "A galaxy"
+
+  - annotation_type: radio
+    humanize_labels: false
+    name: edge_on
+    description: "Could the disk be viewed edge-on?"
+    labels: ["Yes", "No"]
+    display_logic:
+      show_when:
+        - all:
+            - schema: vetting
+              operator: equals
+              value: "Real"
+            - schema: host
+              operator: equals
+              value: "A galaxy"
+            - schema: host_shape
+              operator: equals
+              value: "Features or a disk"
+
+  - annotation_type: radio
+    humanize_labels: false
+    name: spiral
+    description: "Is there a sign of spiral arms?"
+    labels: ["Yes", "No"]
+    display_logic:
+      show_when:
+        - all:
+            - schema: vetting
+              operator: equals
+              value: "Real"
+            - schema: host
+              operator: equals
+              value: "A galaxy"
+            - schema: host_shape
+              operator: equals
+              value: "Features or a disk"
+            - schema: edge_on
+              operator: equals
+              value: "No"

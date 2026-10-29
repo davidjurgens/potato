@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Two-wave panel: rate five statements today, answer a short follow-up a week
+# later at 09:00 in the participant's own time zone.
+#
+# Participants consent (including a separate question about reminders), rate
+# the statements, then pick their time zone and, if they agreed to contact,
+# give an email address and/or a mobile number. Wave 2 opens seven days
+# later at 09:00 local time and stays open for 48 hours. Messages go through
+# the log channel and, with dry_run on, the SMTP and Twilio channels are
+# rendered but nothing is sent: the admin page (/admin/schedule) shows each
+# message with its resume link.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/two-wave-panel/config.yaml -p 8000
+# Docs: docs/workflow/scheduling.md
+
+annotation_task_name: "Attitudes panel"
+
+data_files:
+  - data/statements.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+require_password: false
+
+phases:
+  order: [consent, annotation]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  annotation:
+    type: annotation
+
+annotation_schemes:
+  - annotation_type: likert
+    name: agreement
+    description: "How much do you agree with this statement?"
+    size: 5
+    min_label: "Strongly disagree"
+    max_label: "Strongly agree"
+
+schedule:
+  timezone: "Europe/London"        # used when the browser reports no time zone
+  waves:
+    - name: followup
+      title: "One-week follow-up"
+      offset: 7d
+      at: "09:00"
+      window: 48h
+      questions_file: surveys/followup.json
+      reminders:
+        - before_open: 12h
+        - at: open
+        - before_close: 12h
+      completion_code: "FOLLOWUP-DONE"
+
+notifications:
+  dry_run: true                    # render and log every message; deliver none
+  base_url: "http://localhost:8000"
+  channels:
+    - type: log
+    - type: smtp
+      host: smtp.example.org
+      port: 587
+      security: starttls
+      username_env: POTATO_SMTP_USER
+      password_env: POTATO_SMTP_PASSWORD
+      from: "Attitudes panel <panel@example.org>"
+    - type: twilio
+      account_sid_env: TWILIO_ACCOUNT_SID
+      auth_token_env: TWILIO_AUTH_TOKEN
+      from_number: "+15005550006"
+  contact:
+    consent:
+      question: contact_consent
+      value: "Yes, you may contact me"
+    delete_after_study: true

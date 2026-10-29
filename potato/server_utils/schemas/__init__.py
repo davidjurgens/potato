@@ -10,7 +10,11 @@ from .span_link import generate_span_link_layout
 from .textbox import generate_textbox_layout
 from .cloze import generate_cloze_layout
 from .listening_test import generate_listening_test_layout
+from .interval_label import generate_interval_label_layout
+from .microscopy import generate_microscopy_layout
 from .viewer_selection import generate_viewer_selection_layout
+from .chemical_structure import generate_chemical_structure_layout
+from .peak_picking import generate_peak_picking_layout
 from .spectrogram_annotation import generate_spectrogram_annotation_layout
 from .geo_annotation import generate_geo_annotation_layout
 from .ego_network import generate_ego_network_layout

@@ -1,0 +1,5 @@
+subject_id,project_id,workflow_id,subject_set_id,metadata,locations,classifications_count,retired_at,retirement_reason,created_at,updated_at
+9001,77,501,88,"{""Filename"": ""colony_9001.jpg""}","{""0"": ""https://example.org/penguins/colony_9001.jpg""}",0,,,2026-03-01 00:00:00 UTC,
+9002,77,501,88,"{""Filename"": ""colony_9002.jpg""}","{""0"": ""https://example.org/penguins/colony_9002.jpg""}",0,,,2026-03-01 00:00:00 UTC,
+9003,77,501,88,"{""Filename"": ""colony_9003.jpg""}","{""0"": ""https://example.org/penguins/colony_9003.jpg""}",0,,,2026-03-01 00:00:00 UTC,
+9004,77,501,88,"{""Filename"": ""colony_9004.jpg""}","{""0"": ""https://example.org/penguins/colony_9004.jpg""}",0,,,2026-03-01 00:00:00 UTC,

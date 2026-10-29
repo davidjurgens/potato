@@ -97,6 +97,14 @@ rather than handing you a silently wrong import.
 | VIA | `potato import -i via_project.json -o proj --via-label-key class` |
 | Labelbox | `potato import -i export.ndjson -o proj` |
 
+| QuPath GeoJSON (slides) | `potato import -i case_01.geojson -o proj --image-dir ./slides` |
+| ASAP XML (slides) | `potato import -i case_01.xml -o proj --image-dir ./slides` |
+
+QuPath and ASAP files name no slide: each is paired with the slide that has
+its stem (`case_01.svs` for `case_01.geojson`) in `--image-dir` or beside the
+file. A folder of region files works too. See
+[Clinical and Pathology Formats](../annotation-types/science/clinical_formats.md#pathology-regions-qupath-geojson-and-asap-xml).
+
 Labelbox exports are **newline-delimited JSON**, not a JSON array. The CLI
 detects that and reads them line by line; `json.load` on one fails at line 2
 with a message about extra data that reads as file corruption.

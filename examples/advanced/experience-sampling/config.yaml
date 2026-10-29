@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Experience sampling: five short surveys a day for a week, at random times
+# between 09:00 and 21:00 in each participant's time zone, at least 90
+# minutes apart. Each survey closes 30 minutes after it arrives.
+#
+# The regular flow is a consent page and one intake item (every Potato study
+# has an annotation phase; here it holds the intake questions). Finishing it
+# enrols the participant. Prompts start the next day. Messages go to the
+# log channel (and, with dry_run on, the Twilio channel is rendered but not
+# sent), so the admin page at /admin/schedule shows each prompt's resume link.
+# The `schedule` export writes compliance (answered / expired / missed) and
+# latency (prompt to first answer) per prompt.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/experience-sampling/config.yaml -p 8000
+# Docs: docs/workflow/experience_sampling.md
+
+annotation_task_name: "Daily mood study"
+
+data_files:
+  - data/intake.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+require_password: false
+
+phases:
+  order: [consent, annotation]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  annotation:
+    type: annotation
+
+annotation_schemes:
+  - annotation_type: likert
+    name: usual_mood
+    description: "In general, how would you describe your mood?"
+    size: 7
+    min_label: "Very low"
+    max_label: "Very good"
+  - annotation_type: radio
+    name: phone_use
+    description: "How often do you usually look at your phone?"
+    labels: ["Every few minutes", "About once an hour", "A few times a day"]
+
+schedule:
+  timezone: "UTC"
+  seed: "daily-mood-pilot"
+  experience_sampling:
+    title: "How are you right now?"
+    days: 7
+    start_day: 1
+    daily_window: "09:00-21:00"
+    signal:
+      per_day: 5
+      min_gap: 90m
+    expires_after: 30m
+    questions_file: surveys/prompt.json
+    reminders:
+      - at: open
+      - after_open: 15m
+
+notifications:
+  dry_run: true
+  channels:
+    - type: log
+    - type: twilio
+      account_sid_env: TWILIO_ACCOUNT_SID
+      auth_token_env: TWILIO_AUTH_TOKEN
+      from_number: "+15005550006"
+  templates:
+    prompt:
+      body: "Daily mood study: a 1-minute survey is open for {time_left}: {link} (stop: {stop_link})"
+  contact:
+    consent:
+      question: sms_consent
+      value: "Yes"

@@ -107,6 +107,47 @@ class TestCanvasDrawing(BasePlaywrightTest):
         assert len(data) == 2
         assert sorted(a["label"] for a in data) == ["car", "road"]
 
+    def test_two_shapes_moved_together_store_where_they_were_moved(
+            self, page, image_server):
+        """Inside a multi-selection fabric reports each shape relative to the
+        selection's centre; the stored coordinates must stay image fractions."""
+        self._open(page, image_server)
+        self.draw_bbox_on_image(page, SCHEMA, 0.1, 0.1, 0.3, 0.3, label="car")
+        self.draw_bbox_on_image(page, SCHEMA, 0.5, 0.5, 0.7, 0.7, label="road")
+        page.keyboard.press("v")                      # select / move
+
+        rect = self.image_rect(page, SCHEMA)
+        box = page.locator(f"#canvas-{SCHEMA}").bounding_box()
+
+        def at(fx, fy):
+            return (box["x"] + rect["left"] + fx * rect["width"],
+                    box["y"] + rect["top"] + fy * rect["height"])
+
+        def drag(start, end):
+            page.mouse.move(*at(*start))
+            page.mouse.down()
+            page.mouse.move(*at((start[0] + end[0]) / 2, (start[1] + end[1]) / 2))
+            page.mouse.move(*at(*end))
+            page.mouse.up()
+
+        drag((0.05, 0.05), (0.8, 0.8))                # rubber-band both
+        selected = page.evaluate("""(schema) => {
+            const m = document.querySelector(
+                `.image-annotation-container[data-schema="${schema}"]`).annotationManager;
+            const a = m.canvas.getActiveObject();
+            return a ? [a.type, m.canvas.getActiveObjects().length] : null;
+        }""", SCHEMA)
+        assert selected == ["activeSelection", 2], selected
+
+        drag((0.2, 0.2), (0.3, 0.3))                  # move the pair by 0.1
+        data = {a["label"]: a["coordinates"]
+                for a in self.read_annotation_data(page, SCHEMA)}
+        assert data["car"]["x"] == pytest.approx(0.2, abs=0.02), data
+        assert data["car"]["y"] == pytest.approx(0.2, abs=0.02), data
+        assert data["road"]["x"] == pytest.approx(0.6, abs=0.02), data
+        assert data["road"]["y"] == pytest.approx(0.6, abs=0.02), data
+        assert data["car"]["width"] == pytest.approx(0.2, abs=0.02), data
+
     def test_painting_creates_a_mask(self, page, image_server):
         """
         Masks are not fabric objects and ride the same blob as the shapes, as

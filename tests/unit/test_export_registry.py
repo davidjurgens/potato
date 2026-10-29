@@ -141,6 +141,8 @@ class TestBuiltinExportersRegistered:
             "cvat", "labelme", "darwin", "kitti", "kitti_3d", "mot", "cityscapes", "davis",
             # Medical volumes: NIfTI label volumes and DICOM SEG
             "volume_nifti", "dicom_seg",
+            # DICOM SR measurement report; pathology regions (QuPath, ASAP)
+            "dicom_sr", "qupath_geojson", "asap_xml",
             # Trajectory correction → SFT/DPO
             "trajectory_correction",
             # Tabular exporters
@@ -169,6 +171,13 @@ class TestBuiltinExportersRegistered:
             "labeling_engine",
             # Incentive payments (price_list / bdm / belief_elicitation).
             "incentives",
+            # Consensus across annotators (numpy only).
+            "consensus",
+            # Science viewers: microscopy, chemistry, spectra, signals; ontology terms.
+            "microscopy", "chemistry", "peak_table", "interval_label", "bids_events",
+            "ontology_terms",
+            # Scheduled sessions (waves, experience sampling, Delphi).
+            "schedule",
             # Trial data from runtime phase pages (project SQLite).
             "jspsych", "runtime",
             # Interchange: W3C Web Annotation, Frictionless, Psych-DS.
@@ -282,6 +291,7 @@ class TestTheFormatListIsPinned:
         "darwin", "cityscapes", "kitti", "kitti_3d", "mot", "davis",
         # medical volumes
         "volume_nifti", "dicom_seg",
+        "dicom_sr", "qupath_geojson", "asap_xml",
         # agent evaluation and behaviour
         "agent_eval", "coding_eval", "episode_jsonl",
         "trajectory_correction", "annotation_telemetry", "keystrokes",
@@ -289,6 +299,13 @@ class TestTheFormatListIsPinned:
         "jspsych", "runtime",
         # interchange and repository packaging
         "web_annotation", "data_package", "psych_ds", "listening_test", "survey_experiments", "reliability", "lextale", "flextext", "toolbox", "igt", "ego_network", "cultural_domain", "megadetector", "camtrap_dp", "darwin_core", "raven", "audacity_labels", "geojson", "geo_overlap", "iiif_annotations", "page_xml", "tei",
+        # consensus across annotators (Zooniverse-style aggregation)
+        "consensus",
+        # science viewers and ontology terms
+        "microscopy", "chemistry", "peak_table", "interval_label", "bids_events",
+        "ontology_terms",
+        # scheduled sessions
+        "schedule",
         # adjudication outcome
         "adjudication",
         # labeling engine deliverable

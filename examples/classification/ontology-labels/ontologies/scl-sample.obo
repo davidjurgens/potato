@@ -1,0 +1,127 @@
+format-version: 1.4
+data-version: scl/releases/2026-10-01
+date: 01:10:2026 12:00
+default-namespace: synthetic_cell
+ontology: scl
+remark: SYNTHETIC SAMPLE for Potato tests and examples. This is NOT the Cell Ontology (CL). Term ids, names and the hierarchy are made up for demonstration.
+
+[Term]
+id: SCL:0000000
+name: cell
+def: "A made-up root term for the synthetic sample." [POTATO:sample]
+
+[Term]
+id: SCL:0000001
+name: immune cell
+is_a: SCL:0000000 ! cell
+
+[Term]
+id: SCL:0000002
+name: leukocyte
+synonym: "white blood cell" EXACT []
+synonym: "WBC" RELATED []
+is_a: SCL:0000001 ! immune cell
+
+[Term]
+id: SCL:0000003
+name: lymphocyte
+is_a: SCL:0000002 ! leukocyte {source="POTATO:sample"}
+
+[Term]
+id: SCL:0000004
+name: T cell
+alt_id: SCL:0000099
+def: "A lymphocyte in the sample hierarchy. Used to test \"escaped\" quotes." [POTATO:sample]
+synonym: "T-lymphocyte" EXACT []
+synonym: "T-cell" EXACT []
+is_a: SCL:0000003 ! lymphocyte
+
+[Term]
+id: SCL:0000005
+name: CD4-positive T cell
+synonym: "helper T cell" EXACT []
+is_a: SCL:0000004 ! T cell
+
+[Term]
+id: SCL:0000006
+name: CD8-positive T cell
+synonym: "cytotoxic T cell" EXACT []
+is_a: SCL:0000004 ! T cell
+
+[Term]
+id: SCL:0000007
+name: B cell
+synonym: "B-lymphocyte" EXACT []
+is_a: SCL:0000003 ! lymphocyte
+
+[Term]
+id: SCL:0000008
+name: natural killer cell
+synonym: "NK cell" EXACT []
+is_a: SCL:0000003 ! lymphocyte
+
+[Term]
+id: SCL:0000009
+name: myeloid cell
+is_a: SCL:0000002 ! leukocyte
+
+[Term]
+id: SCL:0000010
+name: monocyte
+is_a: SCL:0000009 ! myeloid cell
+
+[Term]
+id: SCL:0000011
+name: macrophage
+synonym: "histiocyte" RELATED []
+is_a: SCL:0000009 ! myeloid cell
+relationship: develops_from SCL:0000010 ! monocyte
+
+[Term]
+id: SCL:0000012
+name: neutrophil
+is_a: SCL:0000009 ! myeloid cell
+
+[Term]
+id: SCL:0000013
+name: epithelial cell
+is_a: SCL:0000000 ! cell
+
+[Term]
+id: SCL:0000014
+name: keratinocyte
+is_a: SCL:0000013 ! epithelial cell
+
+[Term]
+id: SCL:0000015
+name: neuron
+synonym: "nerve cell" EXACT []
+is_a: SCL:0000000 ! cell
+
+[Term]
+id: SCL:0000016
+name: glial cell
+synonym: "neuroglial cell" EXACT []
+is_a: SCL:0000000 ! cell
+
+[Term]
+id: SCL:0000017
+name: astrocyte
+is_a: SCL:0000016 ! glial cell
+
+[Term]
+id: SCL:0000018
+name: obsolete lymphoid progenitor
+is_a: SCL:0000003 ! lymphocyte
+is_obsolete: true
+replaced_by: SCL:0000003
+
+[Term]
+id: SCL:0000019
+name: red blood cell
+synonym: "erythrocyte" EXACT []
+is_a: SCL:0000000 ! cell
+
+[Typedef]
+id: develops_from
+name: develops from

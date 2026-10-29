@@ -1,0 +1,10 @@
+[
+  {"id": "c1", "text": "Every label has a definition and at least one positive and one negative example."},
+  {"id": "c2", "text": "The guidelines say what to do when two labels both seem to apply."},
+  {"id": "c3", "text": "Edge cases found during annotation are added to the guidelines within a week."},
+  {"id": "c4", "text": "The guidelines state the intended use of the annotations."},
+  {"id": "c5", "text": "Annotators can see the version history of the guidelines."},
+  {"id": "c6", "text": "The guidelines fit on two pages."},
+  {"id": "c7", "text": "Each rule is tied to an agreement measurement from a pilot."},
+  {"id": "c8", "text": "The guidelines are available in the annotators' first language."}
+]

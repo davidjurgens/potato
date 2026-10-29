@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Sleep staging in 30-second epochs.
+#
+# The recording is shown one 30-second epoch at a time. Press a stage key
+# (W 1, N1 2, N2 3, N3 4, REM 5) to label the epoch and move to the next;
+# [ and ] (or Page Up / Page Down) move without labelling. The strip under
+# the plot shows the whole recording, coloured by the stages given so far;
+# click it to jump. The file's own hypnogram (EDF+ annotations) is loaded as
+# a starting point. A second scheme marks arousals by clicking.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/time-series-intervals/config-epochs.yaml -p 8000
+
+port: 8000
+annotation_task_name: "Sleep staging"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output_epochs
+export_annotation_format: jsonl
+
+data_files:
+  - data/psg.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+instance_display:
+  fields:
+    - key: signal
+      type: time_series
+      label: "PSG"
+      display_options:
+        window: 30
+        channels:
+          - name: "EEG Fpz-Cz"
+            range: [-120, 120]
+          - name: "EOG"
+            range: [-150, 150]
+          - name: "EMG chin"
+          - name: "Resp"
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: interval_label
+    name: stage
+    description: "Sleep stage of each 30-second epoch"
+    signal_field: signal
+    mode: epoch
+    epoch_length: 30
+    # Next stays blocked until every epoch has a stage. Both keys are needed:
+    # require_all_epochs only counts while the scheme is required.
+    require_all_epochs: true
+    label_requirement: {required: true}
+    labels:
+      - {name: W, key_value: "1"}
+      - {name: N1, key_value: "2"}
+      - {name: N2, key_value: "3"}
+      - {name: N3, key_value: "4"}
+      - {name: REM, key_value: "5"}
+    preannotation_labels:
+      "Sleep stage W": W
+      "Sleep stage 1": N1
+      "Sleep stage 2": N2
+      "Sleep stage 3": N3
+      "Sleep stage R": REM
+      "Arousal": null
+
+  - annotation_type: interval_label
+    name: arousals
+    description: "Arousals (click on the plot)"
+    signal_field: signal
+    mode: free
+    pre_annotations: false
+    labels:
+      - {name: arousal, key_value: "a", kind: event, color: "#8C6D1F"}

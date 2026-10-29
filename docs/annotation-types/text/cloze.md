@@ -60,7 +60,8 @@ not shown either.
 | `text` | | One passage for every item. Use this or `source_field` |
 | `source_field` | | Item field holding each item's passage |
 | `answer_field` | | Item field holding each item's key (with `source_field` only) |
-| `scoring` | `case_insensitive` | `exact`, `case_insensitive`, or `normalized` (also ignores accents and punctuation) |
+| `scoring` | `case_insensitive` | `exact`, `case_insensitive`, `normalized` (also ignores accents and punctuation), `numeric`, or `latex` (see [Math answers](#math-answers)) |
+| `tolerance` | `0` | Largest absolute difference that still counts as correct, with `numeric` or `latex` scoring |
 | `input_width` | `10` | Width of each blank, in characters |
 | `label_requirement` | | `required: true` requires text in every blank, checked on the page and on the server |
 
@@ -74,6 +75,38 @@ the typed text as its value. The CSV/TSV export adds, for each keyed blank,
 Cloze answers on survey pages are exported with the other phase answers
 (`export_include_phase_data: true`) and are not scored there.
 
+## Math answers
+
+`normalized` removes punctuation, so `-0.5` and `0.5` both become `05`. Use one
+of the math modes for numbers and formulas:
+
+- `numeric` compares values exactly. `0.5`, `1/2`, `\frac{1}{2}`,
+  `\dfrac{1}{2}`, `$\tfrac12$`, `5e-1` and `.5` all match a key of `1/2`.
+  Thousands separators (`1,000`) and the Unicode minus sign are accepted.
+  `tolerance: 0.001` accepts `3.1416` for a key of `3.14159`. A key that is not
+  a number (`x=2`) is compared with the `latex` rule instead.
+- `latex` compares the LaTeX text after removing `$`/`\(`/`\[` delimiters,
+  whitespace, spacing commands (`\,`, `\;`, `\quad`, ...) and
+  `\left`/`\right`, and reading `\dfrac`/`\tfrac` as `\frac`. Two answers
+  that are both numbers are compared by value.
+
+Neither mode does algebra: `2x` does not match `x+x`, and `\sqrt{4}` does not
+match `2`. List each accepted form, separated by `|`. A number needs one form
+(`[[1/2]]` also accepts `0.5`); an equation needs every order you accept
+(`[[x=2|2=x]]`).
+
+```yaml
+- annotation_type: cloze
+  name: final_answer
+  description: Enter the final answer.
+  source_field: answer_prompt     # "The value of $S$ is [[]]."
+  answer_field: answer_key        # "1/2"; never sent to the browser
+  scoring: numeric
+  tolerance: 0.0005
+```
+
+With [math rendering](math.md) on, math in the passage is rendered.
+
 ## Example
 
 ```bash
@@ -83,6 +116,7 @@ python potato/flask_server.py start examples/classification/cloze-test/config.ya
 ## Related
 
 - [Text annotation](text_annotation.md)
+- [Math rendering and grading](math.md)
 - [Text edit](text_edit.md)
 - [Multi-phase workflows](../../workflow/surveyflow.md)
 - [Coming from jsPsych](../../guides/coming-from-jspsych.md)

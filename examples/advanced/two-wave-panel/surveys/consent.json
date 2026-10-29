@@ -1,0 +1,16 @@
+[
+  {
+    "name": "study_consent",
+    "description": "I have read the information sheet and agree to take part in both sessions of this study.",
+    "annotation_type": "radio",
+    "labels": ["I agree", "I do not agree"],
+    "label_requirement": {"required_label": ["I agree"]}
+  },
+  {
+    "name": "contact_consent",
+    "description": "May we send you a reminder by email or text message when the follow-up session opens? Your address is stored apart from your answers, never exported, and deleted when the study ends.",
+    "annotation_type": "radio",
+    "labels": ["Yes, you may contact me", "No reminders, thank you"],
+    "label_requirement": {"required": true}
+  }
+]

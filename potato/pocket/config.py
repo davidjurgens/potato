@@ -102,4 +102,8 @@ def pocket_capability(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
     for scheme in config.get("annotation_schemes", []) or []:
         if scheme.get("annotation_type") not in POCKET_CAPABLE_TYPES:
             incompatible.append(scheme.get("name", "?"))
+        elif scheme.get("label_source"):
+            # Pocket renders only the fixed label list, not the ontology
+            # search, so the regular page (which works on a phone) is used.
+            incompatible.append(scheme.get("name", "?"))
     return (len(incompatible) == 0, incompatible)

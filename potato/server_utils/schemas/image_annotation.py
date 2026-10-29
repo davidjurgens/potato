@@ -571,6 +571,8 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
 
                 {ai_toolbar_html}
 
+                {_ontology_picker_html(annotation_scheme)}
+
                 <!-- Canvas wrapper -->
                 <div class="canvas-wrapper{deepzoom_class}">
                     <!-- The tiled image renders here, BEHIND the fabric canvas.
@@ -1169,6 +1171,12 @@ def _generate_tool_buttons(tools, tool_keys=None):
         )
 
     return "\n".join(buttons)
+
+
+def _ontology_picker_html(annotation_scheme):
+    """The term search box for `label_source` (ontology-backed labels), or ''."""
+    from potato.ontology.picker import picker_html
+    return picker_html(annotation_scheme)
 
 
 def _generate_label_selector(labels):

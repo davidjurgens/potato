@@ -196,6 +196,10 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
             </div>
         """
 
+    # Ontology-backed labels (label_source): the term search box.
+    from potato.ontology.picker import picker_html
+    schematic += picker_html(annotation_scheme)
+
     schematic += "</fieldset></form>"
 
     logger.info(f"Successfully generated radio layout for {schema_name} "

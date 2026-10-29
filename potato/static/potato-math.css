@@ -1,0 +1,44 @@
+/* Math rendering (potato-math.js). KaTeX's own sheet sets glyph metrics; this
+   one fits the output into Potato's text areas in both themes. */
+
+.potato-math {
+  /* KaTeX draws rules and radicals in currentColor, so inheriting the text
+     colour is all dark mode needs. */
+  color: inherit;
+}
+
+.potato-math .katex {
+  font-size: 1.1em;
+}
+
+/* Display math gets its own line and scrolls sideways instead of widening the
+   page: a long equation on a phone otherwise pushes the form off screen. */
+.potato-math-display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.1em 0;
+}
+
+.potato-math-display .katex-display {
+  margin: 0.5em 0;
+}
+
+/* #text-content is white-space: pre-wrap; KaTeX's layout assumes normal. */
+.potato-math {
+  white-space: normal;
+}
+
+.potato-math-display:focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 2px;
+}
+
+.potato-math-error {
+  color: var(--destructive-text, #9f1e17);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95em;
+  text-decoration: underline dotted;
+  cursor: help;
+}

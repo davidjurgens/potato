@@ -73,8 +73,21 @@ On Prolific, create the failure code as a second completion code with a
 screen-out action so those submissions are routed appropriately (and paid a
 screen-out reward if you use fixed screen-out payments).
 
+## Scheduled waves on one server
+
+The patterns above use one platform study per wave. Potato can also run the
+waves itself: a `schedule:` block gives each participant follow-up sessions
+(for example a week later at 09:00 in their time zone, open for 48 hours),
+sends reminders by email, SMS or Prolific message to participants who
+consented, and gives each message a resume link. Experience-sampling prompts
+and Delphi rounds use the same mechanism. See
+[Scheduled Sessions and Notifications](../workflow/scheduling.md),
+[Experience Sampling](../workflow/experience_sampling.md) and
+[Delphi Studies](../workflow/delphi.md).
+
 ## Related documentation
 
 - [Prolific integration](prolific_integration.md)
 - [Crowdsourcing setup](crowdsourcing.md)
 - [Quality control](../workflow/quality_control.md)
+- [Scheduled Sessions and Notifications](../workflow/scheduling.md)

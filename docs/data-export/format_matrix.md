@@ -33,6 +33,8 @@ direction. If you are deciding whether to migrate a dataset, this is the page.
 | `openimages` | CSV | ✅ | ❌ | ❌ | ✅ V7 points | ❌ |
 | `webdataset` | `.tar` shards | ⚠️ ¹¹ | ⚠️ ¹¹ | ⚠️ ¹¹ | ⚠️ ¹¹ | ⚠️ ¹¹ |
 | `huggingface` | Hub id or `save_to_disk` dir | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `qupath_geojson` | QuPath GeoJSON per slide | ✅ upright 4-gons | ✅ holes dropped | ❌ | ✅ | ✅ |
+| `asap_xml` | ASAP XML per slide | ✅ `Rectangle` | ✅ incl. `Spline` | ❌ | ✅ `Dot`, `PointSet` | ✅ `Measurement` |
 
 ¹ Pascal VOC keeps segmentation in a separate `SegmentationObject/` directory of
 indexed PNGs, not in the XML. The importer says so in a warning rather than
@@ -94,6 +96,9 @@ the gap, and the import counts such gaps.
 | `kitti_3d` | ✅ 3D cuboids | ❌ | ❌ | ❌ | Point clouds: `label_2` per cloud, KITTI tracking `label_02` per sequence; needs each item's calibration — see [3D labels](#kitti-3d-labels) |
 | `volume_nifti` | — | — | ✅ 3D label volume | — | `volume_annotation`: uint8 label volume in the source's geometry, plus boxes and polygons as JSON — see [3D medical volumes](../annotation-types/multimedia/volume_annotation.md#export) |
 | `dicom_seg` | — | — | ✅ 3D, one segment per label | — | `volume_annotation` on DICOM series: binary DICOM SEG referencing the source series |
+| `dicom_sr` | — | — | ✅ 3D, SEG plus report | — | The `dicom_seg` SEG plus a TID 1500 measurement report: each segment's volume, the annotator as observer. See [Clinical formats](../annotation-types/science/clinical_formats.md) |
+| `qupath_geojson` | ✅ as a 4-corner polygon | ✅ | ❌ | ✅ `Point` | Level-0 slide pixels; labels as QuPath classifications. See [Clinical formats](../annotation-types/science/clinical_formats.md#pathology-regions-qupath-geojson-and-asap-xml) |
+| `asap_xml` | ✅ `Rectangle` | ✅ | ❌ | ✅ `Dot` | Level-0 slide pixels; labels as `PartOfGroup` groups; polylines of 2 points only |
 | `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives. Also video tracks — see [video annotation](../annotation-types/multimedia/video_annotation.md) |
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
@@ -107,6 +112,8 @@ the gap, and the import counts such gaps.
 | `audacity_labels` | ✅ time × frequency | ❌ | ❌ | ❌ | Audacity label tracks, spectral form when the box has frequencies |
 | `geojson` | — | ✅ geographic | ❌ | ✅ geographic | `geo_annotation` features as RFC 7946 GeoJSON (`[lon, lat]`, EPSG:4326). See [Maps](../annotation-types/spatial/geo_annotation.md) |
 | `geo_overlap` | — | ✅ heat-map cells | ❌ | — | Share of participants whose polygon covers each grid cell, as GeoJSON and a PNG, plus name tables |
+| `microscopy` | ✅ as a closed polygon | ✅ | ✅ cell classes as an OME-Zarr label image | ✅ `Point` | Full-resolution image pixels, as QuPath-readable GeoJSON; one CSV row per classified cell. See [Multichannel microscopy](../annotation-types/science/microscopy.md#export) |
+| `consensus` | ✅ median box per group | ❌ | ❌ | ✅ point clusters | Consensus across annotators: boxes grouped by IoU, points clustered with DBSCAN, vote fractions for questions. See [Consensus aggregation](consensus_aggregation.md) |
 | `episode_jsonl` | — | — | — | — | Per-frame phase, progress reward and outcome for embodied episodes, keyed by `(episode_id, frame_index)` ¹³ |
 
 ⁶ CVAT 1.1's `<mask>` uses its own RLE dialect with an offset origin. Emitting

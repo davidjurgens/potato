@@ -602,6 +602,24 @@
             "if": {
               "properties": {
                 "annotation_type": {
+                  "const": "interval_label"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels",
+                "signal_field"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
                   "const": "likert"
                 }
               },
@@ -633,6 +651,23 @@
                 "items",
                 "sensitive_item",
                 "treatment"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "microscopy"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
               ]
             }
           },
@@ -685,6 +720,23 @@
             "then": {
               "required": [
                 "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "peak_picking"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "viewer_field"
               ]
             }
           },
@@ -983,12 +1035,15 @@
           "allow_correction": {},
           "allow_discontinuous": {},
           "allow_duplicates": {},
+          "allow_empty": {},
           "allow_empty_groups": {},
           "allow_html": {},
           "allow_identifying_tags": {},
+          "allow_manual": {},
           "allow_multiple": {},
           "allow_neutral": {},
           "allow_note": {},
+          "allow_overlap": {},
           "allow_paste": {},
           "allow_replay": {},
           "allow_reset": {},
@@ -1029,6 +1084,10 @@
               {
                 "const": "card_sort",
                 "description": "Drag-and-drop card sorting into predefined or user-created groups"
+              },
+              {
+                "const": "chemical_structure",
+                "description": "Draw or correct a chemical structure (OpenChemLib editor); stores molfile V3000, canonical SMILES and, with RDKit.js, the InChIKey"
               },
               {
                 "const": "cloze",
@@ -1123,6 +1182,10 @@
                 "description": "Interlinear glossed text: morpheme segmentation and glosses aligned per word (Leipzig rules)"
               },
               {
+                "const": "interval_label",
+                "description": "Label intervals and point events on a time_series signal; free or fixed-epoch mode"
+              },
+              {
                 "const": "likert",
                 "description": "Likert scale rating"
               },
@@ -1133,6 +1196,10 @@
               {
                 "const": "listening_test",
                 "description": "Listening tests: MUSHRA, BS.1116, ACR, DCR, CCR, ABX and P.835, with blinded stimuli"
+              },
+              {
+                "const": "microscopy",
+                "description": "Multichannel microscopy (OME-Zarr, OME-TIFF): channel contrast, z/t, ROIs and per-cell classes from a label image"
               },
               {
                 "const": "multi_document_event",
@@ -1157,6 +1224,10 @@
               {
                 "const": "pairwise",
                 "description": "Pairwise comparison of two items (binary selection or scale rating)"
+              },
+              {
+                "const": "peak_picking",
+                "description": "Peaks and integrated regions picked on a spectrum display, with suggested peaks to accept or reject and per-peak fields"
               },
               {
                 "const": "price_list",
@@ -1330,8 +1401,11 @@
           "calls_key": {},
           "caption_field": {},
           "carry_over": {},
+          "cell_labels": {},
           "center": {},
           "cf_verdicts": {},
+          "channel_scope": {},
+          "channels": {},
           "codebook": {},
           "collapsed_tiers": {},
           "collapsible": {},
@@ -1371,9 +1445,11 @@
           "dynamic_options_field": {},
           "edit_final_answer": {},
           "editable_fields": {},
+          "editor_height": {},
           "entity_linking": {},
           "entity_types": {},
           "episode_field": {},
+          "epoch_length": {},
           "eraser_size": {},
           "error_types": {},
           "event_types": {},
@@ -1420,8 +1496,12 @@
           "keybinding_profile": {},
           "keybinding_strategy": {},
           "label": {},
+          "label_image": {},
+          "label_max_side": {},
           "label_requirement": {},
+          "label_source": {},
           "labels": {},
+          "labels_key": {},
           "language": {},
           "layers": {},
           "layout": {},
@@ -1445,7 +1525,9 @@
           "max_lanes": {},
           "max_length": {},
           "max_loaded_nodes": {},
+          "max_peaks": {},
           "max_phases": {},
+          "max_pixels": {},
           "max_points": {},
           "max_score": {},
           "max_segments": {},
@@ -1460,15 +1542,18 @@
           "min": {},
           "min_annotations": {},
           "min_boxes": {},
+          "min_cells": {},
           "min_chars": {},
           "min_features": {},
           "min_freq": {},
           "min_items": {},
           "min_label": {},
           "min_length": {},
+          "min_peaks": {},
           "min_per_item": {},
           "min_per_label": {},
           "min_phases": {},
+          "min_rois": {},
           "min_screen_size": {},
           "min_segments": {},
           "min_selections": {},
@@ -1482,6 +1567,7 @@
             "description": "Unique key this scheme's answers are stored under.",
             "type": "string"
           },
+          "next_key": {},
           "node_scheme": {},
           "nonsensitive_prevalence": {},
           "nonsensitive_statement": {},
@@ -1501,16 +1587,22 @@
           "pan_enabled": {},
           "passage_field": {},
           "path_selection": {},
+          "peak_fields": {},
           "phases": {},
           "placeholder": {},
           "playback_rate_control": {},
           "point_budget": {},
           "point_size": {},
+          "pre_annotations": {},
           "preannotation_field": {},
+          "preannotation_labels": {},
           "precision": {},
           "predictions_field": {},
+          "prefill_field": {},
+          "prefill_format": {},
           "prefill_rtstruct_field": {},
           "preset": {},
+          "previous_key": {},
           "profiles_field": {},
           "profiles_per_set": {},
           "projection": {},
@@ -1522,17 +1614,22 @@
           "randomize_order": {},
           "randomizer": {},
           "rating_scale": {},
+          "rdkit": {},
           "reference_field": {},
+          "region_fields": {},
           "region_type": {},
           "reject_key": {},
           "reject_label": {},
           "require_all": {},
+          "require_all_epochs": {},
           "require_all_played": {},
           "require_all_regions": {},
           "require_clean": {},
           "require_full_playback": {},
           "require_one_at_100": {},
           "require_reason_on_edit": {},
+          "require_review": {},
+          "require_valid": {},
           "require_verification": {},
           "required": {},
           "resource_key": {},
@@ -1563,6 +1660,7 @@
           "show_diff": {},
           "show_distribution_chart": {},
           "show_edit_distance": {},
+          "show_identifiers": {},
           "show_labels": {},
           "show_none_option": {},
           "show_overall": {},
@@ -1576,6 +1674,7 @@
           "show_value": {},
           "show_values": {},
           "shuffle": {},
+          "signal_field": {},
           "single_switch": {},
           "size": {},
           "skeletons": {},
@@ -1612,10 +1711,12 @@
           "tie_label": {},
           "tier_height": {},
           "tiers": {},
+          "tile_size": {},
           "tiles": {},
           "time_limit_s": {},
           "timeline_height": {},
           "title": {},
+          "tolerance": {},
           "tools": {},
           "tooltip": {},
           "tooltip_file": {},
@@ -1792,6 +1893,22 @@
             "name": "topic_groups"
           },
           "source": "examples/classification/card-sort/config.yaml"
+        },
+        "chemical_structure": {
+          "scheme": {
+            "annotation_type": "chemical_structure",
+            "answer_field": "true_smiles",
+            "description": "Correct the structure so it matches the source image",
+            "editor_height": 380,
+            "instructions": "The editor starts from the recognised structure. Edit it with the mouse, or paste a SMILES string and press Load. Leave it unchanged when it is already right.",
+            "label_requirement": {
+              "required": true
+            },
+            "name": "corrected",
+            "prefill_field": "recognised_smiles",
+            "rdkit": "auto"
+          },
+          "source": "examples/advanced/chemical-structure-correction/config.yaml"
         },
         "cloze": {
           "scheme": {
@@ -3579,6 +3696,18 @@
             "labels": [
               {
                 "color": "#e6553a",
+                "dicom": {
+                  "category": {
+                    "code": "49755003",
+                    "meaning": "Morphologically Altered Structure",
+                    "scheme": "SCT"
+                  },
+                  "type": {
+                    "code": "52988006",
+                    "meaning": "Lesion",
+                    "scheme": "SCT"
+                  }
+                },
                 "key_value": "1",
                 "name": "Lesion"
               },
@@ -4306,6 +4435,74 @@
     "config_file": {
       "description": "Path to the config file being run. Written by the loader from the command line, not something to set yourself; task_dir falls back to its directory",
       "type": "string"
+    },
+    "consensus_aggregation": {
+      "additionalProperties": true,
+      "description": "Parameters of the `consensus` export: vote fractions per answer, point clusters and consensus boxes across annotators",
+      "properties": {
+        "agreement_threshold": {
+          "default": 0.8,
+          "description": "Share of classifiers the top answer needs for an item to be marked retired; for multiselect, each option must be ticked or left unticked by at least this share",
+          "maximum": 1,
+          "type": "number"
+        },
+        "boxes": {
+          "additionalProperties": true,
+          "description": "Parameters for grouping bounding boxes across annotators",
+          "properties": {
+            "iou_threshold": {
+              "default": 0.5,
+              "description": "Least IoU between any two boxes in one consensus group",
+              "maximum": 1,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "min_classifiers": {
+          "default": 2,
+          "description": "Items with fewer classifiers than this are marked needs_review",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "points": {
+          "additionalProperties": true,
+          "description": "DBSCAN parameters for clustering image_annotation points",
+          "properties": {
+            "eps": {
+              "default": 0.02,
+              "description": "Neighbourhood radius for point clustering, in the unit eps_unit names",
+              "type": "number"
+            },
+            "eps_unit": {
+              "default": "fraction",
+              "description": "`fraction` (x as a share of the width, y of the height) or `pixels` (needs the image size)",
+              "examples": [
+                "pixels"
+              ],
+              "type": "string"
+            },
+            "min_samples": {
+              "default": 2,
+              "description": "Points within eps (the point itself included) needed to form a cluster",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "schemes": {
+          "description": "Scheme names to aggregate; default every radio, select, likert, multiselect, slider, number and image_annotation scheme",
+          "examples": [
+            [
+              "T0",
+              "T1"
+            ]
+          ],
+          "type": "array"
+        }
+      },
+      "type": "object"
     },
     "corpus_map": {
       "additionalProperties": true,
@@ -5132,6 +5329,10 @@
                     "description": "Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
                   },
                   {
+                    "const": "fits_cutout",
+                    "description": "FITS image cutouts (one image, or science/reference/difference) with an RA/Dec readout and a light curve"
+                  },
+                  {
                     "const": "gallery",
                     "description": "Scrollable image gallery with captions"
                   },
@@ -5164,6 +5365,10 @@
                     "description": "Live coding agent viewer with real-time streaming and intervention controls"
                   },
                   {
+                    "const": "molecule",
+                    "description": "Small molecule from SMILES or molfile (OpenChemLib or RDKit.js), with atom selection"
+                  },
+                  {
                     "const": "multi_agent_discussion",
                     "description": "Multi-agent discussion with agent legend, colors, addressees, and filtering"
                   },
@@ -5180,12 +5385,20 @@
                     "description": "Protein structure (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*, with residue selection"
                   },
                   {
+                    "const": "spectrum",
+                    "description": "Spectrum (NMR, IR, MS from JCAMP-DX, mzML or CSV) with zoom, peak picking and integration"
+                  },
+                  {
                     "const": "spreadsheet",
                     "description": "Spreadsheet/table display with row or cell annotation"
                   },
                   {
                     "const": "text",
                     "description": "Plain text content display"
+                  },
+                  {
+                    "const": "time_series",
+                    "description": "Multi-channel signal (EDF, WFDB, CSV, Parquet) in uPlot, with zoom, pan and labelled overlays"
                   },
                   {
                     "const": "video",
@@ -6066,6 +6279,60 @@
       },
       "type": "object"
     },
+    "math": {
+      "additionalProperties": true,
+      "description": "Render LaTeX math ($...$, $$...$$, \\(...\\), \\[...\\]) in item text, display fields and process_reward / trajectory_eval steps with KaTeX. Span targets are left as source",
+      "examples": [
+        {
+          "enabled": true
+        }
+      ],
+      "properties": {
+        "delimiters": {
+          "default": [
+            "$$",
+            "$",
+            "\\(",
+            "\\["
+          ],
+          "description": "Which delimiters start math: any of $$, $, \\(, \\[. Drop $ for text with prices in it",
+          "examples": [
+            [
+              "$$",
+              "\\(",
+              "\\["
+            ]
+          ],
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Turn math rendering on. Off by default, so text with dollar signs is unchanged unless a project asks for it",
+          "type": "boolean"
+        },
+        "fields": {
+          "description": "instance_display field keys to render. Default: every field that is not a span target",
+          "examples": [
+            [
+              "problem",
+              "solution"
+            ]
+          ],
+          "type": "array"
+        },
+        "macros": {
+          "default": {},
+          "description": "KaTeX macros available in every expression, as name -> expansion",
+          "examples": [
+            {
+              "\\R": "\\mathbb{R}"
+            }
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "max_annotations_per_item": {
       "default": -1,
       "description": "Cap on how many annotators may label one item. -1 means unlimited",
@@ -6224,6 +6491,37 @@
     },
     "mturk": {
       "description": "Amazon Mechanical Turk. Needs `enabled: true` and `config_file_path` pointing at the credentials YAML, plus boto3 installed. MTurk closed to new customers in July 2026 and the loader says so on startup",
+      "type": "object"
+    },
+    "notifications": {
+      "additionalProperties": true,
+      "description": "Messages for scheduled sessions: channels (log, smtp, twilio, prolific), base_url, dry_run, contact consent and templates. Credentials come from environment variables only",
+      "properties": {
+        "base_url": {
+          "description": "Public address used in resume links. Required for any channel other than log unless dry_run is on",
+          "examples": [
+            "https://study.example.org"
+          ],
+          "type": "string"
+        },
+        "channels": {
+          "description": "List of channels: {type: log}, {type: smtp, host, port, security, from, username_env, password_env}, {type: twilio, account_sid_env, auth_token_env, from_number or messaging_service_sid_env}, {type: prolific, token_env, study_id}",
+          "type": "array"
+        },
+        "contact": {
+          "description": "consent {question, value}: the phase-page question whose answer allows contact (required with any channel); delete_after_study (default true)",
+          "type": "object"
+        },
+        "dry_run": {
+          "default": false,
+          "description": "Render and log every message without delivering it",
+          "type": "boolean"
+        },
+        "templates": {
+          "description": "Override subject/body per message kind (before_open, open, reminder, prompt, delphi_round) with {study}, {session}, {opens}, {closes}, {time_left}, {link}, {stop_link}",
+          "type": "object"
+        }
+      },
       "type": "object"
     },
     "num_annotators_per_item": {
@@ -6519,6 +6817,50 @@
           "default": "any",
           "description": "Who may open a room: any member, or admin only",
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "schedule": {
+      "additionalProperties": true,
+      "description": "Sessions after the regular flow: waves, experience-sampling prompts and Delphi rounds, computed per participant at enrolment (when they finish the regular flow). See docs/workflow/scheduling.md",
+      "properties": {
+        "delphi": {
+          "description": "Delphi rounds: items or items_file, scale, comments, max_rounds, round_length, gap, start, stop {iqr_at_most, median_change_at_most, changed_share_below}, min_panel, reminders. See docs/workflow/delphi.md",
+          "type": "object"
+        },
+        "experience_sampling": {
+          "description": "Repeated short prompts: days, start_day, daily_window, signal {per_day, min_gap} or interval {every} / {times}, expires_after, questions or questions_file, reminders. See docs/workflow/experience_sampling.md",
+          "type": "object"
+        },
+        "poll_seconds": {
+          "default": 30,
+          "description": "How often the background loop sends due messages and closes rounds",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "number"
+        },
+        "scheduler": {
+          "default": true,
+          "description": "Run the background loop. Off, nothing is sent until an admin presses Send due messages now (or calls /admin/api/schedule/tick)",
+          "type": "boolean"
+        },
+        "seed": {
+          "default": "",
+          "description": "Text mixed into the random prompt times, so a plan can be recomputed",
+          "type": "string"
+        },
+        "timezone": {
+          "default": "UTC",
+          "description": "IANA time zone used when the participant's browser reports none",
+          "examples": [
+            "Europe/London"
+          ],
+          "type": "string"
+        },
+        "waves": {
+          "description": "Follow-up sessions: name, title, offset (after enrolment), optional at (local clock time), window, questions or questions_file, reminders, completion_code, intro",
+          "type": "array"
         }
       },
       "type": "object"

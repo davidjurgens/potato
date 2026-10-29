@@ -33,6 +33,76 @@ PALETTE = ["#e6553a", "#3a8ee6", "#2bb673", "#e6b93a", "#a35ce6", "#e63a9b",
            "#3ad4e6", "#8bc34a"]
 
 
+#: Coded concepts a DICOM SEG segment and an SR finding carry when a label's
+#: config gives none: SNOMED CT 85756007 "Tissue" for both the category and
+#: the type. Generic on purpose; a label that means something specific should
+#: say so under ``dicom:``.
+DEFAULT_DICOM_CODES = {
+    "category": {"code": "85756007", "scheme": "SCT", "meaning": "Tissue"},
+    "type": {"code": "85756007", "scheme": "SCT", "meaning": "Tissue"},
+}
+_DICOM_CODE_KEYS = ("category", "type", "anatomic_region")
+
+
+def _coded(value, where: str) -> Dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{where} must be a mapping with code, scheme and meaning")
+    unknown = sorted(set(value) - {"code", "scheme", "meaning"})
+    if unknown:
+        raise ValueError(f"{where} has unknown keys {unknown}; use code, scheme and meaning")
+    out = {}
+    for key, limit in (("code", 64), ("scheme", 16), ("meaning", 64)):
+        text = value.get(key)
+        if isinstance(text, bool) or not isinstance(text, (str, int)) or not str(text).strip():
+            raise ValueError(f"{where}.{key} is required (a SNOMED CT or DCM "
+                             f"code, e.g. code: '52988006', scheme: SCT, meaning: Lesion)")
+        text = str(text).strip()
+        if len(text) > limit or "\\" in text:
+            raise ValueError(f"{where}.{key} must be at most {limit} characters "
+                             f"with no backslash")
+        out[key] = text
+    return out
+
+
+def dicom_codes(label) -> Dict[str, Dict[str, str]]:
+    """The coded concepts for one label's DICOM SEG segment and SR finding.
+
+    A label may carry::
+
+        dicom:
+          category: {code: "49755003", scheme: SCT, meaning: Morphologically Altered Structure}
+          type: {code: "52988006", scheme: SCT, meaning: Lesion}
+          anatomic_region: {code: "39607008", scheme: SCT, meaning: Lung}   # optional
+
+    ``category`` and ``type`` default to DEFAULT_DICOM_CODES each.
+    """
+    raw = label.get("dicom") if isinstance(label, dict) else None
+    name = label.get("name") if isinstance(label, dict) else label
+    where = f"label '{name}' dicom"
+    if raw is None:
+        return {k: dict(v) for k, v in DEFAULT_DICOM_CODES.items()}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where} must be a mapping of category, type and anatomic_region")
+    unknown = sorted(set(raw) - set(_DICOM_CODE_KEYS))
+    if unknown:
+        raise ValueError(f"{where} has unknown keys {unknown}; valid: {', '.join(_DICOM_CODE_KEYS)}")
+    out = {k: dict(v) for k, v in DEFAULT_DICOM_CODES.items()}
+    for key in _DICOM_CODE_KEYS:
+        if key in raw:
+            out[key] = _coded(raw[key], f"{where}.{key}")
+    return out
+
+
+def label_dicom_codes(scheme) -> Dict[str, Dict[str, Dict[str, str]]]:
+    """``{label name: dicom_codes(label)}`` for a volume_annotation scheme."""
+    out = {}
+    for item in scheme.get("labels") or []:
+        name = item if isinstance(item, str) else (item or {}).get("name")
+        if name:
+            out[str(name)] = dicom_codes(item if isinstance(item, dict) else {"name": name})
+    return out
+
+
 def _labels(raw) -> List[Dict[str, Any]]:
     if not raw:
         raise ValueError("volume_annotation needs at least one label")
@@ -42,6 +112,8 @@ def _labels(raw) -> List[Dict[str, Any]]:
             item = {"name": item}
         if not isinstance(item, dict) or not item.get("name"):
             raise ValueError("each volume_annotation label needs a name")
+        if "dicom" in item:
+            dicom_codes(item)       # raises on a malformed code
         out.append({"name": str(item["name"]),
                     "color": item.get("color") or PALETTE[index % len(PALETTE)],
                     "key_value": item.get("key_value")})

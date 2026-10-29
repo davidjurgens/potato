@@ -164,6 +164,7 @@ starting with 0s.
 ```bash
 python -m potato.export -c config.yaml -f volume_nifti -o out/
 python -m potato.export -c config.yaml -f dicom_seg -o out/
+python -m potato.export -c config.yaml -f dicom_sr -o out/
 ```
 
 - `volume_nifti`: per annotator, `<item>__<schema>.nii.gz`, a uint8 label
@@ -173,7 +174,14 @@ python -m potato.export -c config.yaml -f dicom_seg -o out/
   input kinds.
 - `dicom_seg`: per annotator, `<item>__<schema>.dcm`, a binary DICOM
   Segmentation with one segment per label that has voxels, referencing the
-  source series. DICOM sources only.
+  source series. DICOM sources only. Each segment carries the label's coded
+  concepts from its `dicom:` key, or SNOMED CT "Tissue" by default.
+- `dicom_sr`: the same SEG plus `<item>__<schema>__sr.dcm`, a TID 1500
+  measurement report with each segment's volume in mm³ and the annotator as
+  observer.
+
+Label codes, the SR's exact contents and how to read both back are in
+[Clinical and Pathology Formats](../science/clinical_formats.md).
 
 ## Agreement
 

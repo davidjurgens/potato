@@ -10,11 +10,18 @@ coordinates. Works for NIfTI and DICOM sources.
 
 ``dicom_seg`` writes ``<user>/<item>__<schema>.dcm``: a binary DICOM
 Segmentation (one segment per label with voxels) referencing the source
-series, for PACS and clinical viewers. DICOM sources only. By DICOM's rules
-a SEG copies the patient and study modules from the images it segments, so
-it carries the same identifying data as the series.
+series, for PACS and clinical viewers. DICOM sources only. Each segment
+carries the label's coded concepts (the label's ``dicom:`` codes, or SNOMED
+CT "Tissue" by default). By DICOM's rules a SEG copies the patient and study
+modules from the images it segments, so it carries the same identifying data
+as the series.
 
-Both need the `volumes` extra (dicom_seg also highdicom).
+``dicom_sr`` writes the same SEG and, beside it, ``<item>__<schema>__sr.dcm``:
+a Comprehensive 3D SR whose content is a TID 1500 Measurement Report, one
+TID 1411 volumetric group per segment with its volume in mm3, the annotator
+as the person observer.
+
+All three need the `volumes` extra (pydicom, nibabel, highdicom).
 """
 
 import json
@@ -143,6 +150,8 @@ class DicomSegExporter(_VolumeExporter):
     format_name = "dicom_seg"
     description = "Volume masks as DICOM Segmentation objects referencing the source series"
     file_extensions = [".dcm"]
+    #: Also write a TID 1500 measurement report beside each SEG.
+    with_sr = False
 
     def can_export(self, context: ExportContext) -> Tuple[bool, str]:
         ok, reason = super().can_export(context)
@@ -156,11 +165,19 @@ class DicomSegExporter(_VolumeExporter):
 
     def export(self, context: ExportContext, output_path: str,
                options: Optional[dict] = None) -> ExportResult:
-        from potato.media.volume_masks import label_volume, to_dicom_seg
+        from potato.media.volume_masks import (label_volume, source_datasets, to_dicom_seg,
+                                               to_dicom_sr)
+        from potato.server_utils.schemas.volume_annotation import label_dicom_codes
         files, warnings = [], []
         not_dicom = []
+        n_reports = 0
         for scheme in _volume_schemes(context):
             names = _label_names(scheme)
+            try:
+                codes = label_dicom_codes(scheme)
+            except ValueError as exc:
+                warnings.append(f"{scheme.get('name')}: {exc}")
+                continue
             for record, item, annotation in _records(context, scheme):
                 instance = str(record.get("instance_id"))
                 try:
@@ -171,22 +188,62 @@ class DicomSegExporter(_VolumeExporter):
                 if volume.kind != "dicom":
                     not_dicom.append(instance)
                     continue
+                stored_shape = annotation.get("shape")
+                if stored_shape and list(stored_shape) != list(volume.shape):
+                    warnings.append(f"{instance}: the annotation was drawn on a volume of "
+                                    f"shape {stored_shape}, the series is now "
+                                    f"{list(volume.shape)}; skipped")
+                    continue
                 masks = {name: label_volume(annotation, volume.shape, name) for name in names}
                 if not any(mask.any() for mask in masks.values()):
                     continue
+                annotator = str(record.get("user_id"))
                 try:
-                    seg = to_dicom_seg(names, masks, volume, annotator=str(record.get("user_id")),
-                                       series_description=f"Potato {scheme['name']}")
+                    sources = source_datasets(volume)
+                    seg = to_dicom_seg(names, masks, volume, annotator=annotator,
+                                       series_description=f"Potato {scheme['name']}",
+                                       label_codes=codes, sources=sources)
                 except Exception as exc:
                     warnings.append(f"{instance}: the SEG could not be built: {exc}")
                     continue
                 folder = self._base(output_path, record)
-                path = os.path.join(folder, f"{_safe(instance)}__{_safe(scheme['name'])}.dcm")
+                stem = f"{_safe(instance)}__{_safe(scheme['name'])}"
+                path = os.path.join(folder, f"{stem}.dcm")
                 seg.save_as(path)
                 files.append(path)
+                if not self.with_sr:
+                    continue
+                try:
+                    sr = to_dicom_sr(seg, masks, volume, sources, annotator=annotator,
+                                     label_codes=codes,
+                                     series_description=f"Potato {scheme['name']} volumes")
+                except Exception as exc:
+                    warnings.append(f"{instance}: the SR could not be built: {exc}")
+                    continue
+                sr_path = os.path.join(folder, f"{stem}__sr.dcm")
+                sr.save_as(sr_path)
+                files.append(sr_path)
+                n_reports += 1
         if not_dicom:
             warnings.append(f"{len(not_dicom)} item(s) are not DICOM series, and a SEG "
                             f"references DICOM images; use volume_nifti for them: "
                             f"{', '.join(sorted(set(not_dicom))[:10])}")
+        stats = {"num_files": len(files)}
+        if self.with_sr:
+            stats["num_reports"] = n_reports
         return ExportResult(success=True, format_name=self.format_name, files_written=files,
-                            warnings=warnings, stats={"num_files": len(files)})
+                            warnings=warnings, stats=stats)
+
+
+class DicomSrExporter(DicomSegExporter):
+    """The SEG plus a DICOM SR measurement report (TID 1500) that references it.
+
+    Both are written together because the SR points at the SEG by its SOP
+    Instance UID: a SEG written by a separate ``dicom_seg`` run gets a new
+    UID, and the report would then reference an object that does not exist.
+    """
+    format_name = "dicom_sr"
+    description = ("Volume masks as a DICOM SEG plus a Comprehensive 3D SR (TID 1500) "
+                   "with each segment's volume and the annotator as observer")
+    file_extensions = [".dcm"]
+    with_sr = True

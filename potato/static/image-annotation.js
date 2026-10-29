@@ -467,7 +467,7 @@ class ImageAnnotationManager {
         this.canvas.on('mouse:up', (opt) => {
             if (this.isPanning) {
                 this.isPanning = false;
-                this.canvas.selection = true;
+                this.canvas.selection = !this.currentTool;
                 if (this._panStart) {
                     const dx = this.lastPosX - this._panStart.x;
                     const dy = this.lastPosY - this._panStart.y;
@@ -1427,6 +1427,12 @@ class ImageAnnotationManager {
         // tool takes it; select/move gives it back, or OpenSeadragon never
         // sees a drag and the image cannot be panned at all.
         if (this.deepZoom) this.deepZoom.setInteractive(!!tool);
+
+        // Rubber-band selection belongs to select/move only. With a drawing
+        // tool armed, fabric ran it alongside the drag that draws a box, and
+        // on release it selected every shape the drag crossed -- the new box
+        // and any imported region it was drawn over -- into one group.
+        this.canvas.selection = !tool;
 
         this.isDrawing = false;
         this.drawingObject = null;
@@ -3943,6 +3949,50 @@ class ImageAnnotationManager {
      * Serialize all annotations to JSON.
      */
     _serializeAnnotations() {
+        const restore = this._absoluteSelectionTransforms();
+        try {
+            return this._serializeAnnotationsFlat();
+        } finally {
+            restore();
+        }
+    }
+
+    /**
+     * Give the members of a multi-selection their canvas transforms until
+     * the returned function is called.
+     *
+     * Inside a fabric ActiveSelection an object's left, top and scale are
+     * relative to the selection's centre, and _getObjectCoordinates reads them
+     * directly for boxes, ellipses, landmarks and paths. A box drawn across
+     * an imported polygon was saved offset by the polygon's centre, and moving
+     * two shapes selected together would save both of them in the wrong
+     * place. Ungrouping instead (discardActiveObject) fires selection events
+     * and can end a transform that is still under way.
+     */
+    _absoluteSelectionTransforms() {
+        const sel = this.canvas.getActiveObject();
+        if (!sel || sel.type !== 'activeSelection') return () => {};
+        const saved = sel.getObjects().map(obj => {
+            const parts = fabric.util.qrDecompose(obj.calcTransformMatrix());
+            const own = fabric.util.saveObjectTransform(obj);
+            const group = obj.group;
+            obj.group = undefined;
+            obj.set({
+                flipX: false, flipY: false, skewY: 0,
+                skewX: parts.skewX, angle: parts.angle,
+                scaleX: parts.scaleX, scaleY: parts.scaleY,
+            });
+            obj.setPositionByOrigin(
+                new fabric.Point(parts.translateX, parts.translateY), 'center', 'center');
+            return { obj, own, group };
+        });
+        return () => saved.forEach(({ obj, own, group }) => {
+            obj.set(own);
+            obj.group = group;
+        });
+    }
+
+    _serializeAnnotationsFlat() {
         const annotations = [];
 
         this.canvas.getObjects().forEach(obj => {

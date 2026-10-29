@@ -37,6 +37,8 @@ nav:
         - "Bioacoustics: Raven, Audacity, BirdNET": guides/bioacoustics.md
         - "Structural Biology: Marking Residues": guides/structural-biology.md
         - "Genomics: Reviewing Variant Calls": guides/genomics-variant-review.md
+        - "Astronomy: Vetting Transients": guides/astronomy.md
+        - "Chemistry: Structures and Atom Marking": guides/chemistry.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Configuration Reference: configuration/config_reference.md
@@ -71,6 +73,7 @@ nav:
             - Error Span: annotation-types/text/error_span.md
             - Text Edit: annotation-types/text/text_edit.md
             - Cloze (Fill in the Blank): annotation-types/text/cloze.md
+            - Math Rendering and Grading: annotation-types/text/math.md
             - Event Annotation: annotation-types/text/event_annotation.md
             - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
@@ -98,6 +101,13 @@ nav:
         - Scientific Viewers:
             - Protein Structures: annotation-types/science/protein_structures.md
             - Genome Loci: annotation-types/science/genome_loci.md
+            - Chemical Structures: annotation-types/science/chemical_structures.md
+            - Spectra and Peak Picking: annotation-types/science/spectra.md
+            - Time Series and Signals: annotation-types/science/time_series.md
+            - Multichannel Microscopy: annotation-types/science/microscopy.md
+            - Clinical and Pathology Formats: annotation-types/science/clinical_formats.md
+            - Astronomical Images (FITS): annotation-types/science/astronomy.md
+            - Ontology-Backed Labels: annotation-types/science/ontology_labels.md
         - Embodied:
             - Episode Annotation: annotation-types/embodied/episodes.md
             - Robot Dataset Formats: annotation-types/embodied/robot_formats.md
@@ -129,6 +139,9 @@ nav:
         - jsPsych Phase: workflow/jspsych_phase.md
         - Timed Trials: workflow/timed_trials.md
         - Self-Paced Reading and Maze: workflow/self_paced_reading.md
+        - Scheduled Sessions and Reminders: workflow/scheduling.md
+        - Experience Sampling: workflow/experience_sampling.md
+        - Delphi Studies: workflow/delphi.md
         - Guidelines and Codebooks: workflow/annotation_guidelines.md
         - Training Phase: workflow/training_phase.md
         - Quality Control: workflow/quality_control.md
@@ -250,6 +263,7 @@ nav:
         - Export Formats: data-export/export_formats.md
         - CV Format Matrix: data-export/format_matrix.md
         - Single-Select Integrity: data-export/single-select-integrity.md
+        - Consensus Aggregation: data-export/consensus_aggregation.md
         - HuggingFace Export: data-export/huggingface_export.md
         - HuggingFace Datasets: data-export/datasets_integration.md
         - HuggingFace Spaces: data-export/huggingface_spaces.md
@@ -301,11 +315,13 @@ nav:
         - Getting Annotations Back: deployment/deploy-pull.md
         - Reverse Proxy: deployment/reverse-proxy.md
         - Air-Gapped Deployment: deployment/air_gap.md
+        - Third-Party Components: deployment/third_party_licenses.md
         - Scaling: deployment/scaling.md
     - API Reference:
         - API Reference: api-reference/api_reference.md
         - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
+        - v2.13.0: releasenotes/v2.13.0.md
         - v2.12.3: releasenotes/v2.12.3.md
         - v2.12.2: releasenotes/v2.12.2.md
         - v2.12.1: releasenotes/v2.12.1.md

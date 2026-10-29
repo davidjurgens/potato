@@ -145,7 +145,7 @@ def write_new_project(result: SurveyImportResult, output_dir: str, source: str,
             f"{'before' if slot == 'prestudy' else 'after'} a placeholder annotation task. "
             "Replace `annotation_schemes` in `config.yaml` and `data/items.jsonl` with "
             "the real task. `IMPORT_REPORT.md` lists anything that did not carry over.\n\n"
-            "Run it:\n\n    python potato/flask_server.py start config.yaml -p 8000\n",
+            "Run it:\n\n    potato start config.yaml -p 8000\n",
             encoding="utf-8")
         written.append(str(readme))
     return written

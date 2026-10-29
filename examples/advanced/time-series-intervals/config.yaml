@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Labelling stretches and moments of a signal.
+#
+# Two items: a five-minute polysomnogram (EDF+, four channels) and a
+# two-minute accelerometer recording (CSV, three axes). Pick a label, drag
+# across the plot to label an interval, click to mark an arousal. Intervals
+# apply to all channels, or to one channel with "the channel I drag on".
+# The EDF+ file's own "Arousal" annotation and the accelerometer's BIDS
+# events.tsv appear as pre-annotations.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/time-series-intervals/config.yaml -p 8000
+#
+# Sleep staging in 30-second epochs on the same recording:
+#   python potato/flask_server.py start examples/advanced/time-series-intervals/config-epochs.yaml -p 8000
+#
+# The signals are synthetic. Regenerate them with:
+#   python examples/advanced/time-series-intervals/generate_data.py
+
+port: 8000
+annotation_task_name: "Signal intervals"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/signals.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+instance_display:
+  fields:
+    - key: note
+      type: text
+      label: "Recording"
+    - key: signal
+      type: time_series
+      label: "Signal"
+      display_options:
+        # Seconds shown at once; the arrows and [ ] keys move one window.
+        window: 30
+        lane_height: 64
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: interval_label
+    name: segments
+    description: "Mark artefacts, spindles, movement and arousals"
+    signal_field: signal
+    mode: free
+    channel_scope: either
+    labels:
+      - name: artefact
+        key_value: "1"
+      - name: spindle
+        key_value: "2"
+      - name: walking
+        key_value: "3"
+      - name: arousal
+        key_value: "4"
+        kind: event
+    # The EDF+ hypnogram is not wanted here; its "Arousal" entry is.
+    preannotation_labels:
+      "Sleep stage W": null
+      "Sleep stage 1": null
+      "Sleep stage 2": null
+      "Sleep stage 3": null
+      "Arousal": arousal
+    # The accelerometer item names a BIDS events.tsv in this field.
+    preannotation_field: events

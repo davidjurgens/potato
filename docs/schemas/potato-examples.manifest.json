@@ -1,25 +1,25 @@
 {
   "categories": {
-    "advanced": 71,
+    "advanced": 77,
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 7,
     "audio": 11,
-    "classification": 33,
+    "classification": 34,
     "conversation": 4,
     "crowdsourcing": 6,
     "custom-layouts": 6,
     "embodied": 1,
-    "image": 21,
+    "image": 24,
     "labeling-engine": 3,
     "plugins": 1,
     "span": 12,
     "spatial": 3,
     "testing": 2,
-    "text": 1,
+    "text": 2,
     "video": 8
   },
-  "count": 249,
+  "count": 260,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -299,6 +299,31 @@
     },
     {
       "annotation_types": [
+        "chemical_structure",
+        "radio",
+        "viewer_selection"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/structures.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/chemical-structure-correction",
+      "display_types": [
+        "image",
+        "molecule"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "chemical-structure-correction",
+      "path": "examples/advanced/chemical-structure-correction/config.yaml",
+      "run": "potato start examples/advanced/chemical-structure-correction/config.yaml -p 8000",
+      "task_name": "Structure recognition check"
+    },
+    {
+      "annotation_types": [
         "multiselect",
         "radio",
         "text"
@@ -471,6 +496,28 @@
     },
     {
       "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/background.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/delphi-study",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "delphi-study",
+      "path": "examples/advanced/delphi-study/config.yaml",
+      "run": "potato start examples/advanced/delphi-study/config.yaml -p 8000",
+      "task_name": "Guideline quality Delphi"
+    },
+    {
+      "annotation_types": [
         "geo_annotation"
       ],
       "category": "advanced",
@@ -578,6 +625,29 @@
       "path": "examples/advanced/embedding-visualization/config.yaml",
       "run": "potato start examples/advanced/embedding-visualization/config.yaml -p 8000",
       "task_name": "Embedding Visualization Demo"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/intake.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/experience-sampling",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "experience-sampling",
+      "path": "examples/advanced/experience-sampling/config.yaml",
+      "run": "potato start examples/advanced/experience-sampling/config.yaml -p 8000",
+      "task_name": "Daily mood study"
     },
     {
       "annotation_types": [
@@ -1405,6 +1475,29 @@
     },
     {
       "annotation_types": [
+        "peak_picking"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/spectra.json"
+      ],
+      "description": "Peak picking and integration on synthetic 1H NMR and IR spectra, with",
+      "dir": "examples/advanced/spectrum-peak-picking",
+      "display_types": [
+        "spectrum",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "spectrum-peak-picking",
+      "path": "examples/advanced/spectrum-peak-picking/config.yaml",
+      "run": "potato start examples/advanced/spectrum-peak-picking/config.yaml -p 8000",
+      "task_name": "Spectrum peak picking"
+    },
+    {
+      "annotation_types": [
         "multiselect",
         "text"
       ],
@@ -1473,6 +1566,29 @@
     },
     {
       "annotation_types": [
+        "interval_label"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/signals.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/time-series-intervals",
+      "display_types": [
+        "text",
+        "time_series"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "time-series-intervals",
+      "path": "examples/advanced/time-series-intervals/config.yaml",
+      "run": "potato start examples/advanced/time-series-intervals/config.yaml -p 8000",
+      "task_name": "Signal intervals"
+    },
+    {
+      "annotation_types": [
         "radio"
       ],
       "category": "advanced",
@@ -1532,6 +1648,28 @@
       "path": "examples/advanced/truth-serum/config.yaml",
       "run": "potato start examples/advanced/truth-serum/config.yaml -p 8000",
       "task_name": "Truth Serum \u2014 Sarcasm"
+    },
+    {
+      "annotation_types": [
+        "likert"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/statements.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/advanced/two-wave-panel",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "two-wave-panel",
+      "path": "examples/advanced/two-wave-panel/config.yaml",
+      "run": "potato start examples/advanced/two-wave-panel/config.yaml -p 8000",
+      "task_name": "Attitudes panel"
     },
     {
       "annotation_types": [
@@ -3831,6 +3969,28 @@
     },
     {
       "annotation_types": [
+        "multiselect",
+        "radio",
+        "span"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/cell-descriptions.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/classification/ontology-labels",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "ontology-labels",
+      "path": "examples/classification/ontology-labels/config.yaml",
+      "run": "potato start examples/classification/ontology-labels/config.yaml -p 8000",
+      "task_name": "Ontology labels: cell types (synthetic sample)"
+    },
+    {
+      "annotation_types": [
         "pairwise"
       ],
       "category": "classification",
@@ -4546,6 +4706,30 @@
     },
     {
       "annotation_types": [
+        "multiselect",
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/candidates.json"
+      ],
+      "description": "",
+      "dir": "examples/image/astronomy-real-bogus",
+      "display_types": [
+        "fits_cutout",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "astronomy-real-bogus",
+      "path": "examples/image/astronomy-real-bogus/config.yaml",
+      "run": "potato start examples/image/astronomy-real-bogus/config.yaml -p 8000",
+      "task_name": "Transient candidate vetting"
+    },
+    {
+      "annotation_types": [
         "image_annotation",
         "multiselect",
         "radio"
@@ -4852,6 +5036,26 @@
     },
     {
       "annotation_types": [
+        "microscopy"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/images.json"
+      ],
+      "description": "",
+      "dir": "examples/image/multichannel-microscopy",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multichannel-microscopy",
+      "path": "examples/image/multichannel-microscopy/config.yaml",
+      "run": "potato start examples/image/multichannel-microscopy/config.yaml -p 8000",
+      "task_name": "Multichannel microscopy"
+    },
+    {
+      "annotation_types": [
         "image_annotation"
       ],
       "category": "image",
@@ -4977,6 +5181,28 @@
       "path": "examples/image/whole-slide/config.yaml",
       "run": "potato start examples/image/whole-slide/config.yaml -p 8000",
       "task_name": "Whole-slide annotation"
+    },
+    {
+      "annotation_types": [
+        "image_annotation",
+        "multiselect",
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/zooniverse-aggregation-example.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/image/zooniverse-aggregation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "zooniverse-aggregation",
+      "path": "examples/image/zooniverse-aggregation/config.yaml",
+      "run": "potato start examples/image/zooniverse-aggregation/config.yaml -p 8000",
+      "task_name": "Penguin count (imported)"
     },
     {
       "annotation_types": [
@@ -5453,6 +5679,30 @@
       "path": "examples/text/htr-line-correction/config.yaml",
       "run": "potato start examples/text/htr-line-correction/config.yaml -p 8000",
       "task_name": "HTR line correction"
+    },
+    {
+      "annotation_types": [
+        "cloze",
+        "process_reward",
+        "radio"
+      ],
+      "category": "text",
+      "config_keys": [],
+      "data_files": [
+        "data/math-proof-grading-example.json"
+      ],
+      "description": "",
+      "dir": "examples/text/math-proof-grading",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "math-proof-grading",
+      "path": "examples/text/math-proof-grading/config.yaml",
+      "run": "potato start examples/text/math-proof-grading/config.yaml -p 8000",
+      "task_name": "Math Proof Grading"
     },
     {
       "annotation_types": [

@@ -414,6 +414,9 @@ KNOWN_CONFIG_KEYS = {
     # annotator cannot copy it into a chatbot. Accepts `true` as well as this
     # mapping. See potato/server_utils/text_to_image.py.
     "text_as_image": {"enabled", "font_size", "max_width"},
+    # KaTeX math rendering in item text, display fields and trace steps.
+    # Validated in detail by potato.math_rendering.validate_math_config().
+    "math": {"enabled", "delimiters", "fields", "macros"},
     # Keystroke logging: content-blind typing dynamics on free-text fields, and
     # the composed/transcribed/pasted detection built on them. Validated in
     # detail by validate_keystroke_logging_config().
@@ -444,6 +447,12 @@ KNOWN_CONFIG_KEYS = {
     # Incentive payments for price_list / bdm / belief_elicitation answers.
     # Validated by potato.incentives.validate_incentives_config().
     "incentives": {"enabled", "currency", "rules", "pay", "max_bonus", "seed", "only_finished"},
+    # Scheduled sessions and their messages. Validated in full (unknown keys
+    # refused, credentials refused inline) by
+    # potato.scheduling.config.validate_schedule_config().
+    "schedule": {"timezone", "seed", "poll_seconds", "scheduler", "waves",
+                 "experience_sampling", "delphi"},
+    "notifications": {"dry_run", "base_url", "channels", "contact", "templates"},
     # Between-subjects conditions for experiment designs. Validated by
     # experiment_conditions.validate_conditions_config().
     "conditions": {"factors", "assignment", "balance_on", "max_per_cell", "cells"},
@@ -553,6 +562,15 @@ KNOWN_CONFIG_KEYS = {
     # exposed to annotators as a 2D navigation surface. Heavy compute is lazy
     # (never at boot). Sub-keys clustering/umap/knn/cluster_labeling are leaf
     # (None) — parsed by parse_corpus_map_config, not recursed here.
+    # Consensus export (format `consensus`): vote fractions, point clusters
+    # and box groups across annotators. Parsed by potato/aggregation/config.py.
+    "consensus_aggregation": {
+        "agreement_threshold": None,
+        "min_classifiers": None,
+        "schemes": None,
+        "points": {"eps", "eps_unit", "min_samples"},
+        "boxes": {"iou_threshold"},
+    },
     "corpus_map": {
         "enabled": None,
         "build_on_start": None,
@@ -2885,6 +2903,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     from potato.incentives import validate_incentives_config
     validate_incentives_config(config_data, config_file_dir)
 
+    # Scheduled sessions (waves, experience sampling, Delphi) and notifications
+    from potato.scheduling.config import validate_schedule_config
+    validate_schedule_config(config_data, config_file_dir)
+
     # Warn about quota / batch-group keys that will never be read
     warn_unreachable_quota_keys(config_data)
     warn_batch_groups_need_the_batch_strategy(config_data)
@@ -2956,6 +2978,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     validate_event_template_config(config_data)
     validate_corpus_map_config(config_data)
 
+    # Validate the consensus export's parameters (potato/aggregation/config.py)
+    from potato.aggregation.config import validate_consensus_aggregation_config
+    validate_consensus_aggregation_config(config_data, ConfigValidationError)
+
     # Validate chain-of-thought segmentation block if present
     validate_cot_segmentation_config(config_data)
 
@@ -2964,6 +2990,13 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate text_as_image (instance text rendered to a PNG) if present
     validate_text_as_image_config(config_data)
+
+    # Validate math rendering (KaTeX) if present
+    from potato.math_rendering import MathConfigError, validate_math_config
+    try:
+        validate_math_config(config_data)
+    except MathConfigError as e:
+        raise ConfigValidationError(str(e))
 
     # Validate annotation telemetry (drawing dynamics) block if present
     validate_annotation_telemetry_config(config_data)
@@ -4566,8 +4599,20 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     if scheme['annotation_type'] == 'listening_test':
         _validate_listening_test(scheme, path)
 
+    if scheme['annotation_type'] == 'interval_label':
+        _validate_interval_label(scheme, path)
+
+    if scheme['annotation_type'] == 'microscopy':
+        _validate_microscopy(scheme, path)
+
     if scheme['annotation_type'] == 'viewer_selection':
         _validate_viewer_selection(scheme, path)
+
+    if scheme['annotation_type'] == 'chemical_structure':
+        _validate_chemical_structure(scheme, path)
+
+    if scheme['annotation_type'] == 'peak_picking':
+        _validate_peak_picking(scheme, path)
 
     if scheme['annotation_type'] == 'spectrogram_annotation':
         _validate_spectrogram_annotation(scheme, path)
@@ -4589,6 +4634,9 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     if scheme['annotation_type'] in ('list_experiment', 'randomized_response'):
         _validate_survey_experiment(scheme, path)
+
+    if 'label_source' in scheme:
+        _validate_label_source(scheme, path)
 
     if 'lextale' in scheme:
         lt = scheme['lextale']
@@ -4620,6 +4668,14 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if scheme.get('scoring', 'case_insensitive') not in SCORING_MODES:
             raise ConfigValidationError(
                 f"{path}.scoring must be one of {', '.join(SCORING_MODES)}")
+        if 'tolerance' in scheme:
+            tol = scheme['tolerance']
+            if isinstance(tol, bool) or not isinstance(tol, (int, float)) or tol < 0:
+                raise ConfigValidationError(
+                    f"{path}.tolerance must be a number >= 0 (an absolute difference)")
+            if scheme.get('scoring') not in ('numeric', 'latex'):
+                raise ConfigValidationError(
+                    f"{path}.tolerance only applies with scoring: numeric or latex")
 
     # Per-object attributes on video tracks and point-cloud objects; the image
     # type checks its own below, beside its tools.
@@ -4727,7 +4783,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path} missing 'labels' field for {annotation_type} annotation type")
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
-        if not scheme['labels']:
+        if not scheme['labels'] and not ('label_source' in scheme and annotation_type != 'select'):
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'likert':
@@ -4790,7 +4846,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path} missing 'labels' field for span annotation type")
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
-        if not scheme['labels']:
+        if not scheme['labels'] and 'label_source' not in scheme:
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'multirate':
@@ -4853,7 +4909,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path} missing 'labels' field for image_annotation type")
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
-        if not scheme['labels']:
+        if not scheme['labels'] and 'label_source' not in scheme:
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
         # Validate optional numeric fields
@@ -5525,6 +5581,91 @@ def _validate_viewer_displays(config_data: Dict[str, Any]) -> None:
     field each viewer_selection scheme binds to."""
     from potato.server_utils.displays.viewer_display import validate_viewer_config
     errors = validate_viewer_config(config_data)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
+def _validate_microscopy(scheme: Dict[str, Any], path: str) -> None:
+    from potato.server_utils.schemas.microscopy import validate_scheme
+    problems = validate_scheme(scheme)
+    if problems:
+        raise ConfigValidationError(f"{path}." + f"; {path}.".join(problems))
+
+
+def _validate_peak_picking(scheme: Dict[str, Any], path: str) -> None:
+    """peak_picking on its own (fields, counts, viewer_field present). That
+    viewer_field names a spectrum display is checked with the whole config,
+    in _validate_viewer_displays."""
+    from potato.server_utils.schemas.peak_picking import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
+def _validate_label_source(scheme: Dict[str, Any], path: str) -> None:
+    """Ontology-backed labels (`label_source`) on radio, multiselect, span or
+    image_annotation. The file and its `root` are checked in
+    _validate_label_source_files, which knows the task directory."""
+    from potato.ontology.source import LabelSourceError, check_label_source
+    try:
+        check_label_source(scheme, path)
+    except LabelSourceError as e:
+        raise ConfigValidationError(str(e)) from None
+    # Picker-only schemes may leave `labels` out; every generator reads it.
+    scheme.setdefault('labels', [])
+
+
+def _validate_label_source_files(config_data: Dict[str, Any], base_dir: str) -> None:
+    """Each `label_source.file` exists inside task_dir, parses as OBO, and
+    contains `root` when one is set."""
+    from potato.ontology.source import (LabelSourceError, check_label_source_file,
+                                        iter_label_source_schemes)
+    for path, scheme in iter_label_source_schemes(config_data):
+        ls = scheme.get('label_source')
+        if not isinstance(ls, dict) or ls.get('service') != 'file' or not ls.get('file'):
+            continue
+        try:
+            resolved = validate_path_security(ls['file'], base_dir)
+        except ConfigSecurityError as e:
+            raise ConfigSecurityError(f"{path}.label_source.file: {e}") from None
+        try:
+            check_label_source_file(scheme, path, resolved)
+        except LabelSourceError as e:
+            raise ConfigValidationError(str(e)) from None
+
+
+def _validate_chemical_structure(scheme: Dict[str, Any], path: str) -> None:
+    """chemical_structure options, and RDKit.js when the scheme asks for it.
+
+    ``rdkit: true`` without the bundle is an error naming the fetch command;
+    ``rdkit: auto`` (the default) without it is a warning, because the scheme
+    works with OpenChemLib alone (no InChIKey in the browser)."""
+    from potato.server_utils.schemas.chemical_structure import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+    mode = scheme.get("rdkit", "auto")
+    if mode is False:
+        return
+    from potato import chemistry, vendoring
+    if chemistry.rdkit_bundle_installed():
+        return
+    hint = vendoring.fetch_hint([chemistry.RDKIT_BUNDLE])
+    if mode is True:
+        raise ConfigValidationError(
+            f"{path}.rdkit is true, but the RDKit.js browser library is not installed. "
+            f"Install it with `{hint}`, or set rdkit: auto to run with OpenChemLib only.")
+    logger.warning(
+        f"{path}: RDKit.js is not installed, so the browser does not compute RDKit "
+        f"SMILES, InChI or InChIKey or check structures with RDKit (OpenChemLib "
+        f"still draws, validates valences and writes the molfile and SMILES). "
+        f"Install it with `{hint}`, or set rdkit: false to silence this.")
+
+
+def _validate_interval_label(scheme: Dict[str, Any], path: str) -> None:
+    """interval_label on its own (labels, mode, keys, pre-annotation options)."""
+    from potato.server_utils.schemas.interval_label import validate_scheme
+    errors = validate_scheme(scheme, path)
     if errors:
         raise ConfigValidationError("; ".join(errors))
 
@@ -7286,6 +7427,9 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                     raise ConfigValidationError(f"data_directory is not a directory: {data_directory} (resolved to: {validated_dir})")
             except ConfigSecurityError as e:
                 raise ConfigSecurityError(f"data_directory: {str(e)}")
+
+    # Ontology files behind `label_source` (ontology-backed labels)
+    _validate_label_source_files(config_data, base_dir)
 
     # Validate output_annotation_dir
     if 'output_annotation_dir' in config_data:
@@ -9699,6 +9843,10 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             "multi_agent_discussion", "cot_trace", "audio_dialogue",
             "depth_map", "image_region",
             "protein_structure", "genome_locus",
+            "molecule",
+            "spectrum",
+            "fits_cutout",
+            "time_series",
         ]
 
     for i, field in enumerate(fields):

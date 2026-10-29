@@ -44,7 +44,8 @@ def validate_schema_config(annotation_scheme: dict) -> bool:
     # Validate labels if present
     if "labels" in annotation_scheme:
         labels = annotation_scheme["labels"]
-        if not labels:
+        # An ontology-backed scheme (label_source) may have no fixed labels.
+        if not labels and not annotation_scheme.get("label_source"):
             raise ValueError("Labels list cannot be empty")
 
         # Check for duplicate labels

@@ -6,6 +6,11 @@
 #   python potato/flask_server.py start examples/image/ct-volume/config.yaml -p 8000
 #
 # Needs: pip install 'potato-annotation[volumes]'
+#
+# Export a DICOM SEG, or the SEG plus a TID 1500 measurement report (SR) with
+# each segment's volume (see docs/annotation-types/science/clinical_formats.md):
+#   python -m potato.export -c examples/image/ct-volume/config.yaml -f dicom_seg -o out/seg
+#   python -m potato.export -c examples/image/ct-volume/config.yaml -f dicom_sr -o out/sr
 annotation_task_name: CT volume segmentation
 task_dir: .
 output_annotation_dir: annotation_output/
@@ -24,7 +29,14 @@ annotation_schemes:
     name: ct_segmentation
     description: Outline the lesion and the bone ring
     labels:
-      - {name: Lesion, color: "#e6553a", key_value: "1"}
+      # `dicom` gives the coded concepts the SEG segment and the SR finding
+      # carry. Bone has none, so it gets the generic SNOMED CT "Tissue".
+      - name: Lesion
+        color: "#e6553a"
+        key_value: "1"
+        dicom:
+          category: {code: "49755003", scheme: SCT, meaning: Morphologically Altered Structure}
+          type: {code: "52988006", scheme: SCT, meaning: Lesion}
       - {name: Bone, color: "#3a8ee6", key_value: "2"}
     source_field: volume
     # The first item carries an RTSTRUCT; its "Lesion" ROI becomes the

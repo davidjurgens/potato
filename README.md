@@ -71,6 +71,10 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | **3D & Volumes** | Lidar and photogrammetry point clouds with 3D boxes and per-point segments; CT and MR volumes (DICOM, NIfTI) with label masks painted in linked axial, coronal and sagittal views ([point clouds](docs/annotation-types/spatial/point_cloud.md), [volumes](docs/annotation-types/multimedia/volume_annotation.md)) |
 | **Maps** | Labelled points, lines and polygons drawn on a map, pinned places, and labelled regions of an outline map ([docs](docs/annotation-types/spatial/geo_annotation.md)) |
 | **Science viewers** | Protein structures with residue selection, genome loci in igv.js for variant review, and spectrograms with time-frequency boxes for bioacoustics ([proteins](docs/annotation-types/science/protein_structures.md), [genomes](docs/annotation-types/science/genome_loci.md), [spectrograms](docs/annotation-types/multimedia/spectrogram_annotation.md)) |
+| **Signals** | Multi-channel EEG, ECG and sensor recordings (EDF/BDF, WFDB, CSV/Parquet) with interval, event and sleep-epoch labels, exported as BIDS events ([docs](docs/annotation-types/science/time_series.md)) |
+| **Chemistry and spectra** | Draw or correct chemical structures, mark atoms in a molecule, and pick and integrate peaks in NMR, IR and MS spectra ([structures](docs/annotation-types/science/chemical_structures.md), [spectra](docs/annotation-types/science/spectra.md)) |
+| **Microscopy and pathology** | Multichannel OME-Zarr and OME-TIFF images with regions and cell classes; whole-slide regions from and to QuPath and ASAP; DICOM SEG and SR export ([microscopy](docs/annotation-types/science/microscopy.md), [clinical formats](docs/annotation-types/science/clinical_formats.md)) |
+| **Astronomy** | FITS cutouts as science/reference/difference triplets with light curves, for real/bogus vetting and morphology ([docs](docs/annotation-types/science/astronomy.md)) |
 
 ### Annotation Schemes
 
@@ -160,6 +164,7 @@ Enable it with `qda_mode`, which turns these features on together; see the [QDA 
 | **Survey import** | `potato import` turns a Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe or Network Canvas questionnaire into Potato survey pages, with their show/hide logic ([docs](docs/tools/survey_import.md)) |
 | **Survey instruments** | A library of validated questionnaires (personality, mental health, affect, demographics) to drop into pre- and post-study pages ([docs](docs/advanced/survey_instruments.md)) |
 | **Self-paced reading** | Self-paced reading and the Maze task, with a reading time for each region ([docs](docs/workflow/self_paced_reading.md)) |
+| **Scheduled sessions** | Follow-up waves, experience-sampling prompts and Delphi rounds, with email, SMS or Prolific reminders ([docs](docs/workflow/scheduling.md)) |
 
 ---
 
@@ -351,8 +356,8 @@ curated by hand:
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 178 config keys, 76 annotation types, 27 display types — validates a `config.yaml` before the server runs |
-| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 512 HTTP paths, with per-operation auth and config gating |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 182 config keys, 80 annotation types, 31 display types — validates a `config.yaml` before the server runs |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 534 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`
 modeline, so editors validate it live. See

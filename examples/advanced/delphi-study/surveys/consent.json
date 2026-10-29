@@ -1,0 +1,16 @@
+[
+  {
+    "name": "panel_consent",
+    "description": "I agree to take part in up to three rating rounds. My ratings and comments are shown to the other panelists without my name.",
+    "annotation_type": "radio",
+    "labels": ["I agree", "I do not agree"],
+    "label_requirement": {"required_label": ["I agree"]}
+  },
+  {
+    "name": "contact_consent",
+    "description": "May we send you a message when each round opens?",
+    "annotation_type": "radio",
+    "labels": ["Yes", "No"],
+    "label_requirement": {"required": true}
+  }
+]

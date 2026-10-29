@@ -327,6 +327,12 @@ def validate_viewer_config(config: Dict[str, Any]) -> List[str]:
             errors.append(
                 f"{path}.viewer_field '{target}' does not name a viewer display "
                 f"field in instance_display (viewer fields: {known})")
+    # peak_picking binds to a spectrum display the same way.
+    from potato.server_utils.schemas.peak_picking import validate_binding
+    errors.extend(validate_binding(config))
+    # interval_label binds to a time_series display.
+    from potato.server_utils.schemas.interval_label import validate_binding as _signal_binding
+    errors.extend(_signal_binding(config))
     return errors
 
 

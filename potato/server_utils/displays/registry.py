@@ -414,7 +414,11 @@ def _register_builtin_displays():
     from .audio_dialogue_display import AudioDialogueDisplay
     from .protein_structure_display import ProteinStructureDisplay
     from .genome_locus_display import GenomeLocusDisplay
+    from .time_series_display import TimeSeriesDisplay
+    from .molecule_display import MoleculeDisplay
+    from .spectrum_display import SpectrumDisplay
     from .image_region_display import ImageRegionDisplay
+    from .fits_cutout_display import FitsCutoutDisplay
 
     displays = [
         DisplayDefinition(
@@ -619,11 +623,39 @@ def _register_builtin_displays():
             description="Genome locus in igv.js: reference, reads, variants and annotation tracks"
         ),
         DisplayDefinition(
+            name="molecule",
+            renderer=MoleculeDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Small molecule from SMILES or molfile (OpenChemLib or RDKit.js), with atom selection"
+        ),
+        DisplayDefinition(
+            name="spectrum",
+            renderer=SpectrumDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Spectrum (NMR, IR, MS from JCAMP-DX, mzML or CSV) with zoom, peak picking and integration"
+        ),
+        DisplayDefinition(
+            name="time_series",
+            renderer=TimeSeriesDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Multi-channel signal (EDF, WFDB, CSV, Parquet) in uPlot, with zoom, pan and labelled overlays"
+        ),
+        DisplayDefinition(
             name="image_region",
             renderer=ImageRegionDisplay(),
             required_fields=["key"],
             supports_span_target=False,
             description="One rectangle of a larger image (a text line, a word, a figure), cropped in the browser"
+        ),
+        DisplayDefinition(
+            name="fits_cutout",
+            renderer=FitsCutoutDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="FITS image cutouts (one image, or science/reference/difference) with an RA/Dec readout and a light curve"
         ),
     ]
 

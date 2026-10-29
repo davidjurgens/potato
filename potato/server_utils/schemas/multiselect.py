@@ -178,6 +178,10 @@ def _generate_multiselect_layout_internal(annotation_scheme):
     if annotation_scheme.get("has_free_response"):
         schematic += _generate_free_response(annotation_scheme, n_columns)
 
+    # Ontology-backed labels (label_source): the term search box.
+    from potato.ontology.picker import picker_html
+    schematic += picker_html(annotation_scheme)
+
     schematic += "</fieldset></form>"
 
     logger.info(f"Successfully generated multiselect layout for {annotation_scheme['name']} "

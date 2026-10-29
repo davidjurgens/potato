@@ -1,0 +1,104 @@
+/* chemical_structure scheme and molecule display. Theme tokens only, so both
+   follow light and dark mode. */
+
+/* ---- chemical_structure ------------------------------------------------ */
+
+.chemical-structure fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.chemical-structure .cs-title { font-weight: 600; font-size: var(--text-base, 0.9375rem);
+    color: var(--foreground); margin-bottom: 0.25rem; }
+.chemical-structure .cs-instructions { margin: 0 0 0.5rem; color: var(--muted-foreground);
+    font-size: var(--text-sm, 0.8125rem); }
+.chemical-structure .cs-editor-wrap { position: relative; width: 100%; min-width: 0;
+    border: 1px solid var(--border); border-radius: var(--radius, 0.5rem); overflow: hidden;
+    background: #fff; }
+/* OpenChemLib draws its editor on a canvas with fixed light colours. In dark
+   mode the whole editor is inverted (hue kept), so the canvas is dark with
+   light bonds instead of a white slab on a dark page. */
+:root[data-theme="dark"] .chemical-structure .cs-editor-wrap { background: #000;
+    filter: invert(0.92) hue-rotate(180deg); }
+.chemical-structure .cs-editor { position: absolute; inset: 0; }
+.chemical-structure .cs-editor > * { max-width: 100%; }
+.chemical-structure .cs-loading { position: absolute; inset: 0; margin: 0; display: flex;
+    align-items: center; justify-content: center; padding: 1rem; text-align: center;
+    color: #555; background: #fff; font-size: var(--text-sm, 0.8125rem); }
+.chemical-structure .cs-loading[hidden] { display: none; }
+.chemical-structure .cs-loading.cs-error { color: #9f1e17; background: #fdecea; }
+.chemical-structure .cs-row { display: flex; flex-wrap: wrap; align-items: flex-start;
+    gap: 0.4rem 0.6rem; margin-top: 0.6rem; }
+.chemical-structure .cs-paste-label { flex: 0 0 100%; font-size: var(--text-sm, 0.8125rem);
+    font-weight: 500; color: var(--foreground); }
+.chemical-structure .cs-paste { flex: 1 1 14rem; min-width: 0; min-height: 2.25rem; resize: vertical;
+    padding: 0.4rem 0.55rem; border: 1px solid var(--input, var(--border));
+    border-radius: var(--radius-sm, 0.375rem); background: var(--background); color: var(--foreground);
+    font-size: var(--text-sm, 0.8125rem); line-height: 1.35; }
+.chemical-structure .cs-paste:focus-visible { outline: 2px solid var(--ring, var(--primary));
+    outline-offset: 1px; }
+.chemical-structure .cs-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chemical-structure .cs-btn { min-height: 2.25rem; padding: 0.35rem 0.8rem;
+    border: 1px solid var(--border); border-radius: var(--radius-sm, 0.375rem);
+    background: var(--card); color: var(--card-foreground); font-size: var(--text-sm, 0.8125rem);
+    cursor: pointer; }
+.chemical-structure .cs-btn:hover:not(:disabled) { background: var(--accent, var(--muted)); }
+.chemical-structure .cs-btn:focus-visible { outline: 2px solid var(--ring, var(--primary));
+    outline-offset: 1px; }
+.chemical-structure .cs-btn:disabled { opacity: 0.55; cursor: default; }
+.chemical-structure .cs-load { border-color: var(--primary); color: var(--primary); }
+.chemical-structure .cs-readout { display: grid; grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem; margin: 0.6rem 0 0; font-size: var(--text-sm, 0.8125rem); }
+.chemical-structure .cs-readout > div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.5rem; align-items: baseline; }
+.chemical-structure .cs-readout dt { color: var(--muted-foreground); font-weight: 500; }
+.chemical-structure .cs-readout dd { margin: 0; color: var(--foreground); overflow-wrap: anywhere; }
+.chemical-structure .cs-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.chemical-structure .cs-muted { color: var(--muted-foreground); font-family: inherit;
+    font-size: var(--text-xs, 0.75rem); }
+.chemical-structure .cs-problems { min-height: 1.25rem; margin: 0.4rem 0 0;
+    font-size: var(--text-sm, 0.8125rem); color: var(--muted-foreground); }
+.chemical-structure .cs-problems.cs-warn { color: var(--warning-text, #7d4407); }
+.chemical-structure .cs-problems.cs-ok { color: var(--muted-foreground); }
+
+/* ---- molecule display ---------------------------------------------------- */
+
+/* In a horizontal instance_display layout every field has flex-basis 0, so
+   on a phone the molecule is squeezed into a third of the width and never
+   wraps. Give its field a real basis: it then wraps below its neighbour. */
+.instance-display-container.layout-horizontal > .display-field:has(.potato-viewer[data-viewer-kind="molecule"]),
+.instance-display-container.layout-horizontal > .display-field-resizable:has(.potato-viewer[data-viewer-kind="molecule"]) {
+    flex: 1 1 18rem; }
+
+.potato-viewer[data-viewer-kind="molecule"] .pv-stage { color: var(--card-foreground); }
+.potato-viewer[data-viewer-kind="molecule"] .mv-svg { display: block; width: 100%; height: 100%; }
+.potato-viewer[data-viewer-kind="molecule"] .mv-svg text {
+    /* A geometric display face draws O as a circle; atom labels need a plain one. */
+    font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; }
+.potato-viewer .mv-hit { fill: transparent; stroke: none; cursor: pointer; pointer-events: all; }
+.potato-viewer .mv-hit.mv-hover { stroke: var(--primary); stroke-width: 2; stroke-dasharray: 3 2; }
+.potato-viewer .mv-selected { opacity: 0.42; }
+.potato-viewer .mv-fixed { opacity: 0.3; }
+.potato-viewer .mv-temp { opacity: 0.5; }
+:root[data-theme="dark"] .potato-viewer .mv-selected { opacity: 0.6; }
+:root[data-theme="dark"] .potato-viewer .mv-fixed { opacity: 0.42; }
+.potato-viewer .mv-num { font-size: 9px; fill: var(--muted-foreground); pointer-events: none; }
+
+.potato-viewer .mv-atoms { border: 1px solid var(--border); border-radius: var(--radius, 0.5rem);
+    padding: 0.5rem 0.75rem 0.75rem; background: var(--card); }
+.potato-viewer .mv-atoms-head { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 0.25rem 0.75rem; margin-bottom: 0.5rem; }
+.potato-viewer .mv-atoms-title { font-weight: 600; color: var(--card-foreground); }
+.potato-viewer .mv-atoms-hint, .potato-viewer .mv-atoms-note { font-size: var(--text-xs, 0.75rem);
+    color: var(--muted-foreground); margin: 0; }
+.potato-viewer .mv-atom-strip { display: flex; flex-wrap: wrap; gap: 3px; max-height: 10rem;
+    overflow-y: auto; }
+.potato-viewer .mv-atom { min-width: 2.6rem; min-height: 2rem; padding: 0.15rem 0.35rem;
+    border: 1px solid var(--border); border-radius: var(--radius-sm, 0.375rem);
+    background: var(--background); color: var(--foreground); cursor: pointer;
+    font: 400 var(--text-xs, 0.75rem)/1.2 Arial, "Helvetica Neue", Helvetica, sans-serif;
+    font-variant-numeric: tabular-nums; }
+.potato-viewer .mv-atom .mv-el { font-weight: 600; font-size: 0.8125rem; }
+.potato-viewer .mv-atom .mv-n { margin-left: 1px; color: var(--muted-foreground); }
+.potato-viewer .mv-atom[aria-pressed="true"] .mv-n { color: inherit; }
+.potato-viewer .mv-atom.mv-hetero .mv-el { font-weight: 800; }
+.potato-viewer .mv-atom:hover { border-color: var(--primary); }
+.potato-viewer .mv-atom:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: 1px; }
+.potato-viewer .mv-atom[aria-pressed="true"] { background: var(--mv-sel, #c2255c); border-color: var(--mv-sel, #c2255c);
+    color: #fff; }

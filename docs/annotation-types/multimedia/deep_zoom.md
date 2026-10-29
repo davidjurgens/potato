@@ -187,6 +187,10 @@ fraction by the slide width and `mpp_x` to get microns. IIIF requests
 Runnable example: `examples/image/whole-slide/`, with a generated synthetic
 Aperio slide (`generate_slide.py`; needs `tifffile`).
 
+Regions drawn in QuPath or ASAP import as pre-annotations, and the
+annotators' regions export back to QuPath GeoJSON and ASAP XML in level-0
+slide pixels: see [Clinical and Pathology Formats](../science/clinical_formats.md#pathology-regions-qupath-geojson-and-asap-xml).
+
 ---
 
 ## Limits

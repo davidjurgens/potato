@@ -9,7 +9,7 @@ A passage with blanks the participant types into:
       name: cloze_1
       description: Fill in the missing words.
       text: "The [[cat|kitten]] sat on the [[mat]]."
-      scoring: case_insensitive     # exact | case_insensitive | normalized
+      scoring: case_insensitive     # exact | case_insensitive | normalized | numeric | latex
       input_width: 10               # width of each blank, in characters
 
 Each ``[[...]]`` is one blank. The text inside is the answer key, with ``|``
@@ -33,11 +33,19 @@ mistake is never shown either -- the blank renders empty.
 
 Each blank is an ordinary text input named ``<schema>:::blank_<i>``, so it
 saves, restores and validates like any text field.
+
+Math answers: ``scoring: numeric`` compares values, so ``0.5``, ``1/2``,
+``\\frac{1}{2}``, ``$\\tfrac12$`` and ``5e-1`` all match a key of ``1/2``;
+``tolerance`` (absolute, default 0) allows rounding. ``scoring: latex``
+compares LaTeX strings after removing delimiters, spacing commands,
+``\\left``/``\\right`` and whitespace, and also accepts equal numbers.
+Neither is algebraic equivalence: ``2x`` and ``x+x`` do not match.
 """
 
 import logging
 import re
 import unicodedata
+from fractions import Fraction
 from typing import Dict, List, Optional, Tuple
 
 from .identifier_utils import (
@@ -51,7 +59,7 @@ from .identifier_utils import (
 logger = logging.getLogger(__name__)
 
 BLANK = re.compile(r"\[\[(.*?)\]\]", re.S)
-SCORING_MODES = ("exact", "case_insensitive", "normalized")
+SCORING_MODES = ("exact", "case_insensitive", "normalized", "numeric", "latex")
 
 
 def parse_passage(text: str) -> Tuple[List[object], List[List[str]]]:
@@ -99,6 +107,84 @@ def _normalize(value: str, mode: str) -> str:
     return value
 
 
+MATH_MODES = ("numeric", "latex")
+
+_MATH_DELIMS = (("$$", "$$"), ("$", "$"), ("\\(", "\\)"), ("\\[", "\\]"))
+_FRAC = re.compile(r"^(-?)\\[dt]?frac\s*(\{[^{}]+\}|\d)\s*(\{[^{}]+\}|\d)$")
+_THOUSANDS = re.compile(r"^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$")
+_SPACING = re.compile(r"\\(?:[,;:!> ]|quad|qquad|left|right|displaystyle|textstyle)(?![A-Za-z])")
+
+
+def _strip_math_delims(value: str) -> str:
+    value = (value or "").strip()
+    for left, right in _MATH_DELIMS:
+        if len(value) >= len(left) + len(right) and value.startswith(left) \
+                and value.endswith(right):
+            return value[len(left):len(value) - len(right)].strip()
+    return value
+
+
+def parse_number(value: str) -> Optional[Fraction]:
+    """An exact value for a written number, or None.
+
+    Accepts integers, decimals, scientific notation, ``a/b``, ``\\frac{a}{b}``
+    (also ``\\dfrac``, ``\\tfrac`` and the ``\\frac12`` shorthand), a leading
+    sign or Unicode minus, thousands separators (``1,000``) and math delimiters
+    around any of these. Nothing is evaluated: ``2+2`` is not a number.
+    """
+    text = _strip_math_delims(str(value)).replace("−", "-").replace(" ", "")
+    text = text.rstrip(".") if re.search(r"\d\.$", text) else text
+    if not text:
+        return None
+    if _THOUSANDS.match(text):
+        text = text.replace(",", "")
+    m = _FRAC.match(text)
+    if m:
+        num, den = (parse_number(g.strip("{}")) for g in (m.group(2), m.group(3)))
+        if num is None or den is None or den == 0:
+            return None
+        return (-1 if m.group(1) else 1) * num / den
+    if text.count("/") == 1:
+        a, b = text.split("/")
+        num, den = parse_number(a), parse_number(b)
+        if num is None or den is None or den == 0:
+            return None
+        return num / den
+    m = re.fullmatch(r"[+-]?(\d+\.?\d*|\.\d+)([eE]([+-]?\d+))?", text)
+    if not m or len(text) > 64:
+        return None
+    if m.group(3) and abs(int(m.group(3))) > 300:
+        # Fraction("1e999999999") builds the integer exactly; refuse it.
+        return None
+    try:
+        return Fraction(text)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def normalize_latex(value: str) -> str:
+    """LaTeX with delimiters, spacing commands, ``\\left``/``\\right`` and
+    whitespace removed, and ``\\dfrac``/``\\tfrac`` read as ``\\frac``."""
+    text = _strip_math_delims(str(value))
+    text = re.sub(r"\\[dt]frac(?![A-Za-z])", r"\\frac", text)
+    text = _SPACING.sub("", text)
+    text = re.sub(r"\s+", "", text)
+    return text.rstrip(".")
+
+
+def math_answer_matches(given: str, key: str, mode: str,
+                        tolerance: Fraction = Fraction(0)) -> bool:
+    """One typed answer against one accepted answer under a math mode."""
+    if not str(given or "").strip():
+        return False
+    g, k = parse_number(given), parse_number(key)
+    if g is not None and k is not None:
+        return abs(g - k) <= tolerance
+    if mode == "numeric" and k is not None:
+        return False
+    return normalize_latex(given) == normalize_latex(key)
+
+
 def item_answers(scheme: dict, item_data: Optional[dict]) -> List[List[str]]:
     """The key for an item-driven passage, one list of accepted answers per blank."""
     raw = (item_data or {}).get(scheme.get("answer_field") or "") if item_data else None
@@ -134,6 +220,9 @@ def answer_fields(config: dict) -> List[str]:
     # Outcomes and pre-drawn prices that settle incentive payments.
     from potato.incentives import private_item_fields
     fields.extend(private_item_fields(config))
+    # A chemical_structure scheme's answer key (graded in the export).
+    from potato.chemistry.structures import private_item_fields as chemistry_fields
+    fields.extend(f for f in chemistry_fields(config) if f not in fields)
     return fields
 
 
@@ -171,14 +260,19 @@ def score_responses(scheme: dict, responses: Dict[str, str],
     else:
         _, answers = parse_passage(scheme.get("text", ""))
     mode = scheme.get("scoring", "case_insensitive")
+    tolerance = Fraction(str(scheme.get("tolerance", 0) or 0))
     out: Dict[str, object] = {}
     score = scored = 0
     for i, key in enumerate(answers):
         if not key:
             continue
         scored += 1
-        given = _normalize(str(responses.get(blank_label(i), "")), mode)
-        ok = any(given == _normalize(k, mode) for k in key)
+        raw_given = str(responses.get(blank_label(i), ""))
+        if mode in MATH_MODES:
+            ok = any(math_answer_matches(raw_given, k, mode, tolerance) for k in key)
+        else:
+            given = _normalize(raw_given, mode)
+            ok = any(given == _normalize(k, mode) for k in key)
         out[f"{blank_label(i)}_correct"] = int(ok)
         score += int(ok)
     if not scored:

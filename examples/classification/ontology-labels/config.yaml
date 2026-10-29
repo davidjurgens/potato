@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Ontology-backed labels: cell types picked from an OBO file
+#
+# The annotator searches the ontology instead of scrolling a fixed list. Each
+# picked term is stored as {obo_id, label, iri, ontology_version}.
+#
+# ontologies/scl-sample.obo is a SYNTHETIC SAMPLE written for this example
+# (prefix SCL). It is NOT the Cell Ontology: the ids, names and hierarchy are
+# made up. For real work, download cl.obo from
+# http://purl.obolibrary.org/obo/cl.obo into this directory and point `file:`
+# at it (and change `root:` to a CL id such as CL:0000000).
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/classification/ontology-labels/config.yaml -p 8000
+#
+# Export one row per picked term (obo_id, label, IRI, version):
+#   python -m potato.export --config examples/classification/ontology-labels/config.yaml --format ontology_terms --output out/
+
+annotation_task_name: "Ontology labels: cell types (synthetic sample)"
+
+task_dir: .
+output_annotation_dir: annotation_output
+data_files:
+  - data/cell-descriptions.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  # Search only: no fixed list. Required, so Next waits for a term.
+  - annotation_type: radio
+    name: main_cell_type
+    description: "Which cell type does the description mainly talk about?"
+    labels: []
+    label_requirement:
+      required: true
+    label_source:
+      ontology: scl
+      service: file
+      file: ontologies/scl-sample.obo
+      max_results: 20
+
+  # A fixed option next to the search box. Terms picked from the search are
+  # added as further checkboxes.
+  - annotation_type: multiselect
+    name: other_cell_types
+    description: "Which other cell types are mentioned?"
+    labels:
+      - name: None
+        tooltip: "No other cell type is mentioned"
+    label_source:
+      ontology: scl
+      service: file
+      file: ontologies/scl-sample.obo
+
+  # Span labels from a subtree: only immune cells (SCL:0000001 and below).
+  - annotation_type: span
+    name: immune_cell_mentions
+    description: "Highlight each mention of an immune cell and tag it with its type"
+    labels: []
+    label_source:
+      ontology: scl
+      service: file
+      file: ontologies/scl-sample.obo
+      root: SCL:0000001

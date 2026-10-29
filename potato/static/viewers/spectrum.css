@@ -1,0 +1,104 @@
+/* Spectrum display (spectrum.js) and the peak_picking scheme (peak-picking.js).
+   Theme tokens only, so both follow light and dark mode. The plot reads the
+   --sp-* properties below when it paints and repaints when the theme changes. */
+
+.potato-viewer[data-viewer-kind="spectrum"] {
+    --sp-line: var(--foreground, #09090b);
+    --sp-grid: var(--border, #e4e4e7);
+    --sp-peak: var(--primary, #6e56cf);
+    --sp-region: var(--primary, #6e56cf);
+    /* Suggestions: orange, apart from the primary purple of picked peaks;
+       4.5:1 or better against the card colour in both themes. */
+    --sp-suggest: #c2410c;
+}
+:root[data-theme="dark"] .potato-viewer[data-viewer-kind="spectrum"],
+:root[data-theme="dark"] .peak-picking { --sp-suggest: #fb923c; }
+.peak-picking { --sp-suggest: #c2410c; }
+
+.potato-viewer[data-viewer-kind="spectrum"] .pv-stage { cursor: crosshair; }
+.potato-viewer[data-viewer-kind="spectrum"] .pv-stage .main-svg { overflow: visible; }
+
+.sp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; }
+.sp-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden; }
+.sp-btn { min-height: 2.25rem; padding: 0.3rem 0.85rem; border: 0; background: var(--card);
+    color: var(--card-foreground, var(--foreground)); font: inherit; font-size: var(--text-sm, 0.8125rem);
+    cursor: pointer; }
+.sp-modes .sp-btn + .sp-btn { border-left: 1px solid var(--border); }
+.sp-btn:hover:not(:disabled) { background: var(--secondary); }
+.sp-btn:disabled { opacity: 0.55; cursor: default; }
+.sp-btn:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: -2px; position: relative; z-index: 1; }
+.sp-mode[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground, #fff); font-weight: 600; }
+.sp-mode[aria-pressed="true"]:hover { background: var(--primary); }
+.sp-reset { border: 1px solid var(--border); border-radius: 0.5rem; }
+.sp-hint { flex: 1 1 14rem; margin: 0; font-size: var(--text-sm, 0.8125rem); color: var(--muted-foreground); }
+
+/* ---- peak_picking ---------------------------------------------------- */
+
+form.peak-picking, .peak-picking fieldset { width: 100%; box-sizing: border-box; min-width: 0; }
+form.peak-picking:focus { outline: none; }
+.peak-picking .pp-title { font-weight: 600; margin-bottom: 0.4rem; }
+.peak-picking .pp-instructions { margin: 0 0 0.6rem; color: var(--muted-foreground); }
+.peak-picking section { margin: 0 0 0.85rem; }
+.peak-picking section[hidden] { display: none; }
+.peak-picking .pp-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem;
+    margin-bottom: 0.35rem; }
+.peak-picking .pp-section-title { margin: 0; font-size: var(--text-sm, 0.875rem); font-weight: 600;
+    color: var(--card-foreground, var(--foreground)); }
+.peak-picking .pp-sugg-count, .peak-picking .pp-peak-count { font-size: var(--text-xs, 0.75rem);
+    color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.peak-picking .pp-head-actions { margin-left: auto; display: inline-flex; gap: 0.4rem; }
+
+.peak-picking .pp-btn { min-height: 2rem; padding: 0.15rem 0.65rem; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: var(--card); color: var(--card-foreground, var(--foreground));
+    font: inherit; font-size: var(--text-sm, 0.8125rem); cursor: pointer; white-space: nowrap; }
+.peak-picking .pp-btn:hover:not(:disabled) { background: var(--secondary); }
+.peak-picking .pp-btn:disabled { opacity: 0.5; cursor: default; }
+.peak-picking .pp-btn:focus-visible, .peak-picking .pp-field:focus-visible,
+.peak-picking .pp-add-x:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: 2px; }
+.peak-picking .pp-accept { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+.peak-picking .pp-sugg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.peak-picking .pp-sugg { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.3rem 0.2rem 0.55rem;
+    border: 1px dashed var(--sp-suggest); border-radius: 0.5rem; background: var(--card); }
+.peak-picking .pp-sugg-mark { width: 0; height: 0; border-left: 0.35rem solid transparent;
+    border-right: 0.35rem solid transparent; border-top: 0.55rem solid var(--sp-suggest); }
+.peak-picking .pp-pos { font-variant-numeric: tabular-nums; font-size: var(--text-sm, 0.8125rem);
+    color: var(--card-foreground, var(--foreground)); }
+.peak-picking .pp-rejected { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0.45rem 0 0;
+    font-size: var(--text-xs, 0.75rem); color: var(--muted-foreground); }
+.peak-picking .pp-rejected[hidden] { display: none; }
+.peak-picking .pp-restore { min-height: 1.75rem; padding: 0 0.5rem; font-size: var(--text-xs, 0.75rem);
+    font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+
+.peak-picking .pp-empty { margin: 0.25rem 0; font-size: var(--text-sm, 0.8125rem); color: var(--muted-foreground); }
+.peak-picking .pp-empty[hidden] { display: none; }
+.peak-picking .pp-table-wrap { overflow-x: auto; max-width: 100%; }
+.peak-picking .pp-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm, 0.8125rem); }
+.peak-picking .pp-table[hidden] { display: none; }
+.peak-picking .pp-table th { text-align: left; font-weight: 600; font-size: var(--text-xs, 0.75rem);
+    color: var(--muted-foreground); padding: 0.25rem 0.45rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.peak-picking .pp-table td { padding: 0.25rem 0.45rem; border-bottom: 1px solid var(--border); vertical-align: middle;
+    color: var(--card-foreground, var(--foreground)); }
+.peak-picking .pp-table .pp-num { text-align: right; font-variant-numeric: tabular-nums; }
+.peak-picking .pp-table .pp-actions { text-align: right; width: 1%; }
+.peak-picking .pp-field { min-height: 2rem; width: 100%; min-width: 6rem; box-sizing: border-box; padding: 0.15rem 0.4rem;
+    border: 1px solid var(--border); border-radius: 0.375rem; background: var(--background, #fff);
+    color: var(--foreground); font: inherit; }
+.peak-picking .pp-source { display: inline-block; padding: 0.05rem 0.45rem; border-radius: 999px;
+    font-size: var(--text-xs, 0.75rem); border: 1px solid var(--border); color: var(--muted-foreground); white-space: nowrap; }
+.peak-picking .pp-source-auto { border-color: var(--sp-suggest); color: var(--sp-suggest); }
+
+.peak-picking .pp-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.25rem 0; }
+.peak-picking .pp-add-label { font-size: var(--text-sm, 0.8125rem); color: var(--card-foreground, var(--foreground)); }
+.peak-picking .pp-add-x { width: 7rem; min-height: 2rem; padding: 0.15rem 0.4rem; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: var(--background, #fff); color: var(--foreground); font: inherit;
+    font-variant-numeric: tabular-nums; }
+.peak-picking .pp-add-hint { font-size: var(--text-xs, 0.75rem); color: var(--muted-foreground); }
+.peak-picking .pp-message { margin: 0.25rem 0; font-size: var(--text-sm, 0.8125rem); color: var(--muted-foreground); }
+.peak-picking .pp-message:empty { display: none; }
+
+@media (max-width: 640px) {
+    .sp-hint { flex-basis: 100%; }
+    .peak-picking .pp-head-actions { margin-left: 0; }
+    .peak-picking .pp-field { min-width: 4.5rem; }
+}

@@ -1000,6 +1000,14 @@ class ZooniverseImporter:
                     continue
                 column = name if name not in ("id", key, "locations", "text") else f"metadata_{name}"
                 fields[column] = value
+            if has_drawing and subject.get("dims"):
+                # The size the marks were converted with. Potato stores marks as
+                # fractions of the image, and an export that works in pixels
+                # (consensus point clustering, COCO) cannot open a remote image
+                # to measure it.
+                width, height = subject["dims"][0]
+                fields.setdefault("image_width", int(width) if float(width).is_integer() else width)
+                fields.setdefault("image_height", int(height) if float(height).is_integer() else height)
             item = ProjectItem(instance_id=sid, fields=fields)
             item.responses = responses.get(sid, {})
             result.items.append(item)

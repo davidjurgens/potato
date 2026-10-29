@@ -361,3 +361,120 @@ class TestDeepZoomCanvas(BasePlaywrightTest):
                 `.image-annotation-container[data-schema="${schema}"]`)
                 .annotationManager.canvas.wrapperEl.style.pointerEvents""",
             arg=SCHEMA) == "auto"
+
+
+@pytest.fixture(scope="module")
+def preannotated_server():
+    """The same tiled image, opened with an imported polygon already on it.
+
+    This is what `potato import` writes for a QuPath or ASAP file: the regions
+    arrive through `pre_annotation`, so the first thing on the canvas is a
+    shape the annotator did not draw.
+    """
+    pytest.importorskip("PIL", reason="deep zoom needs Pillow to build tiles")
+
+    from PIL import Image
+
+    from tests.helpers.flask_test_setup import FlaskTestServer
+    from tests.helpers.port_manager import find_free_port
+    from tests.helpers.test_utils import create_test_directory
+
+    test_dir = create_test_directory("playwright_deepzoom_preannotated")
+    media = os.path.join(test_dir, "media")
+    os.makedirs(media, exist_ok=True)
+    Image.new("RGB", (1600, 1200), "white").save(os.path.join(media, "slide.png"))
+
+    # Centred at (0.7, 0.7), well away from where the test draws, so a box
+    # placed relative to this shape lands far from where it was dragged.
+    polygon = {"type": "polygon", "label": "tissue", "color": "#FF0000",
+               "coordinates": [{"x": 0.5, "y": 0.5}, {"x": 0.9, "y": 0.5},
+                               {"x": 0.9, "y": 0.9}, {"x": 0.5, "y": 0.9}]}
+    items = [{"id": f"scan_{i}", "image": "slide.png", "image_width": 1600,
+              "image_height": 1200, "predictions": {SCHEMA: [polygon]}}
+             for i in range(2)]
+    data_file = os.path.join(test_dir, "items.jsonl")
+    with open(data_file, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(json.dumps(i) for i in items) + "\n")
+
+    config = {
+        "annotation_task_name": "Deep zoom, pre-annotated",
+        "task_dir": test_dir,
+        "media_directory": media,
+        "output_annotation_dir": os.path.join(test_dir, "out"),
+        "data_files": [data_file],
+        "item_properties": {"id_key": "id", "text_key": "image"},
+        "user_config": {"allow_all_users": True},
+        "pre_annotation": {"enabled": True, "field": "predictions",
+                           "allow_modification": True},
+        "annotation_schemes": [{
+            "annotation_type": "image_annotation",
+            "name": SCHEMA,
+            "description": "Correct the imported regions",
+            "source_field": "image",
+            "viewer": "deepzoom",
+            "tools": ["bbox", "landmark", "polygon"],
+            "labels": [{"name": "tissue", "color": "#FF0000"},
+                       {"name": "background", "color": "#00FF00"}],
+        }],
+    }
+    config_path = os.path.join(test_dir, "config.yaml")
+    with open(config_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(config, handle)
+
+    srv = FlaskTestServer(port=find_free_port(), debug=False,
+                          config_file=config_path)
+    if not srv.start():
+        raise RuntimeError("Failed to start the pre-annotated deep-zoom server")
+    yield srv
+    srv.stop()
+
+
+@pytest.mark.playwright
+class TestDeepZoomPreannotated(TestDeepZoomCanvas.__base__):
+    """A box drawn beside an imported region stores where it was drawn."""
+
+    _open = TestDeepZoomCanvas._open
+    viewer_ready = TestDeepZoomCanvas.viewer_ready
+
+    def test_a_box_beside_an_imported_polygon_stores_where_it_was_drawn(
+            self, page, preannotated_server):
+        self._open(page, preannotated_server)
+        # The imported polygon is on the canvas beside the placeholder rect.
+        page.wait_for_function(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.image-annotation-container[data-schema="${schema}"]`);
+                const m = c && c.annotationManager;
+                return m && m.canvas.getObjects().some(o => o.type === 'polygon');
+            }""", arg=SCHEMA, timeout=15_000)
+        self.draw_bbox_on_image(page, SCHEMA, 0.1, 0.1, 0.3, 0.3, label="tissue")
+        boxes = [a for a in self.read_annotation_data(page, SCHEMA)
+                 if a["type"] == "bbox"]
+        assert len(boxes) == 1, boxes
+        box = boxes[0]["coordinates"]
+        assert box["x"] == pytest.approx(0.1, abs=0.03), box
+        assert box["y"] == pytest.approx(0.1, abs=0.03), box
+        assert box["width"] == pytest.approx(0.2, abs=0.03), box
+        assert box["height"] == pytest.approx(0.2, abs=0.03), box
+
+    def test_a_box_drawn_inside_an_imported_polygon_stores_where_it_was_drawn(
+            self, page, preannotated_server):
+        """Drawing a nuclei cluster inside a tissue outline: the press lands
+        on the polygon, which must not become the box's frame of reference."""
+        self._open(page, preannotated_server)
+        page.wait_for_function(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.image-annotation-container[data-schema="${schema}"]`);
+                const m = c && c.annotationManager;
+                return m && m.canvas.getObjects().some(o => o.type === 'polygon');
+            }""", arg=SCHEMA, timeout=15_000)
+        self.draw_bbox_on_image(page, SCHEMA, 0.6, 0.6, 0.8, 0.8, label="tissue")
+        boxes = [a for a in self.read_annotation_data(page, SCHEMA)
+                 if a["type"] == "bbox"]
+        assert len(boxes) == 1, boxes
+        box = boxes[0]["coordinates"]
+        assert box["x"] == pytest.approx(0.6, abs=0.03), box
+        assert box["y"] == pytest.approx(0.6, abs=0.03), box
+        assert box["width"] == pytest.approx(0.2, abs=0.03), box
+        assert box["height"] == pytest.approx(0.2, abs=0.03), box

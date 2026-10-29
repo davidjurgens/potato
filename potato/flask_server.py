@@ -349,10 +349,21 @@ def _resolve_generated_template_path(html_file: str) -> str:
 # rather than a silent asset-loading miss.
 FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "listening_test": ('data-annotation-type="listening_test"',),
+    # Multichannel microscopy. Loads OpenSeadragon too when deep zoom did not.
+    "microscopy": ('data-annotation-type="microscopy"',),
     # Viewer displays (protein_structure, genome_locus) and the viewer_selection
     # scheme. Only the framework and adapters load here; each viewer fetches
     # its library (3Dmol.js, igv.js, Mol*) itself when it mounts.
     "viewer_display": ('class="potato-viewer', 'data-annotation-type="viewer_selection"'),
+    # time_series display + interval_label scheme (uPlot itself loads with the viewer).
+    "time_series": ('data-viewer-kind="time_series"', 'data-annotation-type="interval_label"'),
+    # chemical_structure scheme and molecule display: OpenChemLib (an ES
+    # module, imported when the editor or drawing mounts) and RDKit.js.
+    "chemistry": ('data-annotation-type="chemical_structure"', 'data-viewer-kind="molecule"'),
+    # spectrum display + peak_picking scheme (Plotly loads when the viewer mounts).
+    "spectrum": ('data-viewer-kind="spectrum"', 'data-annotation-type="peak_picking"'),
+    # fits_cutout display (astronomy). Plotly loads only for an item with a light curve.
+    "fits_cutout": ('data-viewer-kind="fits_cutout"',),
     "spectrogram_annotation": ('data-annotation-type="spectrogram_annotation"',),
     # Maps. OpenLayers is ~900 KB, so only a page with a map pays for it.
     "geo_annotation": ('data-annotation-type="geo_annotation"',),
@@ -436,6 +447,8 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "run_tree": ('class="run-tree"',),
     # span schemes configured with entity_linking.
     "entity_linking": ("data-entity-linking",),
+    # Ontology-backed labels (`label_source` on radio/multiselect/span/image).
+    "ontology_picker": ('data-ontology-picker="true"',),
     # Stylesheet-only keys: these displays have no script of their own.
     # `class="spreadsheet-` covers the table wrapper and its error state;
     # the live coding-agent display reuses the coding-trace wrapper class.
@@ -3367,6 +3380,13 @@ def get_current_page_html(config, username):
     soup = BeautifulSoup(rendered_html, "html.parser")
 
     phase_annotations = user_state.phase_to_page_to_label_to_value.get(phase, {}).get(page, {})
+    # Ontology-backed labels: inputs for stored terms (see the annotation page).
+    if phase_annotations and soup.find(attrs={"data-ontology-picker": "true"}) is not None:
+        from potato.ontology.picker import add_stored_term_inputs
+        _stored = {}
+        for _label, _value in phase_annotations.items():
+            _stored.setdefault(_label.get_schema(), {})[_label.get_name()] = _value
+        add_stored_term_inputs(soup, _stored)
     for label_obj, value in phase_annotations.items():
         schema = label_obj.get_schema()
         label = label_obj.get_name()
@@ -4462,6 +4482,11 @@ def render_page_with_annotations(username: str):
             else:
                 logger.warning('Label suggestions not supported for annotation_type %s, please submit a github issue to get support' % scheme_dict[s['name']]['annotation_type'])
     logger.debug("annotation schemes with values: %s", sorted(annotations) if isinstance(annotations, dict) else type(annotations).__name__)
+    # Ontology-backed labels (label_source): a picked term has no input in the
+    # cached template, so add one per stored term for the walk below to fill.
+    if annotations and soup.find(attrs={"data-ontology-picker": "true"}) is not None:
+        from potato.ontology.picker import add_stored_term_inputs
+        add_stored_term_inputs(soup, annotations)
     if annotations is not None:
         # Reset the state
         for schema_name, label_dict in annotations.items():

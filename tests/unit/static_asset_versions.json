@@ -43,6 +43,22 @@
     "sha256": "75c624a0f877f90e",
     "version": "6"
   },
+  "chemistry/chem-toolkits.js": {
+    "sha256": "b67b0685dd3687ab",
+    "version": "1"
+  },
+  "chemistry/chemical-structure.js": {
+    "sha256": "7e65425608e02f98",
+    "version": "1"
+  },
+  "chemistry/chemistry.css": {
+    "sha256": "7f790d5cca397c31",
+    "version": "1"
+  },
+  "chemistry/molecule-viewer.js": {
+    "sha256": "a32462a437505afc",
+    "version": "1"
+  },
   "codebook.js": {
     "sha256": "73bbd6fce063cc89",
     "version": "18"
@@ -220,8 +236,8 @@
     "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "44a32bb3673cef18",
-    "version": "56"
+    "sha256": "dce30685f113dc9a",
+    "version": "57"
   },
   "incentive-elicitation.css": {
     "sha256": "20183e12b6f6efa0",
@@ -249,6 +265,10 @@
   },
   "interlinear-gloss.js": {
     "sha256": "185ae6222b962528",
+    "version": "1"
+  },
+  "interval-label.js": {
+    "sha256": "f773b81bc0ecd3e6",
     "version": "1"
   },
   "js/pdf-viewer.js": {
@@ -295,6 +315,14 @@
     "sha256": "306464a9e2538b50",
     "version": "6"
   },
+  "microscopy.css": {
+    "sha256": "c0f261877a8efdcf",
+    "version": "1"
+  },
+  "microscopy.js": {
+    "sha256": "cfbdc173278b865c",
+    "version": "1"
+  },
   "multi-agent-discussion.css": {
     "sha256": "69ce41d19ea43bb4",
     "version": "2"
@@ -314,6 +342,14 @@
   "object-attributes.js": {
     "sha256": "3d2caba2c3ef1d3a",
     "version": "3"
+  },
+  "ontology-picker.css": {
+    "sha256": "819b90a67bda92bd",
+    "version": "1"
+  },
+  "ontology-picker.js": {
+    "sha256": "3051bc053500f9a3",
+    "version": "1"
   },
   "option_highlight_manager.js": {
     "sha256": "bb9254e571a8ecf9",
@@ -366,6 +402,14 @@
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",
     "version": "3"
+  },
+  "potato-math.css": {
+    "sha256": "0d04b37801995e47",
+    "version": "1"
+  },
+  "potato-math.js": {
+    "sha256": "1d95906e01c0a56c",
+    "version": "1"
   },
   "region-caption.css": {
     "sha256": "c151ae630d94fed9",
@@ -467,6 +511,10 @@
     "sha256": "04bdf8b1039ec34f",
     "version": "6"
   },
+  "time-series.css": {
+    "sha256": "e0fa878084933d38",
+    "version": "1"
+  },
   "tracking-interpolation.js": {
     "sha256": "da8bd01cf9b79b92",
     "version": "2"
@@ -519,12 +567,36 @@
     "sha256": "913b05779170e631",
     "version": "24"
   },
+  "viewers/fits-cutout.css": {
+    "sha256": "f3e20dfd67fa36ca",
+    "version": "1"
+  },
+  "viewers/fits-cutout.js": {
+    "sha256": "afbb83b4f6e707ef",
+    "version": "1"
+  },
   "viewers/genome-locus.js": {
     "sha256": "64bd704779263288",
     "version": "3"
   },
+  "viewers/peak-picking.js": {
+    "sha256": "33551bd32c1f7944",
+    "version": "1"
+  },
   "viewers/protein-structure.js": {
     "sha256": "136fef029f936ee7",
+    "version": "1"
+  },
+  "viewers/spectrum.css": {
+    "sha256": "3a52bbef6e093da5",
+    "version": "1"
+  },
+  "viewers/spectrum.js": {
+    "sha256": "7dd135c7156f1cfa",
+    "version": "1"
+  },
+  "viewers/time-series.js": {
+    "sha256": "e0afaec7619d0f31",
     "version": "1"
   },
   "viewers/viewer-framework.css": {

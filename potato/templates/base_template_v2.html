@@ -191,14 +191,42 @@
     <!-- Entity Linking Styles (knowledge base linking) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}?v=2">
 
+    <!-- Ontology-backed labels (label_source) -->
+    {% if frontend_assets.ontology_picker | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='ontology-picker.css') }}?v=1">
+    {% endif %}
+
     <!-- Listening tests (MUSHRA, ACR, ABX, ...) -->
     {% if frontend_assets.listening_test | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='listening-test.css') }}?v=5">
     {% endif %}
 
+    <!-- Multichannel microscopy (OME-Zarr, OME-TIFF) -->
+    {% if frontend_assets.microscopy | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='microscopy.css') }}?v=1">
+    {% endif %}
+
     <!-- Viewer displays (protein_structure, genome_locus) and viewer_selection -->
     {% if frontend_assets.viewer_display | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='viewers/viewer-framework.css') }}?v=1">
+    {% endif %}
+    {% if frontend_assets.time_series | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='time-series.css') }}?v=1">
+    {% endif %}
+
+    <!-- chemical_structure scheme and molecule display -->
+    {% if frontend_assets.chemistry | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='chemistry/chemistry.css') }}?v=1">
+    {% endif %}
+
+    <!-- Spectrum display and peak_picking scheme -->
+    {% if frontend_assets.spectrum | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='viewers/spectrum.css') }}?v=1">
+    {% endif %}
+
+    <!-- FITS cutouts (astronomy) -->
+    {% if frontend_assets.fits_cutout | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='viewers/fits-cutout.css') }}?v=1">
     {% endif %}
 
     <!-- Spectrogram box annotation (bioacoustics) -->
@@ -210,6 +238,12 @@
     {% if frontend_assets.geo_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/ol-10.9.0/ol.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='geo-annotation.css') }}?v=1">
+    {% endif %}
+
+    <!-- Math (top-level `math: {enabled: true}`): KaTeX, vendored -->
+    {% if math_client_config | default(none) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/katex-0.18.11/katex.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='potato-math.css') }}?v=1">
     {% endif %}
 
     <!-- Ego networks: name generators, dyad census, sociogram -->
@@ -910,7 +944,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=56"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=57"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -934,6 +968,14 @@
     {% if frontend_assets.deepzoom | default(false) %}
     <script src="{{ url_for('static', filename='vendor/openseadragon-5.0.1.min.js') }}"></script>
     <script src="{{ url_for('static', filename='deepzoom-viewer.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Multichannel microscopy: server-composited tiles in OpenSeadragon -->
+    {% if frontend_assets.microscopy | default(false) %}
+    {% if not frontend_assets.deepzoom | default(false) %}
+    <script src="{{ url_for('static', filename='vendor/openseadragon-5.0.1.min.js') }}"></script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='microscopy.js') }}?v=1"></script>
     {% endif %}
 
     <!-- Interactive segmentation. Loaded only when a schema configures the
@@ -1071,6 +1113,11 @@
     <script src="{{ url_for('static', filename='entity-linking.js') }}?v=3"></script>
     {% endif %}
 
+    <!-- Ontology-backed labels (label_source): term search picker -->
+    {% if frontend_assets.ontology_picker | default(false) %}
+    <script src="{{ url_for('static', filename='ontology-picker.js') }}?v=1"></script>
+    {% endif %}
+
     <!-- Coreference chain manager -->
     {% if frontend_assets.coreference | default(false) %}
     <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=6"></script>
@@ -1106,6 +1153,37 @@
     <script src="{{ url_for('static', filename='viewers/genome-locus.js') }}?v=3"></script>
     <script src="{{ url_for('static', filename='viewers/viewer-selection.js') }}?v=1"></script>
     {% endif %}
+    <!-- time_series display (uPlot adapter) and the interval_label scheme -->
+    {% if frontend_assets.time_series | default(false) %}
+    <script src="{{ url_for('static', filename='viewers/time-series.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='interval-label.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- chemical_structure scheme and molecule display. After the viewer
+         framework block: the molecule adapter registers with it. OpenChemLib
+         (vendor/openchemlib-9.25.0, an ES module) and RDKit.js (fetched) are
+         loaded by these scripts when an editor or drawing mounts. -->
+    {% if frontend_assets.chemistry | default(false) %}
+    <script src="{{ url_for('static', filename='chemistry/chem-toolkits.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='chemistry/molecule-viewer.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='chemistry/chemical-structure.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Spectrum display (Plotly is loaded by the framework when it mounts)
+         and the peak_picking scheme. After the viewer framework block: the
+         adapter registers with it, and a spectrum display always turns
+         frontend_assets.viewer_display on too. -->
+    {% if frontend_assets.spectrum | default(false) %}
+    <script src="{{ url_for('static', filename='viewers/spectrum.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='viewers/peak-picking.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- FITS cutouts (astronomy): after the viewer framework, which a
+         fits_cutout display always turns on. Plotly is loaded by the adapter
+         only for an item with a light curve. -->
+    {% if frontend_assets.fits_cutout | default(false) %}
+    <script src="{{ url_for('static', filename='viewers/fits-cutout.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Spectrogram box annotation (bioacoustics) -->
     {% if frontend_assets.spectrogram_annotation | default(false) %}
@@ -1116,6 +1194,14 @@
     {% if frontend_assets.geo_annotation | default(false) %}
     <script src="{{ url_for('static', filename='vendor/ol-10.9.0/ol.js') }}"></script>
     <script src="{{ url_for('static', filename='geo-annotation.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Math (top-level `math: {enabled: true}`): KaTeX, vendored. The JSON
+         element is data, not script: the browser never executes it. -->
+    {% if math_client_config | default(none) %}
+    <script type="application/json" id="potato-math-config">{{ math_client_config | tojson }}</script>
+    <script src="{{ url_for('static', filename='vendor/katex-0.18.11/katex.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='potato-math.js') }}?v=1"></script>
     {% endif %}
 
     <!-- Ego networks: name generators, dyad census, sociogram -->

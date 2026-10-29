@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="{{ ui_lang.html_lang|default('en') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ annotation_task_name }}{% endblock %}</title>
+    {% include '_theme_head.html' %}
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='scheduling.css') }}">
+</head>
+<body class="potato-page-center sched-body">
+    <main class="potato-page-card potato-page-card-wide sched-card {% block card_class %}{% endblock %}" id="{% block main_id %}schedule-page{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="{{ url_for('static', filename='scheduling.js') }}"></script>
+</body>
+</html>

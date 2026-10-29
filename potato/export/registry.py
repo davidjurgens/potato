@@ -123,7 +123,8 @@ def _register_builtin_exporters():
     from .davis_exporter import DAVISExporter
     from .kitti_exporter import KITTIExporter
     from .kitti3d_exporter import KITTI3DExporter
-    from .volume_exporter import DicomSegExporter, VolumeNiftiExporter
+    from .volume_exporter import DicomSegExporter, DicomSrExporter, VolumeNiftiExporter
+    from .pathology_exporter import AsapXmlExporter, QuPathGeoJSONExporter
     from .labelme_exporter import LabelMeExporter
     from .mot_exporter import MOTExporter
     from .conll_2003_exporter import CoNLL2003Exporter
@@ -144,6 +145,11 @@ def _register_builtin_exporters():
     from .runtime_exporter import JsPsychExporter, RuntimeExporter
     from .web_annotation_exporter import WebAnnotationExporter
     from .listening_exporter import ListeningTestExporter
+    from .signal_exporter import IntervalLabelExporter, BIDSEventsExporter
+    from .peak_exporter import PeakTableExporter
+    from .chemistry_exporter import ChemistryExporter
+    from .microscopy_exporter import MicroscopyExporter
+    from .ontology_terms_exporter import OntologyTermsExporter
     from .geo_exporter import GeoJSONExporter, GeoOverlapExporter
     from .camera_trap_exporter import MegaDetectorExporter, CamtrapDPExporter, DarwinCoreExporter
     from .bioacoustics_exporter import RavenExporter, AudacityLabelsExporter
@@ -156,12 +162,14 @@ def _register_builtin_exporters():
     from .interlinear_exporter import FlexTextExporter, ToolboxExporter, IGTExporter
     from .survey_experiment_exporter import SurveyExperimentExporter
     from .reliability_exporter import ReliabilityExporter
+    from .consensus_exporter import ConsensusExporter
     from .lextale_exporter import LexTALEExporter
     from .data_package_exporter import DataPackageExporter, PsychDSExporter
     from .annotation_telemetry_exporter import AnnotationTelemetryExporter
     from .episode_exporter import EpisodeJsonlExporter
     from .adjudication_exporter import AdjudicationExporter
     from .labeling_engine_exporter import LabelingEngineExporter
+    from .schedule_exporter import ScheduleExporter
 
     exporters = [
         COCOExporter(),
@@ -180,6 +188,10 @@ def _register_builtin_exporters():
         KITTI3DExporter(),
         VolumeNiftiExporter(),
         DicomSegExporter(),
+        DicomSrExporter(),
+        # Pathology regions on whole-slide images, in slide pixels at level 0.
+        QuPathGeoJSONExporter(),
+        AsapXmlExporter(),
         MOTExporter(),
         CityscapesExporter(),
         DAVISExporter(),
@@ -215,6 +227,11 @@ def _register_builtin_exporters():
         RuntimeExporter(),
         WebAnnotationExporter(),
         ListeningTestExporter(),
+        IntervalLabelExporter(), BIDSEventsExporter(),
+        PeakTableExporter(),
+        ChemistryExporter(),
+        MicroscopyExporter(),
+        OntologyTermsExporter(),
         GeoJSONExporter(), GeoOverlapExporter(),
         # Ecology: camera-trap review and bioacoustic boxes.
         MegaDetectorExporter(), CamtrapDPExporter(), DarwinCoreExporter(),
@@ -226,6 +243,8 @@ def _register_builtin_exporters():
         FlexTextExporter(), ToolboxExporter(), IGTExporter(),
         SurveyExperimentExporter(),
         ReliabilityExporter(),
+        # Zooniverse-style consensus: vote fractions, point clusters, box groups.
+        ConsensusExporter(),
         LexTALEExporter(),
         DataPackageExporter(),
         PsychDSExporter(),
@@ -239,6 +258,8 @@ def _register_builtin_exporters():
         # The labeling engine's deliverable: resolved labels (machine and
         # human) with provenance, and the quality certificate.
         LabelingEngineExporter(),
+        # Scheduled sessions, compliance and the notification log.
+        ScheduleExporter(),
     ]
 
     # Optional exporters with external dependencies

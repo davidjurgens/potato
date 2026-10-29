@@ -58,6 +58,11 @@ NON_CV_EXPORTERS = {
     # The labeling engine's resolved labels and certificate: whatever each
     # scheme stores, so no shape row of its own.
     "labeling_engine",
+    # Science and scheduling tables with no image geometry: molecules
+    # (molfile/SD), spectrum peaks, signal intervals and BIDS events, ontology
+    # term rows, and scheduled-session records.
+    "chemistry", "peak_table", "interval_label", "bids_events",
+    "ontology_terms", "schedule",
 }
 
 
@@ -82,7 +87,11 @@ class TestImporters:
     def test_no_importer_is_claimed_that_does_not_exist(self, doc_text):
         """The dangerous direction: promising a migration path we do not have."""
         import_section = doc_text.split("## Export")[0]
-        registered = set(import_registry.get_supported_formats())
+        # Whole-slide region files (QuPath, ASAP) arrive through `potato import`,
+        # the project importers, rather than the CV import registry.
+        from potato.importers.projects import IMPORTERS as project_importers
+        registered = (set(import_registry.get_supported_formats())
+                      | set(project_importers))
         for fmt in re.findall(r"^\| `([a-z0-9_]+)`", import_section, re.M):
             assert fmt in registered, (
                 f"{DOC} lists importer '{fmt}', which is not registered")

@@ -259,6 +259,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
 
     if isinstance(annotation_scheme["labels"], list) and len(annotation_scheme["labels"]) > 0:
         labels = annotation_scheme["labels"]
+    elif annotation_scheme.get("label_source") and not annotation_scheme["labels"]:
+        labels = []  # picker only: chips come from the ontology search
     else:
         labels = [annotation_scheme["labels"]]
 
@@ -412,6 +414,10 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             and len(annotation_scheme["labels"]) <= 10
         ):
             key_bindings.append((0, f"{scheme_name}: {bad_text_content}"))
+
+    # Ontology-backed labels (label_source): the term search box.
+    from potato.ontology.picker import picker_html
+    schematic += picker_html(annotation_scheme)
 
     schematic += "</fieldset></form>"
     return schematic, key_bindings

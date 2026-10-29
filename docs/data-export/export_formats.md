@@ -630,6 +630,24 @@ CMOS, MUSHRA and BS.1116 scores), `listening_abx.csv`, and
 python -m potato.export --config config.yaml --format listening_test --output ./export/
 ```
 
+### Chemical structures (chemistry)
+
+From [`chemical_structure` schemes](../annotation-types/science/chemical_structures.md)
+and `viewer_selection` schemes bound to a `molecule` display:
+`chemical_structures.csv` (SMILES, RDKit SMILES, InChI, InChIKey, OpenChemLib
+ID code, formula, whether the pre-filled structure was changed, problems, and
+the answer-key result when the scheme has an `answer_field`),
+`chemical_structures.sdf` (each molfile with those fields as SD properties)
+and `molecule_atoms.csv` (one row per selected atom: 0-based index, molfile
+number, element, label). InChI and InChIKey come from the browser when
+RDKit.js ran there, otherwise from the `rdkit` Python package when it is
+installed (`pip install "potato-annotation[chemistry]"`), otherwise they are
+blank.
+
+```bash
+python -m potato.export --config config.yaml --format chemistry --output ./export/
+```
+
 ### Incentive payments (incentives)
 
 Bonuses for [`price_list`](../annotation-types/measurement/price_list.md),
@@ -747,6 +765,19 @@ Krippendorff's alpha per question with a bootstrap interval, percent
 agreement and the units and coders it rests on, as `reliability.csv` and a
 Markdown table. See [Content analysis](../guides/content-analysis.md).
 
+### Consensus (consensus)
+
+The consensus of several annotators per item, as citizen-science projects
+aggregate volunteers' classifications: vote counts and fractions for radio,
+select, likert and multiselect questions with a `retired` / `needs_review`
+flag, summaries for slider and number, DBSCAN clusters of `image_annotation`
+points and median consensus boxes grouped by IoU. Writes
+`consensus_questions.csv`, `consensus_votes.csv`, `consensus_numeric.csv`,
+`consensus_points.csv`, `consensus_boxes.csv` and `consensus.json`.
+Parameters come from the `consensus_aggregation` config block or `--option`
+(`agreement_threshold`, `min_classifiers`, `eps`, `eps_unit`, `min_samples`,
+`iou_threshold`, `schemes`). See [Consensus aggregation](consensus_aggregation.md).
+
 ### Vocabulary test (lextale)
 
 LexTALE-style scores per participant from a radio scheme with a `lextale`
@@ -839,6 +870,35 @@ series. It copies the source's patient and study modules, as DICOM requires.
 
 ```bash
 python -m potato.export --config config.yaml --format dicom_seg --output ./seg/
+```
+
+Each segment carries the label's coded concepts (`dicom:` on the label; SNOMED
+CT "Tissue" by default). See
+[Clinical and Pathology Formats](../annotation-types/science/clinical_formats.md).
+
+### DICOM SEG with measurement report (dicom_sr)
+
+The `dicom_seg` SEG plus `<item>__<schema>__sr.dcm`: a Comprehensive 3D SR
+holding a TID 1500 measurement report, with one volumetric group per segment
+(its volume in mm³, referencing the segment) and the annotator as the person
+observer. The two are written together because the report names the SEG by
+its instance UID.
+
+```bash
+python -m potato.export --config config.yaml --format dicom_sr --output ./sr/
+```
+
+### QuPath GeoJSON (qupath_geojson) and ASAP XML (asap_xml)
+
+For `image_annotation`, usually on whole-slide images: one file per annotator
+and slide, `<user>/<slide stem>.geojson` or `.xml`, in level-0 slide pixels.
+Labels become QuPath classifications (name and colour) or ASAP groups
+(`PartOfGroup`). Both formats also import, as pre-annotations. See
+[Clinical and Pathology Formats](../annotation-types/science/clinical_formats.md#pathology-regions-qupath-geojson-and-asap-xml).
+
+```bash
+python -m potato.export --config config.yaml --format qupath_geojson --output ./qupath/
+python -m potato.export --config config.yaml --format asap_xml --output ./asap/
 ```
 
 ### JSONL (jsonl)
@@ -1084,6 +1144,12 @@ These formats are documented on the page of the feature that produces them.
 | `annotation_telemetry` | Drawing event streams and annotation-process features | [Annotation telemetry](../advanced/annotation_telemetry.md) |
 | `labeling_engine` | Every item's label with its provenance, the quality certificate and the model-call log | [Labeling engine CLI and API](../labeling-engine/cli-and-api.md) |
 | `trajectory_correction` | Corrected agent trajectories as SFT targets and DPO preference pairs | [Trajectory correction](../agent-evaluation/trajectory_correction.md) |
+| `microscopy` | Regions as QuPath-readable GeoJSON, one CSV row per classified cell, and OME-Zarr label images | [Multichannel microscopy](../annotation-types/science/microscopy.md#export) |
+| `ontology_terms` | One row per picked ontology term (`obo_id`, label, IRI, ontology version), as CSV and JSONL | [Ontology-backed labels](../annotation-types/science/ontology_labels.md#export) |
+| `peak_table` | One row per picked peak or integrated region from `peak_picking`, as CSV and/or JSONL | [Spectra and peak picking](../annotation-types/science/spectra.md#export) |
+| `interval_label` | One row per interval or event from `interval_label`, as CSV and JSONL | [Time series](../annotation-types/science/time_series.md#export) |
+| `bids_events` | BIDS `events.tsv` and `events.json` per annotator and recording | [Time series](../annotation-types/science/time_series.md#export) |
+| `schedule` | Scheduled sessions, compliance, notification log and Delphi ratings as CSV, without contact details | [Scheduled sessions](../workflow/scheduling.md#export) |
 
 ## Programmatic Export
 
