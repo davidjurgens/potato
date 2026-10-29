@@ -207,7 +207,10 @@ def test_camtrap_dp_package(md_file):
     assert dep["deploymentStart"] == "2024-05-14T05:42:10-05:00" and dep["latitude"] == ""
     assert any("latitude" in w for w in res.warnings)
     package = json.load(open(os.path.join(out, "datapackage.json")))
-    assert package["profile"].endswith("/1.0/camtrap-dp-profile.json")
+    # 1.0's profile has a $defs reference frictionless 5.17+ cannot resolve.
+    assert package["profile"].endswith("/1.0.2/camtrap-dp-profile.json")
+    # Single images: GBIF's converter needs to be told the level.
+    assert package["gbifIngestion"] == {"observationLevel": "media"}
     assert [r["name"] for r in package["resources"]] == ["deployments", "media", "observations"]
     assert package["taxonomic"] == [{"scientificName": "Procyon lotor"}]
 
@@ -310,3 +313,67 @@ def test_disagreeing_reviewers_and_an_unknown_annotator_are_named(md_file):
     none = export_registry.export("camtrap_dp", ctx, os.path.join(base, "nobody"),
                                   {"annotator": "nobody"})
     assert any("No answers from annotator 'nobody'" in w for w in none.warnings)
+
+
+def test_megadetector_coordinates_reach_the_package(md_file):
+    data = json.load(open(md_file))
+    for image in data["images"]:
+        image.update({"latitude": 4.61, "longitude": -74.08})
+    json.dump(data, open(md_file, "w"))
+    result = projects.IMPORTERS["megadetector"].parse_path(md_file, {})
+    assert result.items[0].fields["latitude"] == 4.61
+    ctx = _reviewed_context(result, _edit)
+    out = os.path.join(os.path.dirname(md_file), "camtrap_geo")
+    res = export_registry.export("camtrap_dp", ctx, out, {})
+    package = json.load(open(os.path.join(out, "datapackage.json")))
+    assert package["spatial"]["bbox"] == [-74.08, 4.61, -74.08, 4.61]
+    assert not any("latitude" in w for w in res.warnings)
+
+
+def test_camtrap_licenses_need_a_media_license(md_file):
+    result = projects.IMPORTERS["megadetector"].parse_path(md_file, {})
+    ctx = _reviewed_context(result, _edit)
+    out = os.path.join(os.path.dirname(md_file), "camtrap_lic")
+    res = export_registry.export("camtrap_dp", ctx, out, {"license": "CC0-1.0"})
+    assert any("media_license" in w for w in res.warnings)
+    both = export_registry.export("camtrap_dp", ctx, out, {"license": "CC0-1.0",
+                                                          "media_license": "CC-BY-4.0"})
+    package = json.load(open(os.path.join(out, "datapackage.json")))
+    assert package["licenses"] == [{"name": "CC0-1.0", "scope": "data"},
+                                   {"name": "CC-BY-4.0", "scope": "media"}]
+    assert not any("media_license" in w for w in both.warnings)
+
+
+def test_darwin_core_media_is_a_public_link_or_nothing(md_file):
+    """associatedMedia held the Potato server's own /media/ path."""
+    result = projects.IMPORTERS["megadetector"].parse_path(md_file, {})
+    ctx = _reviewed_context(result, _edit)
+    out = os.path.join(os.path.dirname(md_file), "dwc_media")
+    res = export_registry.export("darwin_core", ctx, out, {})
+    assert {r["associatedMedia"] for r in _rows(res.files_written[0])} == {""}
+    assert any("media_base_url" in w for w in res.warnings)
+    based = export_registry.export("darwin_core", ctx, out,
+                                   {"media_base_url": "https://example.org/photos/"})
+    assert {r["associatedMedia"] for r in _rows(based.files_written[0])} == {
+        "https://example.org/photos/cam1/a.jpg", "https://example.org/photos/cam1/b.jpg"}
+    assert not any("media_base_url" in w for w in based.warnings)
+
+
+def test_a_media_base_with_a_query_string_keeps_it_last():
+    from potato.export.camera_trap_exporter import _public_media
+    assert _public_media("/media/cam1/a.jpg", "cam1/a.jpg",
+                         "https://example.org/photos?sig=1") == \
+        "https://example.org/photos/cam1/a.jpg?sig=1"
+
+
+def test_a_megadetector_file_given_as_a_url_is_served_from_it(md_file):
+    data = json.load(open(md_file))
+    data["images"][0]["file"] = "https://cdn.example.org/x/a.jpg?sig=abc"
+    json.dump(data, open(md_file, "w"))
+    result = projects.IMPORTERS["megadetector"].parse_path(md_file, {})
+    assert result.items[0].fields["image_url"] == "https://cdn.example.org/x/a.jpg?sig=abc"
+    ctx = _reviewed_context(result, _edit)
+    res = export_registry.export("darwin_core", ctx,
+                                 os.path.join(os.path.dirname(md_file), "dwc_url"), {})
+    media = {r["associatedMedia"] for r in _rows(res.files_written[0])}
+    assert "https://cdn.example.org/x/a.jpg?sig=abc" in media

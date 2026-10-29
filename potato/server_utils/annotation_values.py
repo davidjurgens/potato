@@ -102,6 +102,34 @@ def group_by_schema(label_data: Dict[Any, Any]) -> Dict[str, Dict[str, Any]]:
     return grouped
 
 
+
+def user_values(ustate, instance_id: str, schemes=None) -> Dict[str, Dict[str, Any]]:
+    """
+    One annotator's answers on one item as ``{schema: {name: value}}``, with
+    each pairwise answer in data order.
+
+    Use this, not ``group_by_schema(ustate.get_label_annotations(iid))``, in
+    anything that compares annotators or writes answers out. A pairwise page
+    with ``randomize_order`` stores the position the annotator saw, so two
+    annotators who preferred the same response can store "A" and "B"; the
+    recorded order turns both back into the data's letter. ``schemes``
+    defaults to the loaded config's.
+    """
+    from potato.server_utils.presentation_order import source_oriented
+
+    grouped = group_by_schema(ustate.get_label_annotations(instance_id) or {})
+    getter = getattr(ustate, "get_presentation_order", None)
+    try:
+        orders = getter(instance_id) if callable(getter) else {}
+    except Exception:
+        orders = {}
+    if not orders:
+        return grouped
+    if schemes is None:
+        from potato.server_utils.config_module import config
+        schemes = config.get("annotation_schemes") or []
+    return source_oriented(schemes, grouped, orders)
+
 def selected_labels(schema_values: Any) -> List[str]:
     """
     The label names a user actually chose for one schema.

@@ -58,6 +58,8 @@ class _AcousticTableImporter:
     #: selections, "ai" for a detector's output.
     source = "import"
     ai_model: Optional[str] = None
+    #: Labels a tool writes for "nothing here", which are not boxes.
+    non_detection_labels: frozenset = frozenset()
 
     def _looks_like(self, text: str) -> bool:
         raise NotImplementedError
@@ -124,6 +126,7 @@ class _AcousticTableImporter:
         recordings: Dict[str, Tuple[Optional[Path], List[dict], List[str]]] = {}
         below = 0
         left_out = 0
+        non_detections = 0
         # A link inside the input folder that points out of it (a downloaded
         # archive can carry one) is not read, and its audio is not copied.
         root = path if path.is_dir() else path.parent
@@ -141,6 +144,7 @@ class _AcousticTableImporter:
                 result.warn(f"{table.name}, {problem}")
                 if problem.endswith("left out"):
                     left_out += 1
+            kept = 0
             for box in boxes:
                 if threshold is not None and box.get("confidence") is not None \
                         and box["confidence"] < threshold:
@@ -150,6 +154,13 @@ class _AcousticTableImporter:
                 key = Path(name).stem if Path(name).suffix.lower() in AUDIO_EXTENSIONS else name
                 if key not in recordings:
                     recordings[key] = (self._find_audio(table.parent, name), [], [])
+                if str(box.get("label") or "").strip().lower() in self.non_detection_labels:
+                    # The recording was listened to; it just has nothing in it.
+                    non_detections += 1
+                    kept += 1
+                    if table.name not in recordings[key][2]:
+                        recordings[key][2].append(table.name)
+                    continue
                 box["source"] = self.source
                 box["import_format"] = self.format_name
                 if self.ai_model:
@@ -157,14 +168,20 @@ class _AcousticTableImporter:
                 if not box.get("label"):
                     box["label"] = "call"
                 recordings[key][1].append(box)
+                kept += 1
                 if table.name not in recordings[key][2]:
                     recordings[key][2].append(table.name)
-            # A table with no rows still names a recording someone listened to.
-            if not boxes:
+            # A table with no rows still names a recording someone listened to,
+            # and so does one whose rows were all left out: BirdNET writes a
+            # lone `nocall` row for a recording with no detections.
+            if not kept:
                 key = tables.recording_stem(table.name)
                 recordings.setdefault(key, (self._find_audio(table.parent, key), [], [table.name]))
         if left_out:
             result.skipped["rows that could not be read (see the warnings)"] = left_out
+        if non_detections:
+            result.skipped[f"{self.import_label} rows that mark no detection "
+                           f"({', '.join(sorted(self.non_detection_labels))})"] = non_detections
         if below:
             result.skipped[f"detections below confidence {threshold}"] = below
             result.warn(f"{below} detection(s) below --min-confidence {threshold} were left out")
@@ -258,6 +275,9 @@ class BirdNETImporter(_AcousticTableImporter):
     file_extensions = [".txt", ".csv"]
     source = "ai"
     ai_model = "BirdNET"
+    #: BirdNET 2.4 writes a "nocall" row, confidence 1.0, for a file with no
+    #: detections. It is not a box.
+    non_detection_labels = frozenset({"nocall"})
 
     def _min_confidence(self, options: dict) -> Optional[float]:
         value = options.get("min_confidence")

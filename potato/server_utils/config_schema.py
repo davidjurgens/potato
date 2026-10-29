@@ -339,6 +339,15 @@ def build_config_schema() -> Dict[str, Any]:
                 "minLength": 1,
                 "description": "Field used by the category_based assignment strategy.",
             },
+            "image_key": {
+                "type": "string",
+                "description": "Field holding the image, for AI support on an item that also has text.",
+            },
+            "private_keys": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "description": "Item fields the annotator's browser never receives; kept in exports.",
+            },
             # Shape varies by task; examples pass both a list and a mapping.
             "kwargs": {},
         },

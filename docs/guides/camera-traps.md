@@ -107,6 +107,8 @@ python potato/flask_server.py start review-project/config.yaml -p 8000
 
 On each image: check the triage answer, then move, resize, relabel or delete
 the boxes and draw any animal that was missed, and tick the species present.
+To relabel a box, click it to select it and then click the right label; a box
+the detector drew is then marked as edited.
 Pre-filled answers are stored only when the annotator saves, so an export
 contains reviewed images only.
 
@@ -147,9 +149,12 @@ pick the reviewer whose answers to publish.
 
 ### Camtrap DP (`camtrap_dp`)
 
-A [Camtrap DP](https://camtrap-dp.tdwg.org/) 1.0 data package:
+A [Camtrap DP](https://camtrap-dp.tdwg.org/) 1.0.2 data package:
 `datapackage.json`, `deployments.csv`, `media.csv` and `observations.csv`,
-with the column names of the 1.0 table schemas.
+with the column names of the 1.0 table schemas. A package of single images
+(media-level observations only) gets `gbifIngestion: {observationLevel:
+media}`, without which GBIF's converter reads event-level observations and
+finds none.
 
 - `media.csv`: one row per image (per frame for sequence items), whether
   reviewed or not, with `mediaID` (the item id), `deploymentID`, `timestamp`,
@@ -171,7 +176,8 @@ with the column names of the 1.0 table schemas.
   timestamp).
 - `deployments.csv`: one row per deployment, taken from the item's
   `deployment_id`, or else its `location`. `latitude` and `longitude` come
-  from item fields of those names. `deploymentStart` and `deploymentEnd` are
+  from item fields of those names, which the MegaDetector and COCO Camera
+  Traps importers copy from the source file. `deploymentStart` and `deploymentEnd` are
   the first and last timestamps.
 
 Camtrap DP requires facts that Potato does not have: the coordinates of
@@ -184,6 +190,7 @@ what you know as export options:
 | `title` | `title` and `project.title` (default: `annotation_task_name`) |
 | `contributor` | `contributors` (one entry, role `contact`) |
 | `license` | `licenses` (scope `data`) |
+| `media_license` | `licenses` (scope `media`); the profile requires it once a license is listed |
 | `sampling_design` | `project.samplingDesign` (`simpleRandom`, `systematicRandom`, `clusteredRandom`, `experimental`, `targeted` or `opportunistic`) |
 | `capture_method` | `project.captureMethod` and `media.captureMethod` (`activityDetection` or `timeLapse`) |
 
@@ -198,7 +205,11 @@ has a scientific name: `occurrenceID`, `basisOfRecord`, `eventID`,
 `eventDate`, `scientificName`, `individualCount`, `occurrenceStatus`
 (`present`), `decimalLatitude`, `decimalLongitude`, `geodeticDatum`
 (`EPSG:4326` when there are coordinates), `locationID`, `associatedMedia`,
-`identifiedBy` and `identificationRemarks`. Animals labelled only `animal`
+`identifiedBy` and `identificationRemarks`. `associatedMedia` must be a link
+other people can open, so it holds the image's URL when that is http(s), or
+the file under `--option media_base_url=https://...` when you give it, and
+is otherwise left empty with a warning: the Potato server's own `/media/`
+path is not written. Animals labelled only `animal`
 are left out, since an occurrence needs a scientific name, and the export
 says how many.
 

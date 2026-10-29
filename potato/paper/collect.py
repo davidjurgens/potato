@@ -87,10 +87,16 @@ def _is_bool_flag(value: Any) -> bool:
 
 
 def _extract_records(username: str, state: Dict[str, Any],
-                     scheme_types: Dict[str, str]) -> List[LabelRecord]:
+                     scheme_types: Dict[str, str],
+                     schemes_by_name: Optional[Dict[str, Dict[str, Any]]] = None,
+                     ) -> List[LabelRecord]:
+    from potato.server_utils.presentation_order import source_pairwise_values
+
     records = []
     labels_by_instance = state.get("instance_id_to_label_to_value", {}) or {}
+    orders_by_instance = state.get("instance_id_to_presentation_order", {}) or {}
     for instance_id, payload in labels_by_instance.items():
+        orders = orders_by_instance.get(instance_id) or {}
         for pair in _flatten_labels(payload):
             key, value = pair
             if not isinstance(key, dict):
@@ -100,6 +106,12 @@ def _extract_records(username: str, state: Dict[str, Any],
             if not schema or schema not in scheme_types:
                 continue
             stype = scheme_types[schema]
+            if stype == "pairwise" and orders.get(schema):
+                # Data order, not screen order: under randomize_order the
+                # stored letter is the position this annotator saw.
+                scheme = (schemes_by_name or {}).get(schema) or {}
+                value = source_pairwise_values(
+                    scheme, {name: value}, orders[schema]).get(name, value)
             if stype == "multiselect":
                 # One record per *selected* checkbox; the label is the name.
                 if _truthy(value):
@@ -247,7 +259,8 @@ def collect_project(config_path: str) -> ProjectData:
             # can say they were there and were left out.
             project.machine_raters.append(username)
             continue
-        records = _extract_records(username, state, scheme_types)
+        records = _extract_records(username, state, scheme_types,
+                                   {s.get("name"): s for s in schemes})
         if records:
             project.records.extend(records)
             project.annotators.append(username)

@@ -699,14 +699,16 @@ From a camera-trap review project ([Camera traps](../guides/camera-traps.md)):
   left unchanged keeps the detector's `conf` and the classifier's own score.
   Boxes on an image triaged empty are kept and listed in the warnings, as in
   every camera-trap export.
-- `camtrap_dp`: a Camtrap DP 1.0 package (deployments, media, observations,
+- `camtrap_dp`: a Camtrap DP 1.0.2 package (deployments, media, observations,
   `datapackage.json`). Coordinates and package metadata come from item
-  fields or `--option` values (`title`, `license`, `contributor`,
-  `timezone`, `capture_method`, `sampling_design`); anything missing is
+  fields or `--option` values (`title`, `license`, `media_license`,
+  `contributor`, `timezone`, `capture_method`, `sampling_design`); anything missing is
   named in the warnings. Run a Camtrap DP validator before publishing.
 - `darwin_core`: an occurrence table. `basisOfRecord` is
   MachineObservation when the model's identification was left unchanged and
   HumanObservation otherwise; `--option basis_of_record=...` forces one.
+  `associatedMedia` is a public link or empty; `--option media_base_url=...`
+  says where the images are published.
 
 All three write one reviewer per item: the first by user id, or the one
 named by `--option annotator=<user>`, and they warn when an item had several.

@@ -168,10 +168,15 @@ def item_order(scheme: Dict[str, Any], item_data: Dict[str, Any], user_id: str,
         return None
     if not wants_randomization(scheme):
         return None
-    items = (item_data or {}).get(scheme.get("items_key", "text"))
+    items_key = scheme.get("items_key", "text")
+    items = (item_data or {}).get(items_key)
     if not isinstance(items, list) or len(items) < 2:
         return None
-    seed = order_seed(user_id, instance_id, scheme.get("name") or "")
+    # Seeded on the FIELD, not the scheme: two schemes comparing the same
+    # candidates are shown one list, so they must share one order. Seeded per
+    # scheme, each permuted the list again and the page showed the
+    # composition of their swaps while each recorded only its own.
+    seed = order_seed(user_id, instance_id, f"items:{items_key}")
     return permutation(len(items), seed)
 
 
@@ -310,3 +315,91 @@ def position_of(order: Sequence[str], label: str) -> Optional[int]:
         return list(order).index(label)
     except ValueError:
         return None
+
+
+#: The position letters a pairwise page stores: the first card shown is "A".
+PAIRWISE_POSITIONS = ("A", "B")
+
+#: Pairwise keys that never name a position.
+_PAIRWISE_FREE_KEYS = frozenset({"justification"})
+
+
+def _reflect(value: Any, low: float, high: float) -> Any:
+    """``value`` mirrored on [low, high], in the type it was stored in."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return value
+    mirrored = low + high - number
+    if isinstance(value, str):
+        return str(int(mirrored)) if mirrored.is_integer() else str(mirrored)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return int(mirrored) if mirrored.is_integer() else mirrored
+    return mirrored
+
+
+def source_pairwise_values(scheme: Dict[str, Any], values: Any,
+                           order: Any) -> Any:
+    """A pairwise answer re-expressed by data position instead of screen position.
+
+    With ``randomize_order`` the page stores what the annotator saw: "A" is the
+    card shown first, which for half of them is the data's second candidate.
+    ``order`` is the recorded list of source indices in shown order (see
+    :func:`item_order`), so the source of shown position k is ``order[k]``.
+
+    A binary or per-dimension answer maps letter to letter. A scale answer
+    runs from "A is better" at ``scale.min`` to "B is better" at ``scale.max``,
+    so a swap mirrors it on that range. A tie and the justification are
+    unchanged. Anything not swapped is returned as given, the same object.
+    """
+    if not isinstance(values, dict) or not isinstance(order, (list, tuple)):
+        return values
+    try:
+        order = [int(i) for i in order]
+    except (TypeError, ValueError):
+        return values
+    if order != [1, 0]:
+        # [0, 1] is the data order; anything else is not a two-way swap.
+        return values
+    scale = scheme.get("scale") or {}
+    try:
+        low = float(scale.get("min", -3))
+        high = float(scale.get("max", 3))
+    except (TypeError, ValueError):
+        low, high = -3.0, 3.0
+    swap = {"A": "B", "B": "A", "a": "b", "b": "a"}
+    out = {}
+    for key, value in values.items():
+        if key in _PAIRWISE_FREE_KEYS:
+            out[key] = value
+        elif key == "scale_value":
+            out[key] = _reflect(value, low, high)
+        elif isinstance(value, str) and value in swap:
+            out[key] = swap[value]
+        else:
+            out[key] = value
+    return out
+
+
+def source_oriented(schemes: Iterable[Dict[str, Any]], labels: Any,
+                    orders: Any) -> Any:
+    """``{schema: {name: value}}`` with every pairwise answer in data order.
+
+    ``orders`` is one annotator's recorded ``{schema: order}`` for the item
+    (``UserState.get_presentation_order``, or ``instance_id_to_presentation_order``
+    in user_state.json). Every reader that compares or exports pairwise answers
+    goes through this; reading the stored letters directly compares screen
+    positions, which differ per annotator under ``randomize_order``.
+    """
+    if not isinstance(labels, dict) or not isinstance(orders, dict) or not orders:
+        return labels
+    pairwise = {str(s.get("name")): s for s in schemes or ()
+                if isinstance(s, dict)
+                and (s.get("annotation_type") or "") in DATA_DRIVEN_TYPES}
+    if not pairwise:
+        return labels
+    out = dict(labels)
+    for name, scheme in pairwise.items():
+        if name in out and name in orders:
+            out[name] = source_pairwise_values(scheme, out[name], orders[name])
+    return out

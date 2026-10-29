@@ -163,6 +163,10 @@ class _CameraTrapImporter:
     # ---- shared assembly -------------------------------------------------
 
     def _url(self, file: str, options: dict) -> str:
+        # A file the detector read from a URL is served from there: under
+        # /media/ it was a path to nothing, and Darwin Core had no public link.
+        if str(file).startswith(("http://", "https://")):
+            return str(file)
         if options.get("image_url_prefix"):
             return apply_url_prefix(file, options)
         return "/media/" + str(file).replace("\\", "/").lstrip("/")
@@ -211,7 +215,8 @@ class _CameraTrapImporter:
             frame.fields[key] = self._url(frame.file, options)
         if options.get("image_dir") and not options.get("image_url_prefix"):
             result.extra_config = {"media_directory": os.path.abspath(options["image_dir"])}
-        elif not options.get("image_url_prefix"):
+        elif not options.get("image_url_prefix") and not all(
+                str(f.file).startswith(("http://", "https://")) for f in frames):
             result.warn("images are served from the project's media/ folder: copy or link the "
                         "image folder there, or re-run with --image-dir or --image-url-prefix")
 
@@ -378,7 +383,8 @@ class MegaDetectorImporter(_CameraTrapImporter):
                 continue
             frame = _Frame(str(entry["file"]).replace("\\", "/"))
             frame.video = _is_video(entry)
-            for name in ("datetime", "location", "seq_id", "frame_num", "frame_rate"):
+            for name in ("datetime", "location", "seq_id", "frame_num", "frame_rate",
+                         "latitude", "longitude"):
                 if entry.get(name) not in (None, ""):
                     frame.fields[name] = entry[name]
             kept = []

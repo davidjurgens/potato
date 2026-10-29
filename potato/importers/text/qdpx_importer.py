@@ -57,6 +57,9 @@ QDA_NS = "urn:QDA-XML:project:1.0"
 #: exporters have shipped it capitalized, so lookup is case-insensitive.
 PROJECT_MEMBER = "project.qde"
 
+#: The multiselect question that holds codes applied to a whole source.
+DOCUMENT_CODES_SCHEME = "document_codes"
+
 _NS_STRIP = re.compile(r"^\{[^}]*\}")
 
 
@@ -181,6 +184,16 @@ class QDPXImporter(BaseTextImporter):
                 result.warnings)
             result.documents.append(document)
 
+        used = {code for document in result.documents
+                for code in document.labels.get(DOCUMENT_CODES_SCHEME, [])}
+        if used:
+            result.document_schemes.append({
+                "annotation_type": "multiselect",
+                "name": DOCUMENT_CODES_SCHEME,
+                "description": "Codes applied to the whole document",
+                "labels": [dict(code) for code in codes if code["name"] in used],
+            })
+
         result.verify()
         result.summarize(
             num_sources=len(text_sources),
@@ -255,6 +268,9 @@ class QDPXImporter(BaseTextImporter):
                     entry["parent"] = parent
                 if description is not None and (description.text or "").strip():
                     entry["description"] = description.text.strip()
+                    # The span page shows `tooltip`; `description` alone was
+                    # kept and never displayed.
+                    entry["tooltip"] = entry["description"]
                 colour = code.get("color")
                 if colour:
                     entry["color"] = colour
@@ -401,6 +417,8 @@ class QDPXImporter(BaseTextImporter):
             if code is not None:
                 whole_document.append(code["name"])
         if whole_document:
-            document.extra["document_codes"] = whole_document
+            # A question of its own, so the codes reach the page and the
+            # exports; as an extra field they were carried and read by nothing.
+            document.labels[DOCUMENT_CODES_SCHEME] = list(dict.fromkeys(whole_document))
 
         return document

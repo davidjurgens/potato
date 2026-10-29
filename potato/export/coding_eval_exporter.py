@@ -246,9 +246,19 @@ class CodingEvalExporter(BaseExporter):
         return output_path, count
 
     def _export_preference(self, context: ExportContext, output_dir: str) -> Tuple[Optional[str], int]:
-        """Export DPO/RLHF preference pairs from pairwise annotations."""
+        """Export DPO/RLHF preference pairs from pairwise annotations.
+
+        Binary pairwise schemes store ``{"selection": "A" | "B" | "tie"}``,
+        already put in data order by the loader, so "A" is the first entry of
+        the item's ``items_key`` list. Ties have no chosen response and are
+        left out. The old reader looked for a ``label`` key, which pairwise
+        never writes, and exported nothing.
+        """
         output_path = os.path.join(output_dir, "preference_pairs.jsonl")
         count = 0
+        pairwise = {s.get("name"): s for s in context.schemas
+                    if s.get("annotation_type") == "pairwise"
+                    and (s.get("mode") or "binary") == "binary"}
 
         with open(output_path, "w") as f:
             for ann in context.annotations:
@@ -256,24 +266,30 @@ class CodingEvalExporter(BaseExporter):
                 labels = ann.get("labels", {})
 
                 for schema_name, value in labels.items():
-                    if not isinstance(value, dict):
+                    scheme = pairwise.get(schema_name)
+                    if scheme is None or not isinstance(value, dict):
+                        continue
+                    chosen = str(value.get("selection") or "").upper()
+                    if chosen not in ("A", "B"):
                         continue
 
-                    label_val = value.get("label", "")
-                    # Pairwise annotations store "A" or "B"
-                    if label_val not in ("A", "B", "a", "b"):
-                        continue
-
-                    # Get the instance data to extract prompt
                     item_data = context.items.get(instance_id, {})
                     prompt = item_data.get("task_description", item_data.get("text", ""))
+                    candidates = item_data.get(scheme.get("items_key", "text"))
+                    have_pair = isinstance(candidates, list) and len(candidates) == 2
+                    idx = 0 if chosen == "A" else 1
 
                     record = {
                         "instance_id": instance_id,
+                        "schema": schema_name,
                         "prompt": prompt,
-                        "chosen": label_val.upper(),
+                        "chosen": candidates[idx] if have_pair else None,
+                        "rejected": candidates[1 - idx] if have_pair else None,
+                        "chosen_position": chosen,
                         "annotator": ann.get("user_id", ""),
                     }
+                    if value.get("justification"):
+                        record["justification"] = value["justification"]
                     f.write(json.dumps(record, ensure_ascii=False) + "\n")
                     count += 1
 

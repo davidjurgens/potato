@@ -79,6 +79,11 @@ class ImportedSpan:
             span["id"] = self.span_id
         if self.additional_parts:
             span["additional_parts"] = list(self.additional_parts)
+        # Who coded it, kept on the item: imported codings are a shared
+        # starting point rather than anyone's saved answer, so this is the
+        # only place the source's coder survives.
+        if self.annotator:
+            span["annotator"] = self.annotator
         return span
 
 

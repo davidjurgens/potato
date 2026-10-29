@@ -109,6 +109,10 @@ def metric_scale(name: str) -> str:
     leaf = str(name).rsplit(".", 1)[-1]
     if leaf.startswith("n_") or leaf in _COUNT_NAMES:
         return "count"
+    if any(part.startswith("n_") for part in str(name).split(".")[:-1]):
+        # A count broken down by label, `n_pairs_by_label.spleen`: the leaf is
+        # the label, and "9.000" pairs read as a measurement.
+        return "count"
     if leaf.endswith("_frames") and len(leaf) > len("_frames"):
         # `mean_offset_frames` is `mean_offset` in different units. Without
         # this, a metric quoted in both seconds and frames needs two entries in

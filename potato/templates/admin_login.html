@@ -150,7 +150,7 @@
                     {% elif key_source == 'env' %}
                     It is the value of the <code>POTATO_ADMIN_API_KEY</code> environment variable the server was started with.
                     {% else %}
-                    It is in <code>admin_api_key.txt</code> in the task directory, and in the server log at startup.
+                    It is in <code>admin_api_key.txt</code> in the task directory, written the first time an admin page is opened.
                     {% endif %}
                 </p>
                 <button type="submit" class="admin-login-button" id="adminLoginSubmit">

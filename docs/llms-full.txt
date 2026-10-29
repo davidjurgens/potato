@@ -3078,8 +3078,12 @@ python -m potato.importers --input project.qdpx --output-dir potato-project/
 ```
 
 The codebook comes across with its hierarchy (each code keeps its parent),
-along with descriptions, colours, the codings themselves, and which annotator
-made each one.
+along with descriptions (shown as each code's tooltip), colours and the
+codings. The codings arrive as pre-annotations, a starting point every
+annotator sees, and each span keeps the name of the analyst who made it as
+`annotator` in the item data; they are not written as that analyst's saved
+work. Codes applied to a whole source become a `document_codes` multiselect
+question.
 
 Exporting back out:
 
@@ -3839,6 +3843,7 @@ shape:
 | `newScale(N)` with `.before` / `.after` texts, classic `AcceptabilityJudgment` | An N-point `likert` scale with those end labels |
 | `newKey("F", "J")` with `newText(row.X)` | A [timed trial](../workflow/timed_trials.md) with those keys (rename the labels to what they mean) |
 | Classic `"Question"` after a sentence | A comprehension question (F and J for the first two answers) |
+| `newText(row.Q)` and `newKey(...)` after a `DashedSentence` | A comprehension question from column `Q`, answered with the template's first two keys as Yes and No (rename the answers if they mean something else) |
 | A `Group` or `List` column; classic `["condition", N]` labels | A between-subjects factor `list`, one data file per list, and `batch_assignment.group_by_condition: list` |
 
 Classic Ibex items labelled `["condition", N]` share group N; list k gets
@@ -3941,7 +3946,9 @@ per question:
 
 A `span` question is coded by highlighting, so its row is positional: every
 character of a coded item is a unit, labelled with the code of the span
-covering it or with none. A coder who read an item and highlighted nothing
+covering it or with none. Where codes overlap, the character's value is the
+set of codes covering it, so a coder who applied two overlapping codes
+disagrees with one who applied only one of them. A coder who read an item and highlighted nothing
 counts as "none" throughout, so a missed passage is a disagreement. Here
 `units` counts items (one per text field that has highlights) and
 `pairable_values` counts characters. `/admin/iaa` reports the same measure as
@@ -5143,6 +5150,8 @@ python potato/flask_server.py start review-project/config.yaml -p 8000
 
 On each image: check the triage answer, then move, resize, relabel or delete
 the boxes and draw any animal that was missed, and tick the species present.
+To relabel a box, click it to select it and then click the right label; a box
+the detector drew is then marked as edited.
 Pre-filled answers are stored only when the annotator saves, so an export
 contains reviewed images only.
 
@@ -5183,9 +5192,12 @@ pick the reviewer whose answers to publish.
 
 ### Camtrap DP (`camtrap_dp`)
 
-A [Camtrap DP](https://camtrap-dp.tdwg.org/) 1.0 data package:
+A [Camtrap DP](https://camtrap-dp.tdwg.org/) 1.0.2 data package:
 `datapackage.json`, `deployments.csv`, `media.csv` and `observations.csv`,
-with the column names of the 1.0 table schemas.
+with the column names of the 1.0 table schemas. A package of single images
+(media-level observations only) gets `gbifIngestion: {observationLevel:
+media}`, without which GBIF's converter reads event-level observations and
+finds none.
 
 - `media.csv`: one row per image (per frame for sequence items), whether
   reviewed or not, with `mediaID` (the item id), `deploymentID`, `timestamp`,
@@ -5207,7 +5219,8 @@ with the column names of the 1.0 table schemas.
   timestamp).
 - `deployments.csv`: one row per deployment, taken from the item's
   `deployment_id`, or else its `location`. `latitude` and `longitude` come
-  from item fields of those names. `deploymentStart` and `deploymentEnd` are
+  from item fields of those names, which the MegaDetector and COCO Camera
+  Traps importers copy from the source file. `deploymentStart` and `deploymentEnd` are
   the first and last timestamps.
 
 Camtrap DP requires facts that Potato does not have: the coordinates of
@@ -5220,6 +5233,7 @@ what you know as export options:
 | `title` | `title` and `project.title` (default: `annotation_task_name`) |
 | `contributor` | `contributors` (one entry, role `contact`) |
 | `license` | `licenses` (scope `data`) |
+| `media_license` | `licenses` (scope `media`); the profile requires it once a license is listed |
 | `sampling_design` | `project.samplingDesign` (`simpleRandom`, `systematicRandom`, `clusteredRandom`, `experimental`, `targeted` or `opportunistic`) |
 | `capture_method` | `project.captureMethod` and `media.captureMethod` (`activityDetection` or `timeLapse`) |
 
@@ -5234,7 +5248,11 @@ has a scientific name: `occurrenceID`, `basisOfRecord`, `eventID`,
 `eventDate`, `scientificName`, `individualCount`, `occurrenceStatus`
 (`present`), `decimalLatitude`, `decimalLongitude`, `geodeticDatum`
 (`EPSG:4326` when there are coordinates), `locationID`, `associatedMedia`,
-`identifiedBy` and `identificationRemarks`. Animals labelled only `animal`
+`identifiedBy` and `identificationRemarks`. `associatedMedia` must be a link
+other people can open, so it holds the image's URL when that is http(s), or
+the file under `--option media_base_url=https://...` when you give it, and
+is otherwise left empty with a warning: the Potato server's own `/media/`
+path is not written. Animals labelled only `animal`
 are left out, since an occurrence needs a scientific name, and the export
 says how many.
 
@@ -5360,7 +5378,9 @@ Both of BirdNET-Analyzer's table formats are read:
 
 Use `--label-column "Common name"` (CSV) or `--label-column "Common Name"`
 (Raven table) for common names. Rows below `--min-confidence` (default 0.1)
-are left out, and the import summary says how many. BirdNET boxes are stored
+are left out, and the import summary says how many. BirdNET 2.4 writes a
+`nocall` row for a file with no detections; those rows are left out and
+counted too, so `nocall` never becomes a label. BirdNET boxes are stored
 with `"source": "ai"`, `"ai_model": "BirdNET"` and their confidence, and the
 page draws them with a dashed border until an annotator changes them.
 
@@ -6222,11 +6242,19 @@ data_files:
 item_properties:
   id_key: id           # Field name for item ID
   text_key: text       # Field name for item text
-  context_key: context # Optional: field name for context
   kwargs:              # Optional: additional fields to pass to templates
     - metadata
     - source
+  private_keys:        # Optional: fields the annotator's browser never receives
+    - model_a
+    - model_b
 ```
+
+`private_keys` lists item fields to leave out of everything sent to the
+annotator's browser: the page's item data, `/api/instance_data` and
+`/api/current_instance`. They stay in the data file and in exports. Use it to
+keep a comparison blind, for example the model behind each response in a
+`pairwise` task. The `id_key` and `text_key` fields cannot be private.
 
 The `encoding` field (optional, default `utf-8`) can be set per-file using the dict form. Any [Python-recognized encoding](https://docs.python.org/3/library/codecs.html#standard-encodings) is accepted.
 
@@ -7193,7 +7221,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `annotation_task_description` |  | string |  | Longer task description; falls back to task_description when absent |  |
 | `annotation_task_name` | Yes | string |  | Display name for the task, shown in the browser title and the header |  |
-| `item_properties` | Yes | object |  | Maps the fields of your data file onto the roles Potato needs: which field is the identifier and which holds the text to annotate | `category_key`, `id_key`, `image_key`, `kwargs`, `text_key` |
+| `item_properties` | Yes | object |  | Maps the fields of your data file onto the roles Potato needs: which field is the identifier and which holds the text to annotate | `category_key`, `id_key`, `image_key`, `kwargs`, `private_keys`, `text_key` |
 | `output_annotation_dir` | Yes | string |  | Directory annotations, user state and exports are written to |  |
 | `output_annotation_format` |  | string | `""` | Deprecated, and read as `export_annotation_format` at load time with a warning (`json` becomes `jsonl`, since no exporter is called `json`). It will stop being read in a later release, so rename it. Annotations are stored as `<output_annotation_dir>/<user>/user_state.json` whatever it says; this key never changed that |  |
 | `task_description` |  | string |  | Short description of the task, shown to annotators |  |
@@ -7453,7 +7481,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Potato 1.x assignment block. Not read, and named at boot if set; use `assignment_strategy`, `num_annotators_per_item` and `max_annotations_per_user` |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `group_by_condition`, `groups` |
-| `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `max_per_cell` |
+| `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `in_progress_minutes`, `max_per_cell` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
 | `max_annotations_per_item` |  | integer | `-1` | Cap on how many annotators may label one item. -1 means unlimited |  |
 | `max_annotations_per_user` |  | integer | `-1` | Cap on how many dataset items one annotator may receive. Left unset, the cap is the number of items loaded, so every annotator is offered the whole corpus; -1 is explicit unlimited, which is what a dynamic data source needs for items added after boot to be assignable. Injected attention checks and gold items do not count against it |  |
@@ -7595,7 +7623,7 @@ on a structured label; `validate` warns about any other key, so
 are accepted everywhere because the codebook export and the labeling engine
 read them for any scheme, even where the annotation page does not show them.
 
-| Type | Label keys read besides `color`, `description`, `name`, `tooltip` |
+| Type | Label keys read besides `color`, `description`, `name`, `parent`, `tooltip` |
 |------|------|
 | `audio_annotation` | `key_value` |
 | `confidence` | none |
@@ -18270,7 +18298,8 @@ annotation_schemes:
 | `Shift+H` | Show only the currently selected label (press again to restore) |
 | `[` / `]` | Decrease / increase brush size |
 | `Ctrl/Cmd+D` | Copy annotations from the previous image (when `carry_over` is enabled) |
-| `1-9` | Select label by number (whatever `key_value` you configure) |
+| `1-9` | Select label by number (whatever `key_value` you configure); relabels a selected shape |
+| `Escape` | Deselect, so a label key sets the label for the next shape |
 | `Delete` / `Backspace` | Delete selected annotation |
 | `Ctrl/Cmd+Z` | Undo |
 | `Ctrl/Cmd+Shift+Z` | Redo |
@@ -18309,7 +18338,9 @@ profiles.
 
 The toolbar provides:
 - **Tool Selection**: Buttons to switch between annotation tools
-- **Label Selection**: Color-coded buttons for each label
+- **Label Selection**: Color-coded buttons for each label. A label button sets
+  the label of the next shape drawn, and with a shape selected it also
+  relabels that shape. A model's shape relabeled this way is marked `edited`.
 - **Zoom Controls**: Zoom in, zoom out, fit to view, reset
 - **Edit Controls**: Undo, redo, delete selected
 
@@ -19728,11 +19759,11 @@ item field named `sample_rate`; without it the browser's own rate is used.
 
 | Action | Mouse or touch | Keyboard (focus in the widget) |
 |---|---|---|
-| Draw a box | Drag on empty spectrogram | `N` adds a box at the play position |
+| Draw a box | Drag on empty spectrogram, or over a detector's box that is not selected | `N` adds a box at the play position |
 | Choose the label for new boxes | Click a label button | `1`–`9` |
 | Relabel a box | Select it, then click a label button, or use the box's menu in the list | Select it, then `1`–`9` |
 | Select a box | Click it | `Tab` to it |
-| Move a box | Drag it | Arrow keys |
+| Move a box | Drag it (a detector's box: select it first) | Arrow keys |
 | Resize a box | Drag its top-left or bottom-right corner | `Shift` + arrow keys (right/left: end time, up/down: top frequency) |
 | Delete a box | Delete in the list | `Delete` or `Backspace` |
 | Deselect | Click empty spectrogram | `Escape` |
@@ -19745,7 +19776,10 @@ An arrow key moves a box by 1% of the visible time span, or by 2% of the
 frequency range. The list under the spectrogram shows every box with its
 times and frequencies, a label menu, and Play and Delete buttons. A box
 imported from a detector is drawn with a dashed border and its confidence
-next to the label until someone changes it.
+next to the label until someone changes it. A drag that starts on such a box
+draws a new box unless the detector's box is selected, because BirdNET's
+full-band windows can cover the whole spectrogram and would otherwise leave
+nowhere to draw.
 
 ## Stored answer
 
@@ -29368,7 +29402,8 @@ cell the first time the server sees them and keeps it.
 |---|---|---|
 | `factors` | required | Factor name to a list of at least two levels |
 | `assignment` | `balanced` | `balanced` picks the cell with the fewest participants (ties broken at random per participant); `random` draws a cell, seeded per participant; `round_robin` cycles through cells in arrival order |
-| `balance_on` | `assigned` | `completed` counts only participants who reached the end without being screened out, so dropouts are replaced |
+| `balance_on` | `assigned` | `completed` counts participants who reached the end without being screened out, and those still in progress whose assignment or last activity is within `in_progress_minutes`; anyone else is a dropout and is replaced |
+| `in_progress_minutes` | `60` | With `balance_on: completed`, how long an unfinished participant still counts toward their cell. Set it to about the study's expected duration; `0` counts finishers only |
 | `max_per_cell` | none | A full cell is skipped. When every cell is full, the least-filled one is used and a warning is logged |
 | `cells` | full factorial | An explicit list of cells, a subset of the factorial, each with an optional `weight` |
 
@@ -34484,6 +34519,12 @@ Leave out `--option types=...` to write all four.
 | `preference` | `preference_pairs.jsonl` | DPO/RLHF from pairwise annotations |
 | `swebench` | `swebench_results.jsonl` | SWE-bench compatible evaluation |
 | `code_review` | `code_reviews.jsonl` | Structured review data |
+
+Each `preference_pairs.jsonl` row comes from one annotator's answer on a binary
+`pairwise` scheme: `prompt`, `chosen` and `rejected` (the two entries of the
+scheme's `items_key`, in data order whatever order the annotator saw), and
+`chosen_position` (`A` or `B`). Ties are left out, and a justification is
+included when the annotator gave one.
 
 ## Supported Tool Types
 
@@ -50049,8 +50090,7 @@ So the order is written down for every ordered scheme regardless.
 The record lands in two places:
 
 - `user_state.json`, under `instance_id_to_presentation_order`
-- each item's behavioural data, under `presentation_order`, so every export and
-  analysis path that reads behavioural data gets it
+- each item's behavioural data, under `presentation_order`
 
 ```json
 "instance_id_to_presentation_order": {
@@ -50094,6 +50134,28 @@ indices rather than label names:
 
 The candidates differ per item, so "this annotator saw the item that was second
 in the data first" is the only fact an analyst can condition on.
+
+Every pairwise scheme reading the same `items_key` shares one order per
+annotator and item, since the page shows one list. The same order is recorded
+for each of them, including a scheme without `randomize_order`.
+
+The page carries the item with its candidates in the order shown, so the data
+order cannot be read off the page. Other fields of the item still reach the
+browser; to keep a field such as the model behind each response out of it, list
+it in [`item_properties.private_keys`](../configuration/configuration.md#input-data).
+
+A `display_logic` rule on a pairwise answer (`value: A`) reads the letter on
+screen, since that is what the annotator just chose and the page has no other.
+
+The page stores the letter of the card the annotator picked as they saw it, so
+with `[1, 0]` a stored `"A"` is the data's second candidate. Exports, the
+agreement reports, adjudication and adaptive escalation all read the answer in
+data order: there `"A"` is always the first entry of `items_key`, a
+`scale_value` is mirrored on the scale's range, and ties and justifications are
+unchanged. The stored answer, in `user_state.json` and from `/get_annotations`,
+keeps the letter as shown. Up to 2.13.0 the
+exports and agreement reports read the stored letter, so annotators who
+preferred the same response could count as disagreeing.
 
 ### Conjoint records its design
 
@@ -52599,8 +52661,8 @@ python -m potato.importers --input project.qdpx --output-dir my-study/
 python -m potato.export -c my-study/config.yaml -f qdpx -o ./export/
 ```
 
-The codebook keeps its hierarchy, along with the codings and which analyst
-made each one. See
+The codebook keeps its hierarchy, along with the codings; each imported span
+records the analyst who made it. See
 [Bringing a Project Into Potato](../guides/migrating-into-potato.md).
 
 ## Interview audio
@@ -53164,6 +53226,17 @@ from potato.server_utils.iaa.geometry_agreement import mask_consensus
 report = mask_consensus(items, {"image_1": (640, 480)}, label="cell")
 report["mean_sensitivity"]   # {"alice": 0.98, "bob": 0.33}
 ```
+
+Where it runs:
+
+- **Image masks:** only through this Python call. `/admin/iaa` does not run
+  STAPLE for image masks.
+- **Volume masks:** `/admin/iaa` runs it for every label on an item with three
+  or more annotators and reports each annotator's mean sensitivity and
+  specificity under `staple` in the JSON report (the HTML table does not show
+  it). With two annotators STAPLE cannot tell which one is right, so it is not
+  run. A scan over 2 million voxels is cropped to the box around every
+  annotator's voxels of the label, so specificity there is over that box.
 
 ### Weighted consensus, not a majority vote
 
@@ -54691,12 +54764,20 @@ When `register_annotator` records an annotation:
 1. If `adaptive.enabled` is true, the item already has at least 2 annotations,
    and its current cap is less than `boost_to`,
 2. The disagreement score (ratio of distinct labels per schema across the
-   item's annotators, max over schemas) is recomputed,
+   item's annotators, max over schemas) is recomputed. An annotator who saved
+   the item but left a question blank counts as giving a different answer
+   from one who answered it; free-text questions are not compared. Pairwise
+   answers are compared in data order (see
+   [Presentation order](presentation_order.md#pairwise-is-different)),
 3. If the score crosses `disagreement_threshold`, the item's cap is raised
    to `boost_to`, the item is removed from `completed_instance_ids`, and it
    re-enters the assignment queue.
 
-The boost is one-shot per item.
+The score is recomputed on every save, autosaves included. If a later save
+brings the answers back into agreement (a misclick the annotator corrected,
+say) and nobody beyond the original cap has annotated or been handed the item
+yet, the boost is withdrawn. Once an extra annotator has the item, the boost
+stays.
 
 ### `min_annotators_per_instance` is a deprecated name for the cap
 
@@ -60542,14 +60623,16 @@ From a camera-trap review project ([Camera traps](../guides/camera-traps.md)):
   left unchanged keeps the detector's `conf` and the classifier's own score.
   Boxes on an image triaged empty are kept and listed in the warnings, as in
   every camera-trap export.
-- `camtrap_dp`: a Camtrap DP 1.0 package (deployments, media, observations,
+- `camtrap_dp`: a Camtrap DP 1.0.2 package (deployments, media, observations,
   `datapackage.json`). Coordinates and package metadata come from item
-  fields or `--option` values (`title`, `license`, `contributor`,
-  `timezone`, `capture_method`, `sampling_design`); anything missing is
+  fields or `--option` values (`title`, `license`, `media_license`,
+  `contributor`, `timezone`, `capture_method`, `sampling_design`); anything missing is
   named in the warnings. Run a Camtrap DP validator before publishing.
 - `darwin_core`: an occurrence table. `basisOfRecord` is
   MachineObservation when the model's identification was left unchanged and
   HumanObservation otherwise; `--option basis_of_record=...` forces one.
+  `associatedMedia` is a public link or empty; `--option media_base_url=...`
+  says where the images are published.
 
 All three write one reviewer per item: the first by user id, or the one
 named by `--option annotator=<user>`, and they warn when an item had several.
@@ -61259,7 +61342,7 @@ the gap, and the import counts such gaps.
 | `iiif_annotations` | ✅ `canvas#xywh` | ✅ SVG selector | ❌ | ✅ PointSelector | One AnnotationPage per canvas in canvas coordinates, plus a manifest copy that references them; polylines and ellipses as SVG. See [Digital humanities](../guides/digital-humanities.md) |
 | `page_xml` | ✅ as a 4-point polygon | ✅ `Coords` | ❌ | ❌ | Edits the project's copy of each PAGE XML file in place: corrected line text, or moved, added and removed regions and lines |
 | `megadetector` | ✅ normalized `[x, y, w, h]` | ❌ | ❌ | ❌ | MegaDetector batch-output JSON; reviewer-drawn or changed boxes get confidence 1.0. See [Camera traps](../guides/camera-traps.md) |
-| `camtrap_dp` | ✅ `bboxX`/`bboxY`/`bboxWidth`/`bboxHeight` | ❌ | ❌ | ❌ | Camtrap DP 1.0 deployments, media and observations with `datapackage.json` |
+| `camtrap_dp` | ✅ `bboxX`/`bboxY`/`bboxWidth`/`bboxHeight` | ❌ | ❌ | ❌ | Camtrap DP 1.0.2 deployments, media and observations with `datapackage.json` |
 | `raven` | ✅ time × frequency | ❌ | ❌ | ❌ | Raven selection tables from `spectrogram_annotation`, one per recording. See [Bioacoustics](../guides/bioacoustics.md) |
 | `audacity_labels` | ✅ time × frequency | ❌ | ❌ | ❌ | Audacity label tracks, spectral form when the box has frequencies |
 | `geojson` | — | ✅ geographic | ❌ | ✅ geographic | `geo_annotation` features as RFC 7946 GeoJSON (`[lon, lat]`, EPSG:4326). See [Maps](../annotation-types/spatial/geo_annotation.md) |

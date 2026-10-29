@@ -96,7 +96,8 @@ from potato.diversity_manager import get_diversity_manager
 
 import os
 from potato.item_state_management import Item
-from potato.flask_server import get_displayed_text, apply_conjoint_profiles
+from potato.flask_server import (get_displayed_text, apply_conjoint_profiles,
+                                  annotator_record)
 
 
 def _qc_answer_payload(annotations: dict):
@@ -246,6 +247,38 @@ def _unmet_required_labels(user_state) -> list:
     return unmet
 
 
+def _drop_hidden_phase_answers(user_state) -> None:
+    """Forget answers to questions the page hides from this participant.
+
+    `display_logic` hides a question in the browser, but a POST that answered
+    it anyway was stored: participants in one condition had answers to a
+    question only the other condition sees. Run as the page is left, once its
+    answers are final.
+    """
+    phase, page = user_state.get_current_phase_and_page()
+    schemes = (config.get("_phase_page_schemes") or {}).get(page) or []
+    if not any(isinstance(s, dict) and s.get("display_logic") for s in schemes):
+        return
+    try:
+        from potato.server_utils.display_logic import compute_hidden_schemas
+        from potato.server_utils.phase_flow import collect_flow_answers
+        hidden = compute_hidden_schemas(schemes, collect_flow_answers(config, user_state))
+    except Exception:
+        logger.warning("display_logic could not be evaluated on %s; its answers "
+                       "are kept as given", page, exc_info=True)
+        return
+    stored = (getattr(user_state, "phase_to_page_to_label_to_value", {}) or {}).get(
+        phase, {}).get(page)
+    if not hidden or not stored:
+        return
+    dropped = [label for label in list(stored) if label.get_schema() in hidden]
+    for label in dropped:
+        del stored[label]
+    if dropped:
+        logger.info("Dropped %d answer(s) to hidden question(s) %s on %s",
+                    len(dropped), sorted({l.get_schema() for l in dropped}), page)
+
+
 def _refuse_unmet_phase_page(username, user_state):
     """The response that keeps a participant on a page with an unmet
     required answer, or None when the page may be left."""
@@ -260,6 +293,7 @@ def _refuse_unmet_phase_page(username, user_state):
         return get_current_page_html(config, username), 400
     unmet = _unmet_required_labels(user_state)
     if not unmet:
+        _drop_hidden_phase_answers(user_state)
         return None
     logger.warning("%s tried to leave %s without the required answer to %s",
                    username, user_state.get_current_phase_and_page()[1], unmet)
@@ -2722,7 +2756,11 @@ def annotate():
             return _engine_no_work_page(username, user_state)
         else:
             logger.debug(f"User {username} has no remaining assignments, advancing phase")
+            last_item = user_state.get_current_instance_id()
             get_user_state_manager().advance_phase(username)
+            # Finishing leaves the last item, and its blanks count.
+            if last_item:
+                get_item_state_manager().reevaluate_adaptive_boost(last_item)
             return redirect(url_for("home"))
 
     _inject_quality_control_item_if_needed(username, user_state)
@@ -2748,6 +2786,12 @@ def annotate():
     # click checkboxes, radio buttons, etc. This ensures proper timing tracking for
     # behavioral data. We do NOT save annotations during navigation - they should
     # already be saved by the time the user navigates.
+
+    # The item this action leaves. Adaptive escalation counts a blank answer
+    # only from an annotator who has gone past the item, so it is checked
+    # again once they have.
+    left_from = user_state.get_current_instance_id()
+    left_index = user_state.get_current_instance_index()
 
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")
@@ -2807,6 +2851,8 @@ def annotate():
                         if ibws_mgr and ibws_mgr.is_completed():
                             logger.debug(f"User {username} completed all IBWS rounds")
                             get_user_state_manager().advance_phase(username)
+                            # The last item is left too, and its blanks count.
+                            get_item_state_manager().reevaluate_adaptive_boost(left_from)
                             return redirect(url_for("home"))
                 elif _engine_assigns():
                     return _engine_no_work_page(username, user_state)
@@ -2814,6 +2860,8 @@ def annotate():
                     logger.debug(f"User {username} completed all assignments at end-of-list")
                     session.pop("potato_reviewing", None)
                     get_user_state_manager().advance_phase(username)
+                    # The last item is left too, and its blanks count.
+                    get_item_state_manager().reevaluate_adaptive_boost(left_from)
                     return redirect(url_for("home"))
         acm = get_ai_cache_manager()
         if acm:
@@ -2886,6 +2934,10 @@ def annotate():
     else:
         logger.debug(f'Action "{action}" - no specific handling')
 
+    # Forward only: Previous leaves the item unfinished, not answered.
+    if left_from and user_state.get_current_instance_index() > left_index:
+        get_item_state_manager().reevaluate_adaptive_boost(left_from)
+
     # After processing the action, check again if user has completed all assignments
     # This handles the case where the user just finished their last item
     # (not while they are reviewing earlier items; see `reviewing` above)
@@ -2905,6 +2957,8 @@ def annotate():
         else:
             logger.debug(f"User {username} has completed all assignments, advancing phase")
             get_user_state_manager().advance_phase(username)
+            if left_from:
+                get_item_state_manager().reevaluate_adaptive_boost(left_from)
             # Use redirect to ensure next phase handler gets a GET request (fixes issue #115)
             return redirect(url_for("home"))
 
@@ -6637,6 +6691,8 @@ def get_current_instance():
         # {condition.<factor>} filled as on the page.
         from potato.server_utils.phase_flow import conditions_for, fill_condition_data
         raw_data = fill_condition_data(raw_data, conditions_for(user_state))
+        # private_keys and the pairwise order, as on the page.
+        raw_data = annotator_record(raw_data, user_state, username, instance_id)
 
         return jsonify({
             "instance_id": instance_id,
@@ -6695,6 +6751,9 @@ def get_instance_data():
         raw_data = screen_item_basemaps(config, raw_data)
         from potato.server_utils.phase_flow import conditions_for, fill_condition_data
         raw_data = fill_condition_data(raw_data, conditions_for(user_state))
+        # private_keys and the pairwise order, as on the page.
+        raw_data = annotator_record(raw_data, user_state, username,
+                                    current_instance.get_id())
         raw_data = apply_conjoint_profiles(dict(raw_data), user_state, username,
                                            current_instance.get_id())
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")

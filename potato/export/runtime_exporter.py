@@ -38,6 +38,11 @@ LEADING_TRIAL_COLUMNS = ["run_id", "user_id", "page", "attempt", "run_status",
 
 
 def _cell(value: Any) -> Any:
+    # csv writes a Python bool as True/False; jsPsych's own data.csv() and the
+    # R and pandas readers expect true/false.
+    if isinstance(value, bool) or (type(value).__module__ == "numpy"
+                                   and type(value).__name__ in ("bool", "bool_")):
+        return "true" if value else "false"
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     return value

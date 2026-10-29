@@ -188,6 +188,8 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
         logger.warning(f"Could not read agent chat transcripts: {e}")
         agent_chats = {}
 
+    from potato.server_utils.presentation_order import source_oriented
+
     for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
         span_times = {} if uses_mysql(config) else _span_times(os.path.join(output_dir, user_dir))
@@ -216,6 +218,13 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
                             schema, name = str(label_obj), ""
                         labels_dict.setdefault(schema, {})[name] = value
                 raw_labels = labels_dict
+
+            # Pairwise answers in data order. Under randomize_order the page
+            # stores the position the annotator saw, so the same preference
+            # could export as "A" for one annotator and "B" for the next.
+            orders = (user_state.get("instance_id_to_presentation_order") or {}).get(
+                instance_id) or {}
+            raw_labels = source_oriented(schemas, raw_labels, orders)
 
             record = {
                 "instance_id": instance_id,
@@ -589,6 +598,16 @@ def build_export_context(config_path: str) -> ExportContext:
     )
     if not os.path.isabs(output_annotation_dir):
         output_annotation_dir = os.path.join(base_dir, output_annotation_dir)
+
+    # `taxonomy_file` is read into `taxonomy` at server boot; the export reads
+    # the YAML itself, so without this a hierarchical_multiselect built from a
+    # file had no codes in the codebook and qdpx exports.
+    try:
+        from potato.server_utils.taxonomy_files import apply_taxonomy_files
+        apply_taxonomy_files(config, config_dir)
+    except Exception:
+        logger.warning("Could not read a taxonomy_file; its codes are missing "
+                       "from the export", exc_info=True)
 
     # A `codebook: true` scheme sources its labels from the project database,
     # not from the YAML -- the server applies that at boot. Reading the file

@@ -861,9 +861,12 @@ class QualtricsImporter:
         if len(ids) <= 1:
             name = self.names.take(tag)
             scheme = make(name)
+            # One statement is the slider's own caption ("Minutes per day"),
+            # not a sub-question, so the question text stands alone; the
+            # caption is used only when the question has no text.
             label = strip_html(choices[ids[0]].get("Display")) if ids else ""
-            if label and label != text:
-                scheme["description"] = _stem(text, label)
+            if label and not text.strip():
+                scheme["description"] = label
             fields = {ids[0]: (name, kind)} if ids else {}
             return [scheme], _Ref(qid, "slider", "Slider", None, fields=fields)
         schemes, fields = [], {}

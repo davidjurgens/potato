@@ -43,8 +43,8 @@ python -m potato.importers --input project.qdpx --output-dir my-study/
 python -m potato.export -c my-study/config.yaml -f qdpx -o ./export/
 ```
 
-The codebook keeps its hierarchy, along with the codings and which analyst
-made each one. See
+The codebook keeps its hierarchy, along with the codings; each imported span
+records the analyst who made it. See
 [Bringing a Project Into Potato](../guides/migrating-into-potato.md).
 
 ## Interview audio

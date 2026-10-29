@@ -277,20 +277,21 @@ def _label_value(label) -> Any:
     return getattr(label, "name", None) or getattr(label, "value", None)
 
 
-def _schema_values(ustate, instance_id: str, schema_name: str):
+def _schema_values(ustate, instance_id: str, schema_name: str, scheme=None):
     """
     ``{label_name: value}`` for one schema on one item, or ``None``.
 
     ``get_label_annotations`` returns the *flat* ``{Label: value}`` container,
     not a mapping keyed by schema name. Regrouping is shared with adjudication
-    via :func:`annotation_values.group_by_schema` so the two cannot drift.
+    via :func:`annotation_values.user_values` so the two cannot drift, and so a
+    pairwise answer is compared by the data's letter, not the screen's.
     """
     from potato.server_utils import annotation_values
 
-    stored = ustate.get_label_annotations(instance_id)
-    if not stored:
+    if not ustate.get_label_annotations(instance_id):
         return None
-    return annotation_values.group_by_schema(stored).get(schema_name)
+    schemes = [scheme] if scheme else None
+    return annotation_values.user_values(ustate, instance_id, schemes).get(schema_name)
 
 
 def _gather_labels(
@@ -329,7 +330,7 @@ def _gather_labels(
     for iid in instance_ids:
         per_user: Dict[str, Any] = {}
         for uid, ustate in user_states.items():
-            values = _schema_values(ustate, iid, schema_name)
+            values = _schema_values(ustate, iid, schema_name, scheme)
             if not values:
                 continue
             packed = packed_answer(scheme, values) if scheme else None
@@ -488,6 +489,7 @@ def _gather_matrix(
     instance_ids: Iterable[str],
     user_states: Dict[str, Any],
     schema_name: str,
+    scheme: Optional[Dict[str, Any]] = None,
 ):
     """
     Per item, ``{user_id: {sub_key: raw_value}}`` for a matrix-shaped schema.
@@ -503,7 +505,7 @@ def _gather_matrix(
     for iid in instance_ids:
         per_user: Dict[str, Dict[str, Any]] = {}
         for uid, ustate in user_states.items():
-            values = _schema_values(ustate, iid, schema_name)
+            values = _schema_values(ustate, iid, schema_name, scheme)
             if not isinstance(values, dict) or not values:
                 continue
             answers = {str(k): v for k, v in values.items()
@@ -1502,7 +1504,7 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
             else:
                 metrics = structured.trace_report(rows, name)
         elif kind == SchemaKind.MATRIX:
-            rows = _gather_matrix(overlap_items, user_states, name)
+            rows = _gather_matrix(overlap_items, user_states, name, scheme)
             metrics = _aggregate_matrix(rows, scheme)
         elif kind in (SchemaKind.GEOMETRY, SchemaKind.TEMPORAL):
             rows = _gather_blobs(overlap_items, user_states, name, scheme)

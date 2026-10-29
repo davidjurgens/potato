@@ -869,14 +869,14 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=51"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=52"></script>
     {% if trial_timing_client_config %}
     <!-- Timed trials: fixation, stimulus duration, deadline, key-to-label RT.
          After annotation.js, whose navigation and save it drives. -->
     <script type="text/javascript">
         window.potatoTrialTiming = {{ trial_timing_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='trial-timing.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='trial-timing.js') }}?v=3"></script>
     {% endif %}
     {# Plugins load after annotation.js so they can use its functions. #}
     {% for href in (plugin_assets | default({})).get('styles', []) %}
@@ -944,7 +944,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=57"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=58"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -1187,7 +1187,7 @@
 
     <!-- Spectrogram box annotation (bioacoustics) -->
     {% if frontend_assets.spectrogram_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='spectrogram-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='spectrogram-annotation.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Maps (geo_annotation): OpenLayers, vendored; geotiff.js loads on demand -->

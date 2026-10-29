@@ -735,7 +735,8 @@ def _run_project_import(parsed, fmt: str) -> int:
     print(f"Imported {summary['num_items']} item(s), {summary['num_schemes']} "
           f"question(s), {summary['num_responses']} answer(s) from "
           f"{summary['num_annotators']} annotator(s), and "
-          f"{summary['num_predictions']} model suggestion(s) from {result.source_format}.")
+          f"{summary['num_predictions']} model suggestion(s) on "
+          f"{summary['num_predicted_items']} item(s) from {result.source_format}.")
     if parsed.keep_annotators and summary["num_annotators"]:
         print("  The project is passwordless so the imported annotators can log in "
               "by name. Set require_password: true and add passwords to "

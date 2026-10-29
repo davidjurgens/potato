@@ -2737,6 +2737,93 @@ class ItemStateManager:
 
         return len(to_assign)
 
+    @staticmethod
+    def _has_left_item(ustate, instance_id: str) -> bool:
+        """Whether the annotator has gone past the item, or finished.
+
+        Past, not merely away: going back with Previous to fix an earlier item
+        leaves this one half-done, and counting its blanks then escalated an
+        item both annotators went on to agree on.
+        """
+        try:
+            from potato.phase import UserPhase
+            if ustate.get_phase() != UserPhase.ANNOTATION:
+                return True
+            ordering = list(getattr(ustate, "instance_id_ordering", None) or [])
+            if str(instance_id) in [str(i) for i in ordering]:
+                position = [str(i) for i in ordering].index(str(instance_id))
+                return ustate.get_current_instance_index() > position
+            return str(ustate.get_current_instance_id()) != str(instance_id)
+        except Exception:
+            return True
+
+    def reevaluate_adaptive_boost(self, instance_id: str) -> None:
+        """Check the item's boost again, after an annotator has left it."""
+        if not (self.adaptive_boost.get('enabled')
+                and self.adaptive_boost.get('boost_to', 0) >= 2):
+            return
+        if len(self.instance_annotators.get(instance_id, ())) < 2:
+            return
+        try:
+            self._update_adaptive_boost(instance_id)
+        except Exception:
+            self.logger.warning("Could not re-check the adaptive boost on %s",
+                                instance_id, exc_info=True)
+
+    def _update_adaptive_boost(self, instance_id: str) -> None:
+        """Raise the item's cap on disagreement, or withdraw a raise that no
+        longer holds.
+
+        This runs on every save, autosaves included, so a reviewer's misclick
+        raised the item before the correction a second later, and a raised
+        item stayed raised: it went to the expert anyway. A boost is withdrawn
+        when the disagreement is gone and nobody beyond the original cap has
+        annotated or been handed the item yet. After that, the extra
+        annotator's work stands.
+        """
+        current_count = len(self.instance_annotators[instance_id])
+        if current_count < 2:
+            return
+        boost_to = self.adaptive_boost['boost_to']
+        threshold = self.adaptive_boost.get('threshold', 0.5)
+        boosts = self.__dict__.setdefault('_adaptive_boosts', {})
+        item = self._store.get(instance_id)
+        if item is None:
+            return
+        if instance_id not in boosts:
+            current_cap = self._get_annotator_cap_for_item(instance_id)
+            if current_cap < 0 or current_cap >= boost_to:
+                return
+            if self._calculate_disagreement_score(instance_id) < threshold:
+                return
+            boosts[instance_id] = (item.get_metadata('required_annotations'), current_cap)
+            item.add_metadata('required_annotations', boost_to)
+            self.logger.info(
+                "Adaptive boost: %s raised to %d annotators (current=%d)",
+                instance_id, boost_to, current_count,
+            )
+            if instance_id in self.completed_instance_ids:
+                self.completed_instance_ids.discard(instance_id)
+                if instance_id not in self.remaining_instance_ids:
+                    self.remaining_instance_ids.append(instance_id)
+            return
+        previous, original_cap = boosts[instance_id]
+        if self._calculate_disagreement_score(instance_id) >= threshold:
+            return
+        spoken_for = len(self.instance_annotators[instance_id]
+                         | self.instance_assignees[instance_id])
+        if spoken_for > original_cap:
+            return
+        if previous is None:
+            item.metadata.pop('required_annotations', None)
+        else:
+            item.add_metadata('required_annotations', previous)
+        del boosts[instance_id]
+        self.logger.info(
+            "Adaptive boost withdrawn: %s agrees again, back to %d annotators",
+            instance_id, original_cap,
+        )
+
     def _calculate_disagreement_score(self, instance_id: str,
                                       kinds: str = "all") -> float:
         """
@@ -2795,11 +2882,21 @@ class ItemStateManager:
         # also split a multiselect's ticked boxes apart, so a set of labels was
         # never compared as a set.
         from potato.server_utils import annotation_values
+        from potato.server_utils.iaa.dispatcher import packed_answer
+
+        schemes = [sc for sc in (self.config.get("annotation_schemes") or [])
+                   if isinstance(sc, dict)]
+        schemes_by_name = {str(sc.get("name")): sc for sc in schemes}
 
         schema_to_user_value: Dict[str, Dict[str, tuple]] = defaultdict(dict)
         if kinds != "all":
             from potato.annotator_origin import is_machine
 
+        counted = []
+        # Annotators who have moved on from the item: only their blanks are
+        # answers. Every autosave reaches here, and a question the annotator
+        # has not got to yet is not a disagreement.
+        finished = []
         for uid in annotators:
             ustate = usm.get_user_state(uid) if hasattr(usm, "get_user_state") else None
             if ustate is None:
@@ -2808,14 +2905,23 @@ class ItemStateManager:
                 continue
             if kinds == "machine" and not is_machine(ustate):
                 continue
-            grouped = annotation_values.group_by_schema(
-                ustate.get_label_annotations(instance_id) or {})
+            counted.append(uid)
+            if self._has_left_item(ustate, instance_id):
+                finished.append(uid)
+            # Pairwise answers in data order: under randomize_order two
+            # annotators who preferred the same response store "A" and "B".
+            grouped = annotation_values.user_values(ustate, instance_id, schemes)
             for schema, values in grouped.items():
                 # The names chosen, which is where the answer lives: radio
                 # stores {"eligible": True} and likert {"4": "4"}. Shared with
                 # the agreement report and adjudication so the three cannot
-                # disagree about what a person answered.
-                names = annotation_values.selected_labels(values)
+                # disagree about what a person answered. A packed type keeps
+                # its answer in the value (pairwise {"selection": "A"}), and
+                # reading names made every pairwise annotator agree.
+                scheme = schemes_by_name.get(schema)
+                names = packed_answer(scheme, values) if scheme else None
+                if names is None:
+                    names = annotation_values.selected_labels(values)
                 if not names:
                     continue
                 schema_to_user_value[schema][uid] = tuple(sorted(names))
@@ -2841,6 +2947,28 @@ class ItemStateManager:
 
         if not schema_to_user_value:
             return 0.0
+
+        # An annotator who saved the item and left a question blank disagrees
+        # with one who answered it. Skipping blanks found 5 of 13 real
+        # disagreements in a camera-trap review, where a species left empty
+        # beside a named one is the disagreement that matters. Free-text
+        # questions are left out: a comment one reviewer wrote and another
+        # did not is not a disagreement about the item.
+        from potato.server_utils.iaa.dispatcher import SchemaKind, classify_schema
+        for key, values_by_user in schema_to_user_value.items():
+            name = key[len("__span__"):] if key.startswith("__span__") else key
+            scheme = schemes_by_name.get(name)
+            # TEXT and UNSUPPORTED: what the agreement report does not score
+            # (`text` itself classifies as UNSUPPORTED).
+            if scheme is None or classify_schema(scheme) in (SchemaKind.TEXT,
+                                                             SchemaKind.UNSUPPORTED):
+                continue
+            # A question display_logic can hide may be blank because this
+            # annotator never saw it.
+            if scheme.get("display_logic"):
+                continue
+            for uid in finished:
+                values_by_user.setdefault(uid, ())
 
         scores = []
         for values_by_user in schema_to_user_value.values():
@@ -3367,25 +3495,9 @@ class ItemStateManager:
 
         # Adaptive boost: when an item has begun gathering annotations under
         # the default cap and shows real disagreement, raise its per-item cap
-        # so we keep gathering votes. The boost is one-shot per item.
+        # so we keep gathering votes.
         if self.adaptive_boost.get('enabled') and self.adaptive_boost.get('boost_to', 0) >= 2:
-            current_count = len(self.instance_annotators[instance_id])
-            current_cap = self._get_annotator_cap_for_item(instance_id)
-            boost_to = self.adaptive_boost['boost_to']
-            if 2 <= current_count and current_cap >= 0 and current_cap < boost_to:
-                threshold = self.adaptive_boost.get('threshold', 0.5)
-                if self._calculate_disagreement_score(instance_id) >= threshold:
-                    item = self._store.get(instance_id)
-                    if item is not None:
-                        item.add_metadata('required_annotations', boost_to)
-                        self.logger.info(
-                            "Adaptive boost: %s raised to %d annotators (current=%d)",
-                            instance_id, boost_to, current_count,
-                        )
-                        if instance_id in self.completed_instance_ids:
-                            self.completed_instance_ids.discard(instance_id)
-                            if instance_id not in self.remaining_instance_ids:
-                                self.remaining_instance_ids.append(instance_id)
+            self._update_adaptive_boost(instance_id)
 
         # Check if this item has reached its annotation limit
         if self._item_is_saturated(instance_id):

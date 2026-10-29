@@ -34,6 +34,7 @@ import itertools
 import logging
 import random
 import threading
+import time
 from typing import Any, Dict, Iterable, List, Optional
 
 from potato.server_utils.phase_flow import flow_record
@@ -79,6 +80,7 @@ class ConditionAssigner:
         self.assignment = spec.get("assignment", "balanced")
         self.balance_on = spec.get("balance_on", "assigned")
         self.max_per_cell = spec.get("max_per_cell")
+        self.in_progress_minutes = spec.get("in_progress_minutes", 60)
         self._counts = [0] * len(self.cells)
         self._next_ordinal = 0
         self._lock = threading.Lock()
@@ -117,24 +119,31 @@ class ConditionAssigner:
     def counts(self, user_states: Optional[Iterable[Any]] = None) -> List[int]:
         """Per-cell counts used for balancing.
 
-        ``balance_on: completed`` counts only participants who reached the end
-        without being screened out, so dropouts are replaced; it needs the
-        user states to look at.
+        ``balance_on: completed`` counts participants who reached the end
+        without being screened out, so dropouts are replaced, and also those
+        still in progress whose assignment or last activity is within
+        ``in_progress_minutes``. Counting finishers alone put everyone who
+        started together in one cell: 12 readers arriving at once split 8 and 4
+        across two lists. It needs the user states to look at.
         """
         if self.balance_on != "completed" or user_states is None:
             return list(self._counts)
         from potato.phase import UserPhase
+        now = time.time()
+        window = float(self.in_progress_minutes) * 60
         counts = [0] * len(self.cells)
         for us in user_states:
             rec = flow_record(us)
             if rec.get("screened_out"):
                 continue
+            cell = self.cell_of(us)
+            if cell is None:
+                continue
             try:
                 done = us.get_phase() == UserPhase.DONE
             except Exception:
                 done = False
-            cell = self.cell_of(us)
-            if done and cell is not None:
+            if done or now - _last_seen(us, rec) <= window:
                 counts[cell] += 1
         return counts
 
@@ -167,6 +176,7 @@ class ConditionAssigner:
             self._counts[cell] += 1
             conditions = {f: self.cells[cell][f] for f in self.factors}
             rec["conditions"] = conditions
+            rec["condition_assigned_at"] = time.time()
             rec["condition_cell"] = cell
             rec["condition_ordinal"] = ordinal
             rec["cell_ordinal"] = cell_ordinal
@@ -200,6 +210,23 @@ class ConditionAssigner:
         return rng.choice(tied)
 
 
+def _last_seen(user_state, rec: Dict[str, Any]) -> float:
+    """When the participant was assigned or last active, as a Unix time.
+
+    0 when neither is known, so a state saved before assignments were stamped
+    counts as long gone rather than as in progress forever.
+    """
+    seen = rec.get("condition_assigned_at")
+    seen = float(seen) if isinstance(seen, (int, float)) else 0.0
+    last = getattr(user_state, "last_activity_time", None)
+    try:
+        if last is not None:
+            seen = max(seen, last.timestamp() if hasattr(last, "timestamp") else float(last))
+    except (TypeError, ValueError):
+        pass
+    return seen
+
+
 def validate_conditions_config(config_data: Dict[str, Any]) -> None:
     """Refuse a malformed ``conditions`` block."""
     from potato.server_utils.config_module import ConfigValidationError
@@ -208,7 +235,8 @@ def validate_conditions_config(config_data: Dict[str, Any]) -> None:
         return
     if not isinstance(spec, dict):
         raise ConfigValidationError("conditions must be a mapping with a 'factors' block")
-    unknown = set(spec) - {"factors", "assignment", "balance_on", "max_per_cell", "cells"}
+    unknown = set(spec) - {"factors", "assignment", "balance_on", "max_per_cell", "cells",
+                           "in_progress_minutes"}
     if unknown:
         raise ConfigValidationError(
             f"conditions has unknown key(s): {', '.join(sorted(unknown))}")
@@ -239,6 +267,11 @@ def validate_conditions_config(config_data: Dict[str, Any]) -> None:
     if spec.get("balance_on", "assigned") not in BALANCE_ON:
         raise ConfigValidationError(
             f"conditions.balance_on must be one of {', '.join(BALANCE_ON)}")
+    minutes = spec.get("in_progress_minutes")
+    if minutes is not None and (not isinstance(minutes, (int, float)) or isinstance(minutes, bool)
+                                or minutes < 0):
+        raise ConfigValidationError(
+            "conditions.in_progress_minutes must be a number of minutes, 0 or more")
     cap = spec.get("max_per_cell")
     if cap is not None and (not isinstance(cap, int) or isinstance(cap, bool) or cap < 1):
         raise ConfigValidationError("conditions.max_per_cell must be a positive integer")

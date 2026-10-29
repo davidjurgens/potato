@@ -128,11 +128,37 @@ class TestBalanceOnCompleted:
         done.advance_to_phase(UserPhase.DONE, None)
         dropout = InMemoryUserState("dropout", -1)
         a.ensure(dropout, [done])
+        # Two hours ago, past in_progress_minutes (60).
+        dropout.flow_record["condition_assigned_at"] -= 2 * 3600
         # The dropout never finished, so the next arrival goes to its cell.
         nxt = InMemoryUserState("next", -1)
         a.ensure(nxt, [done, dropout])
         assert nxt.flow_record["condition_cell"] == dropout.flow_record["condition_cell"]
         assert done.flow_record["condition_cell"] != dropout.flow_record["condition_cell"]
+
+
+    def test_participants_who_start_together_are_spread(self):
+        """Counting finishers alone put a cohort arriving at once in one
+        cell: 12 readers split 8 and 4."""
+        a = ConditionAssigner(_cfg(balance_on="completed", cells=[
+            {"feedback": "none", "font": "serif"},
+            {"feedback": "immediate", "font": "serif"}]))
+        started = []
+        for n in range(12):
+            us = InMemoryUserState(f"reader{n}", -1)
+            a.ensure(us, list(started))
+            started.append(us)
+        cells = [u.flow_record["condition_cell"] for u in started]
+        assert sorted(cells.count(c) for c in set(cells)) == [6, 6]
+
+    def test_zero_minutes_counts_finishers_only(self):
+        a = ConditionAssigner(_cfg(balance_on="completed", in_progress_minutes=0, cells=[
+            {"feedback": "none", "font": "serif"},
+            {"feedback": "immediate", "font": "serif"}]))
+        first = InMemoryUserState("first", -1)
+        a.ensure(first, [])
+        first.flow_record["condition_assigned_at"] -= 1
+        assert a.counts([first]) == [0, 0]
 
 
 class TestValidation:
@@ -148,6 +174,7 @@ class TestValidation:
         ({"factors": {"f": ["a", "b"]}, "assignment": "latin"}, "assignment"),
         ({"factors": {"f": ["a", "b"]}, "balance_on": "finished"}, "balance_on"),
         ({"factors": {"f": ["a", "b"]}, "max_per_cell": 0}, "max_per_cell"),
+        ({"factors": {"f": ["a", "b"]}, "in_progress_minutes": -5}, "in_progress_minutes"),
         ({"factors": {"f": ["a", "b"]}, "cells": [{"f": "c"}]}, "not a declared level"),
         ({"factors": {"f": ["a", "b"]}, "cells": [{"f": "a"}, {"f": "a"}]}, "repeats"),
         ({"factors": {"f": ["a", "b"]}, "cells": [{"f": "a", "weight": -1}]}, "weight"),

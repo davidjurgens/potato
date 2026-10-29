@@ -206,9 +206,12 @@
         if (area) { area.appendChild(readingEl); }
         body.classList.add('potato-trial-presenting');
         var legend = document.getElementById('potato-trial-keys');
+        // "word" only when every region is one word; regions can be phrases.
+        var unit = (pres.regions || []).every(function (r) { return !/\s/.test(String(r).trim()); })
+            ? 'word' : 'region';
         var hint = pres.mode === 'maze'
-            ? (pres.maze_keys.left.toUpperCase() + ' = left word    ' + pres.maze_keys.right.toUpperCase() + ' = right word')
-            : ((pres.advance_key === ' ' ? 'Space' : pres.advance_key.toUpperCase()) + ' = next word');
+            ? (pres.maze_keys.left.toUpperCase() + ' = left ' + unit + '    ' + pres.maze_keys.right.toUpperCase() + ' = right ' + unit)
+            : ((pres.advance_key === ' ' ? 'Space' : pres.advance_key.toUpperCase()) + ' = next ' + unit);
         var p = document.createElement('p');
         p.id = 'potato-trial-reading-keys';
         p.className = 'potato-trial-keys';

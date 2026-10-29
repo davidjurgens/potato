@@ -225,7 +225,7 @@ class DicomSegExporter(_VolumeExporter):
                 files.append(sr_path)
                 n_reports += 1
         if not_dicom:
-            warnings.append(f"{len(not_dicom)} item(s) are not DICOM series, and a SEG "
+            warnings.append(f"{len(set(not_dicom))} item(s) are not DICOM series, and a SEG "
                             f"references DICOM images; use volume_nifti for them: "
                             f"{', '.join(sorted(set(not_dicom))[:10])}")
         stats = {"num_files": len(files)}

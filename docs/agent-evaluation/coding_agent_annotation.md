@@ -294,6 +294,12 @@ Leave out `--option types=...` to write all four.
 | `swebench` | `swebench_results.jsonl` | SWE-bench compatible evaluation |
 | `code_review` | `code_reviews.jsonl` | Structured review data |
 
+Each `preference_pairs.jsonl` row comes from one annotator's answer on a binary
+`pairwise` scheme: `prompt`, `chosen` and `rejected` (the two entries of the
+scheme's `items_key`, in data order whatever order the annotator saw), and
+`chosen_position` (`A` or `B`). Ties are left out, and a justification is
+included when the annotator gave one.
+
 ## Supported Tool Types
 
 The display renders each tool type with appropriate formatting:

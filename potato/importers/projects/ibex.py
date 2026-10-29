@@ -165,6 +165,22 @@ class IbexImporter:
             res.kind, text_col, extra = "maze", maze[0][0], {"distractors": maze[0][1]}
         elif dashed:
             res.kind, text_col, extra = "spr", dashed[0], {}
+            # A comprehension question after the sentence: newText(row.Question)
+            # with a newKey to answer it. The DashedSentence branch read only
+            # the sentence, so the question was dropped without a word.
+            questions = [c for c in texts if c != dashed[0]]
+            if questions and keys:
+                extra["question"] = questions[-1]
+                res.has_question = True
+                res.keys = [k.lower() for k in keys][:2]
+                res.report.append(
+                    f"the question in column {questions[-1]} is answered with "
+                    f"{' / '.join(k.upper() for k in res.keys)}, imported as "
+                    f"{' / '.join(res.question_answers or ['Yes', 'No'])}; rename the "
+                    "answers if the keys mean something else")
+            elif questions:
+                res.report.append(f"column {questions[-1]} is shown with newText but has no "
+                                  "newKey to answer it, so it was not imported as a question")
         elif scale:
             res.kind, text_col, extra = "rating", (texts[0] if texts else None), {}
             n = int(scale.group(1))
@@ -204,6 +220,8 @@ class IbexImporter:
                     item[k] = v
             if extra.get("distractors"):
                 item["distractors"] = row.get(extra["distractors"], "")
+            if extra.get("question"):
+                item["question"] = row.get(extra["question"], "")
             if group_col and str(row.get(group_col, "")).strip():
                 item["_group"] = str(row[group_col]).strip()
             res.items.append(item)
@@ -385,8 +403,9 @@ class IbexImporter:
             if res.has_question:
                 answers = res.question_answers or ["Yes", "No"]
                 presentation["question_field"] = "question"
+                first, second = (res.keys + ["f", "j"])[:2] if len(res.keys or []) >= 2 else ("f", "j")
                 block["response"] = {"schema": "comprehension",
-                                     "keys": {"f": answers[0], "j": answers[1] if len(answers) > 1 else "No"}}
+                                     "keys": {first: answers[0], second: answers[1] if len(answers) > 1 else "No"}}
                 config["annotation_schemes"] = [{"annotation_type": "radio", "name": "comprehension",
                                                  "description": "Answer the question",
                                                  "labels": answers[:2] if len(answers) > 1 else ["Yes", "No"]}]

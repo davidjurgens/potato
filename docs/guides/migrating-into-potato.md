@@ -170,8 +170,12 @@ python -m potato.importers --input project.qdpx --output-dir potato-project/
 ```
 
 The codebook comes across with its hierarchy (each code keeps its parent),
-along with descriptions, colours, the codings themselves, and which annotator
-made each one.
+along with descriptions (shown as each code's tooltip), colours and the
+codings. The codings arrive as pre-annotations, a starting point every
+annotator sees, and each span keeps the name of the analyst who made it as
+`annotator` in the item data; they are not written as that analyst's saved
+work. Codes applied to a whole source become a `document_codes` multiselect
+question.
 
 Exporting back out:
 

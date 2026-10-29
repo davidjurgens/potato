@@ -79,7 +79,9 @@ Both of BirdNET-Analyzer's table formats are read:
 
 Use `--label-column "Common name"` (CSV) or `--label-column "Common Name"`
 (Raven table) for common names. Rows below `--min-confidence` (default 0.1)
-are left out, and the import summary says how many. BirdNET boxes are stored
+are left out, and the import summary says how many. BirdNET 2.4 writes a
+`nocall` row for a file with no detections; those rows are left out and
+counted too, so `nocall` never becomes a label. BirdNET boxes are stored
 with `"source": "ai"`, `"ai_model": "BirdNET"` and their confidence, and the
 page draws them with a dashed border until an annotator changes them.
 

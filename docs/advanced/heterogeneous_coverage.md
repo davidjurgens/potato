@@ -67,12 +67,20 @@ When `register_annotator` records an annotation:
 1. If `adaptive.enabled` is true, the item already has at least 2 annotations,
    and its current cap is less than `boost_to`,
 2. The disagreement score (ratio of distinct labels per schema across the
-   item's annotators, max over schemas) is recomputed,
+   item's annotators, max over schemas) is recomputed. An annotator who saved
+   the item but left a question blank counts as giving a different answer
+   from one who answered it; free-text questions are not compared. Pairwise
+   answers are compared in data order (see
+   [Presentation order](presentation_order.md#pairwise-is-different)),
 3. If the score crosses `disagreement_threshold`, the item's cap is raised
    to `boost_to`, the item is removed from `completed_instance_ids`, and it
    re-enters the assignment queue.
 
-The boost is one-shot per item.
+The score is recomputed on every save, autosaves included. If a later save
+brings the answers back into agreement (a misclick the annotator corrected,
+say) and nobody beyond the original cap has annotated or been handed the item
+yet, the boost is withdrawn. Once an extra annotator has the item, the boost
+stays.
 
 ### `min_annotators_per_instance` is a deprecated name for the cap
 

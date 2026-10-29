@@ -288,6 +288,11 @@ class QDPXExporter(BaseExporter):
                           code_guid: Dict[str, str], user_guid: Dict[str, str],
                           warnings: List[str]) -> int:
         written = 0
+        # The XSD puts every PlainTextSelection before the source's own
+        # Codings; interleaving them, as a project with spans and whole-item
+        # codes did, made the file fail validation.
+        source_codings: List[ET.Element] = []
+        schemes = {s.get("name"): s for s in context.schemas}
         for annotation in context.annotations:
             if annotation.get("instance_id") != instance_id:
                 continue
@@ -338,17 +343,22 @@ class QDPXExporter(BaseExporter):
             # Document-level labels become codings on the source itself, which
             # is how REFI-QDA expresses "this code applies to the whole thing".
             for schema_name, payload in (annotation.get("labels") or {}).items():
-                for label in _label_names(payload):
+                for label in _label_names(payload, schemes.get(schema_name)):
                     guid = code_guid.get(label)
                     if guid is None:
                         continue
-                    coding = ET.SubElement(
-                        source, f"{{{QDA_NS}}}Coding",
+                    coding = ET.Element(
+                        f"{{{QDA_NS}}}Coding",
                         {"guid": _deterministic_guid(
                             "doc-coding", instance_id, user, schema_name,
                             label)})
+                    # Without it the coder of a whole-item code was lost.
+                    if user and user in user_guid:
+                        coding.set("creatingUser", user_guid[user])
                     ET.SubElement(coding, f"{{{QDA_NS}}}CodeRef",
                                   {"targetGUID": guid})
+                    source_codings.append(coding)
+        source.extend(source_codings)
         return written
 
     @staticmethod
@@ -366,8 +376,18 @@ class QDPXExporter(BaseExporter):
                 archive.writestr(f"sources/{member}", text.encode("utf-8"))
 
 
-def _label_names(payload) -> List[str]:
-    """The label names in one schema's stored value, whatever shape it is in."""
+def _label_names(payload, scheme=None) -> List[str]:
+    """The label names in one schema's stored value, whatever shape it is in.
+
+    A packed type keeps its answer in the value: hierarchical_multiselect
+    stores ``{"selected_labels": "A,B"}``, which read by name was one code
+    called ``selected_labels``.
+    """
+    if scheme:
+        from potato.server_utils.iaa.dispatcher import packed_answer
+        packed = packed_answer(scheme, payload)
+        if packed is not None:
+            return packed
     if isinstance(payload, dict):
         return [name for name, value in payload.items() if value]
     if isinstance(payload, list):

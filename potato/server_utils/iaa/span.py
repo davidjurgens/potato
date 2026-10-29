@@ -61,23 +61,36 @@ def spans_to_bio(spans: Iterable, length: int) -> List[str]:
     Convert spans to BIO tags over a unit sequence of length ``length``.
 
     ``length`` can be in characters or tokens depending on the unit; the
-    representation is the same. Overlapping spans are resolved with the rule
-    "longest span wins" — sufficient for IAA where overlap is rare.
+    representation is the same. A position covered by several spans gets all
+    their labels, sorted and joined with ``+`` (``B-LOC+PER``), and a ``B-``
+    tag wherever a span starts or the set of labels changes.
+
+    Overlaps used to be resolved by "longest span wins", which dropped the
+    shorter span. Overlapping codes are ordinary in qualitative coding, and an
+    annotator who applied two codes to a passage agreed perfectly with one who
+    applied only the longer of them.
     """
-    tags = ["O"] * length
-    span_list = sorted(_normalize(spans), key=lambda s: -(s[1] - s[0]))
-    for start, end, label in span_list:
+    covering: List[set] = [set() for _ in range(length)]
+    starts = [False] * length
+    for start, end, label in _normalize(spans):
         start = max(0, start)
         end = min(length, end)
         if end <= start:
             continue
-        if tags[start] != "O":
-            continue  # respect longest-wins
-        tags[start] = f"B-{label}"
-        for i in range(start + 1, end):
-            if tags[i] != "O":
-                continue
-            tags[i] = f"I-{label}"
+        starts[start] = True
+        for i in range(start, end):
+            covering[i].add(label)
+    tags = []
+    previous = None
+    for i, labels in enumerate(covering):
+        if not labels:
+            tags.append("O")
+            previous = None
+            continue
+        joined = "+".join(sorted(labels))
+        prefix = "B" if starts[i] or joined != previous else "I"
+        tags.append(f"{prefix}-{joined}")
+        previous = joined
     return tags
 
 

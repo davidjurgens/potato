@@ -241,6 +241,17 @@ report = mask_consensus(items, {"image_1": (640, 480)}, label="cell")
 report["mean_sensitivity"]   # {"alice": 0.98, "bob": 0.33}
 ```
 
+Where it runs:
+
+- **Image masks:** only through this Python call. `/admin/iaa` does not run
+  STAPLE for image masks.
+- **Volume masks:** `/admin/iaa` runs it for every label on an item with three
+  or more annotators and reports each annotator's mean sensitivity and
+  specificity under `staple` in the JSON report (the HTML table does not show
+  it). With two annotators STAPLE cannot tell which one is right, so it is not
+  run. A scan over 2 million voxels is cropped to the box around every
+  annotator's voxels of the label, so specificity there is over that box.
+
 ### Weighted consensus, not a majority vote
 
 A careful annotator's disagreement moves the consensus more than a careless

@@ -39,8 +39,7 @@ So the order is written down for every ordered scheme regardless.
 The record lands in two places:
 
 - `user_state.json`, under `instance_id_to_presentation_order`
-- each item's behavioural data, under `presentation_order`, so every export and
-  analysis path that reads behavioural data gets it
+- each item's behavioural data, under `presentation_order`
 
 ```json
 "instance_id_to_presentation_order": {
@@ -84,6 +83,28 @@ indices rather than label names:
 
 The candidates differ per item, so "this annotator saw the item that was second
 in the data first" is the only fact an analyst can condition on.
+
+Every pairwise scheme reading the same `items_key` shares one order per
+annotator and item, since the page shows one list. The same order is recorded
+for each of them, including a scheme without `randomize_order`.
+
+The page carries the item with its candidates in the order shown, so the data
+order cannot be read off the page. Other fields of the item still reach the
+browser; to keep a field such as the model behind each response out of it, list
+it in [`item_properties.private_keys`](../configuration/configuration.md#input-data).
+
+A `display_logic` rule on a pairwise answer (`value: A`) reads the letter on
+screen, since that is what the annotator just chose and the page has no other.
+
+The page stores the letter of the card the annotator picked as they saw it, so
+with `[1, 0]` a stored `"A"` is the data's second candidate. Exports, the
+agreement reports, adjudication and adaptive escalation all read the answer in
+data order: there `"A"` is always the first entry of `items_key`, a
+`scale_value` is mirrored on the scale's range, and ties and justifications are
+unchanged. The stored answer, in `user_state.json` and from `/get_annotations`,
+keeps the letter as shown. Up to 2.13.0 the
+exports and agreement reports read the stored letter, so annotators who
+preferred the same response could count as disagreeing.
 
 ### Conjoint records its design
 

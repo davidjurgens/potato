@@ -540,8 +540,20 @@
             var box = null;
             state.boxes.forEach(function (b) { if (b._id === id) { box = b; } });
             if (!box) { return; }
-            select(state, id, false);
             var handle = ev.target.getAttribute('data-handle');
+            if (!handle && state.selected !== id && box.source === 'ai') {
+                // A detector's box that is not selected is drawn over, not
+                // moved. BirdNET boxes are full-band 3 s windows and can cover
+                // the whole spectrogram, so a press always landed on one and a
+                // drag meant to draw a missed call moved a detection instead.
+                // A click without a drag still selects it; once selected it
+                // moves and resizes as usual.
+                state.drag = {mode: 'draw', from: p, moved: false, ghost: null, pressedBox: id};
+                state.wrap.setPointerCapture(ev.pointerId);
+                ev.preventDefault();
+                return;
+            }
+            select(state, id, false);
             state.drag = {mode: handle ? 'resize-' + handle : 'move', box: box, from: p,
                           orig: {start_s: box.start_s, end_s: box.end_s, low_hz: box.low_hz, high_hz: box.high_hz},
                           moved: false};
@@ -615,6 +627,8 @@
                            label: state.activeLabel};
                 normalise(state, box);
                 add(state, box);
+            } else if (!d.moved && d.pressedBox !== undefined) {
+                select(state, d.pressedBox, false);
             } else if (!d.moved) {
                 // A click on empty spectrogram: deselect and move the play position.
                 state.selected = null;

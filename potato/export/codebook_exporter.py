@@ -140,7 +140,21 @@ class CodebookExporter(BaseExporter):
         atype = scheme.get("annotation_type")
 
         if atype == "hierarchical_multiselect":
-            yield from CodebookExporter._iter_hierarchical(scheme.get("labels", []), parent="")
+            # The codes are the taxonomy (inline, from taxonomy_file, or a
+            # preset); a scheme built that way has no `labels`, and reading
+            # them gave a codebook with no codes.
+            taxonomy = scheme.get("taxonomy")
+            if not taxonomy and scheme.get("taxonomy_preset"):
+                try:
+                    from potato.server_utils.failure_taxonomy import to_hierarchical
+                    taxonomy = to_hierarchical(scheme["taxonomy_preset"])
+                except Exception:
+                    taxonomy = None
+            if taxonomy:
+                yield from CodebookExporter._iter_taxonomy(
+                    taxonomy, "", scheme.get("tooltips") or {})
+            else:
+                yield from CodebookExporter._iter_hierarchical(scheme.get("labels", []), parent="")
             return
         if atype == "tree_annotation":
             yield from CodebookExporter._iter_hierarchical(scheme.get("labels", []), parent="")
@@ -152,12 +166,33 @@ class CodebookExporter(BaseExporter):
                 name = label.get("name", "")
                 yield {
                     "code": name,
-                    "parent": "",
+                    # A flat label can still name its parent: a QDPX import
+                    # carries the source's code tree this way.
+                    "parent": str(label.get("parent") or ""),
                     "description": label.get("description") or label.get("tooltip", ""),
                     "color": label.get("color", ""),
                 }
             else:
                 yield {"code": str(label), "parent": "", "description": "", "color": ""}
+
+    @staticmethod
+    def _iter_taxonomy(taxonomy, parent, tooltips):
+        """A hierarchical_multiselect taxonomy (nested dict or list) as codes."""
+        if isinstance(taxonomy, dict):
+            for key, children in taxonomy.items():
+                name = str(key)
+                yield {"code": name, "parent": parent,
+                       "description": str(tooltips.get(name) or ""), "color": ""}
+                if children:
+                    yield from CodebookExporter._iter_taxonomy(children, name, tooltips)
+        elif isinstance(taxonomy, list):
+            for item in taxonomy:
+                if isinstance(item, (dict, list)):
+                    yield from CodebookExporter._iter_taxonomy(item, parent, tooltips)
+                else:
+                    name = str(item)
+                    yield {"code": name, "parent": parent,
+                           "description": str(tooltips.get(name) or ""), "color": ""}
 
     @staticmethod
     def _iter_hierarchical(nodes, parent):
@@ -179,12 +214,21 @@ class CodebookExporter(BaseExporter):
 
     @staticmethod
     def _count_label_uses(context):
+        from potato.server_utils.iaa.dispatcher import packed_answer
+        schemes = {s.get("name"): s for s in context.schemas}
         counts = {}
         for ann in context.annotations:
             labels = ann.get("labels", {}) or {}
             for schema_name, schema_payload in labels.items():
                 names = []
-                if isinstance(schema_payload, dict):
+                # A packed type keeps its codes in the value
+                # ({"selected_labels": "City,Person"}); read by name it counted
+                # a code called selected_labels and every real code got 0.
+                packed = (packed_answer(schemes[schema_name], schema_payload)
+                          if schema_name in schemes else None)
+                if packed is not None:
+                    names = packed
+                elif isinstance(schema_payload, dict):
                     names = [k for k, v in schema_payload.items() if v]
                 elif isinstance(schema_payload, list):
                     names = [str(x) for x in schema_payload]

@@ -87,7 +87,9 @@ INTERNAL_SCHEME_FIELDS = frozenset({
 #:   description, tooltip     -> export/codebook_exporter.py,
 #:                               labeling_engine/schemes.label_descriptions
 #:   color                    -> export/codebook_exporter.py, export/cvat_exporter.py
-LABEL_BASE_FIELDS = frozenset({"name", "description", "tooltip", "color"})
+#:   parent                   -> export/codebook_exporter.py, export/qdpx_exporter.py
+#:                               (the code tree a QDPX import brings in)
+LABEL_BASE_FIELDS = frozenset({"name", "description", "tooltip", "color", "parent"})
 
 #: identifier_utils.display_label_text: the visible text of an option.
 _LABEL_DISPLAY_FIELDS = frozenset({"displayed_label", "text", "label"})

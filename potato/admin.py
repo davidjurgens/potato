@@ -1794,8 +1794,15 @@ class AdminDashboard:
                         # anyone picked. Shared with /admin/iaa and with
                         # adjudication so the two reports cannot disagree about
                         # what a person answered.
-                        values = annotation_values.group_by_schema(
-                            labels).get(schema_name)
+                        # Pairwise answers in data order, as /admin/iaa reads
+                        # them: under randomize_order the stored letter is the
+                        # screen position, which differs per annotator.
+                        from potato.server_utils.presentation_order import source_oriented
+                        values = source_oriented(
+                            [scheme], annotation_values.group_by_schema(labels),
+                            user_state.get_presentation_order(item_id)
+                            if hasattr(user_state, "get_presentation_order") else {},
+                        ).get(schema_name)
                         if not values:
                             continue
                         names = (dispatcher.packed_answer(scheme, values)

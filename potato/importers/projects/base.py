@@ -95,7 +95,17 @@ class ProjectImportResult:
 
     @property
     def num_predictions(self) -> int:
-        return sum(len(item.predictions) for item in self.items)
+        """Model suggestions: each box, region or label, not each item.
+
+        A scheme's suggestion is a list (boxes, species) or one value. Counting
+        items reported "4 model suggestion(s)" for 621 BirdNET boxes.
+        """
+        return sum(len(value) if isinstance(value, list) else 1
+                   for item in self.items for value in item.predictions.values())
+
+    @property
+    def num_predicted_items(self) -> int:
+        return sum(1 for item in self.items if item.predictions)
 
     def summarize(self) -> Dict[str, Any]:
         return {
@@ -105,6 +115,7 @@ class ProjectImportResult:
             "num_annotators": len(self.annotator_ids),
             "num_responses": self.num_responses,
             "num_predictions": self.num_predictions,
+            "num_predicted_items": self.num_predicted_items,
             "skipped": dict(self.skipped),
             "warnings": list(self.warnings),
         }

@@ -4592,7 +4592,7 @@
         },
         "balance_on": {
           "default": "assigned",
-          "description": "What `balanced` counts: everyone `assigned`, or only participants who `completed` without being screened out, so dropouts are replaced",
+          "description": "What `balanced` counts: everyone `assigned`, or participants who `completed` without being screened out plus those still in progress (see in_progress_minutes), so dropouts are replaced",
           "type": "string"
         },
         "cells": {
@@ -4602,6 +4602,12 @@
         "factors": {
           "description": "Factor name to list of levels, e.g. `{feedback: [none, immediate]}`. Several factors form a full factorial design unless `cells` lists a subset",
           "type": "object"
+        },
+        "in_progress_minutes": {
+          "default": 60,
+          "description": "With `balance_on: completed`, how long after assignment or last activity an unfinished participant still counts toward their cell. 0 counts finishers only",
+          "minimum": 0,
+          "type": "number"
         },
         "max_per_cell": {
           "description": "Skip a cell once it has this many participants. When every cell is full, the least-filled one is still assigned and a warning is logged",
@@ -5643,7 +5649,19 @@
           "description": "Field holding each item's unique id.",
           "type": "string"
         },
+        "image_key": {
+          "description": "Field holding the image, for AI support on an item that also has text.",
+          "type": "string"
+        },
         "kwargs": {},
+        "private_keys": {
+          "description": "Item fields the annotator's browser never receives; kept in exports.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
         "text_key": {
           "description": "Field holding the text shown to annotators.",
           "type": "string"

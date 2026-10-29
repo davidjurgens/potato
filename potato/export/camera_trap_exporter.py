@@ -31,7 +31,7 @@ lists the image in the export warnings. Camtrap DP marks those observations
 in ``observationComments``.
 
 ``camtrap_dp``
-    A Camtrap DP 1.0 data package: ``datapackage.json``, ``deployments.csv``,
+    A Camtrap DP 1.0.2 data package: ``datapackage.json``, ``deployments.csv``,
     ``media.csv`` and ``observations.csv`` with the 1.0 column names.
     Observations are media-level (one per box, or one per species / triage
     answer when there are no boxes) or event-level for sequence items. Potato
@@ -70,7 +70,7 @@ MD_CATEGORY_ID = {v: k for k, v in MD_CATEGORIES.items()}
 #: Camtrap DP observationType for each triage class.
 CAMTRAP_TYPE = {"animal": "animal", "person": "human", "vehicle": "vehicle", "empty": "blank"}
 
-CAMTRAP_VERSION = "1.0"
+CAMTRAP_VERSION = "1.0.2"
 CAMTRAP_BASE = f"https://raw.githubusercontent.com/tdwg/camtrap-dp/{CAMTRAP_VERSION}"
 DEPLOYMENT_COLUMNS = [
     "deploymentID", "locationID", "locationName", "latitude", "longitude",
@@ -510,6 +510,31 @@ def _number(value: Any) -> Optional[float]:
         return None
 
 
+def _public_media(url: Any, file: Any, base: Optional[str]) -> str:
+    """A link for Darwin Core ``associatedMedia``, or "" when there is none.
+
+    An http(s) URL is kept. Otherwise, with ``--option media_base_url``, the
+    file is placed under that base; without it there is no public link, and
+    the server's own ``/media/...`` path is not written.
+    """
+    url = str(url or "")
+    if url.startswith(("http://", "https://")):
+        return url
+    if base:
+        name = str(file or url).lstrip("/")
+        if name.startswith("media/"):
+            name = name[len("media/"):]
+        if not name:
+            return ""
+        # The file goes on the path, before any query string the base has
+        # (a signed bucket URL, say).
+        from urllib.parse import quote, urlsplit, urlunsplit
+        parts = urlsplit(base)
+        path = parts.path.rstrip("/") + "/" + quote(name)
+        return urlunsplit(parts._replace(path=path))
+    return ""
+
+
 def _coords(item: dict) -> Tuple[Optional[float], Optional[float]]:
     lat = _number(item.get("latitude", item.get("lat")))
     lon = _number(item.get("longitude", item.get("lon", item.get("lng"))))
@@ -530,7 +555,7 @@ def _write_csv(path: str, columns: List[str], rows: Iterable[dict]) -> None:
 
 class CamtrapDPExporter(BaseExporter):
     format_name = "camtrap_dp"
-    description = "Camtrap DP 1.0 data package (deployments, media, observations, datapackage.json)"
+    description = "Camtrap DP 1.0.2 data package (deployments, media, observations, datapackage.json)"
     file_extensions = [".csv", ".json"]
 
     def can_export(self, context: ExportContext) -> Tuple[bool, str]:
@@ -655,8 +680,24 @@ class CamtrapDPExporter(BaseExporter):
                            "schema": f"{CAMTRAP_BASE}/{n}-table-schema.json"}
                           for n in ("deployments", "media", "observations")],
         }
+        # The profile requires a media licence once any licence is listed.
+        # The two often differ (CC0 data, CC BY images), so neither is
+        # copied from the other.
+        licenses = []
         if options.get("license"):
-            package["licenses"] = [{"name": options["license"], "scope": "data"}]
+            licenses.append({"name": options["license"], "scope": "data"})
+        if options.get("media_license"):
+            licenses.append({"name": options["media_license"], "scope": "media"})
+        if licenses:
+            package["licenses"] = licenses
+        if options.get("license") and not options.get("media_license"):
+            warnings.append("datapackage.json: pass --option media_license=... as well "
+                            "(the profile requires a media license once a license is listed)")
+        if levels == ["media"]:
+            # GBIF's converter (camtrapdp write_dwc) reads event-level
+            # observations unless told otherwise, and found 0 occurrences in
+            # a package of single images.
+            package["gbifIngestion"] = {"observationLevel": "media"}
         for key, missing in (("contributor", not options.get("contributor")),
                              ("sampling_design", not options.get("sampling_design")),
                              ("capture_method", not options.get("capture_method"))):
@@ -699,7 +740,8 @@ class DarwinCoreExporter(BaseExporter):
                                 errors=["basis_of_record must be MachineObservation or HumanObservation"])
         review = CameraTrapReview(context, options)
         annotator = options.get("annotator")
-        rows, unnamed = [], 0
+        media_base = options.get("media_base_url")
+        rows, unnamed, local_media = [], 0, 0
         for o in observations(context, review, options.get("timezone"), annotator):
             if o["observationType"] != "animal":
                 continue
@@ -708,9 +750,15 @@ class DarwinCoreExporter(BaseExporter):
                 continue
             item = o["_item"]
             lat, lon = _coords(item)
-            media = item.get("image_url") or item.get("video_url") or item.get("file") or ""
             if isinstance(item.get("frames"), list):
-                media = " | ".join(str(f.get("url", "")) for f in item["frames"] if isinstance(f, dict))
+                links = [_public_media(f.get("url"), f.get("url"), media_base)
+                         for f in item["frames"] if isinstance(f, dict)]
+            else:
+                links = [_public_media(item.get("image_url") or item.get("video_url"),
+                                       item.get("file"), media_base)]
+            if not all(links):
+                local_media += 1
+            media = " | ".join(link for link in links if link)
             rows.append({
                 "occurrenceID": o["observationID"],
                 "basisOfRecord": forced or ("MachineObservation" if o["_machine"] else "HumanObservation"),
@@ -740,6 +788,10 @@ class DarwinCoreExporter(BaseExporter):
         if unnamed:
             warnings.append(f"{unnamed} animal observation(s) without a species name were left out "
                             "(Darwin Core needs scientificName)")
+        if local_media:
+            warnings.append(f"{local_media} occurrence(s) have media served only by this Potato "
+                            "server, so associatedMedia is empty for them; pass "
+                            "--option media_base_url=https://... where the files are published")
         conflict = conflict_warning(triage_conflicts(context, review, annotator), "The Darwin Core export")
         if conflict:
             warnings.append(conflict)

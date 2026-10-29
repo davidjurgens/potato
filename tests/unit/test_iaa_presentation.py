@@ -386,3 +386,11 @@ class TestPresentIsNonDestructive:
                                     "metrics": {"cohens_kappa": 0.9}}}}
         rows = P.present(report)["schemas"]["s"]["rows"]
         assert rows[0]["band"] == "strong"
+
+
+
+def test_a_count_by_label_prints_as_a_count():
+    """`n_pairs_by_label` flattens to `n_pairs_by_label.spleen`; its 9 pairs
+    printed as "9.000"."""
+    rows = {r["name"]: r for r in P.flatten({"n_pairs_by_label": {"spleen": 9}})}
+    assert rows["n_pairs_by_label.spleen"]["display"] == "9"

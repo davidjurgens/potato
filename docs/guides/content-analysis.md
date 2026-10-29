@@ -60,7 +60,9 @@ per question:
 
 A `span` question is coded by highlighting, so its row is positional: every
 character of a coded item is a unit, labelled with the code of the span
-covering it or with none. A coder who read an item and highlighted nothing
+covering it or with none. Where codes overlap, the character's value is the
+set of codes covering it, so a coder who applied two overlapping codes
+disagrees with one who applied only one of them. A coder who read an item and highlighted nothing
 counts as "none" throughout, so a missed passage is a disagreement. Here
 `units` counts items (one per text field that has highlights) and
 `pairable_values` counts characters. `/admin/iaa` reports the same measure as

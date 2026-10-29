@@ -484,7 +484,8 @@ annotation_schemes:
 | `Shift+H` | Show only the currently selected label (press again to restore) |
 | `[` / `]` | Decrease / increase brush size |
 | `Ctrl/Cmd+D` | Copy annotations from the previous image (when `carry_over` is enabled) |
-| `1-9` | Select label by number (whatever `key_value` you configure) |
+| `1-9` | Select label by number (whatever `key_value` you configure); relabels a selected shape |
+| `Escape` | Deselect, so a label key sets the label for the next shape |
 | `Delete` / `Backspace` | Delete selected annotation |
 | `Ctrl/Cmd+Z` | Undo |
 | `Ctrl/Cmd+Shift+Z` | Redo |
@@ -523,7 +524,9 @@ profiles.
 
 The toolbar provides:
 - **Tool Selection**: Buttons to switch between annotation tools
-- **Label Selection**: Color-coded buttons for each label
+- **Label Selection**: Color-coded buttons for each label. A label button sets
+  the label of the next shape drawn, and with a shape selected it also
+  relabels that shape. A model's shape relabeled this way is marked `edited`.
 - **Zoom Controls**: Zoom in, zoom out, fit to view, reset
 - **Edit Controls**: Undo, redo, delete selected
 

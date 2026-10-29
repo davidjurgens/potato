@@ -6,6 +6,124 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- With `randomize_order` on a `pairwise` scheme, the page stores the letter
+  of the card as the annotator saw it, so annotators who preferred the same
+  response could store "A" and "B". Agreement at `/admin/iaa` and
+  `/admin/api/agreement`, every export, adjudication, adaptive escalation,
+  paper mode and the labeling engine read that letter as if it were the data's.
+  They now apply the recorded order: "A" is the first entry of `items_key`, and
+  a `scale_value` is mirrored on the scale's range.
+- Several pairwise schemes on one `items_key` each permuted the list again, so
+  the page showed the composition of their swaps while each scheme recorded
+  only its own order. They now share one order per annotator and item.
+- On a page with a pairwise scheme, `display_logic` never hid anything: the
+  pairwise layout moved each form out of the container that is hidden and
+  shown. It was already so in 2.12.1.
+- Adaptive escalation skipped an annotator who left a question blank, so a
+  species named by one reviewer and left empty by the other was not a
+  disagreement; in one camera-trap review 5 of 13 disagreements were raised.
+  A blank now counts as a different answer once the annotator has gone past
+  the item (Previous does not count), except on free-text questions and ones `display_logic` can
+  hide; a half-finished autosave is not a disagreement. The score is
+  recomputed on every save and when an annotator leaves the item, and a boost
+  is now withdrawn when a
+  later save brings the answers back into agreement before anyone beyond the
+  original cap has the item, so a corrected misclick no longer reaches the
+  expert.
+- Answers to survey questions hidden by `display_logic` were stored when a
+  request answered them anyway. They are dropped when the page is left.
+- Span agreement (token kappa and positional alpha at `/admin/iaa`, and the
+  span rows of the reliability export) kept only the longest of overlapping
+  spans, so a coder who applied two overlapping codes agreed perfectly with
+  one who applied only the longer. A position now carries every code that
+  covers it.
+- STAPLE was implemented and documented and called by nothing. The volume
+  agreement report at `/admin/iaa` now runs it on items with three or more
+  annotators and gives each annotator's sensitivity and specificity per label
+  in the JSON report. For image masks it is still a Python call, and the docs
+  now say so.
+- `balance_on: completed` counted only finished participants, so everyone who
+  started together counted toward no cell: 12 readers arriving at once split
+  8 and 4 across two lists. Participants still in progress now count until
+  `conditions.in_progress_minutes` (default 60) after their assignment or last
+  activity; after that they are treated as dropouts and replaced.
+- The PCIbex importer dropped a comprehension question shown after a
+  `DashedSentence` (`newText(row.Question)` answered with `newKey`) and did
+  not list it in `IMPORT_REPORT.md`. It is imported as the trial's question,
+  answered with the template's keys, and the report says which.
+- The `codebook` export counted 0 uses for every `hierarchical_multiselect`
+  code, reading the stored `selected_labels` as a code name.
+- The self-paced reading hint said "Space = next word" when the regions were
+  phrases. It says "region" unless every region is one word.
+- On a spectrogram covered by BirdNET's full-band boxes, a drag meant to
+  draw a missed call moved a detection instead, since a press on a box always
+  started a move. A detector's box that is not selected is now drawn over; a
+  click selects it, and a selected box moves as before.
+- The QDPX export failed the REFI-QDA XSD when a source had both highlighted
+  passages and whole-source codes, because the source's own codings were
+  interleaved with the selections. Those codings also had no `creatingUser`,
+  and a `hierarchical_multiselect` answer became one code named
+  `selected_labels`.
+- A `hierarchical_multiselect` built from a `taxonomy`, `taxonomy_file` or
+  `taxonomy_preset` had no codes in the `codebook` and `qdpx` exports, which
+  read `labels`. `taxonomy_file` was also never loaded by the export command.
+- QDPX import put code definitions under `description`, which the span page
+  does not show; they are also the label's `tooltip` now. Codes on a whole
+  source became an unused `document_codes` field; they are a `document_codes`
+  multiselect question. Each imported span keeps its coder as `annotator`. A
+  label's `parent`, which carries the imported code tree, was ignored by the
+  `codebook` and `qdpx` exports of a flat scheme and is now read.
+- An image box could not be relabeled: a label button set only the label of
+  the next box drawn. With a box selected, a label button or number key now
+  relabels it, and a detector's box relabeled this way is marked `edited`. A
+  box just drawn also could not be selected by clicking it until something
+  redrew the canvas. `Escape` deselects, and polygon points are clamped to the
+  image as box corners are, so a point in the margin no longer saves a
+  negative coordinate.
+- Camtrap DP exports pointed at the 1.0 profile, which frictionless 5.17 and
+  later cannot resolve; they use 1.0.2. A package of single images gets
+  `gbifIngestion: {observationLevel: media}`, without which GBIF's converter
+  found 0 occurrences. `--option media_license=` adds the media license the
+  profile requires once a license is listed, and the export warns when only
+  `license` is given.
+- Darwin Core `associatedMedia` held the Potato server's own `/media/` path.
+  It is an http(s) URL, or the file under `--option media_base_url=`, or empty
+  with a warning.
+- The MegaDetector importer ignored `latitude` and `longitude` on image
+  entries, so deployments had no coordinates and Camtrap DP `spatial` stayed
+  empty. A `file` that is an http(s) URL is now the image URL, rather than a
+  path under `/media/`.
+- BirdNET 2.4's `nocall` rows imported as boxes and as a label. They are left
+  out and counted, and a recording with only a `nocall` row stays an item with
+  no boxes, as an empty Raven table does.
+- The import summary counted items with suggestions as "model suggestions":
+  "4 model suggestion(s)" for 621 boxes. It counts the boxes and labels, and
+  names the items they are on.
+- A Qualtrics slider with one statement had the statement appended to its
+  question ("...watching news: Minutes per day").
+- The runtime (jsPsych, OSWeb) CSV exports wrote Python `True`/`False`; they
+  write `true`/`false`, as jsPsych does.
+- The `dicom_seg` warning about volumes that are not DICOM counted each
+  annotator's copy of an item: "9 item(s)" for 3.
+- `/admin/iaa` printed a count broken down by label, such as
+  `n_pairs_by_label`, as a measurement ("9.000").
+- The admin login page said the generated key is in the server log at
+  startup. It is written to `admin_api_key.txt` the first time an admin page
+  is opened, and the log names the file, not the key.
+- Adaptive escalation compared pairwise answers by the label name
+  (`selection`), so every pair of annotators agreed and no pairwise item was
+  escalated.
+- A randomized pairwise page still carried the item in data order in its
+  `[data-instance-json]` record, beside the shuffled candidates, so the
+  original order could be read off the page. The page and both instance-data
+  APIs now get one annotator view of the item, with the candidates in the order
+  shown. The page's item data also kept machine labels and held-out
+  pre-annotations that the APIs already removed; they are removed there too.
+- The configuration guide showed `item_properties.context_key`, which nothing
+  reads. It is removed from the example.
+- The `coding_eval` `preference` export looked for a `label` key that
+  pairwise never writes and produced no rows. It reads `selection` and writes
+  the chosen and rejected responses.
 - Span agreement at `/admin/iaa` was always empty. Every span measure read
   n/a over 0 items, however many annotators had marked spans, because the
   report expected saved spans grouped by scheme and they are stored one entry
@@ -86,6 +204,9 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Added
 
+- **`item_properties.private_keys`**: item fields the annotator's browser never
+  receives, for keeping a comparison blind (the model behind each response,
+  say). They are kept in exports.
 - **Point tiers** in `tiered_annotation` (`point: true`): click to place a
   mark, drag to move it. TextGrid point tiers (`TextTier`) import as point
   tiers and export as `TextTier`, so ToBI tones and breaks round-trip.

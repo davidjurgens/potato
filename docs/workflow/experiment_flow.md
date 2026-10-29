@@ -32,7 +32,8 @@ cell the first time the server sees them and keeps it.
 |---|---|---|
 | `factors` | required | Factor name to a list of at least two levels |
 | `assignment` | `balanced` | `balanced` picks the cell with the fewest participants (ties broken at random per participant); `random` draws a cell, seeded per participant; `round_robin` cycles through cells in arrival order |
-| `balance_on` | `assigned` | `completed` counts only participants who reached the end without being screened out, so dropouts are replaced |
+| `balance_on` | `assigned` | `completed` counts participants who reached the end without being screened out, and those still in progress whose assignment or last activity is within `in_progress_minutes`; anyone else is a dropout and is replaced |
+| `in_progress_minutes` | `60` | With `balance_on: completed`, how long an unfinished participant still counts toward their cell. Set it to about the study's expected duration; `0` counts finishers only |
 | `max_per_cell` | none | A full cell is skipped. When every cell is full, the least-filled one is used and a warning is logged |
 | `cells` | full factorial | An explicit list of cells, a subset of the factorial, each with an optional `weight` |
 

@@ -180,3 +180,21 @@ def _output_dir(server):
     if not os.path.isabs(out):
         out = os.path.join(os.path.dirname(server.config), out)
     return out
+
+
+def test_an_answer_to_a_hidden_question_is_not_kept(flow_server):
+    """display_logic hides smoke_years from a non-smoker in the browser, but a
+    POST that answered it anyway was stored as if the question had been
+    shown."""
+    from potato.phase import UserPhase
+    from potato.user_state_management import get_user_state_manager
+
+    s = _login(flow_server.base_url, "hidden_answer")
+    s.get(f"{flow_server.base_url}/", timeout=5)
+    r = _submit_page(s, flow_server.base_url, {"smoker:::No": "No", "age:::age": "30",
+                                               "smoke_years:::smoke_years": "12"})
+    assert 'data-schema-name="general_q"' in r.text
+    state = get_user_state_manager().get_user_state("hidden_answer")
+    kept = {label.get_schema() for label in
+            state.phase_to_page_to_label_to_value[UserPhase.PRESTUDY]["screener"]}
+    assert kept == {"smoker", "age"}

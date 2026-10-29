@@ -21,7 +21,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from potato.server_utils.annotation_values import group_by_schema
+from potato.server_utils.annotation_values import group_by_schema, user_values
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +177,9 @@ def on_human_save(user_state, instance_id: str) -> None:
         if _is_machine(user_state) or is_quality_control_item(instance_id):
             return
         user_id = str(getattr(user_state, "user_id", ""))
-        grouped = group_by_schema(user_state.get_label_annotations(instance_id) or {})
+        # Data order: the engine's own answers are about the candidates as
+        # the data lists them, not as this annotator's page showed them.
+        grouped = user_values(user_state, instance_id)
         for scheme in engine.schemes():
             value = answer_for(engine, scheme, grouped)
             if value is not None:

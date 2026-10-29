@@ -163,6 +163,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Field holding a category label, used by category-based assignment",
         type="string", category=CORE, see_also=("assignment_strategy",),
     ),
+    "item_properties.private_keys": _D(
+        "Item fields the annotator's browser never receives: left out of the "
+        "page's item data and the instance-data APIs, and kept in exports. Use "
+        "it for fields such as the model behind each response in a blind "
+        "pairwise comparison",
+        type="array", category=CORE, example=["model_a", "model_b"],
+        see_also=("item_properties.text_key",),
+    ),
     "item_properties.kwargs": _D(
         "Extra per-item fields to carry through to the display layer",
         type="object", category=CORE,
@@ -2002,9 +2010,16 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", default="balanced", category=ASSIGN,
     ),
     "conditions.balance_on": _D(
-        "What `balanced` counts: everyone `assigned`, or only participants who "
-        "`completed` without being screened out, so dropouts are replaced",
+        "What `balanced` counts: everyone `assigned`, or participants who "
+        "`completed` without being screened out plus those still in progress "
+        "(see in_progress_minutes), so dropouts are replaced",
         type="string", default="assigned", category=ASSIGN,
+    ),
+    "conditions.in_progress_minutes": _D(
+        "With `balance_on: completed`, how long after assignment or last "
+        "activity an unfinished participant still counts toward their cell. "
+        "0 counts finishers only",
+        type="number", default=60, category=ASSIGN, minimum=0,
     ),
     "conditions.max_per_cell": _D(
         "Skip a cell once it has this many participants. When every cell is "

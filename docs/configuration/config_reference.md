@@ -37,7 +37,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `annotation_task_description` |  | string |  | Longer task description; falls back to task_description when absent |  |
 | `annotation_task_name` | Yes | string |  | Display name for the task, shown in the browser title and the header |  |
-| `item_properties` | Yes | object |  | Maps the fields of your data file onto the roles Potato needs: which field is the identifier and which holds the text to annotate | `category_key`, `id_key`, `image_key`, `kwargs`, `text_key` |
+| `item_properties` | Yes | object |  | Maps the fields of your data file onto the roles Potato needs: which field is the identifier and which holds the text to annotate | `category_key`, `id_key`, `image_key`, `kwargs`, `private_keys`, `text_key` |
 | `output_annotation_dir` | Yes | string |  | Directory annotations, user state and exports are written to |  |
 | `output_annotation_format` |  | string | `""` | Deprecated, and read as `export_annotation_format` at load time with a warning (`json` becomes `jsonl`, since no exporter is called `json`). It will stop being read in a later release, so rename it. Annotations are stored as `<output_annotation_dir>/<user>/user_state.json` whatever it says; this key never changed that |  |
 | `task_description` |  | string |  | Short description of the task, shown to annotators |  |
@@ -297,7 +297,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Potato 1.x assignment block. Not read, and named at boot if set; use `assignment_strategy`, `num_annotators_per_item` and `max_annotations_per_user` |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `group_by_condition`, `groups` |
-| `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `max_per_cell` |
+| `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `in_progress_minutes`, `max_per_cell` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
 | `max_annotations_per_item` |  | integer | `-1` | Cap on how many annotators may label one item. -1 means unlimited |  |
 | `max_annotations_per_user` |  | integer | `-1` | Cap on how many dataset items one annotator may receive. Left unset, the cap is the number of items loaded, so every annotator is offered the whole corpus; -1 is explicit unlimited, which is what a dynamic data source needs for items added after boot to be assignable. Injected attention checks and gold items do not count against it |  |
@@ -439,7 +439,7 @@ on a structured label; `validate` warns about any other key, so
 are accepted everywhere because the codebook export and the labeling engine
 read them for any scheme, even where the annotation page does not show them.
 
-| Type | Label keys read besides `color`, `description`, `name`, `tooltip` |
+| Type | Label keys read besides `color`, `description`, `name`, `parent`, `tooltip` |
 |------|------|
 | `audio_annotation` | `key_value` |
 | `confidence` | none |

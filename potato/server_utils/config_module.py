@@ -56,6 +56,8 @@ KNOWN_CONFIG_KEYS = {
         # The image counterpart of text_key, for AI support on a multimodal
         # item. `ai_support.image_key` overrides it.
         "image_key",
+        # Item fields kept out of everything the annotator's browser receives.
+        "private_keys",
     },
     "data_files": None,
     "task_dir": None,
@@ -462,7 +464,8 @@ KNOWN_CONFIG_KEYS = {
     "notifications": {"dry_run", "base_url", "channels", "contact", "templates"},
     # Between-subjects conditions for experiment designs. Validated by
     # experiment_conditions.validate_conditions_config().
-    "conditions": {"factors", "assignment", "balance_on", "max_per_cell", "cells"},
+    "conditions": {"factors", "assignment", "balance_on", "max_per_cell", "cells",
+                   "in_progress_minutes"},
     # Timed trials on the annotation page. Validated by
     # potato.trial_timing.validate_trial_timing_config().
     "trial_timing": {"enabled", "fixation_ms", "fixation_symbol", "stimulus_duration_ms",
@@ -2856,6 +2859,19 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
         category_key = item_properties['category_key']
         if not isinstance(category_key, str) or not category_key.strip():
             raise ConfigValidationError("item_properties.category_key must be a non-empty string")
+
+    private_keys = item_properties.get('private_keys')
+    if private_keys is not None:
+        if (not isinstance(private_keys, list)
+                or not all(isinstance(k, str) and k.strip() for k in private_keys)):
+            raise ConfigValidationError(
+                "item_properties.private_keys must be a list of field names")
+        shown = {item_properties.get('id_key'), item_properties.get('text_key')}
+        clash = sorted(shown & set(private_keys))
+        if clash:
+            raise ConfigValidationError(
+                f"item_properties.private_keys cannot include {', '.join(clash)}: "
+                "the id and text fields are what the page shows")
 
     # Validate data_files (required unless data_directory or data_sources is provided)
     data_files = config_data.get('data_files', [])

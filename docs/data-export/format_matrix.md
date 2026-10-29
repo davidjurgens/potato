@@ -107,7 +107,7 @@ the gap, and the import counts such gaps.
 | `iiif_annotations` | ✅ `canvas#xywh` | ✅ SVG selector | ❌ | ✅ PointSelector | One AnnotationPage per canvas in canvas coordinates, plus a manifest copy that references them; polylines and ellipses as SVG. See [Digital humanities](../guides/digital-humanities.md) |
 | `page_xml` | ✅ as a 4-point polygon | ✅ `Coords` | ❌ | ❌ | Edits the project's copy of each PAGE XML file in place: corrected line text, or moved, added and removed regions and lines |
 | `megadetector` | ✅ normalized `[x, y, w, h]` | ❌ | ❌ | ❌ | MegaDetector batch-output JSON; reviewer-drawn or changed boxes get confidence 1.0. See [Camera traps](../guides/camera-traps.md) |
-| `camtrap_dp` | ✅ `bboxX`/`bboxY`/`bboxWidth`/`bboxHeight` | ❌ | ❌ | ❌ | Camtrap DP 1.0 deployments, media and observations with `datapackage.json` |
+| `camtrap_dp` | ✅ `bboxX`/`bboxY`/`bboxWidth`/`bboxHeight` | ❌ | ❌ | ❌ | Camtrap DP 1.0.2 deployments, media and observations with `datapackage.json` |
 | `raven` | ✅ time × frequency | ❌ | ❌ | ❌ | Raven selection tables from `spectrogram_annotation`, one per recording. See [Bioacoustics](../guides/bioacoustics.md) |
 | `audacity_labels` | ✅ time × frequency | ❌ | ❌ | ❌ | Audacity label tracks, spectral form when the box has frequencies |
 | `geojson` | — | ✅ geographic | ❌ | ✅ geographic | `geo_annotation` features as RFC 7946 GeoJSON (`[lon, lat]`, EPSG:4326). See [Maps](../annotation-types/spatial/geo_annotation.md) |

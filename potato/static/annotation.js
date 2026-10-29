@@ -5717,13 +5717,21 @@ function wrapPairwiseFormsInFlexContainer(pairwiseForms) {
         annotationFormsContainer.insertBefore(wrapper, annotationFormsContainer.firstChild);
     }
 
-    // Move ALL annotation forms into the wrapper
+    // Move ALL annotation forms into the wrapper. A form gated by
+    // display_logic sits inside a .display-logic-container, which is what is
+    // hidden and shown; moving the form out of it left the container empty and
+    // the question always visible. Move the container instead.
+    const moved = new Set();
     allForms.forEach(form => {
+        const gate = form.closest('.display-logic-container');
+        const node = (gate && annotationFormsContainer.contains(gate)) ? gate : form;
+        if (moved.has(node)) return;
+        moved.add(node);
         // Set default grid column if not specified
-        if (!form.hasAttribute('data-grid-columns')) {
-            form.setAttribute('data-grid-columns', '1');
+        if (!node.hasAttribute('data-grid-columns')) {
+            node.setAttribute('data-grid-columns', form.getAttribute('data-grid-columns') || '1');
         }
-        wrapper.appendChild(form);
+        wrapper.appendChild(node);
     });
 }
 

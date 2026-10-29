@@ -129,3 +129,37 @@ def test_an_unknown_annotator_is_named(folder):
     res = export_registry.export("raven", ctx, os.path.join(folder, "nobody"), {"annotator": "zed"})
     assert res.files_written == []
     assert any("No answers from annotator 'zed'" in w for w in res.warnings)
+
+
+def test_birdnet_nocall_rows_are_not_boxes(folder):
+    """BirdNET 2.4 writes a confidence-1.0 `nocall` row for a file with no
+    detections. It imported as a box and put `nocall` in the label list."""
+    with open(os.path.join(folder, "rec1.BirdNET.results.csv"), "w") as f:
+        f.write("Start (s),End (s),Scientific name,Common name,Confidence\n"
+                "0.0,3.0,nocall,nocall,1.0\n"
+                "3.0,6.0,Turdus migratorius,American Robin,0.82\n")
+    result = projects.IMPORTERS["birdnet"].parse_path(folder, {})
+    assert [b["label"] for b in result.items[0].predictions["calls"]] == ["Turdus migratorius"]
+    assert "nocall" not in result.schemes[0]["labels"]
+    assert any("no detection" in what for what in result.skipped)
+
+
+def test_summary_counts_boxes_not_items(folder):
+    with open(os.path.join(folder, "rec1.Table.1.selections.txt"), "w") as f:
+        f.write(t.write_raven(BOXES, label_column="Species"))
+    result = projects.IMPORTERS["raven"].parse_path(folder, {})
+    summary = result.summarize()
+    assert summary["num_predictions"] == len(BOXES)
+    assert summary["num_predicted_items"] == 1
+
+
+def test_a_recording_with_only_nocall_stays_an_item(folder):
+    """A recording BirdNET found nothing in was dropped from the project."""
+    with open(os.path.join(folder, "rec2.BirdNET.results.csv"), "w") as f:
+        f.write("Start (s),End (s),Scientific name,Common name,Confidence\n"
+                "0.0,3.0,nocall,nocall,1.0\n")
+    result = projects.IMPORTERS["birdnet"].parse_path(folder, {})
+    [item] = result.items
+    assert item.instance_id == "rec2"
+    assert not item.predictions.get("calls")
+    assert any("no detection" in what for what in result.skipped)

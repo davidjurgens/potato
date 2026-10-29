@@ -3729,6 +3729,32 @@ def _strip_machine_fields(record, username, instance_id):
     return _strip_cloze_answers(record)
 
 
+def _strip_private_keys(record):
+    """``record`` without the fields named in ``item_properties.private_keys``."""
+    private = (config.get("item_properties") or {}).get("private_keys") or []
+    if not private or not isinstance(record, dict):
+        return record
+    return {k: v for k, v in record.items() if k not in private}
+
+
+def annotator_record(record, user_state, username, instance_id):
+    """The item as this annotator's browser may receive it.
+
+    Every path that sends item data to the page goes through here: the page's
+    ``instance_data`` and ``[data-instance-json]``, the instance display, and
+    the instance-data APIs. It drops machine labels, held-out
+    pre-annotations, cloze answers and ``private_keys``, and puts pairwise
+    candidates in the order this annotator is shown them. The page used to
+    carry the item in data order beside the shuffled candidates, so the
+    source order (and any model name in the data) could be read off it.
+    """
+    record = _strip_private_keys(_strip_machine_fields(record, username, instance_id))
+    if isinstance(record, dict):
+        record = dict(record)
+        _apply_pairwise_order(record, user_state, username, instance_id)
+    return record
+
+
 def _strip_cloze_answers(record):
     """Drop item fields that hold cloze answer keys (never sent to the page)."""
     from potato.server_utils.schemas.cloze import strip_answer_fields
@@ -3887,18 +3913,17 @@ def render_page_with_annotations(username: str):
     # Include full instance data for dynamic schemas (extractive_qa, text_edit,
     # error_span, card_sort, conjoint) that need fields beyond text_key
     if item_data and isinstance(item_data, dict):
-        var_elems["instance_data"] = {
-            k: v for k, v in _strip_cloze_answers(item_data).items()
-            if isinstance(v, (str, int, float, bool, list))
-        }
         # Pairwise candidates come from the item's own data and are laid out by
         # the client in the order it receives them, so swapping them means
-        # permuting the list HERE -- there is no markup to reorder afterwards.
-        # Always showing A before B is the position bias the whole feature
-        # exists for: it does not cancel across annotators, it inflates
-        # agreement while biasing the estimate.
-        _apply_pairwise_order(var_elems["instance_data"], user_state,
-                              username, instance_id)
+        # permuting the list (in annotator_record) -- there is no markup to
+        # reorder afterwards. Always showing A before B is the position bias
+        # the whole feature exists for: it does not cancel across annotators,
+        # it inflates agreement while biasing the estimate.
+        var_elems["instance_data"] = {
+            k: v for k, v in annotator_record(item_data, user_state,
+                                              username, instance_id).items()
+            if isinstance(v, (str, int, float, bool, list))
+        }
         apply_conjoint_profiles(var_elems["instance_data"], user_state,
                                 username, instance_id)
 
@@ -4189,7 +4214,8 @@ def render_page_with_annotations(username: str):
     if has_instance_display:
         try:
             display_renderer = get_instance_display_renderer(config)
-            display_template_vars = display_renderer.get_template_variables(user_item_data)
+            display_template_vars = display_renderer.get_template_variables(
+                annotator_record(user_item_data, user_state, username, instance_id))
             display_html = display_template_vars.get("display_html", "")
             logger.debug(f"Instance display rendered: {len(display_html)} chars")
         except Exception as e:
@@ -4229,8 +4255,8 @@ def render_page_with_annotations(username: str):
         # normalized "_transcripts" index attached here, so they accept every
         # format the audio_dialogue display does (see transcripts/binding.py).
         instance_record=enrich_transcript_record(
-            _strip_machine_fields(item_data if instance_image else user_item_data,
-                                  username, instance_id),
+            annotator_record(item_data if instance_image else user_item_data,
+                             user_state, username, instance_id),
             config, base_dir=config.get("task_dir")
         ),
         instance_id=instance_id,
@@ -4911,23 +4937,46 @@ def _apply_pairwise_order(instance_data, user_state, username, instance_id):
     """
     from potato.server_utils import presentation_order as _order
 
-    for scheme in config.get('annotation_schemes', []) or []:
-        name = scheme.get("name")
-        if not name:
+    # One order per items_key. Every pairwise scheme that reads the field sees
+    # the one list on the page, so it is permuted once and the same order is
+    # recorded for each of them, randomized or not. Permuting per scheme
+    # showed the composition of their swaps while each recorded only its own.
+    pairwise = [s for s in config.get('annotation_schemes', []) or []
+                if s.get("name") and (s.get("annotation_type") or "") in _order.DATA_DRIVEN_TYPES]
+
+    def _ints(order):
+        try:
+            return [int(i) for i in order]
+        except (TypeError, ValueError):
+            return None
+
+    orders: dict = {}
+    for scheme in pairwise:
+        items_key = scheme.get("items_key", "text")
+        if items_key in orders:
             continue
         order = _order.item_order(scheme, instance_data, username, instance_id)
         if not order:
             continue
+        name = scheme["name"]
+        recorded = _ints(_order.record(user_state, instance_id, {name: order}).get(name) or [])
+        orders[items_key] = recorded if recorded and len(recorded) == len(order) else order
 
-        recorded = _order.record(user_state, instance_id, {name: order}).get(name)
-        if recorded and len(recorded) == len(order):
-            try:
-                order = [int(i) for i in recorded]
-            except (TypeError, ValueError):
-                logger.warning("Ignoring a malformed recorded order for %s/%s",
-                               instance_id, name)
-
+    for scheme in pairwise:
         items_key = scheme.get("items_key", "text")
+        if items_key not in orders:
+            continue
+        name = scheme["name"]
+        recorded = _ints(_order.record(user_state, instance_id,
+                                       {name: orders[items_key]}).get(name) or [])
+        if recorded != orders[items_key]:
+            logger.warning(
+                "%s/%s was recorded with order %s, but the page shows %s, the "
+                "order shared by every scheme on %s; its answers on this item "
+                "cannot be put in data order", instance_id, name, recorded,
+                orders[items_key], items_key)
+
+    for items_key, order in orders.items():
         items = instance_data.get(items_key)
         if isinstance(items, list) and len(items) == len(order):
             instance_data[items_key] = [items[i] for i in order]

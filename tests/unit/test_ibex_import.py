@@ -203,3 +203,33 @@ def test_message_form_and_html_screens_are_reported():
                                       "chunk_includes/items.csv": ITEMS_CSV})
     report = " ".join(imp.parse_path(d2 / "src").report)
     assert "Html screens" in report and "Message and Form" in report, report
+
+
+PCIBEX_QUESTION_JS = """PennController.ResetPrefix(null)
+Template("items.csv", row =>
+    newTrial("experiment",
+        newController("DashedSentence", {s: row.Sentence}).print().log().wait().remove(),
+        newText("question", row.Question).print(),
+        newKey("answer", "FJ").log().wait()
+    )
+)
+"""
+
+
+def test_pcibex_comprehension_question_after_a_dashed_sentence():
+    """The DashedSentence branch read only the sentence; the question was
+    dropped and not named in the report."""
+    d = _project("ibex_pcibex_question", {
+        "data_includes/main.js": PCIBEX_QUESTION_JS,
+        "chunk_includes/items.csv": "Sentence,Question\nThe horse raced past the barn fell.,Did it fall?\n"})
+    imp = projects.IMPORTERS["ibex"]
+    res = imp.parse_path(d / "src")
+    assert res.kind == "spr" and res.has_question
+    assert res.items[0]["question"] == "Did it fall?"
+    assert any("Question" in r for r in res.report)
+    imp.write_project(res, str(d / "out"), source=str(d / "src"))
+    cfg = yaml.safe_load((d / "out" / "config.yaml").read_text())
+    assert cfg["trial_timing"]["presentation"]["question_field"] == "question"
+    assert set(cfg["trial_timing"]["response"]["keys"]) == {"f", "j"}
+    assert cfg["annotation_schemes"][0]["name"] == "comprehension"
+    _boot(d / "out")

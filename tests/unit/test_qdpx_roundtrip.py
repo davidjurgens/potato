@@ -353,7 +353,12 @@ class TestAnnotatorsAndDocumentCodes:
             "A code on the whole document is a Coding on the TextSource, not "
             "on a selection")
         result = QDPXImporter().parse_path(path)
-        assert result.documents[0].extra["document_codes"] == ["negative"]
+        # A question of its own, which reaches the page and the exports; as an
+        # extra field the codes were read by nothing.
+        assert result.documents[0].labels["document_codes"] == ["negative"]
+        [scheme] = result.document_schemes
+        assert (scheme["annotation_type"], scheme["name"]) == ("multiselect", "document_codes")
+        assert [label["name"] for label in scheme["labels"]] == ["negative"]
 
 
 class TestRefusesWhatItCannotDo:
@@ -449,3 +454,75 @@ class TestLeftOutIsNamed:
     def test_a_plain_project_has_no_such_warning(self, tmp_path):
         _, result = export(tmp_path, make_context())
         assert not any("does not include" in w for w in result.warnings)
+
+
+SPAN_AND_TOPIC = [
+    {"annotation_type": "span", "name": "codes", "description": "codes",
+     "labels": [{"name": "PER"}, {"name": "LOC"}]},
+    {"annotation_type": "radio", "name": "topic", "description": "topic",
+     "labels": ["politics", "travel"]},
+    {"annotation_type": "hierarchical_multiselect", "name": "themes",
+     "description": "themes", "taxonomy": {"Place": ["City", "Country"], "Person": None}},
+]
+
+
+class TestWholeSourceCodings:
+    def _source(self, tmp_path):
+        ctx = make_context(schemas=SPAN_AND_TOPIC, labels={
+            "topic": {"travel": True},
+            "themes": {"selected_labels": "City,Person"}})
+        # A second coder: their selections came after the first coder's
+        # whole-source codings.
+        ctx.annotations.append({"instance_id": "doc1", "user_id": "bob", "labels": {},
+                                "spans": {"codes": [{"name": "LOC", "start": 21, "end": 26}]}})
+        root, _ = read_project(export(tmp_path, ctx)[0])
+        [source] = find_all(root, "TextSource")
+        return root, source
+
+    def test_selections_come_before_the_sources_own_codings(self, tmp_path):
+        """REFI-QDA's XSD orders them; interleaving failed validation."""
+        _, source = self._source(tmp_path)
+        kinds = [local(child) for child in source]
+        assert kinds.index("Coding") > max(
+            i for i, k in enumerate(kinds) if k == "PlainTextSelection")
+
+    def test_a_whole_source_coding_names_its_coder(self, tmp_path):
+        root, source = self._source(tmp_path)
+        [alice] = [u.get("guid") for u in find_all(root, "User") if u.get("name") == "alice"]
+        codings = [c for c in source if local(c) == "Coding"]
+        assert codings and {c.get("creatingUser") for c in codings} == {alice}  # bob coded no labels
+
+    def test_a_hierarchical_answer_is_its_codes(self, tmp_path):
+        root, source = self._source(tmp_path)
+        names = {c.get("guid"): c.get("name") for c in find_all(root, "Code")}
+        coded = {names[ref.get("targetGUID")]
+                 for c in source if local(c) == "Coding"
+                 for ref in c if local(ref) == "CodeRef"}
+        assert coded == {"travel", "City", "Person"}
+
+    def test_the_taxonomy_is_in_the_codebook(self, tmp_path):
+        root, _ = self._source(tmp_path)
+        assert {"Place", "City", "Country", "Person"} <= {
+            c.get("name") for c in find_all(root, "Code")}
+
+
+
+class TestImportKeepsWhatTheSourceSays:
+    def test_the_coder_and_the_code_definition_survive(self, tmp_path):
+        schemas = [{"annotation_type": "span", "name": "codes", "description": "d",
+                    "labels": [{"name": "PER", "description": "A person"}, {"name": "LOC"}]}]
+        path, _ = export(tmp_path, make_context(schemas=schemas))
+        result = QDPXImporter().parse_path(path)
+        assert {span.annotator for span in result.documents[0].spans} == {"alice"}
+        assert result.documents[0].spans[0].as_client_span("codes")["annotator"] == "alice"
+        per = next(label for label in result.labels if label["name"] == "PER")
+        assert per["tooltip"] == "A person"      # what the span page shows
+
+
+def test_the_codebook_counts_hierarchical_codes():
+    from potato.export.codebook_exporter import CodebookExporter
+    ctx = make_context(schemas=SPAN_AND_TOPIC,
+                       labels={"themes": {"selected_labels": "City,Person"}})
+    counts = CodebookExporter._count_label_uses(ctx)
+    assert counts[("themes", "City")] == 1 and counts[("themes", "Person")] == 1
+    assert ("themes", "selected_labels") not in counts

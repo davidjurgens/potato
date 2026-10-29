@@ -369,7 +369,8 @@ class AdjudicationManager:
                         instance_id_str, {}
                     )
                     if label_annots:
-                        item_annotations[user_id] = self._serialize_labels(label_annots)
+                        item_annotations[user_id] = self._serialize_labels(
+                            label_annots, user_state, instance_id_str)
 
                     # Get span annotations
                     span_annots = user_state.instance_id_to_span_to_value.get(
@@ -499,7 +500,8 @@ class AdjudicationManager:
                     continue
                 la = ustate.instance_id_to_label_to_value.get(instance_id_str, {})
                 if la:
-                    item_annotations[user_id] = self._serialize_labels(la)
+                    item_annotations[user_id] = self._serialize_labels(
+                        la, ustate, instance_id_str)
                 sa = ustate.instance_id_to_span_to_value.get(instance_id_str, {})
                 if sa:
                     item_spans[user_id] = self._serialize_spans(sa)
@@ -542,14 +544,27 @@ class AdjudicationManager:
             )
             return True
 
-    def _serialize_labels(self, label_data: Dict) -> Dict[str, Any]:
+    def _serialize_labels(self, label_data: Dict, user_state=None,
+                          instance_id: Optional[str] = None) -> Dict[str, Any]:
         """Convert label annotation data to serializable dict.
 
         Delegates to :func:`annotation_values.group_by_schema` so adjudication
         and the IAA dispatcher share one definition of how the flat
-        ``{Label: value}`` container regroups by schema.
+        ``{Label: value}`` container regroups by schema. With the annotator's
+        state, a pairwise answer is put in data order, as the IAA report reads
+        it: under ``randomize_order`` the stored letter is the screen position.
         """
-        return annotation_values.group_by_schema(label_data)
+        grouped = annotation_values.group_by_schema(label_data)
+        getter = getattr(user_state, "get_presentation_order", None)
+        if not callable(getter) or instance_id is None:
+            return grouped
+        from potato.server_utils.presentation_order import source_oriented
+        try:
+            orders = getter(instance_id)
+        except Exception:
+            return grouped
+        return source_oriented(self.config.get("annotation_schemes") or [],
+                               grouped, orders)
 
     def _serialize_spans(self, span_data: Dict) -> List[Dict]:
         """Convert span annotation data to serializable list."""
@@ -1380,7 +1395,8 @@ class AdjudicationManager:
                     instance_id_str, {}
                 )
                 if labels:
-                    annotations[user_id] = self._serialize_labels(labels)
+                    annotations[user_id] = self._serialize_labels(
+                        labels, user_state, instance_id_str)
 
             if not annotations:
                 continue

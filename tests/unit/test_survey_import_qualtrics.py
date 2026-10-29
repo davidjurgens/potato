@@ -414,3 +414,31 @@ def test_a_rule_on_a_later_page_is_kept_off_the_page():
     out = create_test_directory("survey_import_qualtrics_later")
     write_new_project(res, out, str(FIXTURE))
     _boot_check(os.path.join(out, "config.yaml"))
+
+
+def _slider(qid, tag, text, statements):
+    return {"QuestionID": qid, "DataExportTag": tag, "QuestionType": "Slider",
+            "Selector": "HSLIDER", "QuestionText": text,
+            "Choices": {str(i + 1): {"Display": s} for i, s in enumerate(statements)},
+            "ChoiceOrder": [str(i + 1) for i in range(len(statements))],
+            "Configuration": {"CSSliderMin": 0, "CSSliderMax": 120}}
+
+
+def _one_block(question):
+    blocks = {"0": {"ID": "BL_1", "Description": "B", "Type": "Default",
+                    "BlockElements": [{"Type": "Question", "QuestionID": question["QuestionID"]}]}}
+    return QualtricsImporter().parse(_survey(blocks, [{"Type": "Block", "ID": "BL_1"}],
+                                             [question]), {})
+
+
+def test_a_single_statement_slider_keeps_its_question_text():
+    """The one statement is the slider's caption, not a sub-question; it was
+    appended, giving "...watching news: Minutes per day"."""
+    res = _one_block(_slider("QID1", "news", "How long do you spend watching news?",
+                             ["Minutes per day"]))
+    assert _q(res, "news")["description"] == "How long do you spend watching news?"
+
+
+def test_a_single_statement_slider_with_no_text_uses_the_statement():
+    res = _one_block(_slider("QID1", "news", "", ["Minutes per day"]))
+    assert _q(res, "news")["description"] == "Minutes per day"

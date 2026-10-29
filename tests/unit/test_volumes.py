@@ -329,6 +329,23 @@ class TestAgreement:
         assert report["dice_by_label"]["Bone"] is None       # nobody painted it
         assert report["mean_dice"] == pytest.approx(expected, abs=1e-4)
         assert report["n_items"] == 1
+        assert "staple" not in report          # two readers: nobody to break the tie
+
+    def test_three_readers_get_staple_rates(self, lesion_truth):
+        """STAPLE was implemented and documented and called by nothing."""
+        from potato.server_utils.iaa.volume_agreement import volume_report
+        shape = list(lesion_truth.shape)
+        eroded = lesion_truth.copy()
+        eroded[np.argwhere(lesion_truth)[::2].T.tolist()] = False   # half the voxels
+        stored = lambda m: {"shape": shape, "masks": {"Lesion": vm.masks_from_volume(m)}}
+        report = volume_report({"item": {"u1": stored(lesion_truth), "u2": stored(lesion_truth),
+                                         "u3": stored(eroded)}},
+                               {"labels": ["Lesion", "Bone"]})
+        lesion = report["staple"]["Lesion"]
+        assert lesion["n_items"] == 1 and "Bone" not in report["staple"]
+        assert lesion["sensitivity"]["u1"] > 0.95
+        assert lesion["sensitivity"]["u3"] < 0.7          # under-segmented
+        assert lesion["specificity"]["u3"] > 0.95
 
 
 @pytest.fixture(scope="module")

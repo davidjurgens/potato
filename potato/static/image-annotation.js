@@ -528,14 +528,32 @@ class ImageAnnotationManager {
             }
         });
 
-        // Selection events
-        this.canvas.on('selection:created', () => {
+        // Selection events. A shape the annotator clicked is the one a label
+        // button relabels; a shape made active by the code (a drawing that has
+        // just finished) is not, or picking the label for the next box would
+        // relabel the box just drawn. Fabric passes the pointer event only for
+        // a selection the user made.
+        this.canvas.on('selection:created', (opt) => {
+            this._relabelTarget = (opt && opt.e) ? this.canvas.getActiveObject() : null;
             this._updateDeleteButtonState();
             this._renderAttributePanel();
         });
 
-        this.canvas.on('selection:updated', () => {
+        this.canvas.on('selection:updated', (opt) => {
+            this._relabelTarget = (opt && opt.e) ? this.canvas.getActiveObject() : null;
             this._renderAttributePanel();
+        });
+
+        this.canvas.on('selection:cleared', () => {
+            this._relabelTarget = null;
+        });
+
+        // Clicking a shape that is already active (the one just drawn) fires
+        // no selection event, but it is the annotator choosing that shape.
+        this.canvas.on('mouse:down', (opt) => {
+            if (opt && opt.e && opt.target && opt.target.annotationData) {
+                this._relabelTarget = opt.target;
+            }
         });
 
         // A finished drawing becomes active after the save that announced it,
@@ -575,6 +593,16 @@ class ImageAnnotationManager {
             if (e.code === 'Space' && !this._spaceKeyDown) {
                 this._spaceKeyDown = true;
                 this.canvas.defaultCursor = 'grab';
+                e.preventDefault();
+            }
+
+            // Escape deselects, so the next label key picks the label for the
+            // next shape instead of relabeling the one left selected.
+            if (e.key === 'Escape' && this.canvas.getActiveObject()) {
+                this.canvas.discardActiveObject();
+                this._relabelTarget = null;
+                this.canvas.requestRenderAll();
+                this._updateDeleteButtonState();
                 e.preventDefault();
             }
 
@@ -2409,6 +2437,17 @@ class ImageAnnotationManager {
         if (this.canvas.isDrawingMode) {
             this.canvas.freeDrawingBrush.color = this.currentColor;
         }
+
+        // With a shape selected, a label button changes that shape's label,
+        // as reviewers of a detector's boxes expect: the button used to set
+        // only the label of the next box drawn, so a wrong class could not be
+        // corrected without deleting the box and drawing it again.
+        const target = this._relabelTarget;
+        if (target && target.annotationData && this.canvas.getActiveObject() === target
+                && target.annotationData.label !== label) {
+            const index = this.getAnnotationHandles().findIndex(h => h.object === target);
+            if (index >= 0) this.relabelAnnotation(index, label);
+        }
     }
 
     /**
@@ -2605,6 +2644,11 @@ class ImageAnnotationManager {
 
         // Only keep if it has reasonable size
         if (this.drawingObject.width > 5 && this.drawingObject.height > 5) {
+            // The drag set width and height but not the hit-test corners,
+            // which stayed at the 0x0 rectangle the drag began with, so a
+            // click on the new box missed it until something else refreshed
+            // them.
+            this.drawingObject.setCoords();
             this.drawingObject.annotationData = {
                 type: 'bbox',
                 label: this.currentLabel,
@@ -2624,6 +2668,9 @@ class ImageAnnotationManager {
      * Add a point to the current polygon.
      */
     _addPolygonPoint(pointer) {
+        // Clamped like a box's corners: a point in the margin round the image
+        // saved as a negative coordinate.
+        pointer = this._pointerInImage(pointer);
         this.polygonPoints.push({ x: pointer.x, y: pointer.y });
 
         // Draw point marker
@@ -3021,6 +3068,7 @@ class ImageAnnotationManager {
         // Same 5px floor as the bbox tool: a stray click must not leave a
         // degenerate annotation behind.
         if (this.drawingObject.rx > 2.5 && this.drawingObject.ry > 2.5) {
+            this.drawingObject.setCoords();  // as for a box: hit-testable at once
             this.drawingObject.annotationData = {
                 type: 'ellipse',
                 label: this.currentLabel,
@@ -3906,6 +3954,12 @@ class ImageAnnotationManager {
             this._renderAllMasks();
         } else {
             const obj = handle.object;
+            const data = obj.annotationData;
+            // A model's box given another class is not the model's answer any
+            // more, same as one that was moved.
+            if (data.label !== label && data.source && data.source !== 'human') {
+                data.edited = true;
+            }
             obj.annotationData.label = label;
             obj.annotationData.color = color;
             obj.set({ stroke: color });

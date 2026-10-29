@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "10bbad15eaf65b34",
-    "version": "51"
+    "sha256": "164978df6eff7890",
+    "version": "52"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -236,8 +236,8 @@
     "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "dce30685f113dc9a",
-    "version": "57"
+    "sha256": "ff1211207757a648",
+    "version": "58"
   },
   "incentive-elicitation.css": {
     "sha256": "20183e12b6f6efa0",
@@ -492,8 +492,8 @@
     "version": "1"
   },
   "spectrogram-annotation.js": {
-    "sha256": "2e7835214c7e1602",
-    "version": "1"
+    "sha256": "5e2909ac5df1d310",
+    "version": "2"
   },
   "spreadsheet-display.css": {
     "sha256": "b7ae8488ab879d3c",
@@ -544,8 +544,8 @@
     "version": "3"
   },
   "trial-timing.js": {
-    "sha256": "18a800447f5ca6c2",
-    "version": "2"
+    "sha256": "1b3ef897ff84ff5f",
+    "version": "3"
   },
   "truth-serum.js": {
     "sha256": "9795b4dd43262680",

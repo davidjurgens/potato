@@ -29,6 +29,7 @@ shape:
 | `newScale(N)` with `.before` / `.after` texts, classic `AcceptabilityJudgment` | An N-point `likert` scale with those end labels |
 | `newKey("F", "J")` with `newText(row.X)` | A [timed trial](../workflow/timed_trials.md) with those keys (rename the labels to what they mean) |
 | Classic `"Question"` after a sentence | A comprehension question (F and J for the first two answers) |
+| `newText(row.Q)` and `newKey(...)` after a `DashedSentence` | A comprehension question from column `Q`, answered with the template's first two keys as Yes and No (rename the answers if they mean something else) |
 | A `Group` or `List` column; classic `["condition", N]` labels | A between-subjects factor `list`, one data file per list, and `batch_assignment.group_by_condition: list` |
 
 Classic Ibex items labelled `["condition", N]` share group N; list k gets

@@ -68,11 +68,11 @@ item field named `sample_rate`; without it the browser's own rate is used.
 
 | Action | Mouse or touch | Keyboard (focus in the widget) |
 |---|---|---|
-| Draw a box | Drag on empty spectrogram | `N` adds a box at the play position |
+| Draw a box | Drag on empty spectrogram, or over a detector's box that is not selected | `N` adds a box at the play position |
 | Choose the label for new boxes | Click a label button | `1`–`9` |
 | Relabel a box | Select it, then click a label button, or use the box's menu in the list | Select it, then `1`–`9` |
 | Select a box | Click it | `Tab` to it |
-| Move a box | Drag it | Arrow keys |
+| Move a box | Drag it (a detector's box: select it first) | Arrow keys |
 | Resize a box | Drag its top-left or bottom-right corner | `Shift` + arrow keys (right/left: end time, up/down: top frequency) |
 | Delete a box | Delete in the list | `Delete` or `Backspace` |
 | Deselect | Click empty spectrogram | `Escape` |
@@ -85,7 +85,10 @@ An arrow key moves a box by 1% of the visible time span, or by 2% of the
 frequency range. The list under the spectrogram shows every box with its
 times and frequencies, a label menu, and Play and Delete buttons. A box
 imported from a detector is drawn with a dashed border and its confidence
-next to the label until someone changes it.
+next to the label until someone changes it. A drag that starts on such a box
+draws a new box unless the detector's box is selected, because BirdNET's
+full-band windows can cover the whole spectrogram and would otherwise leave
+nowhere to draw.
 
 ## Stored answer
 

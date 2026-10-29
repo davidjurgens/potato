@@ -251,3 +251,20 @@ class TestConfigCodes:
         from potato.server_utils.schemas.volume_annotation import generate_volume_annotation_layout
         html, _keys = generate_volume_annotation_layout(SCHEME)
         assert "VolumeAnnotationManager" in html and "52988006" not in html
+
+
+def test_the_not_dicom_warning_counts_items_not_annotations(project):
+    """Three readers on one NIfTI case were reported as "3 item(s)"."""
+    import nibabel as nib
+    path = os.path.join(project, "media", "case.nii.gz")
+    nib.save(nib.Nifti1Image(np.zeros((8, 8, 4), np.int16), np.eye(4)), path)
+    stored = json.dumps({"shape": [8, 8, 4], "masks": {}})
+    records = [{"instance_id": "nifti case", "user_id": user,
+                "labels": {"seg": {"_data": stored}}} for user in ("ada", "bo", "cy")]
+    ctx = ExportContext(config={"task_dir": project, "media_directory": "media"},
+                        annotations=records,
+                        items={"nifti case": {"id": "nifti case", "volume": "case.nii.gz"}},
+                        schemas=[SCHEME], output_dir=project)
+    res = export_registry.export("dicom_seg", ctx, os.path.join(project, "seg_nifti"), {})
+    [warning] = [w for w in res.warnings if "not DICOM" in w]
+    assert warning.startswith("1 item(s)")

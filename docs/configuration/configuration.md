@@ -257,11 +257,19 @@ data_files:
 item_properties:
   id_key: id           # Field name for item ID
   text_key: text       # Field name for item text
-  context_key: context # Optional: field name for context
   kwargs:              # Optional: additional fields to pass to templates
     - metadata
     - source
+  private_keys:        # Optional: fields the annotator's browser never receives
+    - model_a
+    - model_b
 ```
+
+`private_keys` lists item fields to leave out of everything sent to the
+annotator's browser: the page's item data, `/api/instance_data` and
+`/api/current_instance`. They stay in the data file and in exports. Use it to
+keep a comparison blind, for example the model behind each response in a
+`pairwise` task. The `id_key` and `text_key` fields cannot be private.
 
 The `encoding` field (optional, default `utf-8`) can be set per-file using the dict form. Any [Python-recognized encoding](https://docs.python.org/3/library/codecs.html#standard-encodings) is accepted.
 
