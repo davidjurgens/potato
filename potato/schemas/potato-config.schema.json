@@ -2596,6 +2596,44 @@
           },
           "source": "examples/span/interlinear-gloss/config.yaml"
         },
+        "interval_label": {
+          "scheme": {
+            "annotation_type": "interval_label",
+            "channel_scope": "either",
+            "description": "Mark artefacts, spindles, movement and arousals",
+            "labels": [
+              {
+                "key_value": "1",
+                "name": "artefact"
+              },
+              {
+                "key_value": "2",
+                "name": "spindle"
+              },
+              {
+                "key_value": "3",
+                "name": "walking"
+              },
+              {
+                "key_value": "4",
+                "kind": "event",
+                "name": "arousal"
+              }
+            ],
+            "mode": "free",
+            "name": "segments",
+            "preannotation_field": "events",
+            "preannotation_labels": {
+              "Arousal": "arousal",
+              "Sleep stage 1": null,
+              "Sleep stage 2": null,
+              "Sleep stage 3": null,
+              "Sleep stage W": null
+            },
+            "signal_field": "signal"
+          },
+          "source": "examples/advanced/time-series-intervals/config.yaml"
+        },
         "likert": {
           "scheme": {
             "annotation_type": "likert",
@@ -2647,6 +2685,56 @@
             "stimuli_field": "stimuli"
           },
           "source": "examples/audio/listening-test-mushra/config.yaml"
+        },
+        "microscopy": {
+          "scheme": {
+            "annotation_type": "microscopy",
+            "cell_labels": [
+              {
+                "color": "#f03e3e",
+                "name": "marker positive"
+              },
+              {
+                "color": "#4dabf7",
+                "name": "marker negative"
+              },
+              {
+                "color": "#fab005",
+                "name": "dividing"
+              }
+            ],
+            "channels": [
+              {
+                "label": "DAPI (nuclei)",
+                "name": "DAPI"
+              }
+            ],
+            "description": "Classify the cells, and outline any region that looks damaged.",
+            "image_key": "image",
+            "instructions": "Turn channels on and off and set their contrast in the Channels panel. Click a cell to select it, then choose its class (or press 1-3). Use Rectangle, Polygon or Point to mark regions.",
+            "label_requirement": {
+              "required": true
+            },
+            "labels": [
+              {
+                "color": "#e8590c",
+                "name": "damaged"
+              },
+              {
+                "color": "#868e96",
+                "name": "debris"
+              }
+            ],
+            "labels_key": "cells",
+            "min_cells": 1,
+            "name": "cells",
+            "tools": [
+              "bbox",
+              "polygon",
+              "landmark"
+            ]
+          },
+          "source": "examples/image/multichannel-microscopy/config.yaml"
         },
         "multi_document_event": {
           "scheme": {
@@ -2781,6 +2869,47 @@
             "show_labels": true
           },
           "source": "examples/classification/pairwise-scale/config.yaml"
+        },
+        "peak_picking": {
+          "scheme": {
+            "annotation_type": "peak_picking",
+            "description": "Pick the peaks and describe each one",
+            "label_requirement": {
+              "required": true
+            },
+            "min_peaks": 1,
+            "name": "peaks",
+            "peak_fields": [
+              {
+                "name": "assignment",
+                "placeholder": "e.g. OCH2, C=O",
+                "type": "text"
+              },
+              {
+                "name": "multiplicity",
+                "options": [
+                  "s",
+                  "d",
+                  "t",
+                  "q",
+                  "m",
+                  "br"
+                ],
+                "type": "choice"
+              }
+            ],
+            "region_fields": [
+              {
+                "label": "nH",
+                "name": "protons",
+                "placeholder": "e.g. 2",
+                "type": "text"
+              }
+            ],
+            "require_review": true,
+            "viewer_field": "spectrum"
+          },
+          "source": "examples/advanced/spectrum-peak-picking/config.yaml"
         },
         "price_list": {
           "scheme": {
