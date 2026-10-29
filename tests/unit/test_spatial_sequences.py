@@ -398,6 +398,23 @@ class TestTruncationFloor:
         assert _truncation({"truncated": "fully"}) == 1.0
         assert _truncation({"truncated": 0.2}, measured=0.6) == 0.6
 
+    def test_an_imported_unedited_value_is_written_as_it_is(self):
+        """The corners of KITTI's own boxes spill past the image: cuts of 0.05
+        to 0.46 turned 13 of its 31 truncated 0 lines into 1."""
+        from potato.export.spatial_sequences import (
+            _truncation, source_judged, tracking_truncation)
+        imported = {"source": "import", "attributes": {"truncated": "none"}}
+        assert source_judged(imported)
+        assert tracking_truncation({"truncated": "none"}, 0.46, trusted=True) == 0
+        assert tracking_truncation({"truncated": "fully"}, 0.0, trusted=True) == 2
+        assert _truncation({"truncated": "none"}, 0.3, trusted=True) == 0.0
+        # Edited, or drawn in Potato: the measured share is still the floor.
+        assert not source_judged(dict(imported, edited=True))
+        assert not source_judged({"attributes": {"truncated": "none"}})
+        assert tracking_truncation({"truncated": "none"}, 0.4) == 1
+        # A yes/no attribute is never trusted over the measurement.
+        assert tracking_truncation({"truncated": False}, 0.4, trusted=True) == 1
+
     def test_an_unrecognized_value_is_reported(self, tmp_path):
         obj = TestKitti2DBoxes.single(15.0)
         obj["attributes"] = {"truncated": "sort of"}
@@ -405,3 +422,42 @@ class TestTruncationFloor:
             "image_width": "1242", "image_height": "375"})
         assert float(line.split()[1]) == 0.0
         assert any("'sort of'" in w for w in result.warnings)
+
+
+class TestTrackedProvenance:
+    """tracks() kept only geometry and attributes, so an imported track's
+    source never reached the truncation rule and its own 0 got the floor."""
+
+    def _keyframe(self, frame, **extra):
+        return dict({"type": "cuboid_3d", "label": "Car", "track_id": "t1", "frame": frame,
+                     "coordinates": {"center": [10, 0, 0], "size": [4, 2, 1.5],
+                                     "rotation": [0, 0, 0, 1]},
+                     "attributes": {"truncated": "none"}}, **extra)
+
+    def test_source_and_edited_survive_into_every_frame(self):
+        from potato.export.spatial_sequences import dense_frames, source_judged
+        frames = dense_frames([self._keyframe(0, source="import"),
+                               self._keyframe(2, source="import")], 3)
+        assert all(source_judged(frames[f][0]) for f in range(3))
+        edited = dense_frames([self._keyframe(0, source="import"),
+                               self._keyframe(2, source="import", edited=True)], 3)
+        assert [source_judged(edited[f][0]) for f in range(3)] == [True, False, False]
+
+    def test_an_imported_track_keeps_its_truncation_through_the_export(self, tmp_path):
+        """Through kitti_tracking_lines: an imported Car marked truncated none
+        and cut by the image edge exported with the floor's code."""
+        objects = []
+        for frame in (0, 1):
+            obj = box(frame, "t1", 6.0)
+            obj["coordinates"]["center"][1] = 5.0
+            obj.update(source="import", attributes={"truncated": "none"})
+            objects.append(obj)
+        _r, lines = TestKitti2DBoxes.export(
+            tmp_path, objects, item_extra={"point_cloud": ["a.bin", "b.bin"]},
+            options={"image_width": "1242", "image_height": "375"})
+        assert [line.split()[3] for line in lines] == ["0", "0"]
+        objects[1]["edited"] = True
+        _r, lines = TestKitti2DBoxes.export(
+            tmp_path, objects, item_extra={"point_cloud": ["a.bin", "b.bin"]},
+            options={"image_width": "1242", "image_height": "375"})
+        assert lines[1].split()[3] != "0"    # edited: the measured floor again

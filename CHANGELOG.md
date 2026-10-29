@@ -53,6 +53,20 @@ All notable changes to the Potato annotation platform are documented in this fil
 - `/admin/iaa` skipped `rubric_eval`; it is scored per criterion like
   `multirate`. The `reliability` export skipped `pairwise`; a binary scheme
   gets a nominal row and a scale scheme an interval one, in data order.
+- A cuboid's class could not be changed in the point-cloud viewer: the class
+  buttons and keys set only the class of the next object. With an object the
+  annotator selected they relabel it, and in a sequence the whole track. A
+  detector's or an import's box that is moved, turned or resized is marked
+  `edited`, as relabeling and attribute changes already marked it.
+- KITTI exports clipped 2D boxes at the image width and height (1224, 370)
+  instead of the last pixel (1223, 369), wrote tracking labels with two
+  decimals where KITTI has six (an unchanged box came back at 3D IoU 0.979),
+  and wrote `-0.00`. An imported box's own truncation was raised by the share
+  measured from its corners; it is now written as imported unless someone
+  edited the box. The `kitti_tracking` importer marks occlusion and truncation
+  `per_keyframe`, so an edit on one frame no longer changes the whole track.
+  A point-cloud import names its scheme `objects`, not `image_annotation`, and
+  the `kitti_3d` export counts items rather than (annotator, item) records.
 - A `text_edit` line left unchanged saved nothing on Next, so the progress
   counter did not move and an export could not tell a line someone checked
   from one nobody opened. Next now saves it as accepted, with edit distance 0.

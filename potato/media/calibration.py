@@ -372,10 +372,14 @@ def clip_bbox_to_image(bbox: Sequence[float], width: Optional[int],
     """
     if not bbox or width is None or height is None:
         return list(bbox) if bbox else None
-    x0 = max(0.0, min(float(bbox[0]), float(width)))
-    y0 = max(0.0, min(float(bbox[1]), float(height)))
-    x1 = max(0.0, min(float(bbox[2]), float(width)))
-    y1 = max(0.0, min(float(bbox[3]), float(height)))
+    # Pixel coordinates are 0-based, so the last pixel is width - 1: KITTI's
+    # own labels clip a 1224-wide frame at 1223, and clipping at the width put
+    # every edge-touching box one pixel past the image.
+    right, bottom = float(width) - 1.0, float(height) - 1.0
+    x0 = max(0.0, min(float(bbox[0]), right))
+    y0 = max(0.0, min(float(bbox[1]), bottom))
+    x1 = max(0.0, min(float(bbox[2]), right))
+    y1 = max(0.0, min(float(bbox[3]), bottom))
     if x1 - x0 <= 0 or y1 - y0 <= 0:
         return None
     return [x0, y0, x1, y1]

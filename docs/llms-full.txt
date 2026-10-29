@@ -22750,6 +22750,7 @@ since, they are suspect.
 | `Delete` | Remove the selected box |
 | `Escape` | Deselect |
 | click *(no tool armed)* | Select the nearest annotation |
+| class button or its key, with an annotation you selected | Change its class (in a sequence, the whole track's). The box just drawn is not changed: picking a class then sets the next box's |
 | `h` / `Shift+H` | Hide the armed class / solo it |
 
 Per-class show/hide is the same feature image and video annotation have — the
@@ -61481,7 +61482,14 @@ KITTI's 0/1/2). Truncation starts from the share of the projected box outside
 the image: a fraction in the object format, and 0, 1 (partly) or 2 (fully) in
 the tracking format. A `truncated` attribute can only raise it, since KITTI
 grades difficulty by truncation and a box the image edge cuts in half is not
-Easy whatever the label says. The attribute may be true/false, a number from 0
+Easy whatever the label says. The exception is an imported or model object
+nobody edited: its own share or `none`/`partly`/`fully` is written as it is,
+because the share measured from a cuboid's corners overstates truncation (on
+one KITTI sequence it turned KITTI's 0 into 1 on 13 of 31 lines). Moving,
+turning, relabeling or changing an attribute marks the object edited. The
+tracking format writes six decimals, as KITTI's tracking labels do; the
+object format writes two. 2D boxes are clipped to the last pixel, width − 1 and
+height − 1. The attribute may be true/false, a number from 0
 to 1, or `none`/`partly`/`fully`; `partly` with nothing cut off is written as
 0.5 in the object format. Any other value is ignored and named in a warning.
 

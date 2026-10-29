@@ -236,7 +236,7 @@
     "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "ff1211207757a648",
+    "sha256": "974e0d3d005b3323",
     "version": "58"
   },
   "incentive-elicitation.css": {
@@ -396,8 +396,8 @@
     "version": "8"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "ca63f13e06bf570a",
-    "version": "14"
+    "sha256": "038d81c9b59812b9",
+    "version": "15"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",

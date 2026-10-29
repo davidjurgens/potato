@@ -143,6 +143,7 @@ since, they are suspect.
 | `Delete` | Remove the selected box |
 | `Escape` | Deselect |
 | click *(no tool armed)* | Select the nearest annotation |
+| class button or its key, with an annotation you selected | Change its class (in a sequence, the whole track's). The box just drawn is not changed: picking a class then sets the next box's |
 | `h` / `Shift+H` | Hide the armed class / solo it |
 
 Per-class show/hide is the same feature image and video annotation have — the

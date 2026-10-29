@@ -297,6 +297,16 @@ class TestParsing:
         assert fields[6] == "180.00" and fields[7] == "130.00"
 
 
+    def test_decimals_and_no_negative_zero(self):
+        obj = normalize_spatial_object(kitti_to_cuboid(
+            "Car", [1.5, 1.6, 4.0], [0.123456, 1.6, 20.0], -0.0001, REFERENCE_RT))
+        fields = cuboid_to_kitti(obj, REFERENCE_RT)
+        two = format_kitti_3d_line("Car", fields, bbox=[1, 2, 3, 4]).split()
+        six = format_kitti_3d_line("Car", fields, bbox=[1, 2, 3, 4], decimals=6).split()
+        assert two[11] == "0.12" and six[11] == "0.123456"
+        assert not any(v.startswith("-0.00") and float(v) == 0 for v in two + six)
+
+
 class TestDegenerate:
     def test_a_non_cuboid_is_refused(self):
         point = normalize_spatial_object(

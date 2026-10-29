@@ -345,6 +345,12 @@ class TestBboxClipping:
         assert clip_bbox_to_image([-20, -5, 100, 90], 640, 480) == \
             [0.0, 0.0, 100.0, 90.0]
 
+    def test_the_last_pixel_is_width_minus_one(self):
+        """KITTI clips a 1224-wide frame at 1223; clipping at the width put an
+        edge-touching box one pixel past the image."""
+        assert clip_bbox_to_image([1100, 200, 1300, 400], 1224, 370) == \
+            [1100.0, 200.0, 1223.0, 369.0]
+
     def test_a_box_entirely_outside_is_dropped(self):
         assert clip_bbox_to_image([700, 10, 900, 90], 640, 480) is None
 

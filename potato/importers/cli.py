@@ -53,7 +53,8 @@ def parse_args(args=None):
         help="Directory to write the generated project into")
     parser.add_argument(
         "--schema-name", default="image_annotation",
-        help="Name of the generated annotation scheme (default: image_annotation)")
+        help=("Name of the generated annotation scheme (default: image_annotation; "
+              "spans for text, objects for point clouds)"))
     parser.add_argument(
         "--image-dir",
         help=("Directory holding the images. Used to read width/height when "
@@ -1048,6 +1049,12 @@ def _write_project(parsed, result, source: str,
             f"{len(unstamped)} imported annotation(s) have no `source` after "
             f"stamping, so they would export as though a person drew them. "
             f"First: {unstamped[0]}")
+
+    if (result.project.get("annotation_type") == "spatial_annotation"
+            and parsed.schema_name == "image_annotation"):
+        # The default is the image one, and a point-cloud project named its
+        # scheme and task "image_annotation".
+        parsed.schema_name = "objects"
 
     os.makedirs(parsed.output_dir, exist_ok=True)
     data_dir = os.path.join(parsed.output_dir, "data")

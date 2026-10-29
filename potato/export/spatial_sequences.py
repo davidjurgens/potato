@@ -53,6 +53,11 @@ def tracks(objects: Iterable[dict]) -> Dict[str, List[Tuple[int, dict]]]:
             continue
         canonical = dict(canonical)
         canonical["attributes"] = obj.get("attributes") or {}
+        # Provenance rides along, or source_judged() saw every tracked object
+        # as drawn in Potato and an imported box's truncation got the floor.
+        for key in ("source", "edited"):
+            if key in obj:
+                canonical[key] = obj[key]
         out.setdefault(str(obj["track_id"]), []).append((frame, canonical))
     for keyframes in out.values():
         keyframes.sort(key=lambda pair: pair[0])
@@ -93,6 +98,9 @@ def object_at(keyframes: List[Tuple[int, dict]], frame: int) -> Optional[dict]:
             f1, b = f, obj
             t = (frame - f0) / (f1 - f0)
             out = dict(a, frame=frame, interpolated=True)
+            # Between two keyframes, edited if either side was.
+            if b.get("edited"):
+                out["edited"] = True
             if a.get("center") and b.get("center"):
                 out["center"] = _lerp(a["center"], b["center"], t)
             if a.get("size") and b.get("size"):
@@ -211,15 +219,39 @@ def truncation_attribute(attributes: Dict[str, Any]):
     return code, None, None
 
 
-def _truncation(attributes: Dict[str, Any], measured: float = 0.0) -> float:
+def source_judged(obj: Dict[str, Any]) -> bool:
+    """Whether an object's attributes are its source's own judgement: it came
+    from an import or a model and nobody changed it."""
+    return (str(obj.get("source") or "human") != "human") and not obj.get("edited")
+
+
+def _graded(attributes: Dict[str, Any]) -> bool:
+    """A share or a none/partly/fully level, not a yes/no or nothing."""
+    value = attributes.get("truncated", attributes.get("truncation"))
+    return value not in (None, "") and not isinstance(value, bool)
+
+
+def _truncation(attributes: Dict[str, Any], measured: float = 0.0,
+                trusted: bool = False) -> float:
     """KITTI's object-format truncation.
 
     The share of the projected box outside the image is the floor; an
     attribute can only raise it, so `truncated: false` (a bool attribute's
     starting value) cannot hide a box the image edge cuts in half.
+
+    ``trusted`` (see :func:`source_judged`) is for an imported object nobody
+    edited: its graded value is the source's judgement and is written as it
+    is. The measured share comes from the cuboid's corners, which spill past
+    the image for objects inside it; as a floor it turned KITTI's own 0 into
+    1 on 13 of 31 tracking lines, at cuts of 0.05 to 0.46, while KITTI's real
+    partial truncations there cut 0.65 and 0.83.
     """
     measured = max(0.0, min(1.0, measured))
     code, fraction, _unknown = truncation_attribute(attributes)
+    if trusted and _graded(attributes) and code is not None:
+        if fraction is not None:
+            return fraction
+        return {0: 0.0, 1: PARTLY_TRUNCATED, 2: 1.0}[code]
     if fraction is not None:
         return max(measured, fraction)
     if code == 2:
@@ -229,13 +261,17 @@ def _truncation(attributes: Dict[str, Any], measured: float = 0.0) -> float:
     return measured
 
 
-def tracking_truncation(attributes: Dict[str, Any], measured: float = 0.0) -> int:
+def tracking_truncation(attributes: Dict[str, Any], measured: float = 0.0,
+                        trusted: bool = False) -> int:
     """KITTI's tracking-format truncation: 0 none, 1 partly, 2 fully.
 
-    The larger of the measured code and the attribute's.
+    The larger of the measured code and the attribute's, except for a trusted
+    object's graded value, which is written as it is (see :func:`_truncation`).
     """
     measured_code = 0 if measured <= 0 else 2 if measured >= 1 else 1
     code, _fraction, _unknown = truncation_attribute(attributes)
+    if trusted and _graded(attributes) and code is not None:
+        return code
     return max(measured_code, code or 0)
 
 
@@ -268,7 +304,12 @@ def kitti_tracking_lines(objects: Iterable[dict], n_frames: int,
             number = ids.setdefault(obj["track_id"], len(ids))
             attributes = obj.get("attributes") or {}
             row = format_kitti_3d_line(str(obj.get("label") or "DontCare"), fields, bbox=box,
-                                       truncated=tracking_truncation(attributes, cut),
-                                       occluded=_occlusion(attributes))
+                                       truncated=tracking_truncation(
+                                           attributes, cut, trusted=source_judged(obj)),
+                                       occluded=_occlusion(attributes),
+                                       # KITTI tracking labels carry six decimals;
+                                       # two moved a box enough to drop its 3D IoU
+                                       # with itself to 0.979.
+                                       decimals=6)
             lines.append(f"{frame} {number} {row}")
     return lines, ids

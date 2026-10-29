@@ -283,7 +283,8 @@ def parse_kitti_3d_line(line: str) -> Optional[Tuple[str, List[float],
 
 def format_kitti_3d_line(label: str, fields: Dict[str, Any], *,
                          bbox: Optional[Sequence[float]] = None,
-                         truncated: float = 0.0, occluded: int = 0) -> str:
+                         truncated: float = 0.0, occluded: int = 0,
+                         decimals: int = 2) -> str:
     """
     A full fifteen-field KITTI label line from :func:`cuboid_to_kitti` output.
 
@@ -300,16 +301,22 @@ def format_kitti_3d_line(label: str, fields: Dict[str, Any], *,
     box = list(bbox) if bbox else [0.0, 0.0, 0.0, 0.0]
     h, w, length = fields["dimensions"]
     x, y, z = fields["location"]
+
+    def num(value) -> str:
+        text = f"{float(value):.{decimals}f}"
+        # -0.00 is 0.00: a rotation of -0.001 rounds to it.
+        return text[1:] if text.startswith("-") and float(text) == 0 else text
+
     return " ".join([
         label,
         str(truncated) if isinstance(truncated, int) and not isinstance(truncated, bool)
         else f"{float(truncated):.2f}",
         str(int(occluded)),
-        f"{fields['alpha']:.2f}",
-        f"{box[0]:.2f}", f"{box[1]:.2f}", f"{box[2]:.2f}", f"{box[3]:.2f}",
-        f"{h:.2f}", f"{w:.2f}", f"{length:.2f}",
-        f"{x:.2f}", f"{y:.2f}", f"{z:.2f}",
-        f"{fields['rotation_y']:.2f}",
+        num(fields["alpha"]),
+        num(box[0]), num(box[1]), num(box[2]), num(box[3]),
+        num(h), num(w), num(length),
+        num(x), num(y), num(z),
+        num(fields["rotation_y"]),
     ])
 
 

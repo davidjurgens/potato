@@ -960,6 +960,8 @@
                                  coordinates: coords,
                                  attributes: this._newAttributes(this.currentLabel) });
             this.selectedIndex = this.annotations.length - 1;
+            this._relabelTarget = null;
+            this._relabelTrack = undefined;
             this._renderAttributePanel();
             if (this.frames) this._updateFrameBar();
             this._status(`Box added: ${describeBox(coords, this.origin)}. `
@@ -975,6 +977,8 @@
                                  color: this.currentColor, coordinates: hit,
                                  attributes: this._newAttributes(this.currentLabel) });
             this.selectedIndex = this.annotations.length - 1;
+            this._relabelTarget = null;
+            this._relabelTrack = undefined;
             this._renderAttributePanel();
             if (this.frames) this._updateFrameBar();
         }
@@ -1002,6 +1006,7 @@
             });
 
             this.selectedIndex = best;
+            this._markUserSelection();
             this._highlightSelection();
             if (best >= 0) {
                 this._status(
@@ -1023,6 +1028,7 @@
             const from = this.selectedIndex < 0
                 ? (step > 0 ? -1 : 0) : this.selectedIndex;
             this.selectedIndex = ((from + step) % n + n) % n;
+            this._markUserSelection();
             this._highlightSelection();
             this._drawOverlays();
             const obj = this.annotations[this.selectedIndex];
@@ -1113,6 +1119,7 @@
             if (!obj || obj.type !== 'cuboid_3d') return false;
             obj.coordinates.rotation = composeYaw(obj.coordinates.rotation,
                                                   radians);
+            this._markEdited(obj);
             this._rebuildMeshes();
             this._saveState();
             this._updateAnnotationData();
@@ -1467,6 +1474,7 @@
                 selection.coordinates = mpr.applyDrag(
                     view, selection.coordinates, this._slabDrag.handle, world,
                     this._slabDrag.offset);
+                this._markEdited(selection);
                 this._rebuildMesh(this.selectedIndex);
                 this._updateAnnotationData();
             });
@@ -1564,6 +1572,7 @@
                 this._announce('Box is already at its minimum size.');
                 return;
             }
+            this._markEdited(selection);
             this._rebuildMesh(this.selectedIndex);
             // _updateAnnotationData redraws the slabs and the camera overlays,
             // so there is no separate redraw here.
@@ -1733,7 +1742,7 @@
             });
             this.container.querySelectorAll('.label-btn').forEach((btn) => {
                 btn.addEventListener('click', () => {
-                    this.setLabel(btn.dataset.label, btn.dataset.color);
+                    this.setLabel(btn.dataset.label, btn.dataset.color, true);
                 });
             });
             const first = this.container.querySelector('.label-btn');
@@ -1811,6 +1820,7 @@
                     if (e.key === 'Escape') {
                         e.preventDefault();
                         this.selectedIndex = -1;
+                        this._markUserSelection();
                         this._highlightSelection();
                         this._drawOverlays();
                         return;
@@ -1827,7 +1837,7 @@
                 for (const label of (this.config.labels || [])) {
                     if (label.key_value && e.key === String(label.key_value)) {
                         e.preventDefault();
-                        this.setLabel(label.name, label.color);
+                        this.setLabel(label.name, label.color, true);
                         return;
                     }
                 }
@@ -1848,15 +1858,51 @@
             });
         }
 
-        setLabel(name, color) {
+        setLabel(name, color, fromUser) {
             this.currentLabel = name;
             this.currentColor = color;
+            // With an object the annotator selected, a class button or key
+            // changes its class. It used to set only the class of the next
+            // object, so a wrong cuboid had to be deleted and drawn again. An
+            // object the viewer selected itself (the one just drawn) is left
+            // alone, or choosing the class of the next box would relabel it.
+            if (fromUser) {
+                const index = this._userSelectedIndex();
+                if (index >= 0 && this.annotations[index].label !== name) {
+                    this.relabelAnnotation(index, name);
+                }
+            }
             if (!this.container) return;
             this.container.querySelectorAll('.label-btn').forEach((btn) => {
                 const on = btn.dataset.label === name;
                 btn.classList.toggle('active', on);
                 btn.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
+        }
+
+        /** A model's or an import's object a person changed is not the
+         * source's answer any more: moved or turned boxes were exported as if
+         * the detector's (or KITTI's) own, attributes and all. */
+        _markEdited(obj) {
+            if (obj && obj.source && obj.source !== 'human') obj.edited = true;
+        }
+
+        /** Remember the object the annotator chose, by object and by track. */
+        _markUserSelection() {
+            const obj = this.selectedIndex >= 0 ? this.annotations[this.selectedIndex] : null;
+            this._relabelTarget = obj || null;
+            this._relabelTrack = obj ? obj.track_id : undefined;
+        }
+
+        /** The selected index if the annotator chose it, else -1. A track
+         * chosen on one frame stays chosen on the next. */
+        _userSelectedIndex() {
+            const index = this.selectedIndex;
+            const obj = index >= 0 ? this.annotations[index] : null;
+            if (!obj) return -1;
+            if (obj === this._relabelTarget) return index;
+            if (this._relabelTrack !== undefined && obj.track_id === this._relabelTrack) return index;
+            return -1;
         }
 
         // -------------------------------------------------------------
@@ -1939,8 +1985,23 @@
             const obj = this.annotations[index];
             const color = this.colorForLabel(label);
             if (!obj || !color) return false;
+            // A model's object given another class is not the model's answer.
+            if (obj.label !== label && obj.source && obj.source !== 'human') obj.edited = true;
             obj.label = label;
             obj.color = color;
+            if (this.frames && obj.track_id !== undefined) {
+                // A track has one class: every keyframe takes it, or the
+                // object would change class between frames.
+                for (const stored of this.sequenceStore) {
+                    if (stored && stored.track_id === obj.track_id) {
+                        if (stored.label !== label && stored.source && stored.source !== 'human') {
+                            stored.edited = true;
+                        }
+                        stored.label = label;
+                        stored.color = color;
+                    }
+                }
+            }
             this._rebuildMeshes();
             this._saveState();
             this._updateAnnotationData();

@@ -48,10 +48,12 @@ TRUNCATION_NAMES = {0: "none", 1: "partly", 2: "fully"}
 _FRAME, _TRACK, _TYPE, _TRUNCATED, _OCCLUDED = 0, 1, 2, 3, 4
 _DIMS, _LOC, _RY, _SCORE = slice(10, 13), slice(13, 16), 16, 17
 
+#: Per keyframe: KITTI labels occlusion and truncation frame by frame, and
+#: without the flag an edit on one frame changed the whole track.
 ATTRIBUTES = [
-    {"name": "occluded", "type": "select",
+    {"name": "occluded", "type": "select", "per_keyframe": True,
      "options": ["none", "partly", "largely", "unknown"], "default": "none"},
-    {"name": "truncated", "type": "select",
+    {"name": "truncated", "type": "select", "per_keyframe": True,
      "options": ["none", "partly", "fully"], "default": "none"},
 ]
 

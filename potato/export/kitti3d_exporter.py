@@ -62,7 +62,10 @@ class KITTI3DExporter(BaseExporter):
         skipped_types: Dict[str, int] = {}
         no_calibration: List[str] = []
         tilted = 0
-        n_objects = n_items = 0
+        n_objects = 0
+        # Items, not (annotator, item) records: two reviewers of one scan
+        # reported two items.
+        written_items = set()
         no_box = 0
         unknown_truncation: Dict[str, int] = {}
         unknown_occlusion: Dict[str, int] = {}
@@ -104,7 +107,9 @@ class KITTI3DExporter(BaseExporter):
                 if frames:
                     lines, _ids = seq.kitti_tracking_lines(objects, len(frames), reference,
                                                            camera=camera, image_size=size)
-                    no_box += sum(1 for line in lines if line.split()[6:10] == ["0.00"] * 4)
+                    # By value: tracking lines carry six decimals, not two.
+                    no_box += sum(1 for line in lines
+                                  if all(float(v) == 0.0 for v in line.split()[6:10]))
                     folder = os.path.join(base, "label_02")
                 else:
                     lines = []
@@ -120,7 +125,8 @@ class KITTI3DExporter(BaseExporter):
                         attributes = obj.get("attributes") or {}
                         lines.append(format_kitti_3d_line(
                             str(obj.get("label") or "DontCare"), fields, bbox=box,
-                            truncated=seq._truncation(attributes, cut),
+                            truncated=seq._truncation(attributes, cut,
+                                                      trusted=seq.source_judged(obj)),
                             occluded=seq._occlusion(attributes)))
                     folder = os.path.join(base, "label_2")
                 os.makedirs(folder, exist_ok=True)
@@ -129,7 +135,7 @@ class KITTI3DExporter(BaseExporter):
                     fh.write("\n".join(lines) + ("\n" if lines else ""))
                 files.append(path)
                 n_objects += len(lines)
-                n_items += 1
+                written_items.add(instance_id)
 
         for kind, count in sorted(skipped_types.items()):
             warnings.append(f"{count} {kind} annotation(s) were not written: KITTI labels "
@@ -164,7 +170,7 @@ class KITTI3DExporter(BaseExporter):
                             f"stores yaw only, so their pitch and roll were dropped.")
         return ExportResult(success=True, format_name=self.format_name, files_written=files,
                             warnings=warnings,
-                            stats={"num_items": n_items, "num_lines": n_objects})
+                            stats={"num_items": len(written_items), "num_lines": n_objects})
 
     @staticmethod
     def _calibration(context: ExportContext, item: Dict[str, Any], scheme: Dict[str, Any],

@@ -2443,7 +2443,9 @@ class ImageAnnotationManager {
         // only the label of the next box drawn, so a wrong class could not be
         // corrected without deleting the box and drawing it again.
         const target = this._relabelTarget;
-        if (target && target.annotationData && this.canvas.getActiveObject() === target
+        const active = this.canvas && typeof this.canvas.getActiveObject === 'function'
+            ? this.canvas.getActiveObject() : null;
+        if (target && target.annotationData && active === target
                 && target.annotationData.label !== label) {
             const index = this.getAnnotationHandles().findIndex(h => h.object === target);
             if (index >= 0) this.relabelAnnotation(index, label);
@@ -2648,7 +2650,7 @@ class ImageAnnotationManager {
             // which stayed at the 0x0 rectangle the drag began with, so a
             // click on the new box missed it until something else refreshed
             // them.
-            this.drawingObject.setCoords();
+            if (typeof this.drawingObject.setCoords === 'function') this.drawingObject.setCoords();
             this.drawingObject.annotationData = {
                 type: 'bbox',
                 label: this.currentLabel,
@@ -3068,7 +3070,8 @@ class ImageAnnotationManager {
         // Same 5px floor as the bbox tool: a stray click must not leave a
         // degenerate annotation behind.
         if (this.drawingObject.rx > 2.5 && this.drawingObject.ry > 2.5) {
-            this.drawingObject.setCoords();  // as for a box: hit-testable at once
+            // As for a box: hit-testable at once.
+            if (typeof this.drawingObject.setCoords === 'function') this.drawingObject.setCoords();
             this.drawingObject.annotationData = {
                 type: 'ellipse',
                 label: this.currentLabel,
@@ -4024,7 +4027,10 @@ class ImageAnnotationManager {
      * and can end a transform that is still under way.
      */
     _absoluteSelectionTransforms() {
-        const sel = this.canvas.getActiveObject();
+        // Serialization runs without a live fabric canvas too (a manager built
+        // for export, or the jest stubs); there is no selection to unwind then.
+        const sel = this.canvas && typeof this.canvas.getActiveObject === 'function'
+            ? this.canvas.getActiveObject() : null;
         if (!sel || sel.type !== 'activeSelection') return () => {};
         const saved = sel.getObjects().map(obj => {
             const parts = fabric.util.qrDecompose(obj.calcTransformMatrix());

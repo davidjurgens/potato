@@ -141,6 +141,9 @@ class TestTheCommand:
         assert scheme["annotation_type"] == "spatial_annotation"
         assert scheme["tools"] == ["cuboid_3d"] and scheme["calibration_field"] == "calibration"
         assert [a["name"] for a in scheme["attributes"]] == ["occluded", "truncated"]
+        # KITTI labels both frame by frame; without per_keyframe an edit on
+        # one frame changed the whole track.
+        assert all(a.get("per_keyframe") for a in scheme["attributes"])
         assert config["pre_annotation"]["field"] == "predictions"
         media = (out / config["media_directory"]).resolve()
         assert media == (tmp_path / "kitti" / "training").resolve()
@@ -159,3 +162,16 @@ class TestTheCommand:
         dataset(tmp_path)
         assert _detect_directory_format(str(tmp_path)) == "kitti_tracking"
         assert _detect_directory_format(str(tmp_path / "training")) == "kitti_tracking"
+
+
+def test_without_a_schema_name_the_point_cloud_scheme_is_objects(tmp_path):
+    """The default was the image one: the scheme and task were "image_annotation"."""
+    from potato.importers import cli
+
+    dataset(tmp_path / "kitti")
+    out = tmp_path / "project"
+    assert cli.main(["--input", str(tmp_path / "kitti"), "--output-dir", str(out)]) == 0
+    config = yaml.safe_load((out / "config.yaml").read_text())
+    [scheme] = config["annotation_schemes"]
+    assert scheme["name"] == "objects"
+    assert "image_annotation" not in config["annotation_task_name"]
