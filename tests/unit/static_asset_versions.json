@@ -396,8 +396,8 @@
     "version": "8"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "038d81c9b59812b9",
-    "version": "15"
+    "sha256": "bb4870fd53352840",
+    "version": "16"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",
