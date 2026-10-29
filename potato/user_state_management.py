@@ -2869,9 +2869,10 @@ class InMemoryUserState(UserState):
         # NB: Should this be a view/copy?
         return self.instance_id_to_label_to_value[instance_id]
 
-    def get_span_annotations(self, instance_id) -> dict[str,list[SpanAnnotation]]:
+    def get_span_annotations(self, instance_id) -> dict[SpanAnnotation, any]:
         """
-        Returns a mapping from each schema to the span annotations for that schema.
+        Returns the item's spans as a flat ``{SpanAnnotation: value}`` across
+        every span scheme. Filter on ``span.get_schema()`` for one scheme.
         """
         if instance_id not in self.instance_id_to_span_to_value:
             return {}

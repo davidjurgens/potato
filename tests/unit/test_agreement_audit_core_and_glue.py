@@ -12,6 +12,8 @@ import math
 import pandas as pd
 import pytest
 
+from potato.item_state_management import SpanAnnotation
+
 from potato.server_utils.iaa import dispatcher, drift, nominal, ordinal, ranking
 from tests.unit.test_iaa_dispatcher_gathering import (
     FakeUserState, run_report,
@@ -159,12 +161,13 @@ class _SpanUser(FakeUserState):
 
 class TestEmptySpanAnswersCount:
     def test_a_missed_entity_is_disagreement(self):
-        span = lambda a, b: {"start": a, "end": b, "name": "PER"}
+        # The real accessor's shape: a flat {span: value} for the item.
+        span = lambda a, b: SpanAnnotation("ner", "PER", "PER", a, b)
         users = {
-            "A": _SpanUser({i: {"ner": [span(n, n + 3)]}
+            "A": _SpanUser({i: {span(n, n + 3): True}
                             for n, i in enumerate(("i1", "i2", "i3"))},
                            {"i1", "i2", "i3"}),
-            "B": _SpanUser({"i1": {"ner": [span(0, 3)]}}, {"i1", "i2", "i3"}),
+            "B": _SpanUser({"i1": {span(0, 3): True}}, {"i1", "i2", "i3"}),
         }
         rows = dispatcher._gather_spans(["i1", "i2", "i3"], users, "ner")
         assert set(rows) == {"i1", "i2", "i3"}

@@ -739,13 +739,17 @@ def _gather_spans(
     measure read 1.0 for a study whose second annotator missed two of three
     entities. Items nobody marked anything on are still left out -- there is
     nothing to agree about.
+
+    ``get_span_annotations`` returns a flat ``{SpanAnnotation: value}`` for
+    every scheme on the item, not spans grouped by scheme. Reading it as
+    ``{scheme: [spans]}`` found nothing, so every span measure at /admin/iaa
+    was n/a with 0 items.
     """
     rows: Dict[str, Dict[str, list]] = {}
     for iid in instance_ids:
         per_user = {}
         for uid, ustate in user_states.items():
-            spans_by_schema = ustate.get_span_annotations(iid) or {}
-            spans = spans_by_schema.get(schema_name) or []
+            spans = _spans_for_schema(ustate.get_span_annotations(iid), schema_name)
             if spans:
                 per_user[uid] = list(spans)
             elif _saved_item(ustate, iid):
@@ -753,6 +757,17 @@ def _gather_spans(
         if any(per_user.values()):
             rows[iid] = per_user
     return rows
+
+
+def _spans_for_schema(span_to_value, schema_name: str) -> list:
+    """One scheme's spans from a user's flat ``{span: value}`` for an item."""
+    out = []
+    for span_obj in (span_to_value or {}):
+        schema = (span_obj.get("schema") if isinstance(span_obj, dict)
+                  else getattr(span_obj, "schema", None))
+        if schema == schema_name:
+            out.append(span_obj)
+    return out
 
 
 def _saved_item(ustate, iid) -> bool:

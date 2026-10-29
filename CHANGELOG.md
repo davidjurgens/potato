@@ -6,6 +6,10 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- Span agreement at `/admin/iaa` was always empty. Every span measure read
+  n/a over 0 items, however many annotators had marked spans, because the
+  report expected saved spans grouped by scheme and they are stored one entry
+  per span. The report now reads them as stored.
 - `/admin/api/agreement` compared multiselect answers as whole sets, so
   {neutrophil, T cell} against {neutrophil} was complete disagreement and the
   kappas could come out negative for annotators who mostly agreed. Multi-label
