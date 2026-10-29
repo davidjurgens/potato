@@ -808,37 +808,6 @@ class UserStateManager:
         """
         self.max_annotations_per_user = max_annotations_per_user
 
-    def old_get_or_create_user(self, user_id: str) -> UserState:
-        if user_id not in self.user_to_annotation_state:
-            self.logger.debug('Previously unknown user "%s"; creating new annotation state' % (user_id))
-
-            if "automatic_assignment" in self.config and self.config["automatic_assignment"]["on"]:
-                # when pre_annotation is set up, only assign the instance when consent question is answered
-                if "prestudy" in self.config and self.config["prestudy"]["on"]:
-                    user_state = UserState(generate_initial_user_dataflow(user_id))
-                    self.user_to_annotation_state[user_id] = user_state
-
-                # when pre_annotation is set up, only assign the instance when consent question is answered
-                elif "pre_annotation" in self.config["automatic_assignment"] \
-                        and "pre_annotation" in self.config["automatic_assignment"]["order"]:
-
-                    user_state = UserState(generate_initial_user_dataflow(user_id))
-                    self.user_to_annotation_state[user_id] = user_state
-
-                # assign instances to new user when automatic assignment is turned on and there is no pre_annotation or prestudy pages
-                else:
-                    user_state = UserState(generate_initial_user_dataflow(user_id))
-                    self.user_to_annotation_state[user_id] = user_state
-                    self.assign_instances_to_user(user_id)
-
-            else:
-                # assign all the instance to each user when automatic assignment is turned off
-                user_state = UserState(user_id)
-                # user_state.real_instance_assigned_count = user_state.get_assigned_instance_count()
-                self.user_to_annotation_state[user_id] = user_state
-        else:
-            user_state = self.user_to_annotation_state[user_id]
-
     def get_user_state(self, user_id: str) -> UserState:
         '''
         Gets a user from the user state manager or None if the user does not exist (thread-safe).'''

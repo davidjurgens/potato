@@ -65,7 +65,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `annotation_schemes` |  | array |  | The questions annotators answer. Each entry needs an annotation_type from the schema registry plus a name and description |  |
 | `phases` |  | array or object |  | Per-phase configuration. Either a list of phase objects or a mapping with an `order` key. Page types: consent, prestudy, instructions, training, annotation and poststudy, plus the runtime pages jspsych, headphone_check and external (oTree, Empirica, hosted surveys). `counterbalance` (a list of {pages, method: random \| latin_square}) orders groups of pages per participant. Phase-level annotation_schemes replace the top-level list rather than adding to it |  |
 | `pre_annotation` |  | object |  | Seed annotations to show as a starting point for each item | `agreement_metrics`, `allow_modification`, `enabled`, `field`, `highlight_low_confidence`, `predictions_file`, `show_confidence` |
-| `surveyflow` |  | object |  | Survey pages shown before and after annotation |  |
+| `surveyflow` |  | object |  | Potato 1.x survey pages. Not read in 2.x, and named at boot if set; survey pages go under `phases` |  |
 | `training` |  | object |  | Qualification phase annotators must pass before real items | `allow_retry`, `annotation_schemes`, `data_file`, `enabled`, `failure_action`, `feedback`, `passing_criteria` |
 
 ## Authentication / Login
@@ -120,7 +120,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
+| `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_kwargs`, `classifier_name`, `classifier_params`, `cold_start_batch_size`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `llm_config`, `llm_enabled`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `model_persistence_enabled`, `model_retention_count`, `model_save_directory`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_kwargs`, `vectorizer_name`, `vectorizer_params`, `verification_sample_rate` |
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd`, `prices` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `holdout`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
@@ -283,7 +283,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `prestudy` |  | object |  | Legacy pre-study screening block. The only code that reads it is an unreferenced method, so it has no effect -- configure the screening phase through `phases` or `surveyflow` with `type: prestudy` |  |
+| `prestudy` |  | object |  | Legacy pre-study screening block. Not read, and named at boot if set; add a phase with `type: prestudy` under `phases` |  |
 | `review_mode` |  | object |  | Hotkey review queue. Once the current item is complete the page moves on by itself, which turns keyboard-labelled schemes into press-key-and-advance | `advance_on`, `auto_advance`, `delay_ms`, `enabled` |
 | `review_workflow` |  | object |  | Reviewer routing and the kanban board at /admin/review. Keeps its own state per instance (pending, in_review, needs_second, adjudication, done) alongside the annotations | `auto_enroll`, `enabled`, `reviewers`, `routing` |
 | `schedule` |  | object |  | Sessions after the regular flow: waves, experience-sampling prompts and Delphi rounds, computed per participant at enrolment (when they finish the regular flow). See docs/workflow/scheduling.md | `delphi`, `experience_sampling`, `poll_seconds`, `scheduler`, `seed`, `timezone`, `waves` |
@@ -295,7 +295,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
 | `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
-| `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
+| `automatic_assignment` |  | object |  | Potato 1.x assignment block. Not read, and named at boot if set; use `assignment_strategy`, `num_annotators_per_item` and `max_annotations_per_user` |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `group_by_condition`, `groups` |
 | `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `max_per_cell` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
@@ -432,3 +432,33 @@ labels:
 | `key_value` | No | Single-key keyboard shortcut for this label |
 | `abbreviation` | No | Short text for compact display (span overlays) |
 | `color` | No | CSS color for label-specific styling |
+
+Not every type reads every field. The table lists the keys each type reads
+on a structured label; `validate` warns about any other key, so
+`validate --strict` fails on it. `name`, `description`, `tooltip` and `color`
+are accepted everywhere because the codebook export and the labeling engine
+read them for any scheme, even where the annotation page does not show them.
+
+| Type | Label keys read besides `color`, `description`, `name`, `tooltip` |
+|------|------|
+| `audio_annotation` | `key_value` |
+| `confidence` | none |
+| `constant_sum` | `tooltip_file` |
+| `image_annotation` | `key_value`, `label_id`, `supercategory` |
+| `likert` | `displayed_label`, `label`, `text` |
+| `microscopy` | none |
+| `multiselect` | `displayed_label`, `key_value`, `label`, `text`, `tooltip_file`, `videopath` |
+| `radio` | `displayed_label`, `key_value`, `label`, `text`, `tooltip_file` |
+| `ranking` | `tooltip_file` |
+| `select` | none |
+| `slider` | `displayed_label`, `key_value`, `label`, `text`, `tooltip_file` |
+| `soft_label` | `tooltip_file` |
+| `span` | `abbreviation`, `displayed_label`, `key_value`, `label`, `text`, `tooltip_file` |
+| `spatial_annotation` | `key_value` |
+| `spectrogram_annotation` | `key_value` |
+| `triad_test` | `text` |
+| `video_annotation` | `key_value` |
+| `volume_annotation` | `dicom`, `key_value` |
+
+Labels on `multirate`, `pairwise`, `pure_display`, `text` must be plain strings; a structured label there is refused.
+`geo_annotation`, `interval_label`, `viewer_selection` check their own label keys and refuse unknown ones.

@@ -32,11 +32,11 @@ annotation_schemes:
     description: "Does this text contain personally identifiable information (PII)?"
     labels:
       - name: "Yes"
-        key_binding: y
+        key_value: y
       - name: "No"
-        key_binding: n
+        key_value: n
       - name: "Uncertain"
-        key_binding: u
+        key_value: u
 
   # Conditional: Appears when contains_pii = "Yes" or "Uncertain"
   - annotation_type: multiselect
@@ -44,19 +44,19 @@ annotation_schemes:
     description: "What types of PII are present? (select all that apply)"
     labels:
       - name: "Name"
-        key_binding: "1"
+        key_value: "1"
       - name: "Email"
-        key_binding: "2"
+        key_value: "2"
       - name: "Phone"
-        key_binding: "3"
+        key_value: "3"
       - name: "Address"
-        key_binding: "4"
+        key_value: "4"
       - name: "SSN"
-        key_binding: "5"
+        key_value: "5"
       - name: "Credit Card"
-        key_binding: "6"
+        key_value: "6"
       - name: "Other"
-        key_binding: "7"
+        key_value: "7"
     display_logic:
       show_when:
         - schema: contains_pii

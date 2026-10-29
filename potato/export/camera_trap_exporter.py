@@ -16,8 +16,13 @@ and ``species_scheme`` name them explicitly.
     score as ``conf`` and the classifier's score in ``classifications``.
     Items reviewed as a sequence or a video clip (no boxes in Potato) carry
     the imported detections through, emptied when the reviewer chose
-    ``empty``. One entry per image means one annotator: the first by user id,
-    or ``annotator=``.
+    ``empty``.
+
+All three write one reviewer per item: the first by user id, or the one named
+by ``annotator=``, with a warning when an item had several. In Camtrap DP and
+Darwin Core a second reviewer's answer would be a second observation of the
+same animal, and GBIF counts it twice. Reconcile reviewers (adjudication)
+before publishing, or name the one whose answers to export.
 
 An image triaged ``empty`` that still has boxes is a contradiction the
 reviewer left. Every camera-trap export (and the Darwin JSON export) keeps the
@@ -236,6 +241,35 @@ def records_by_item(context: ExportContext, review: CameraTrapReview,
     return grouped
 
 
+def _answer_key(review: "CameraTrapReview", record: dict) -> tuple:
+    """What a reviewer said about an item, for telling disagreement apart."""
+    boxes = review.boxes(record) or []
+    return (review.triage(record), tuple(sorted(review.species(record))),
+            tuple(sorted(str(b.get("label", "")) for b in boxes)))
+
+
+def several_annotators_warning(grouped: "OrderedDict[str, List[dict]]",
+                               annotator: Optional[str],
+                               review: Optional["CameraTrapReview"] = None) -> Optional[str]:
+    if annotator:
+        return None if grouped else (
+            f"No answers from annotator '{annotator}', so nothing was written; "
+            f"check the user id")
+    several = [iid for iid, recs in grouped.items() if len(recs) > 1]
+    if not several:
+        return None
+    message = (f"{len(several)} item(s) have several annotators; each is written from "
+               "the first by user id (pass --option annotator=<user> to choose)")
+    if review is not None:
+        differ = [iid for iid in several
+                  if len({_answer_key(review, r) for r in grouped[iid]}) > 1]
+        if differ:
+            shown = ", ".join(differ[:10]) + (f" and {len(differ) - 10} more" if len(differ) > 10 else "")
+            message += (f". On {len(differ)} of them the annotators disagree (triage, "
+                        f"species or box labels): {shown}. Adjudicate those before publishing")
+    return message
+
+
 def _round(v: float, n: int = 4) -> float:
     return round(float(v), n)
 
@@ -294,10 +328,9 @@ class MegaDetectorExporter(BaseExporter):
         review = CameraTrapReview(context, options)
         grouped = records_by_item(context, review, options.get("annotator"))
         warnings: List[str] = []
-        several = [iid for iid, recs in grouped.items() if len(recs) > 1]
-        if several and not options.get("annotator"):
-            warnings.append(f"{len(several)} item(s) have several annotators; each is written from "
-                            "the first by user id (pass --option annotator=<user> to choose)")
+        several = several_annotators_warning(grouped, options.get("annotator"), review)
+        if several:
+            warnings.append(several)
 
         species: "OrderedDict[str, None]" = OrderedDict()
         images: List[dict] = []
@@ -393,15 +426,20 @@ class MegaDetectorExporter(BaseExporter):
 # ---------------------------------------------------------------------------
 
 def observations(context: ExportContext, review: CameraTrapReview,
-                 timezone: Optional[str] = None) -> Iterable[Dict[str, Any]]:
-    """One dict per observation, in Camtrap DP terms, plus ``_machine`` / ``_item``."""
-    grouped = records_by_item(context, review)
+                 timezone: Optional[str] = None,
+                 annotator: Optional[str] = None) -> Iterable[Dict[str, Any]]:
+    """One dict per observation, in Camtrap DP terms, plus ``_machine`` / ``_item``.
+
+    From one reviewer per item, as the MegaDetector export does: every
+    reviewer's boxes would be separate observations of the same animal.
+    """
+    grouped = records_by_item(context, review, annotator)
     for iid, recs in grouped.items():
         item = context.items.get(iid) or {}
         event_level = bool(item.get("frames")) or "files" in item
         start, _ = iso_timestamp(item.get("datetime"), timezone)
         end, _ = iso_timestamp(item.get("datetime_end") or item.get("datetime"), timezone)
-        for record in recs:
+        for record in recs[:1]:
             user = str(record.get("user_id", ""))
             base = {"_item": item, "_iid": iid, "deploymentID": deployment_of(item),
                     "mediaID": "" if event_level else iid,
@@ -570,8 +608,12 @@ class CamtrapDPExporter(BaseExporter):
             warnings.append("some deployments have no timestamps, so deploymentStart/End are empty "
                             "(required by Camtrap DP)")
 
-        obs = list(observations(context, review, tz))
-        conflict = conflict_warning(triage_conflicts(context, review), "The Camtrap DP export")
+        annotator = options.get("annotator")
+        several = several_annotators_warning(records_by_item(context, review, annotator), annotator, review)
+        if several:
+            warnings.append(several)
+        obs = list(observations(context, review, tz, annotator))
+        conflict = conflict_warning(triage_conflicts(context, review, annotator), "The Camtrap DP export")
         if conflict:
             warnings.append(conflict)
         taxa = sorted({o["scientificName"] for o in obs if o.get("scientificName")})
@@ -656,8 +698,9 @@ class DarwinCoreExporter(BaseExporter):
             return ExportResult(success=False, format_name=self.format_name,
                                 errors=["basis_of_record must be MachineObservation or HumanObservation"])
         review = CameraTrapReview(context, options)
+        annotator = options.get("annotator")
         rows, unnamed = [], 0
-        for o in observations(context, review, options.get("timezone")):
+        for o in observations(context, review, options.get("timezone"), annotator):
             if o["observationType"] != "animal":
                 continue
             if not o.get("scientificName"):
@@ -691,10 +734,13 @@ class DarwinCoreExporter(BaseExporter):
         path = os.path.join(output_path, "occurrence.csv")
         _write_csv(path, DWC_COLUMNS, rows)
         warnings = []
+        several = several_annotators_warning(records_by_item(context, review, annotator), annotator, review)
+        if several:
+            warnings.append(several)
         if unnamed:
             warnings.append(f"{unnamed} animal observation(s) without a species name were left out "
                             "(Darwin Core needs scientificName)")
-        conflict = conflict_warning(triage_conflicts(context, review), "The Darwin Core export")
+        conflict = conflict_warning(triage_conflicts(context, review, annotator), "The Darwin Core export")
         if conflict:
             warnings.append(conflict)
         return ExportResult(success=True, format_name=self.format_name, files_written=[path],

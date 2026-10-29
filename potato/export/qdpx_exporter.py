@@ -127,6 +127,18 @@ class QDPXExporter(BaseExporter):
 
         self._write_archive(out_file, root, payloads)
 
+        # Not written yet; say so rather than hand over a project that looks
+        # complete in NVivo or ATLAS.ti and is missing them.
+        left_out = []
+        if (context.config.get("annotation_ui") or {}).get("memos"):
+            left_out.append("memos")
+        if (context.config.get("cases") or {}).get("enabled"):
+            left_out.append("cases")
+        if left_out:
+            warnings.append(
+                f"The project has {' and '.join(left_out)}, which the QDPX export "
+                f"does not include yet; export them separately.")
+
         logger.info("QDPX exported to %s: %d source(s), %d selection(s)",
                     out_file, len(payloads), num_selections)
         return ExportResult(

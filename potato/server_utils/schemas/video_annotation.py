@@ -46,6 +46,8 @@ DEFAULT_COLORS = [
 
 # Valid annotation modes
 VALID_MODES = ["segment", "frame", "keyframe", "tracking", "combined"]
+# The cases tracking-interpolation.js switches on.
+TRACKING_INTERPOLATIONS = ("linear", "cubic", "constant")
 
 
 def generate_video_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:
@@ -123,6 +125,29 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     show_timecode = annotation_scheme.get('show_timecode', True)
     video_fps = annotation_scheme.get('video_fps', 30)
 
+    # tracking_options was declared and documented but never reached the page:
+    # interpolation was hard-coded to linear and auto-advance was never applied.
+    tracking_options = annotation_scheme.get('tracking_options') or {}
+    if not isinstance(tracking_options, dict):
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options must be a mapping")
+    unknown = set(tracking_options) - {'interpolation', 'auto_advance_frames'}
+    if unknown:
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options: unknown key(s) "
+            f"{sorted(unknown)}; expected interpolation and auto_advance_frames")
+    interpolation = tracking_options.get('interpolation', 'linear')
+    if interpolation not in TRACKING_INTERPOLATIONS:
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options.interpolation must be "
+            f"one of {list(TRACKING_INTERPOLATIONS)} (got {interpolation!r})")
+    auto_advance_frames = tracking_options.get('auto_advance_frames', 0)
+    if (isinstance(auto_advance_frames, bool) or not isinstance(auto_advance_frames, int)
+            or auto_advance_frames < 0):
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options.auto_advance_frames "
+            f"must be a whole number of frames, 0 or more (got {auto_advance_frames!r})")
+
     # AI support configuration
     ai_support = annotation_scheme.get("ai_support", {})
     ai_enabled = ai_support.get("enabled", False)
@@ -155,6 +180,8 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "frameStepping": frame_stepping,
         "showTimecode": show_timecode,
         "videoFps": video_fps,
+        "interpolation": interpolation,
+        "autoAdvanceFrames": auto_advance_frames,
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
         "sourceField": source_field,
@@ -296,9 +323,9 @@ def _generate_html(
                 <button type="button" class="tracking-btn" data-action="create-track" title="Create a new object track (T)">+ Track</button>
                 <button type="button" class="tracking-btn delete-btn" data-action="delete-track" title="Delete selected track" disabled>Delete Track</button>
                 <select class="interpolation-select" title="Interpolation method between keyframes">
-                    <option value="linear">Linear</option>
-                    <option value="cubic">Cubic (smooth)</option>
-                    <option value="constant">Constant (hold)</option>
+                    <option value="linear"__SEL_linear__>Linear</option>
+                    <option value="cubic"__SEL_cubic__>Cubic (smooth)</option>
+                    <option value="constant"__SEL_constant__>Constant (hold)</option>
                 </select>
                 <button type="button" class="tracking-btn tracking-propagate-btn"
                         data-action="propagate"
@@ -307,6 +334,11 @@ def _generate_html(
                       aria-live="polite" aria-atomic="true"></span>
             </div>
         '''
+    # The selector opens on tracking_options.interpolation, which new tracks use.
+    for method in TRACKING_INTERPOLATIONS:
+        mode_controls_html = mode_controls_html.replace(
+            f"__SEL_{method}__",
+            " selected" if method == js_config.get("interpolation") else "")
 
     # Generate timecode display
     timecode_html = ""
@@ -708,8 +740,8 @@ def _generate_html(
                                     form: container.closest('.annotation-form'),
                                     config: {{
                                         videoFps: config.videoFps || 30,
-                                        interpolation: 'linear',
-                                        autoAdvanceFrames: config.autoAdvanceFrames || 5,
+                                        interpolation: config.interpolation || 'linear',
+                                        autoAdvanceFrames: config.autoAdvanceFrames || 0,
                                         attributes: config.attributes || [],
                                         schemaName: config.schemaName
                                     }}

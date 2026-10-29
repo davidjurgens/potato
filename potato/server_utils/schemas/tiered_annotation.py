@@ -36,6 +36,9 @@ Example configuration:
             labels:
               - name: Word
                 color: "#95E1D3"
+          - name: tones
+            point: true          # instants, not intervals (Praat TextTier)
+            labels: ["H*", "L*", "L-L%"]
 """
 
 import json
@@ -353,8 +356,16 @@ def _process_tiers(tiers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "constraint_type": tier.get("constraint_type", "none").lower(),
             "description": tier.get("description", ""),
             "linguistic_type": tier.get("linguistic_type"),
+            # A point tier marks instants (Praat's TextTier: ToBI tones, break
+            # indices) instead of intervals. Its annotations have
+            # start_time == end_time.
+            "point": tier.get("point", False),
             "labels": [],
         }
+        if not isinstance(tier_data["point"], bool):
+            raise ValueError(
+                f"Tier '{tier_data['name']}' has point: {tier_data['point']!r}; "
+                f"use true or false")
 
         # Validate tier_type
         if tier_data["tier_type"] not in ("independent", "dependent"):
@@ -408,8 +419,17 @@ def _validate_tier_structure(tiers: List[Dict[str, Any]]) -> None:
         ValueError: If structure is invalid
     """
     tier_names = {t["name"] for t in tiers}
+    point_tiers = {t["name"] for t in tiers if t.get("point")}
 
     for tier in tiers:
+        if tier.get("point") and tier["tier_type"] == "dependent":
+            raise ValueError(
+                f"Point tier '{tier['name']}' must be independent: a point has no "
+                f"duration to fit inside a parent annotation")
+        if tier.get("parent_tier") in point_tiers:
+            raise ValueError(
+                f"Tier '{tier['name']}' cannot depend on point tier "
+                f"'{tier['parent_tier']}': a point has no duration to subdivide")
         # Check dependent tier requirements
         if tier["tier_type"] == "dependent":
             if not tier.get("parent_tier"):
@@ -455,6 +475,8 @@ def _generate_tier_rows_html(
         is_collapsed = tier_name in collapsed_tiers
         collapsed_class = "collapsed" if is_collapsed else ""
         indent_class = "tier-dependent" if tier["tier_type"] == "dependent" else ""
+        if tier.get("point"):
+            indent_class += " tier-point"
 
         row_html = f'''
         <div class="tier-row {indent_class} {collapsed_class}"
@@ -462,6 +484,7 @@ def _generate_tier_rows_html(
              data-tier-type="{escape_html_content(tier['tier_type'])}"
              data-parent-tier="{escape_html_content(tier.get('parent_tier') or '')}"
              data-constraint-type="{escape_html_content(tier.get('constraint_type', 'none'))}"
+             data-point="{'true' if tier.get('point') else 'false'}"
              style="height: {tier_height}px;">
 '''
 
@@ -492,6 +515,8 @@ def _generate_tier_selector_html(tiers: List[Dict[str, Any]]) -> str:
     for tier in tiers:
         indent = "&nbsp;&nbsp;" if tier["tier_type"] == "dependent" else ""
         tier_type_indicator = " (→)" if tier["tier_type"] == "dependent" else ""
+        if tier.get("point"):
+            tier_type_indicator = " (points)"
         options.append(
             f'<option value="{escape_html_content(tier["name"])}">'
             f'{indent}{escape_html_content(tier["name"])}{tier_type_indicator}</option>'

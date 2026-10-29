@@ -267,7 +267,7 @@
 
     <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}?v=3">
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
@@ -859,7 +859,7 @@
          reads is on every annotation page, and the media widgets need it
          whether or not `instance_display` is declared. -->
     <script src="{{ url_for('static', filename='instance-fields.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=25"></script>
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=26"></script>
     <!-- Touch path for span highlighting; no-op on a fine pointer. -->
     <script src="{{ url_for('static', filename='span-touch.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=6"></script>
@@ -869,7 +869,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=50"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=51"></script>
     {% if trial_timing_client_config %}
     <!-- Timed trials: fixation, stimulus duration, deadline, key-to-label RT.
          After annotation.js, whose navigation and save it drives. -->
@@ -1131,7 +1131,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=15"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=16"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->
@@ -1226,7 +1226,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=7"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->

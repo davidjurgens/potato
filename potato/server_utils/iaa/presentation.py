@@ -93,7 +93,7 @@ _COUNT_NAMES = {"fps", "tolerance", "tolerance_frames", "headline_tolerance",
 
 #: alpha and kappa appear as a whole underscore-separated token in every name
 #: this codebase produces — `alpha`, `detection_alpha`, `alpha_masi`,
-#: `krippendorff_alpha_u`, `weighted_kappa_linear` — and matching the token
+#: `positional_alpha`, `weighted_kappa_linear` — and matching the token
 #: rather than listing the names means a new coefficient is classified before
 #: anyone remembers to add it here.
 _KAPPA_TOKEN = re.compile(r"(?:^|_)(?:alpha|kappa|gamma)(?:_|$)")

@@ -6504,50 +6504,11 @@ function populateConjoint(form, schemaName, data) {
         profiles = data[profilesField];
     }
 
-    // If no profiles in data, generate from config attributes
+    // Profiles come from the item (`profiles_field`) or, for a scheme built
+    // from `attributes`, from the server, which draws and records a design per
+    // annotator and item. With neither, the cards keep their em dashes.
     if (!profiles) {
-        // Read attribute definitions from the form's data-attributes or from inline config
-        const attrCells = form.querySelectorAll('.conjoint-attr-value');
-        if (attrCells.length === 0) return;
-
-        // Collect unique attributes
-        const attrs = {};
-        attrCells.forEach(cell => {
-            const attrName = cell.getAttribute('data-attr');
-            if (attrName && !attrs[attrName]) attrs[attrName] = [];
-        });
-
-        // Try to read levels from inline script config
-        const formScript = form.closest('.annotation_schema');
-        const scriptEl = formScript ? formScript.querySelector('script') : null;
-        let configData = null;
-        if (scriptEl) {
-            try {
-                // Look for conjointConfig in the script text
-                const scriptText = scriptEl.textContent;
-                const match = scriptText.match(/var\s+conjointConfig\s*=\s*(\{[^;]+\})/);
-                if (match) configData = JSON.parse(match[1]);
-            } catch (e) {}
-        }
-
-        // If we have config data, use it to generate random profiles
-        if (configData && configData.attributes) {
-            const profileCards = form.querySelectorAll('.conjoint-profile-card');
-            profileCards.forEach((card, idx) => {
-                const profileNum = card.getAttribute('data-profile');
-                configData.attributes.forEach(attr => {
-                    const cell = card.querySelector(`.conjoint-attr-value[data-attr="${attr.name}"]`);
-                    if (cell && attr.levels && attr.levels.length > 0) {
-                        // Use a deterministic index based on profile num and attribute
-                        // to vary levels across profiles for each instance
-                        const instanceId = document.getElementById('instance_id');
-                        const seed = (instanceId ? instanceId.value.length : 0) + idx;
-                        const levelIdx = (seed + attr.name.length + idx * 7) % attr.levels.length;
-                        cell.textContent = attr.levels[levelIdx];
-                    }
-                });
-            });
-        }
+        return;
     } else if (Array.isArray(profiles)) {
         // Profiles from data.
         //

@@ -4,9 +4,9 @@ Exports for volume_annotation: a NIfTI label volume, and a DICOM SEG.
 ``volume_nifti`` writes, per annotator and item,
 ``<user>/<item>__<schema>.nii.gz``: one uint8 label volume in the source
 file's own voxel order and affine (label n is the scheme's n-th label, 0 is
-background), plus ``labels.json`` mapping values to names and
-``<item>__<schema>__shapes.json`` with the boxes and polygons in voxel
-coordinates. Works for NIfTI and DICOM sources.
+background) and ``<item>__<schema>__shapes.json`` with the boxes and polygons
+in voxel coordinates, plus one ``labels__<schema>.json`` per scheme, at the top
+of the export, mapping values to names. Works for NIfTI and DICOM sources.
 
 ``dicom_seg`` writes ``<user>/<item>__<schema>.dcm``: a binary DICOM
 Segmentation (one segment per label with voxels) referencing the source

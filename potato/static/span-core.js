@@ -824,7 +824,12 @@ class UnifiedPositioningStrategy {
             if (showLabels) {
                 const label = document.createElement('div');
                 label.className = 'span-label';
-                label.textContent = span.label;
+                // A label's `abbreviation` is the chip text; the full name
+                // stays in the tooltip. The picker checkbox carries it, so a
+                // span restored from the server gets it as a new one does.
+                const picker = document.getElementById(`${span.schema}_${span.label}`);
+                const abbreviation = picker && picker.dataset ? picker.dataset.abbreviation : '';
+                label.textContent = abbreviation || span.label;
                 label.title = span.label;
                 // Read by the compact (dot) form, so a collapsed chip still
                 // says which code it is by colour.

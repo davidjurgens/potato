@@ -256,3 +256,57 @@ def test_sequence_review_carries_or_empties_detections(md_file):
         rows = _rows(os.path.join(out, "dp", "observations.csv"))
         assert {r["observationLevel"] for r in rows} == {"event"} and rows[0]["eventID"] == "s1"
         assert rows[0]["observationType"] == ("animal" if triage == "animal" else "blank")
+
+
+def _two_reviewers(result):
+    """The reviewed context with a second reviewer, bob, who agrees with rev."""
+    ctx = _reviewed_context(result, _edit)
+    ctx.annotations = ctx.annotations + [dict(r, user_id="bob") for r in ctx.annotations]
+    return ctx
+
+
+@pytest.mark.parametrize("fmt,path", [
+    ("camtrap_dp", "observations.csv"),
+    ("darwin_core", "occurrence.csv"),
+])
+def test_several_reviewers_are_not_written_as_several_animals(md_file, fmt, path):
+    """Every reviewer's boxes were written as separate observations, so two
+    reviewers of one raccoon published two raccoons, and annotator= was
+    ignored. Now one reviewer per item, as in the MegaDetector export."""
+    result = projects.IMPORTERS["megadetector"].parse_path(md_file, {})
+    base = os.path.dirname(md_file)
+    one = export_registry.export(fmt, _reviewed_context(result, _edit), os.path.join(base, fmt + "_1"), {})
+    two = export_registry.export(fmt, _two_reviewers(result), os.path.join(base, fmt + "_2"), {})
+    rows_one = _rows(os.path.join(base, fmt + "_1", path))
+    rows_two = _rows(os.path.join(base, fmt + "_2", path))
+    assert len(rows_two) == len(rows_one)
+    assert any("several annotators" in w for w in two.warnings)
+    assert not any("several annotators" in w for w in one.warnings)
+    # bob sorts first, so he is the default; annotator= picks rev instead.
+    who = "classifiedBy" if fmt == "camtrap_dp" else "identifiedBy"
+    humans = {r[who] for r in rows_two if r.get("classificationMethod", "human") == "human"
+              and r[who] in ("bob", "rev")}
+    assert humans == {"bob"}
+    chosen = export_registry.export(fmt, _two_reviewers(result), os.path.join(base, fmt + "_3"),
+                                    {"annotator": "rev"})
+    rows_rev = _rows(os.path.join(base, fmt + "_3", path))
+    assert len(rows_rev) == len(rows_one)
+    assert {r[who] for r in rows_rev} & {"bob", "rev"} == {"rev"}
+    assert not any("several annotators" in w for w in chosen.warnings)
+
+
+def test_disagreeing_reviewers_and_an_unknown_annotator_are_named(md_file):
+    result = projects.IMPORTERS["megadetector"].parse_path(md_file, {})
+    base = os.path.dirname(md_file)
+    ctx = _two_reviewers(result)
+    # bob calls b.jpg empty where rev saw a raccoon.
+    for record in ctx.annotations:
+        if record["user_id"] == "bob" and record["instance_id"] == "cam1_b.jpg":
+            record["labels"] = {"triage": {"empty": "empty"}}
+            record["image_annotations"] = {"detections": []}
+    res = export_registry.export("darwin_core", ctx, os.path.join(base, "dis"), {})
+    (warning,) = [w for w in res.warnings if "several annotators" in w]
+    assert "On 1 of them the annotators disagree" in warning and "cam1_b.jpg" in warning
+    none = export_registry.export("camtrap_dp", ctx, os.path.join(base, "nobody"),
+                                  {"annotator": "nobody"})
+    assert any("No answers from annotator 'nobody'" in w for w in none.warnings)

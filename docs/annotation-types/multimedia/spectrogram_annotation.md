@@ -132,7 +132,7 @@ they never reach a stored answer. Reversed times are swapped.
 
 | Format | Output |
 |---|---|
-| `raven` | One Raven selection table per recording (`<recording>.selections.txt`). The label goes in an `Annotation` column (`--option label_column=Species` renames it) and `Confidence` is written when a box has one. A box with no frequency range is written from 0 Hz to the Nyquist frequency (from the item's `sample_rate`, or the header of a WAV file in the media directory) or to `max_freq`. Without any of these, `High Freq (Hz)` is left empty and the export warns |
+| `raven` | One Raven selection table per recording (`<recording>.selections.txt`). The label goes in an `Annotation` column (`--option label_column=Species` renames it) and `Confidence` is written when a box has one: the detector's score on a box kept unchanged, 1.0 on one a reviewer drew or changed. A `Box Source` column (`ai`, `ai (edited)`, `human`, ...) is added when the boxes record where they came from. A box with no frequency range is written from 0 Hz to the Nyquist frequency (from the item's `sample_rate`, or the header of a WAV file in the media directory) or to `max_freq`. Without any of these, `High Freq (Hz)` is left empty and the export warns |
 | `audacity_labels` | One Audacity label file per recording (`<recording>.labels.txt`), with a spectral line under each box that has a frequency range |
 | `jsonl`, `csv` and the other general formats | The JSON list as the scheme's value |
 

@@ -322,6 +322,22 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             span_counter += 1
             set_span_color(scheme_name, label, span_color)
 
+        # An explicit key_value, as radio and multiselect honour it. Only the
+        # allocator used to read it, and the allocator runs only for schemes
+        # with sequential keys, so on any other span scheme the documented
+        # key_value did nothing.
+        if isinstance(label_data, Mapping) and label_data.get("key_value") is not None \
+                and label not in allocated_map:
+            shortcut_key = str(label_data["key_value"])
+            if shortcut_key in key2label:
+                logger.warning(
+                    f"Keyboard input conflict in '{scheme_name}': key '{shortcut_key}' is "
+                    f"already bound to '{key2label[shortcut_key]}', so '{label}' gets no shortcut")
+            else:
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{scheme_name}: {label}"))
+
         # Handle keybinding allocation
         if label in allocated_map and label not in label2key:
             shortcut_key = allocated_map[label]
@@ -334,6 +350,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                 "sequential_key_binding" in annotation_scheme
                 and annotation_scheme["sequential_key_binding"]
                 and len(annotation_scheme["labels"]) <= 10
+                and str(i % 10) not in key2label
             ):
                 shortcut_key = str(i % 10)
                 key2label[shortcut_key] = label
@@ -358,15 +375,20 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         # Generate name with span prefix so ingestion code can skip this
         name_with_span = f"span_label:::{scheme_name}"
 
-        # Support abbreviation for label display (from master branch fix)
-        # Users can specify an abbreviation for the label shown above the span
-        if isinstance(label_data, dict) and label_data.get('abbreviation'):
-            label_title = label_data['abbreviation']
-        else:
-            label_title = label_content
+        # `abbreviation` is the text of the chip over a span; span-core.js
+        # reads it from this checkbox. It used to be read into a variable
+        # nothing used.
+        abbreviation_attr = ""
+        if isinstance(label_data, Mapping) and label_data.get("abbreviation"):
+            abbreviation_attr = f'data-abbreviation="{escape_html_content(str(label_data["abbreviation"]))}"'
 
         # Use label as title if span_title is empty
         effective_title = span_title if span_title else label
+
+        # What the page's key handler matches on. Without it no span shortcut,
+        # allocated or explicit, did anything.
+        data_key_attr = (f'data-key="{escape_html_content(label2key[label])}"'
+                         if label in label2key else "")
 
         schematic += f"""
             <div class="shadcn-span-option">
@@ -378,6 +400,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        value="{escape_html_content(key_value)}"
                        onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}', '{escape_html_content(target_field)}');"
                        data-target-field="{escape_html_content(target_field)}"
+                       {data_key_attr} {abbreviation_attr}
                        validation="{validation}">
                 <label for="{escape_html_content(scheme_name)}_{escape_html_content(label)}" class="shadcn-span-label" {tooltip}>
                     <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>

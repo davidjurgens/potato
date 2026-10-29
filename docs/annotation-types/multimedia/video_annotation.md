@@ -154,8 +154,8 @@ For object tracking across video frames with keyframe-based bounding box annotat
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
-| `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
+| `tracking_options.interpolation` | string | `"linear"` | How a new track fills frames between keyframes: `linear`, `cubic` (Catmull-Rom) or `constant` (hold the last keyframe) |
+| `tracking_options.auto_advance_frames` | integer | `0` | Frames to step forward after you draw a box, so the next keyframe is one drag away. `0` stays on the frame |
 | `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list; `per_keyframe: true` lets one change along the track. See [Per-Object Attributes](object_attributes.md) |
 
 **Model-assisted tracking**

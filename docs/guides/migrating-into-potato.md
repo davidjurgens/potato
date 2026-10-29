@@ -258,7 +258,9 @@ Each of these produces a warning on the import rather than a silence:
   one no other CoNLL tool can read.
 - **Whitespace, through CoNLL-2003.** The format does not record it.
 - **Non-text QDA sources.** Picture, PDF, audio and video sources in a `.qdpx`
-  are not imported yet; text sources are.
+  are not imported yet; text sources are. The warnings count each kind skipped.
+- **QDA memos and cases on export.** The `.qdpx` export does not write them
+  yet, and warns when the project has them.
 - **Uncoded selections in a `.qdpx`.** A highlight with no code attached has
   nothing to import. Counted in the warnings.
 - **Label Studio Pairwise, Ranker, Taxonomy, BrushLabels and relations.** Left

@@ -21,6 +21,88 @@ All notable changes to the Potato annotation platform are documented in this fil
   boot, a `language` list that does not exist, and a phase `header` key that
   nothing reads. The examples now use the scheme format, and the legacy
   section says `surveyflow` is no longer read.
+- The media proxy (`/api/audio/proxy`) and waveform downloads connected to
+  the validated IP with no TLS server name and with certificate checks off.
+  A host that needs SNI, such as the one serving the tiered-annotation
+  example's audio, failed the handshake and the proxy returned 502, and a
+  server presenting any certificate was accepted. Pinned fetches now send the
+  hostname and verify the certificate against it. A URL with a literal IP
+  address now needs a certificate that names that IP, as a browser would.
+- `video_annotation` read nothing from `tracking_options`: interpolation was
+  always linear and the documented auto-advance never ran. Both now work;
+  `auto_advance_frames` defaults to 0, and an unknown key or interpolation is
+  refused at boot.
+- Conjoint profiles shown without a `profiles_field` were picked from the
+  length of the item id and attribute names, so they were not random and were
+  not saved. The server now draws them, seeded per annotator and item, and
+  records them in the behavioral data with the choice.
+- TextGrid and EAF exports wrote the first annotator only. With several, each
+  annotator gets a file (`<item>_<user>_<schema>.TextGrid`).
+- TextGrid text doubled every backslash on each round trip and escaped quotes
+  with a backslash, which Praat does not read; quotes are now doubled. `xmax`
+  is the length of the recording rather than the end of the last label.
+- EAF exports dropped parent links (`REF_ANNOTATION` with no
+  `ANNOTATION_REF`), wrote time-aligned dependent tiers as symbolic, mapped
+  `Symbolic_Association` to `Included_In`, left out `PARTICIPANT` and some
+  linguistic types, and wrote the Potato server path as `MEDIA_URL`. Imports
+  now keep parents, constraints, participants and linguistic types, and
+  exports write all four. `MEDIA_URL` is a `file://` URL (an `http` URL is kept
+  as given), with `./<file>` in `RELATIVE_MEDIA_URL`.
+- `interlinear_gloss` had no agreement at `/admin/iaa`, and
+  `/admin/api/agreement` reduced it to the scheme name, so any two annotators
+  agreed perfectly. `/admin/iaa` now scores segmentation, gloss, per-morpheme
+  gloss and each extra tier, with alpha and percent agreement per word.
+- Camtrap DP and Darwin Core wrote every reviewer's boxes, so two reviewers of
+  one animal published two observations, and `--option annotator=` was
+  ignored. They now write one reviewer per item, as the MegaDetector export
+  does, and warn when an item had several.
+- The Raven export kept the detector's `Confidence` on boxes a reviewer
+  resized or drew. Those boxes now get 1.0, as in the MegaDetector export, and
+  a `Box Source` column (`ai`, `ai (edited)`, `human`) records where each box
+  came from. Imported again, the column is kept as an attribute of the box.
+- On radio and multiselect, a second label with the same `key_value` was
+  left off the page. It is now shown without a shortcut, with a warning.
+- Span labels' `key_value` did nothing unless the scheme also used sequential
+  keys, and no span shortcut reached the page's key handler. Both work now.
+  `abbreviation`, read and then unused, is now the text of the chip over a
+  span.
+- A dict label broke the HuggingFace dataset card, appeared as a Python dict
+  in the AI chat system prompt, and could become the whole dict in a
+  `highlight` label suggestion. `confidence` wrote "Level N" padding into the
+  config's own label list.
+- In the tiered annotation editor, a segment dragged in the waveform while
+  paused stayed at its old place in the zoomed timeline until playback.
+
+### Added
+
+- **Point tiers** in `tiered_annotation` (`point: true`): click to place a
+  mark, drag to move it. TextGrid point tiers (`TextTier`) import as point
+  tiers and export as `TextTier`, so ToBI tones and breaks round-trip.
+- **Span rows in the reliability export.** Span schemes get positional alpha
+  over characters, with the bootstrap interval, like the other schemes.
+
+### Changed
+
+- `krippendorff_alpha_u` is now `positional_alpha`, in the `/admin/iaa`
+  report and in `potato.server_utils.iaa.span`. It was nominal alpha over
+  per-character labels, never Krippendorff's unitizing alpha, and the old name
+  said otherwise. Scripts that read the old key need the new one.
+- Config keys that are accepted but read by nothing now warn at boot, so
+  `validate --strict` fails on them: `surveyflow`, `automatic_assignment`,
+  top-level `prestudy`, and `active_learning.annotation_routing`,
+  `routing_thresholds` and `verification_sample_rate`. Each warning says what
+  to use instead. Six examples that set them no longer do.
+- `validate` checks the keys inside dict labels against what each type reads,
+  and `--strict` fails on the rest; `key_binding` is pointed at `key_value`.
+  The per-type list is in the [config reference](docs/configuration/config_reference.md).
+  Dict labels on `text`, `multirate`, `pairwise` and `pure_display`, which
+  rendered as a Python dict or raised, are refused. Six examples used
+  `key_binding`; they now use `key_value`, so their shortcuts work.
+- `--strict` accepts the flat `active_learning` keys the docs use
+  (`classifier_name`, `vectorizer_name` and the rest).
+- The `.qdpx` importer names every picture, PDF, audio and video source it
+  skips, not only when a project has no text, and the exporter warns that
+  memos and cases are not included.
 
 ## [2.13.0] - Science Viewers, Scheduled Sessions and Consensus
 

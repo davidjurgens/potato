@@ -123,3 +123,123 @@ class TestPinning:
         # resolution, which is the window a rebinding attack needs.
         assert addrs == [(socket.AF_INET, "93.184.216.34")]
         assert parsed.hostname == "example.com"
+
+
+def _issue_cert(directory, hostname):
+    """Write a CA and a server certificate for ``hostname`` signed by it."""
+    import datetime
+    import os
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    window = (now - datetime.timedelta(days=1), now + datetime.timedelta(days=1))
+
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "potato test CA")])
+    ca = (x509.CertificateBuilder()
+          .subject_name(ca_name).issuer_name(ca_name)
+          .public_key(ca_key.public_key()).serial_number(x509.random_serial_number())
+          .not_valid_before(window[0]).not_valid_after(window[1])
+          .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+          .sign(ca_key, hashes.SHA256()))
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    cert = (x509.CertificateBuilder()
+            .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)]))
+            .issuer_name(ca_name)
+            .public_key(key.public_key()).serial_number(x509.random_serial_number())
+            .not_valid_before(window[0]).not_valid_after(window[1])
+            .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False)
+            .sign(ca_key, hashes.SHA256()))
+
+    paths = {name: os.path.join(directory, name) for name in ("ca.pem", "cert.pem", "key.pem")}
+    with open(paths["ca.pem"], "wb") as f:
+        f.write(ca.public_bytes(serialization.Encoding.PEM))
+    with open(paths["cert.pem"], "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+    with open(paths["key.pem"], "wb") as f:
+        f.write(key.private_bytes(serialization.Encoding.PEM,
+                                  serialization.PrivateFormat.PKCS8,
+                                  serialization.NoEncryption()))
+    return paths
+
+
+class TestPinnedHttps:
+    """A pinned https fetch must send the hostname as SNI and verify it.
+
+    The pinned URL holds an IP, and the fetch used to send no SNI and run with
+    verification off: every CDN-hosted media URL failed the handshake, and a
+    server presenting any certificate at all was accepted.
+    """
+
+    def _serve(self, directory, cert_host, sni_required=True):
+        import http.server
+        import ssl
+        import threading
+
+        paths = _issue_cert(directory, cert_host)
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = b"ID3audio"
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        def require_sni(sock, server_name, context):
+            seen.append(server_name)
+            if server_name is None and sni_required:
+                return ssl.ALERT_DESCRIPTION_HANDSHAKE_FAILURE
+            return None
+
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(paths["cert.pem"], paths["key.pem"])
+        context.sni_callback = require_sni
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server, paths["ca.pem"], seen
+
+    @pytest.fixture
+    def directory(self):
+        from tests.helpers.test_utils import create_test_directory
+        return create_test_directory("url_guard_pinned_https")
+
+    def _fetch(self, monkeypatch, ca, port):
+        from potato.server_utils import url_guard
+        monkeypatch.setenv("REQUESTS_CA_BUNDLE", ca)
+        # The server is on loopback, which the guard blocks; stand in for a
+        # public resolution that pins to it.
+        monkeypatch.setattr(url_guard, "resolve_public_addresses",
+                            lambda host, p: [(socket.AF_INET, "127.0.0.1")])
+        return url_guard.fetch("https://media.test:%d/clip.mp3" % port, timeout=10)
+
+    def test_sends_the_hostname_as_sni(self, directory, monkeypatch):
+        server, ca, seen = self._serve(directory, "media.test")
+        try:
+            response = self._fetch(monkeypatch, ca, server.server_address[1])
+            assert response.status_code == 200
+            assert response.content == b"ID3audio"
+            assert seen == ["media.test"]
+        finally:
+            server.shutdown()
+
+    def test_refuses_a_certificate_for_another_name(self, directory, monkeypatch):
+        import requests
+        # SNI is optional here so the handshake gets as far as the
+        # certificate; refusing it is then verification's job alone.
+        server, ca, _ = self._serve(directory, "other.test", sni_required=False)
+        try:
+            with pytest.raises(requests.exceptions.SSLError):
+                self._fetch(monkeypatch, ca, server.server_address[1])
+        finally:
+            server.shutdown()

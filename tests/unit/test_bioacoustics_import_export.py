@@ -122,3 +122,10 @@ def test_export_names_files_by_annotator_when_there_are_several(folder):
         "rec1.a.selections.txt", "rec1.b.selections.txt"]
     only = export_registry.export("raven", ctx, os.path.join(folder, "one"), {"annotator": "b"})
     assert [os.path.basename(p) for p in only.files_written] == ["rec1.selections.txt"]
+
+
+def test_an_unknown_annotator_is_named(folder):
+    ctx = _context(folder, {("rec1", "a"): BOXES})
+    res = export_registry.export("raven", ctx, os.path.join(folder, "nobody"), {"annotator": "zed"})
+    assert res.files_written == []
+    assert any("No answers from annotator 'zed'" in w for w in res.warnings)

@@ -63,7 +63,8 @@ given under a different arrangement.
 |---|---|---|
 | `radio`, `multiselect`, `select`, `multirate` | ✅ | ✅ |
 | `pairwise` | ✅ (source indices) | ✅ |
-| `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval`, `conjoint` | ✅ | ❌ not yet |
+| `conjoint` built from `attributes` | ✅ (the profiles shown) | always random |
+| `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval` | ✅ | ❌ not yet |
 
 Asking to randomise a scheme in the bottom row logs a warning rather than
 silently pretending to. The order is still recorded, so the data stays
@@ -83,6 +84,15 @@ indices rather than label names:
 
 The candidates differ per item, so "this annotator saw the item that was second
 in the data first" is the only fact an analyst can condition on.
+
+### Conjoint records its design
+
+A conjoint scheme built from `attributes` draws its profiles from the same
+seed, and the record is the list of profiles in card order, so a stored choice
+of `"2"` can be read against the second profile. See
+[Conjoint](../annotation-types/comparison/conjoint.md#data-format). A conjoint
+scheme with `profiles_field` shows the item's own profiles in data order and
+records nothing.
 
 ---
 

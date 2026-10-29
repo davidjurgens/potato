@@ -401,20 +401,20 @@ class TestSpan:
         p, r, f = span.span_f1_partial([(0, 4, "X")], [(2, 6, "X")], threshold=0.5)
         assert f > 0
 
-    def test_alpha_u_perfect(self):
+    def test_positional_alpha_perfect(self):
         spans_by_user = {
             "u1": [(0, 3, "X")],
             "u2": [(0, 3, "X")],
         }
-        au = span.krippendorff_alpha_u(spans_by_user, length=10)
+        au = span.positional_alpha(spans_by_user, length=10)
         assert isclose(au, 1.0)
 
-    def test_alpha_u_partial_disagreement(self):
+    def test_positional_alpha_partial_disagreement(self):
         spans_by_user = {
             "u1": [(0, 3, "X")],
             "u2": [(0, 4, "X")],  # one extra character
         }
-        au = span.krippendorff_alpha_u(spans_by_user, length=10)
+        au = span.positional_alpha(spans_by_user, length=10)
         # Mostly agree -> high alpha
         assert au > 0.5
 
@@ -463,7 +463,8 @@ class TestDispatcher:
     def test_metrics_for_span_contains_gamma(self):
         ms = metrics_for_schema({"annotation_type": "span", "name": "x"})
         assert "gamma_mathet" in ms
-        assert "krippendorff_alpha_u" in ms
+        assert "positional_alpha" in ms
+        assert "krippendorff_alpha_u" not in ms
         assert "span_f1_partial" in ms
 
     def test_metrics_for_textbox_is_empty(self):

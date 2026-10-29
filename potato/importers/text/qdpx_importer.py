@@ -147,11 +147,19 @@ class QDPXImporter(BaseTextImporter):
 
         sources_element = _find(root, "Sources")
         text_sources = _findall(sources_element, "TextSource") if sources_element is not None else []
-        if not text_sources:
+        # Named whenever any are present, not only when nothing else is: a
+        # project of 40 transcripts and 12 interview recordings used to import
+        # the transcripts and say nothing about the recordings.
+        skipped = {kind: len(_findall(sources_element, kind)) if sources_element is not None else 0
+                   for kind in ("PictureSource", "PDFSource", "AudioSource", "VideoSource")}
+        skipped = {kind: n for kind, n in skipped.items() if n}
+        if skipped:
+            listed = ", ".join(f"{n} <{kind}>" for kind, n in skipped.items())
             result.warnings.append(
-                "The project has no <TextSource>. Picture, PDF, audio and "
-                "video sources are not imported yet, so an audio-only project "
-                "arrives empty.")
+                f"Not imported: {listed}. Only text sources are imported; "
+                f"picture, PDF, audio and video sources and their codings are skipped.")
+        if not text_sources:
+            result.warnings.append("The project has no <TextSource>, so nothing was imported.")
 
         # Read every source's text first: the end-position convention is a
         # property of the FILE, not of one selection, so it has to be decided

@@ -79,6 +79,55 @@ INTERNAL_SCHEME_FIELDS = frozenset({
     "codebook_guidance",
 })
 
+#: Keys a dict-form label (``labels: [{name: ..., ...}]``) may carry on every
+#: type that takes dict labels. Some of these the page does not use on every
+#: type, but they are read for any scheme elsewhere:
+#:
+#:   name                     -> every generator
+#:   description, tooltip     -> export/codebook_exporter.py,
+#:                               labeling_engine/schemes.label_descriptions
+#:   color                    -> export/codebook_exporter.py, export/cvat_exporter.py
+LABEL_BASE_FIELDS = frozenset({"name", "description", "tooltip", "color"})
+
+#: identifier_utils.display_label_text: the visible text of an option.
+_LABEL_DISPLAY_FIELDS = frozenset({"displayed_label", "text", "label"})
+
+#: Per type, the label keys it reads beyond LABEL_BASE_FIELDS. config_module
+#: warns about any other key on a dict label, so `--strict` fails on it. Each
+#: set was taken from the generator, its page script and the exporters that
+#: read the type's label config; a key read nowhere for a type is absent even
+#: if another type reads it (`key_value` does nothing on select, confidence,
+#: likert or microscopy, whose keys are positional or absent).
+LABEL_FIELDS = {
+    "radio": frozenset({"key_value", "tooltip_file"}) | _LABEL_DISPLAY_FIELDS,
+    # A slider with labels renders as radio.
+    "slider": frozenset({"key_value", "tooltip_file"}) | _LABEL_DISPLAY_FIELDS,
+    "multiselect": frozenset({"key_value", "tooltip_file", "videopath"}) | _LABEL_DISPLAY_FIELDS,
+    "likert": _LABEL_DISPLAY_FIELDS,
+    "span": frozenset({"key_value", "tooltip_file", "abbreviation"}) | _LABEL_DISPLAY_FIELDS,
+    # label_id and supercategory: export/cv_utils.py (COCO categories).
+    "image_annotation": frozenset({"key_value", "label_id", "supercategory"}),
+    "volume_annotation": frozenset({"key_value", "dicom"}),
+    "audio_annotation": frozenset({"key_value"}),
+    "video_annotation": frozenset({"key_value"}),
+    "spectrogram_annotation": frozenset({"key_value"}),
+    "spatial_annotation": frozenset({"key_value"}),
+    "soft_label": frozenset({"tooltip_file"}),
+    "constant_sum": frozenset({"tooltip_file"}),
+    "ranking": frozenset({"tooltip_file"}),
+    "triad_test": frozenset({"text"}),
+    "microscopy": frozenset(),
+    "select": frozenset(),
+    "confidence": frozenset(),
+}
+
+#: Types whose labels must be strings: a dict label raised (text) or was
+#: printed on the page as its Python repr (multirate, pairwise, pure_display).
+STRING_LABEL_TYPES = frozenset({"text", "multirate", "pairwise", "pure_display"})
+
+#: Types that check their own label keys and raise on unknown ones.
+SELF_VALIDATED_LABEL_TYPES = frozenset({"interval_label", "geo_annotation", "viewer_selection"})
+
 
 @dataclass
 class SchemaDefinition:

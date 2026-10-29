@@ -11,9 +11,11 @@ this picture, which is why dedicated metrics exist:
   lengths.
 - **Span F1 (exact, partial)** — IR-style; classic in NER literature
   (MUC, CoNLL, SemEval).
-- **Krippendorff's alpha_U (unitizing alpha)** — Krippendorff 2018; treats
-  each character/token as a unit and accounts for both boundary and
-  categorical disagreement.
+- **Positional alpha** — Krippendorff's nominal alpha with each character as
+  a unit, labelled with the span label covering it or ``O``. Boundary and
+  label disagreements both count. It is not Krippendorff's unitizing alpha
+  (uα), which compares the units themselves; gamma is the measure here that
+  aligns units.
 - **Gamma (Mathet et al. 2015)** — state-of-the-art unified measure that
   jointly handles unit alignment + categorization via the Hungarian algorithm.
 
@@ -212,24 +214,25 @@ def pairwise_span_f1(
 
 
 # ---------------------------------------------------------------------------
-# Krippendorff's alpha_U (unitizing alpha)
+# Positional alpha
 # ---------------------------------------------------------------------------
 
-def krippendorff_alpha_u(
+def positional_alpha(
     spans_by_user: Dict[str, Iterable],
     length: int,
 ) -> float:
     """
-    Krippendorff's unitizing alpha for span annotation.
+    Krippendorff's nominal alpha over character positions.
 
-    Implementation: assign each character/token position a categorical label
-    (one of the span labels or "O") per annotator, then compute Krippendorff's
-    alpha (nominal) over the (annotator, position) pairs. This is the
-    operational form recommended in Krippendorff (2018) when the unit is
-    fixed (per-character) rather than continuous.
+    Each annotator gives every position the label of the span covering it, or
+    "O", and alpha is computed over the (annotator, position) pairs. A position
+    one annotator includes and another leaves out is a disagreement, so
+    boundary placement counts as well as the label.
 
-    For continuous-domain alpha_U (where annotators may disagree on the unit
-    boundary in a fundamentally continuous space such as audio), prefer gamma.
+    This was reported as ``krippendorff_alpha_u`` and described as unitizing
+    alpha. It is not: Krippendorff's uα compares the coders' units and gaps
+    as segments of a continuum, and this treats each character as an
+    independent unit. For agreement that aligns units, use gamma.
     """
     users = list(spans_by_user)
     if len(users) < 2 or length <= 0:

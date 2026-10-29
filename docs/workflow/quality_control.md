@@ -565,7 +565,7 @@ Returns:
       "fleiss_kappa": {"kappa": 0.78, "n_items_evaluated": 100, "n_raters": 3, "n_categories": 3, "interpretation": "Substantial"}
     },
     "regions": {
-      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "error": "Structured answers (steps, segments, regions or glosses) are scored in the agreement report at /admin/iaa, not here.",
       "see": "/admin/iaa"
     }
   },
@@ -594,7 +594,7 @@ Returns:
   `"krippendorff_alpha": null`, `"percent_agreement": 1.0` and
   `"interpretation": "Undefined"`. That is perfect agreement, not a failed
   computation.
-- Structured schemes (steps, segments, regions and other non-label answers)
+- Structured schemes (steps, segments, regions, glosses and other non-label answers)
   are skipped with an `error` pointing to `/admin/iaa`, which scores them.
 
 ---

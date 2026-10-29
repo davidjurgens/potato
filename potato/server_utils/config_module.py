@@ -194,6 +194,13 @@ KNOWN_CONFIG_KEYS = {
         "classifier_params", "vectorizer_params", "calibrate_probabilities",
         "bald_params", "use_icl_ensemble", "icl_ensemble_params",
         "annotation_routing", "routing_thresholds",
+        # Flat spellings of the dataclass fields. parse_active_learning_config
+        # reads any ActiveLearningConfig field and the active-learning guides
+        # use these, but they were missing here, so --strict rejected them.
+        "classifier_name", "classifier_kwargs", "vectorizer_name",
+        "vectorizer_kwargs", "cold_start_batch_size", "verification_sample_rate",
+        "model_persistence_enabled", "model_save_directory",
+        "model_retention_count", "llm_enabled", "llm_config",
     },
     "category_assignment": {
         "enabled": None,
@@ -940,6 +947,61 @@ def _apply_require_fully_annotated(config_data: Dict[str, Any]) -> None:
     if stamped:
         logger.debug(
             "require_fully_annotated: made %d scheme(s) required", stamped)
+
+
+#: Keys a config may carry that nothing reads. They stay accepted, so an old
+#: config still boots, but each one is named at boot and by `potato validate`
+#: (and fails `--strict`): a config that looks like it sets up a screener or an
+#: assignment policy and silently does neither is the failure being avoided.
+#: Dotted keys are nested; the message says what to use instead.
+UNREAD_CONFIG_KEYS = {
+    "surveyflow": (
+        "Its survey pages are not shown. Move them into `phases` "
+        "(docs/workflow/surveyflow.md, \"Moving from surveyflow\", maps the "
+        "old keys)."
+    ),
+    "prestudy": (
+        "Add a phase with `type: prestudy` under `phases`; `exit_when` on it "
+        "screens people out."
+    ),
+    "automatic_assignment": (
+        "Items are assigned by `assignment_strategy`. Use "
+        "`num_annotators_per_item` for annotators per item "
+        "(`labels_per_instance`, `annotators_per_instance`) and "
+        "`max_annotations_per_user` for items per annotator "
+        "(`instance_per_annotator`)."
+    ),
+    "active_learning.annotation_routing": (
+        "Nothing routes items past annotators on model confidence. Accepting "
+        "machine labels above a confidence is a `labeling_engine` contract "
+        "(docs/labeling-engine/contracts.md)."
+    ),
+    "active_learning.routing_thresholds": (
+        "See `active_learning.annotation_routing`."
+    ),
+    "active_learning.verification_sample_rate": (
+        "The spot-check rate for auto-labels is "
+        "`icl_labeling.verification.sample_rate`."
+    ),
+}
+
+
+def unread_key_warnings(config_data: Dict[str, Any]) -> List[str]:
+    """Describe every key in UNREAD_CONFIG_KEYS that the config sets."""
+    messages: List[str] = []
+    if not isinstance(config_data, dict):
+        return messages
+    for dotted, advice in UNREAD_CONFIG_KEYS.items():
+        node: Any = config_data
+        for part in dotted.split("."):
+            node = node.get(part, _MISSING) if isinstance(node, dict) else _MISSING
+        if node is not _MISSING:
+            messages.append(
+                f"Config key '{dotted}' is not read, so it has no effect. {advice}")
+    return messages
+
+
+_MISSING = object()
 
 
 def deprecated_key_warnings(config_data: Dict[str, Any]) -> List[str]:
@@ -2755,6 +2817,8 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # load_and_validate_config() has already folded and removed them.
     for _deprecation in deprecated_key_warnings(config_data):
         logger.warning(_deprecation)
+    for _unread in unread_key_warnings(config_data):
+        logger.warning(_unread)
 
     # Plugins register annotation and display types, so they load before
     # anything checks a type name. See potato/plugins.py.
@@ -3190,6 +3254,54 @@ def validate_scheme_keys(config_data: Dict[str, Any],
                 logger.warning(
                     "Unrecognized config key '%s'. A %s scheme does not read it, "
                     "so it will be ignored.", full_key, scheme_type)
+        _check_label_keys(scheme, scheme_type, f"{where}[{label}]")
+
+
+def _check_label_keys(scheme: Dict[str, Any], scheme_type: str, where: str) -> None:
+    """Warn about keys on a dict label that its type does not read.
+
+    The scheme-level check stops at `labels`, so `description:` on an audio
+    label or `key_value:` on a select label loaded and did nothing. A dict label
+    on a type that prints labels as text is refused: it rendered as the dict's
+    Python repr, or raised.
+    """
+    from potato.server_utils.schemas.registry import (
+        LABEL_BASE_FIELDS, LABEL_FIELDS, STRING_LABEL_TYPES)
+
+    labels = scheme.get("labels")
+    if not isinstance(labels, list):
+        return
+    if scheme_type in STRING_LABEL_TYPES:
+        for i, entry in enumerate(labels):
+            if isinstance(entry, dict):
+                raise ConfigValidationError(
+                    f"{where}.labels[{i}]: a {scheme_type} scheme takes labels as plain "
+                    f"strings, not {{name: ...}} entries (got {sorted(entry)}). Write "
+                    f"'{entry.get('name', '...')}' instead.")
+        return
+    extra = LABEL_FIELDS.get(scheme_type)
+    if extra is None:
+        return
+    accepted = LABEL_BASE_FIELDS | extra
+    for i, entry in enumerate(labels):
+        if not isinstance(entry, dict):
+            continue
+        for key in sorted(k for k in entry if k not in accepted):
+            full_key = f"{where}.labels[{i}].{key}"
+            if key == "key_binding" and "key_value" in accepted:
+                matches = ["key_value"]
+            else:
+                matches = difflib.get_close_matches(str(key), accepted, n=3, cutoff=0.6)
+            if matches:
+                logger.warning(
+                    "Unrecognized config key '%s' (labels on %s schemes do not read "
+                    "it). Did you mean: %s?",
+                    full_key, scheme_type, ", ".join(f"'{m}'" for m in matches))
+            else:
+                logger.warning(
+                    "Unrecognized config key '%s'. Labels on %s schemes do not read "
+                    "it, so it will be ignored; they read %s.",
+                    full_key, scheme_type, ", ".join(sorted(accepted)))
 
 
 def validate_live_ingestion_assignment_compat(config_data: Dict[str, Any]) -> None:
@@ -5156,6 +5268,13 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             if constraint_type not in valid_constraint_types:
                 raise ConfigValidationError(f"{tier_path}.constraint_type must be one of: {valid_constraint_types}")
 
+            if 'point' in tier and not isinstance(tier['point'], bool):
+                raise ConfigValidationError(f"{tier_path}.point must be true or false")
+            if tier.get('point') and tier_type == 'dependent':
+                raise ConfigValidationError(
+                    f"{tier_path} is a point tier, so it must be independent: a point has "
+                    f"no duration to fit inside a parent annotation")
+
         # Validate parent_tier references (second pass)
         for i, tier in enumerate(scheme['tiers']):
             parent = tier.get('parent_tier')
@@ -5163,6 +5282,11 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.tiers[{i}] references unknown parent_tier: '{parent}'")
             if parent and parent == tier['name']:
                 raise ConfigValidationError(f"{path}.tiers[{i}] cannot be its own parent")
+            if parent and any(t.get('name') == parent and t.get('point')
+                              for t in scheme['tiers']):
+                raise ConfigValidationError(
+                    f"{path}.tiers[{i}] cannot depend on point tier '{parent}': a point "
+                    f"has no duration to subdivide")
 
         # Validate optional numeric fields
         if 'tier_height' in scheme:

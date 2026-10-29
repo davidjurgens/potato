@@ -140,7 +140,10 @@ for each frame, or none when the reviewer chose `empty`.
 
 The file holds one answer per image. When several people reviewed an image,
 the first by user id is written, and the export warns; `--option
-annotator=<user>` picks one person.
+annotator=<user>` picks one person. Camtrap DP and Darwin Core do the same,
+because there a second reviewer's boxes would be a second observation of the
+same animal, and GBIF would count it twice. Adjudicate disagreements first, or
+pick the reviewer whose answers to publish.
 
 ### Camtrap DP (`camtrap_dp`)
 
@@ -152,7 +155,7 @@ with the column names of the 1.0 table schemas.
   reviewed or not, with `mediaID` (the item id), `deploymentID`, `timestamp`,
   `filePath` (the source path), `filePublic` (`false`), `fileName` and
   `fileMediatype`.
-- `observations.csv`: for each reviewed item and annotator, one observation
+- `observations.csv`: for each reviewed item (from one reviewer, as above), one observation
   per box (`observationType` `animal`, `human` or `vehicle`, `scientificName`
   for species labels, `count` 1, `bboxX`/`bboxY`/`bboxWidth`/`bboxHeight` as
   fractions from the top-left corner); one per ticked species that has no

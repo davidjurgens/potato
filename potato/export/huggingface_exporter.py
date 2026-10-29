@@ -293,7 +293,10 @@ class HuggingFaceExporter(BaseExporter):
         for name, schema in schema_map.items():
             ann_type = schema.get("annotation_type", "unknown")
             desc = schema.get("description", "")
-            labels = schema.get("labels", [])
+            # Names, whatever shape the labels are in: dict labels made
+            # this join raise TypeError and the export fail.
+            from potato.server_utils.presentation_order import label_names
+            labels = label_names(schema)
             label_str = ", ".join(labels[:10]) if labels else "N/A"
             if len(labels) > 10:
                 label_str += f" (+{len(labels) - 10} more)"

@@ -120,12 +120,17 @@ def _generate_multiselect_layout_internal(annotation_scheme):
             if "key_value" in label_data:
                 shortcut_key = str(label_data["key_value"])
                 if shortcut_key in key2label:
-                    logger.warning(f"Keyboard input conflict: {shortcut_key}")
-                    continue
-                key2label[shortcut_key] = label
-                label2key[label] = shortcut_key
-                key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
-                logger.debug(f"Added key binding '{shortcut_key}' for label '{label}'")
+                    # Warn and keep the label. Skipping it here took the
+                    # option off the page, not just its shortcut.
+                    logger.warning(
+                        f"Keyboard input conflict in '{annotation_scheme['name']}': "
+                        f"key '{shortcut_key}' is already bound to "
+                        f"'{key2label[shortcut_key]}', so '{label}' gets no shortcut")
+                else:
+                    key2label[shortcut_key] = label
+                    label2key[label] = shortcut_key
+                    key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+                    logger.debug(f"Added key binding '{shortcut_key}' for label '{label}'")
 
         # Use pre-allocated keys if available
         if label in allocated_map and label not in label2key:
@@ -138,7 +143,8 @@ def _generate_multiselect_layout_internal(annotation_scheme):
             # Fallback: sequential key bindings when no allocator was used
             if (annotation_scheme.get("sequential_key_binding")
                 and len(annotation_scheme["labels"]) <= 10
-                and label not in label2key):
+                and label not in label2key
+                and str(i % 10) not in key2label):
                 shortcut_key = str(i % 10)
                 key2label[shortcut_key] = label
                 label2key[label] = shortcut_key

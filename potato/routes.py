@@ -96,7 +96,7 @@ from potato.diversity_manager import get_diversity_manager
 
 import os
 from potato.item_state_management import Item
-from potato.flask_server import get_displayed_text
+from potato.flask_server import get_displayed_text, apply_conjoint_profiles
 
 
 def _qc_answer_payload(annotations: dict):
@@ -4241,7 +4241,7 @@ def admin_iaa():
 
     Computes a schema-appropriate set of metrics (nominal: Cohen/Fleiss kappa,
     Krippendorff alpha; ordinal: weighted kappa, Spearman rho; continuous:
-    Pearson, ICC; span: token kappa, span F1, alpha_U, gamma; etc.).
+    Pearson, ICC; span: token kappa, span F1, positional alpha, gamma; etc.).
     Restricted to items whose per-item annotator cap is >= 2 and that have
     reached that cap.
 
@@ -6695,6 +6695,8 @@ def get_instance_data():
         raw_data = screen_item_basemaps(config, raw_data)
         from potato.server_utils.phase_flow import conditions_for, fill_condition_data
         raw_data = fill_condition_data(raw_data, conditions_for(user_state))
+        raw_data = apply_conjoint_profiles(dict(raw_data), user_state, username,
+                                           current_instance.get_id())
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)

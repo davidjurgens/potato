@@ -328,6 +328,7 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
                     segment["media_url"] = media
                 annotation_id = aligned.get("ANNOTATION_ID")
                 if annotation_id:
+                    segment["annotation_id"] = annotation_id
                     by_id[annotation_id] = segment
                 segments.append(segment)
                 continue
@@ -355,9 +356,12 @@ def parse_eaf(text: str) -> List[Dict[str, Any]]:
             "end": parent["end"] if parent else 0.0,
             "text": pending["text"],
         }
+        if pending.get("ref"):
+            segment["parent_annotation_id"] = pending["ref"]
         if media:
             segment["media_url"] = media
         if pending.get("id"):
+            segment["annotation_id"] = pending["id"]
             by_id[pending["id"]] = segment
         segments.append(segment)
 
@@ -398,15 +402,29 @@ def _eaf_slots(root: ET.Element) -> Dict[str, float]:
 
 
 def eaf_tier_info(text: str) -> Dict[str, Any]:
-    """Tier ids in document order with their PARENT_REF, and how many time
-    slots had no TIME_VALUE (for import reports)."""
+    """Tier ids in document order with their PARENT_REF, how many time slots
+    had no TIME_VALUE (for import reports), and per tier its linguistic type,
+    that type's ELAN constraint (``Symbolic_Association``, ...) and the
+    PARTICIPANT, so an export can write the tier back as it came in."""
     try:
         root = ET.fromstring(text)
     except ET.ParseError:
-        return {"tiers": [], "unaligned_slots": 0}
+        return {"tiers": [], "unaligned_slots": 0, "details": {}}
     tiers = [(t.get("TIER_ID"), t.get("PARENT_REF")) for t in root.iter("TIER") if t.get("TIER_ID")]
     unaligned = sum(1 for s in root.iter("TIME_SLOT") if s.get("TIME_VALUE") in (None, ""))
-    return {"tiers": tiers, "unaligned_slots": unaligned}
+    constraints = {lt.get("LINGUISTIC_TYPE_ID"): lt.get("CONSTRAINTS") or None
+                   for lt in root.iter("LINGUISTIC_TYPE") if lt.get("LINGUISTIC_TYPE_ID")}
+    details = {}
+    for t in root.iter("TIER"):
+        if not t.get("TIER_ID"):
+            continue
+        ling_type = t.get("LINGUISTIC_TYPE_REF") or None
+        details[t.get("TIER_ID")] = {
+            "linguistic_type": ling_type,
+            "constraint": constraints.get(ling_type),
+            "participant": (t.get("PARTICIPANT") or "").strip() or None,
+        }
+    return {"tiers": tiers, "unaligned_slots": unaligned, "details": details}
 
 
 def textgrid_tier_names(text: str) -> List[str]:
@@ -415,6 +433,31 @@ def textgrid_tier_names(text: str) -> List[str]:
     if not names:
         # Short format: "IntervalTier" / "TextTier", then the quoted name.
         names = re.findall(r'"(?:IntervalTier|TextTier)"\s*\n\s*"((?:[^"]|"")*)"', text)
+    return [n.replace('""', '"') for n in names]
+
+
+def textgrid_bounds(text: str) -> Optional[Tuple[float, float]]:
+    """The grid's own xmin and xmax: the recording span, which the last
+    label usually stops short of."""
+    long = re.search(r'^\s*xmin\s*=\s*([\d.eE+-]+)\s*\n\s*xmax\s*=\s*([\d.eE+-]+)',
+                     text, flags=re.M)
+    if long:
+        pair = (_tg_float(long.group(1)), _tg_float(long.group(2)))
+    else:
+        tokens = [ln.strip() for ln in text.replace("\r", "").split("\n") if ln.strip()]
+        # Short format: two header lines, then xmin and xmax.
+        pair = (_tg_float(tokens[2]), _tg_float(tokens[3])) if len(tokens) > 3 else (None, None)
+    if pair[0] is None or pair[1] is None or pair[1] < pair[0]:
+        return None
+    return pair
+
+
+def textgrid_point_tiers(text: str) -> List[str]:
+    """Names of the point tiers (``TextTier``) in a TextGrid, either format."""
+    names = re.findall(
+        r'^\s*class\s*=\s*"TextTier"\s*\n\s*name\s*=\s*"((?:[^"]|"")*)"', text, flags=re.M)
+    if not names:
+        names = re.findall(r'"TextTier"\s*\n\s*"((?:[^"]|"")*)"', text)
     return [n.replace('""', '"') for n in names]
 
 

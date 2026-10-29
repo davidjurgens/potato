@@ -35,11 +35,11 @@ annotation_schemes:
     description: "What is the sentiment of this text?"
     labels:
       - name: "Positive"
-        key_binding: p
+        key_value: p
       - name: "Negative"
-        key_binding: n
+        key_value: n
       - name: "Neutral"
-        key_binding: u
+        key_value: u
 
 # User configuration
 # Admin API key (for admin dashboard access)

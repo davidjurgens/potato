@@ -47,6 +47,10 @@ RAVEN_BEGIN = "Begin Time (s)"
 RAVEN_END = "End Time (s)"
 RAVEN_LOW = "Low Freq (Hz)"
 RAVEN_HIGH = "High Freq (Hz)"
+#: Where a box came from, written by Potato: ``ai``, ``human``, ``import``,
+#: with `` (edited)`` when a reviewer changed a model's or an imported box.
+#: Read back as an attribute of the box, not as its provenance.
+RAVEN_SOURCE = "Box Source"
 
 #: Raven's own columns: measurements and bookkeeping, never a label.
 RAVEN_STANDARD_COLUMNS = frozenset({
@@ -54,6 +58,7 @@ RAVEN_STANDARD_COLUMNS = frozenset({
     "Begin File", "End File", "Begin Path", "End Path", "File Offset (s)",
     "Begin Date", "End Date", "Begin Clock Time", "End Clock Time", "Begin Date Time",
     "Delta Time (s)", "Delta Freq (Hz)", "Confidence", "Rank", "Sound Files",
+    RAVEN_SOURCE,
 })
 
 #: Annotation columns tried, in order, when no label column is named.
@@ -214,6 +219,12 @@ def parse_raven(text: str, label_column: Optional[str] = None,
         confidence = _float(row.get("Confidence"))
         if confidence is not None:
             box["confidence"] = confidence
+        # Kept as a note, not as this box's provenance: in the project the
+        # table is imported into, the box is an import whatever it was before,
+        # and an `edited` carried over would mark it reviewed before anyone
+        # looked at it.
+        if row.get(RAVEN_SOURCE):
+            box.setdefault("attributes", {})[RAVEN_SOURCE] = row[RAVEN_SOURCE]
         if source_file:
             box["file"] = source_file
         for extra in ("Common Name", "Species Code"):
@@ -223,6 +234,18 @@ def parse_raven(text: str, label_column: Optional[str] = None,
             order.append(key)
         merged[key] = box
     return [merged[k] for k in order]
+
+
+def _source_cell(box: Dict[str, Any]) -> str:
+    source = str(box.get("source") or "")
+    if not source:
+        return ""
+    return f"{source} (edited)" if box.get("edited") and source != "human" else source
+
+
+def _reviewed(box: Dict[str, Any]) -> bool:
+    """Drawn or changed by a person, so no model score describes it."""
+    return box.get("source") == "human" or bool(box.get("edited"))
 
 
 def _fmt(value: Optional[float]) -> str:
@@ -239,11 +262,20 @@ def write_raven(boxes: Iterable[Dict[str, Any]], label_column: str = "Annotation
     A box with no frequency extent gets 0 Hz and ``default_high_hz`` (the
     recording's Nyquist frequency when the caller knows it), so Raven draws it
     over the whole spectrogram.
+
+    ``Confidence`` is the detector's score only on a model box the reviewer
+    left as it was. A box a person drew or changed gets 1.0, as in the
+    MegaDetector export: the detector's score described a box that no longer
+    exists, and a confidence threshold applied downstream would otherwise drop
+    reviewed boxes or keep them for the wrong reason. ``Box Source`` says which
+    is which, when the boxes record where they came from.
     """
     boxes = list(boxes)
     with_conf = any(b.get("confidence") is not None for b in boxes)
+    with_source = any(b.get("source") for b in boxes)
     columns = ["Selection", "View", "Channel", RAVEN_BEGIN, RAVEN_END, RAVEN_LOW,
-               RAVEN_HIGH, label_column] + (["Confidence"] if with_conf else [])
+               RAVEN_HIGH, label_column] + (["Confidence"] if with_conf else []) + \
+        ([RAVEN_SOURCE] if with_source else [])
     lines = ["\t".join(columns)]
     for i, box in enumerate(sorted(boxes, key=lambda b: (float(b["start_s"]), float(b["end_s"]))),
                             start=1):
@@ -255,7 +287,9 @@ def write_raven(boxes: Iterable[Dict[str, Any]], label_column: str = "Annotation
                  _fmt(box["start_s"]), _fmt(box["end_s"]), _fmt(low if low is not None else 0.0),
                  _fmt(high), _clean(box.get("label", ""))]
         if with_conf:
-            cells.append(_fmt(box.get("confidence")))
+            cells.append(_fmt(1.0 if _reviewed(box) else box.get("confidence")))
+        if with_source:
+            cells.append(_source_cell(box))
         lines.append("\t".join(cells))
     return "\n".join(lines) + "\n"
 

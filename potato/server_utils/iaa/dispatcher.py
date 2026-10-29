@@ -38,6 +38,7 @@ class SchemaKind(str, Enum):
     VOLUME = "volume"        # 3D label masks on a medical volume: Dice per label
     SEGMENTS = "segments"    # time segments under non-audio/video types
     TRACE = "trace"          # one label per step of an agent trace
+    GLOSS = "gloss"          # interlinear glossed text: one unit per word
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -115,6 +116,8 @@ _KIND_BY_TYPE = {
     "tool_call_review": SchemaKind.TRACE,
     "failure_attribution": SchemaKind.TRACE,
     "gui_trajectory": SchemaKind.TRACE,
+    # One JSON blob per item; scored line by line in iaa/glossing.py.
+    "interlinear_gloss": SchemaKind.GLOSS,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
@@ -192,9 +195,17 @@ def metrics_for_schema(scheme: Dict[str, Any],
         SchemaKind.VOLUME: ["mean_dice", "dice_by_label.<label>"],
         SchemaKind.SEGMENTS: ["mean_agreement", "mean_object_count_diff"],
         SchemaKind.TRACE: ["alpha_nominal", "cohen_kappa", "percent_agreement"],
+        # One group per line of the analysis: a low segmentation alpha and a
+        # low gloss alpha are different problems.
+        SchemaKind.GLOSS: [
+            "segmentation.alpha", "segmentation.percent_agreement",
+            "gloss.alpha", "gloss.percent_agreement",
+            "morpheme_gloss.alpha", "morpheme_gloss.percent_agreement",
+            "tier_<tier>.alpha", "tier_<tier>.percent_agreement",
+        ],
         SchemaKind.SPAN: [
             "token_level_kappa", "span_f1_exact", "span_f1_partial",
-            "krippendorff_alpha_u", "gamma_mathet",
+            "positional_alpha", "gamma_mathet",
         ],
         SchemaKind.GEOMETRY: [
             "mean_agreement", "mean_matched_iou", "detection_f1",
@@ -1183,11 +1194,11 @@ def _aggregate_span(span_rows, find_item):
         except Exception as exc:
             logger.debug("span_f1 failed on %s: %s", iid, exc)
         try:
-            au = span.krippendorff_alpha_u(per_user, length)
+            au = span.positional_alpha(per_user, length)
             if au == au:
                 alphas_u.append(au)
         except Exception as exc:
-            logger.debug("alpha_u failed on %s: %s", iid, exc)
+            logger.debug("positional_alpha failed on %s: %s", iid, exc)
         try:
             g = span.gamma(per_user, length=length)
             if g == g:
@@ -1202,7 +1213,7 @@ def _aggregate_span(span_rows, find_item):
         "token_level_kappa": _mean(token_kappas),
         "span_f1_exact": _mean(f1_exact),
         "span_f1_partial": _mean(f1_partial),
-        "krippendorff_alpha_u": _mean(alphas_u),
+        "positional_alpha": _mean(alphas_u),
         "gamma_mathet": _mean(gammas),
         "n_items": n_items,
         "n_annotators": len(annotators),
@@ -1458,6 +1469,10 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
             # cannot drift from what the client wrote.
             rows = _gather_raw(overlap_items, user_states, name)
             metrics = rollout_iaa.rollout_report(rows, scheme)
+        elif kind == SchemaKind.GLOSS:
+            from potato.server_utils.iaa.glossing import gloss_report
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = gloss_report(rows, scheme)
         elif kind == SchemaKind.VOLUME:
             from potato.server_utils.iaa.volume_agreement import volume_report
             rows = _gather_raw(overlap_items, user_states, name)

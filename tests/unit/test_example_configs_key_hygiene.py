@@ -75,7 +75,8 @@ def test_no_example_config_uses_an_unrecognized_key():
                 # is only about key hygiene.
                 pass
             for message in handler.messages:
-                if "Unrecognized config key" in message:
+                if ("Unrecognized config key" in message
+                        or "is not read, so it has no effect" in message):
                     offenders.append(
                         f"{os.path.relpath(path, REPO_ROOT)}: {message}"
                     )

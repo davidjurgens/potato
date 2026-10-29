@@ -75,6 +75,8 @@ Each tier in the `tiers` list can have:
 | `tier_type` | string | No | `"independent"` (default) or `"dependent"` |
 | `parent_tier` | string | For dependent | Name of parent tier |
 | `constraint_type` | string | No | Constraint relationship (see below) |
+| `point` | boolean | No | `true` for a tier of instants instead of intervals, such as ToBI tones or break indices. Click the tier to place a point with the active label; drag it to move it. A point tier is independent, and no tier can depend on it. It exports to TextGrid as a point tier (`TextTier`) |
+| `participant` | string | No | Speaker code written as the tier's `PARTICIPANT` in EAF exports. Set by `potato import` from an EAF file |
 | `description` | string | No | Tier description/tooltip |
 | `labels` | list | No | Available annotation labels |
 | `linguistic_type` | string | No | ELAN linguistic type (for export) |
@@ -89,6 +91,22 @@ Each label can have:
 | `color` | string | Hex color code (e.g., `"#4ECDC4"`) |
 | `tooltip` | string | Hover tooltip text |
 | `description` | string | Extended description |
+
+## Point Tiers
+
+```yaml
+tiers:
+  - name: words
+    labels: [word]
+  - name: tones
+    point: true
+    labels: ["H*", "L*", "L-L%", "H-H%"]
+```
+
+A point's `start_time` and `end_time` are the same. `potato import` turns a
+TextGrid point tier into a `point: true` tier, and the `textgrid` export writes
+it back as one. EAF has no point tiers, so the `eaf` export writes each point as
+an annotation that starts and ends on one time slot and says so in its warnings.
 
 ## Constraint Types
 

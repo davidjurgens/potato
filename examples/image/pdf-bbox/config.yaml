@@ -47,19 +47,19 @@ annotation_schemes:
     labels:
       - name: FIGURE
         tooltip: "A figure, image, or diagram"
-        key_binding: f
+        key_value: f
       - name: TABLE
         tooltip: "A data table"
-        key_binding: t
+        key_value: t
       - name: HEADER
         tooltip: "A header or title section"
-        key_binding: h
+        key_value: h
       - name: PARAGRAPH
         tooltip: "A text paragraph"
-        key_binding: p
+        key_value: p
       - name: FOOTER
         tooltip: "A footer section"
-        key_binding: o
+        key_value: o
 
   - annotation_type: text
     name: notes

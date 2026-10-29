@@ -259,3 +259,15 @@ class TestConfidenceConfigModuleValidation:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_padding_does_not_write_into_the_config():
+    """Short custom labels are padded to scale_points for the page; the
+    padding used to be appended to the scheme's own list."""
+    from potato.server_utils.schemas.confidence import generate_confidence_layout
+    labels = ["Unsure", "Sure"]
+    scheme = {"annotation_type": "confidence", "name": "conf", "description": "How sure?",
+              "scale_type": "likert", "scale_points": 4, "labels": labels}
+    html, _ = generate_confidence_layout(scheme)
+    assert "Level 4" in html
+    assert labels == ["Unsure", "Sure"]

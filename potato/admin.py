@@ -1757,9 +1757,9 @@ class AdminDashboard:
                         dispatcher.SchemaKind.GEOMETRY, dispatcher.SchemaKind.TEMPORAL,
                         dispatcher.SchemaKind.SPATIAL, dispatcher.SchemaKind.GROUNDING,
                         dispatcher.SchemaKind.EPISODE, dispatcher.SchemaKind.ROLLOUT,
-                        dispatcher.SchemaKind.CAPTION):
+                        dispatcher.SchemaKind.CAPTION, dispatcher.SchemaKind.GLOSS):
                     metrics["by_schema"][schema_name] = {
-                        "error": "Structured answers (steps, segments or regions) "
+                        "error": "Structured answers (steps, segments, regions or glosses) "
                                  "are scored in the agreement report at /admin/iaa, "
                                  "not here.",
                         "see": "/admin/iaa",

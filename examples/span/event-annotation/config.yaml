@@ -25,19 +25,19 @@ annotation_schemes:
     labels:
       - name: PERSON
         color: "#3b82f6"
-        key_binding: "p"
+        key_value: "p"
       - name: ORGANIZATION
         color: "#10b981"
-        key_binding: "o"
+        key_value: "o"
       - name: LOCATION
         color: "#f59e0b"
-        key_binding: "l"
+        key_value: "l"
       - name: WEAPON
         color: "#ef4444"
-        key_binding: "w"
+        key_value: "w"
       - name: EVENT_TRIGGER
         color: "#8b5cf6"
-        key_binding: "e"
+        key_value: "e"
         tooltip: "Words that trigger/indicate events"
 
   # Event annotation that builds on the span schema

@@ -326,7 +326,8 @@ python -m potato.export -c config.yaml -f qdpx -o ./export/
 A `.qdpx` is a ZIP holding `project.qde` (REFI-QDA XML) and one UTF-8 `.txt`
 per annotated item under `sources/`. Codes carry their hierarchy, descriptions
 and colours; span annotations become `PlainTextSelection` elements with a
-`Coding` each; annotators become `Users`.
+`Coding` each; annotators become `Users`. Memos and cases are not exported
+yet; the export warns when the project has them.
 
 Two things worth knowing:
 
@@ -707,13 +708,17 @@ From a camera-trap review project ([Camera traps](../guides/camera-traps.md)):
   MachineObservation when the model's identification was left unchanged and
   HumanObservation otherwise; `--option basis_of_record=...` forces one.
 
+All three write one reviewer per item: the first by user id, or the one
+named by `--option annotator=<user>`, and they warn when an item had several.
+
 ### Bioacoustics (raven, audacity_labels)
 
 The boxes of a
 [spectrogram_annotation](../annotation-types/multimedia/spectrogram_annotation.md)
 question, one file per recording: Raven selection tables, and Audacity label
 tracks (the spectral form when a box has frequencies). Both import back by
-file name. See [Bioacoustics](../guides/bioacoustics.md).
+file name. In the Raven table a box a reviewer drew or changed has
+`Confidence` 1.0, and `Box Source` records where each box came from. See [Bioacoustics](../guides/bioacoustics.md).
 
 ### Viewer selections (no dedicated format)
 
@@ -763,7 +768,8 @@ and counts per scheme.
 
 Krippendorff's alpha per question with a bootstrap interval, percent
 agreement and the units and coders it rests on, as `reliability.csv` and a
-Markdown table. See [Content analysis](../guides/content-analysis.md).
+Markdown table. Span questions get a positional row, with each character as a
+unit. See [Content analysis](../guides/content-analysis.md).
 
 ### Consensus (consensus)
 

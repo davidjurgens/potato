@@ -175,6 +175,14 @@ class TestDatasetCardGeneration:
         )
         assert "+10 more" in card
 
+    def test_card_names_dict_labels(self, sample_context):
+        """Dict labels made the join raise TypeError, failing the export."""
+        from potato.export.huggingface_exporter import HuggingFaceExporter
+        schema_map = {"q": {"name": "q", "annotation_type": "radio", "description": "d",
+                            "labels": [{"name": "Yes", "color": "#0a0"}, {"name": "No"}]}}
+        card = HuggingFaceExporter()._build_dataset_card(sample_context, "org/ds", [], schema_map)
+        assert "Labels: Yes, No" in card
+
 
 class TestExport:
     @patch("potato.export.huggingface_exporter._check_deps")

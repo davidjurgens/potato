@@ -8,7 +8,10 @@ annotator, so a reviewed clip opens in Raven or Audacity beside its audio:
                      View, Channel, Begin Time (s), End Time (s), Low Freq
                      (Hz), High Freq (Hz) and the label under ``Annotation``
                      (``label_column=`` renames it), plus ``Confidence`` when
-                     any box has one. A time-only box is written over the whole
+                     any box has one (1.0 on a box a reviewer drew or changed;
+                     the detector's score only on one they kept as it was) and
+                     ``Box Source`` (``ai``, ``ai (edited)``, ``human``) when
+                     the boxes record it. A time-only box is written over the whole
                      band: 0 Hz to the recording's Nyquist frequency (from the
                      item's ``sample_rate``, or read from the header of a WAV
                      file in the media directory), else the scheme's
@@ -91,6 +94,9 @@ class _BoxTableExporter(BaseExporter):
                     handle.write(self._render(boxes, scheme, item, options, context, warnings))
                 files.append(path)
                 boxes_written += len(boxes)
+        if only and not users:
+            warnings.append(f"No answers from annotator '{only}', so nothing was written; "
+                            f"check the user id")
         return ExportResult(success=True, format_name=self.format_name, files_written=files,
                             warnings=warnings,
                             stats={"num_files": len(files), "num_boxes": boxes_written})

@@ -95,3 +95,100 @@ def test_degenerate_resamples_are_counted_not_logged(caplog):
     assert not [r for r in caplog.records if "krippendorff_alpha failed" in r.getMessage()]
     assert len(res.warnings) == 1 and "undefined (no variation)" in res.warnings[0]
     assert "bootstrap resamples" in open(os.path.join(out, "reliability.md")).read()
+
+
+# -- span schemes --------------------------------------------------------------
+# A QDA project coded only by highlighting used to get no rows at all.
+
+SPAN = [{"name": "codes", "annotation_type": "span", "labels": ["joy", "fear"]}]
+TEXTS = {"d1": "I was happy, then scared.", "d2": "Nothing happened here.",
+         "d3": "Fear and joy together."}
+
+
+def _span_ann(user, item, spans):
+    return {"user_id": user, "instance_id": item, "labels": {},
+            "spans": {"codes": [{"start": s, "end": e, "name": n} for s, e, n in spans]}}
+
+
+def _span_ctx(out, anns):
+    items = {k: {"id": k, "text": v} for k, v in TEXTS.items()}
+    return ExportContext(config={"item_properties": {"text_key": "text"}}, annotations=anns,
+                         items=items, schemas=SPAN, output_dir=out)
+
+
+SPAN_ANNS = [
+    _span_ann("x", "d1", [(6, 11, "joy"), (18, 24, "fear")]),
+    _span_ann("y", "d1", [(6, 11, "joy"), (17, 24, "fear")]),     # one character wider
+    _span_ann("x", "d2", []),                                     # read, marked nothing
+    _span_ann("y", "d2", [(0, 7, "fear")]),
+    _span_ann("x", "d3", [(0, 4, "fear"), (9, 12, "joy")]),
+    _span_ann("y", "d3", [(0, 4, "fear"), (9, 12, "fear")]),     # same place, other code
+    _span_ann("x", "solo", [(0, 3, "joy")]),                      # one coder: not a unit
+]
+
+
+def _reference_alpha(anns):
+    """Long-format nominal alpha with one unit per (item, character)."""
+    from potato.server_utils.iaa.span import spans_to_bio
+    long = []
+    for a in anns:
+        if a["instance_id"] not in TEXTS:
+            continue
+        spans = [(s["start"], s["end"], s["name"]) for s in a["spans"]["codes"]]
+        for pos, tag in enumerate(spans_to_bio(spans, len(TEXTS[a["instance_id"]]))):
+            long.append((a["user_id"], f"{a['instance_id']}#{pos}",
+                         "O" if tag == "O" else tag.split("-", 1)[1]))
+    return krippendorff_alpha(long, "nominal")
+
+
+def test_span_schemes_get_a_positional_row():
+    out = create_test_directory("reliability_span")
+    res = ReliabilityExporter().export(_span_ctx(out, SPAN_ANNS), out, {"bootstrap": 200})
+    assert res.success
+    row = {r["schema"]: r for r in csv.DictReader(open(os.path.join(out, "reliability.csv")))}["codes"]
+    assert row["level"] == "positional"
+    assert row["units"] == "3" and row["coders"] == "2"
+    assert float(row["alpha"]) == pytest.approx(round(_reference_alpha(SPAN_ANNS), 3))
+    assert float(row["ci95_low"]) <= float(row["alpha"]) <= float(row["ci95_high"])
+    chars = sum(len(t) for t in TEXTS.values())
+    assert row["pairable_values"] == str(2 * chars)
+    # Disagreeing positions: 1 (d1 boundary) + 7 (d2) + 3 (d3 code).
+    assert float(row["percent_agreement"]) == pytest.approx(round(100 * (chars - 11) / chars, 3))
+    assert "| codes | positional |" in open(os.path.join(out, "reliability.md")).read()
+
+
+def test_one_item_matches_the_per_item_coefficient():
+    from potato.export.reliability_exporter import (
+        _alpha_from_coincidences, _span_coincidences)
+    from potato.server_utils.iaa.span import positional_alpha
+    spans = {"x": [(6, 11, "joy"), (18, 24, "fear")], "y": [(6, 11, "joy"), (17, 24, "fear")]}
+    table = _span_coincidences({"length": len(TEXTS["d1"]), "coders": spans})[0]
+    assert _alpha_from_coincidences(table) == pytest.approx(
+        positional_alpha(spans, len(TEXTS["d1"])))
+
+
+def test_span_spans_on_another_field_are_their_own_unit():
+    out = create_test_directory("reliability_span_fields")
+    anns = [
+        {"user_id": u, "instance_id": "d1", "labels": {}, "spans": {"codes": [
+            {"start": 0, "end": 3, "name": "joy", "target_field": "title"},
+            {"start": 6, "end": 11, "name": "joy"}]}}
+        for u in ("x", "y")]
+    ctx = _span_ctx(out, anns)
+    ctx.items["d1"]["title"] = "Joy!"
+    ReliabilityExporter().export(ctx, out, {"bootstrap": 0})
+    row = next(csv.DictReader(open(os.path.join(out, "reliability.csv"))))
+    assert row["units"] == "2"
+    assert row["pairable_values"] == str(2 * (len("Joy!") + len(TEXTS["d1"])))
+
+
+def test_a_span_past_the_text_is_named():
+    out = create_test_directory("reliability_span_past")
+    too_long = len(TEXTS["d1"]) + 5
+    anns = [{"user_id": u, "instance_id": "d1", "labels": {}, "spans": {"codes": [
+        {"start": 6, "end": too_long if u == "x" else 11, "name": "joy"}]}} for u in ("x", "y")]
+    res = ReliabilityExporter().export(_span_ctx(out, anns), out, {"bootstrap": 0})
+    (note,) = [w for w in res.warnings if "past the" in w]
+    assert note.startswith("codes: 1 span(s)") and "d1" in note
+    clean = ReliabilityExporter().export(_span_ctx(out, SPAN_ANNS), out, {"bootstrap": 0})
+    assert not any("past the" in w for w in clean.warnings)

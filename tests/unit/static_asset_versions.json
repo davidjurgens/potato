@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "1c6755d7fbd8cd0c",
-    "version": "50"
+    "sha256": "10bbad15eaf65b34",
+    "version": "51"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -128,8 +128,8 @@
     "version": "1"
   },
   "css/tiered-annotation.css": {
-    "sha256": "9bfefdcd08eb1153",
-    "version": "2"
+    "sha256": "ff1d8cdb58619c62",
+    "version": "3"
   },
   "css/tracking.css": {
     "sha256": "54510457266d1f9d",
@@ -468,8 +468,8 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "b0fa67fa431f8787",
-    "version": "25"
+    "sha256": "740a114a7e3651bb",
+    "version": "26"
   },
   "span-link-manager.js": {
     "sha256": "6461cb278105a953",
@@ -508,8 +508,8 @@
     "version": "2"
   },
   "tiered-annotation.js": {
-    "sha256": "04bdf8b1039ec34f",
-    "version": "6"
+    "sha256": "16cc11d7570a8610",
+    "version": "7"
   },
   "time-series.css": {
     "sha256": "e0fa878084933d38",
@@ -520,8 +520,8 @@
     "version": "2"
   },
   "tracking-ui.js": {
-    "sha256": "81187e571efed11d",
-    "version": "15"
+    "sha256": "99fbb410ccf3d9d9",
+    "version": "16"
   },
   "triad-design.js": {
     "sha256": "7c52f0b30650ce18",

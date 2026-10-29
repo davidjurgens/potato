@@ -324,14 +324,14 @@ annotation_schemes:
 Write consent, instructions, and training content in the target language:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - consent
-    - instructions
-    - annotation
-  consent: surveyflow/consent_ja.html     # Japanese consent page
-  instructions: surveyflow/instructions_ja.html
+phases:
+  order: [consent, instructions, annotation]
+  consent:
+    type: consent
+    file: surveys/consent_ja.json         # Japanese consent questions
+  instructions:
+    type: instructions
+    file: surveys/instructions_ja.html
 ```
 
 ## Font Support for Non-Latin Scripts

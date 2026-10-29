@@ -357,27 +357,20 @@ The weight interpolates linearly as annotations accumulate, providing a smooth t
 
 ## Annotation Routing
 
-Noise-aware routing between LLM auto-labeling and human annotation (based on Yuan et al., 2024):
+`active_learning.annotation_routing`, `routing_thresholds` and
+`verification_sample_rate` are accepted in a config but nothing reads them, so
+they do not route anything; Potato names them at boot. Two things do what they
+describe:
 
-```yaml
-active_learning:
-  annotation_routing: true
-  routing_thresholds:
-    auto_label_min_confidence: 0.9
-    show_suggestion_below: 0.5
-  verification_sample_rate: 0.2
-```
-
-- **High LLM confidence (>0.9):** Auto-label with periodic spot-checking
-- **Medium confidence (0.5-0.9):** Route to human annotator (most informative)
-- **Low confidence (<0.5):** Route to human with LLM suggestion displayed
-
-The `verification_sample_rate` controls how often auto-labeled instances are spot-checked by humans.
+- The share of ICL labels sent back to annotators for blind checking is
+  `icl_labeling.verification.sample_rate` (see [Configuration
+  Options](#configuration-options)).
+- Accepting machine labels above a confidence, with a stated error bound, is a
+  [labeling engine contract](../labeling-engine/contracts.md).
 
 ## References
 
 - Mavromatis et al. (2024) "CoverICL: Selective Annotation for In-Context Learning via Active Graph Coverage." *EMNLP 2024*.
-- Yuan et al. (2024) "Hide and Seek in Noise Labels: Noise-Robust Collaborative Active Learning." *ACL 2024*.
 - Xiao et al. (2023) "FreeAL: Towards Human-Free Active Learning in the Era of Large Language Models." *EMNLP 2023*.
 
 ## Related Documentation

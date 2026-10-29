@@ -52,11 +52,22 @@ per question:
 
 | Column | Meaning |
 |---|---|
-| `level` | Level of measurement: nominal (radio, select), ordinal (likert), interval (number, slider, VAS), MASI (multiselect and hierarchical multiselect, with partial credit for overlapping sets) |
+| `level` | Level of measurement: nominal (radio, select), ordinal (likert), interval (number, slider, VAS), MASI (multiselect and hierarchical multiselect, with partial credit for overlapping sets), positional (span; see below) |
 | `alpha` | Krippendorff's alpha over the units coded by two or more coders |
 | `ci95_low`, `ci95_high` | A percentile bootstrap interval, resampling units with replacement (`bootstrap` resamples, default 1000, seeded) |
 | `percent_agreement` | Share of coder pairs on a unit that gave the same answer |
 | `units`, `coders`, `pairable_values` | What the coefficient rests on |
+
+A `span` question is coded by highlighting, so its row is positional: every
+character of a coded item is a unit, labelled with the code of the span
+covering it or with none. A coder who read an item and highlighted nothing
+counts as "none" throughout, so a missed passage is a disagreement. Here
+`units` counts items (one per text field that has highlights) and
+`pairable_values` counts characters. `/admin/iaa` reports the same measure as
+positional alpha, but computes it per item and averages, so the two can
+differ: this row pools the characters of every item into one coefficient. It
+is not Krippendorff's unitizing alpha, which compares the highlighted
+segments rather than the characters in them.
 
 The bootstrap resamples units; it is not the coincidence-based bootstrap of
 Hayes and Krippendorff (2007). Krippendorff (2004) suggests relying on

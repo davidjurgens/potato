@@ -175,6 +175,54 @@ def item_order(scheme: Dict[str, Any], item_data: Dict[str, Any], user_id: str,
     return permutation(len(items), seed)
 
 
+#: Where the client finds the profiles Potato generated for a conjoint scheme
+#: that has no ``profiles_field``. The generator points the form at this key.
+CONJOINT_PROFILES_KEY = "_conjoint_profiles__{}"
+
+
+def conjoint_profiles(scheme: Dict[str, Any], user_id: str,
+                      instance_id: str) -> Optional[List[Dict[str, str]]]:
+    """
+    The profiles a conjoint scheme shows this annotator on this item.
+
+    Each profile takes one level of every attribute, drawn at random from a
+    seed of (annotator, item, scheme), so the design varies across annotators
+    and items and a reload shows the same cards. Profiles within one set are
+    kept distinct while enough combinations exist. The client used to pick
+    each level from the LENGTHS of the item id and the attribute name, so
+    every item with a same-length id showed the same profiles, and nothing
+    recorded which profiles were shown.
+
+    Returns None when the scheme takes its profiles from the item
+    (``profiles_field``) or has no attributes with levels.
+    """
+    if (scheme.get("annotation_type") or "") != "conjoint" or scheme.get("profiles_field"):
+        return None
+    attributes = [a for a in scheme.get("attributes") or []
+                  if isinstance(a, dict) and a.get("name") and a.get("levels")]
+    if not attributes:
+        return None
+    try:
+        count = max(1, int(scheme.get("profiles_per_set", 3)))
+    except (TypeError, ValueError):
+        count = 3
+    combinations = 1
+    for attr in attributes:
+        combinations *= len(attr["levels"])
+    rng = random.Random(order_seed(user_id, instance_id, scheme.get("name") or ""))
+    profiles: List[Dict[str, str]] = []
+    seen = set()
+    for _ in range(count):
+        for _attempt in range(50):
+            profile = {str(a["name"]): str(rng.choice(a["levels"])) for a in attributes}
+            key = tuple(profile.values())
+            if key not in seen or len(seen) >= combinations:
+                break
+        seen.add(key)
+        profiles.append(profile)
+    return profiles
+
+
 def presentation_order(scheme: Dict[str, Any], user_id: str,
                        instance_id: str) -> Optional[List[str]]:
     """

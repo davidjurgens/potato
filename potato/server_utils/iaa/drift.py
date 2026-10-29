@@ -73,7 +73,7 @@ HEADLINE_METRICS = (
     # had a headline, so no drift prompt could fire for them.
     "pooled.alpha_ordinal", "pooled.alpha_interval", "pooled.alpha_nominal",
     "alpha",
-    "krippendorff_alpha_u", "detection_alpha", "classification_alpha",
+    "positional_alpha", "detection_alpha", "classification_alpha",
     "detection.alpha", "outcome.outcome_alpha",
     "fleiss_kappa", "cohen_kappa", "weighted_kappa_quadratic",
     "weighted_kappa_linear", "token_level_kappa",

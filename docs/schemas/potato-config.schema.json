@@ -34,7 +34,7 @@
       "properties": {
         "annotation_routing": {
           "default": false,
-          "description": "Route high-confidence predictions past the annotator instead of asking",
+          "description": "Not read: nothing routes items on model confidence, and the key is named at boot if set. Accepting machine labels above a confidence is a `labeling_engine` contract",
           "type": "boolean"
         },
         "bald_params": {
@@ -54,9 +54,23 @@
           "description": "The model that scores unlabeled items. `{name: ...}`, optionally with `hyperparameters`. `name` takes a short name (`logistic`, `random_forest`, `svm`) or a fully qualified import path such as `sklearn.linear_model.LogisticRegression`",
           "type": "object"
         },
+        "classifier_kwargs": {
+          "description": "Flat form of `classifier.hyperparameters`; merged with `classifier_params`",
+          "type": "object"
+        },
+        "classifier_name": {
+          "default": "sklearn.linear_model.LogisticRegression",
+          "description": "Flat form of `classifier.name`",
+          "type": "string"
+        },
         "classifier_params": {
           "description": "Extra keyword arguments passed to the classifier constructor",
           "type": "object"
+        },
+        "cold_start_batch_size": {
+          "default": 20,
+          "description": "How many unannotated items `cold_start_strategy: llm` samples for the LLM to score",
+          "type": "integer"
         },
         "cold_start_strategy": {
           "default": "random",
@@ -92,6 +106,15 @@
           "description": "Use a model rather than a classifier for cold start and confidence: `{enabled, endpoint_url, model_name}`",
           "type": "object"
         },
+        "llm_config": {
+          "description": "Flat form of the `llm` block",
+          "type": "object"
+        },
+        "llm_enabled": {
+          "default": false,
+          "description": "Flat form of `llm.enabled`",
+          "type": "boolean"
+        },
         "max_instances_to_reorder": {
           "description": "Cap on how many unlabeled items are ranked per pass. They are sampled, not taken from the head of the file",
           "type": "integer"
@@ -110,6 +133,20 @@
           "description": "Save fitted models to disk: `{enabled, save_directory, retention_count}`",
           "type": "object"
         },
+        "model_persistence_enabled": {
+          "default": false,
+          "description": "Flat form of `model_persistence.enabled`",
+          "type": "boolean"
+        },
+        "model_retention_count": {
+          "default": 2,
+          "description": "Flat form of `model_persistence.retention_count`",
+          "type": "integer"
+        },
+        "model_save_directory": {
+          "description": "Flat form of `model_persistence.save_directory`",
+          "type": "string"
+        },
         "query_strategy": {
           "default": "uncertainty",
           "description": "What \"informative\" means: uncertainty, diversity, badge, bald or hybrid",
@@ -126,7 +163,7 @@
           "type": "string"
         },
         "routing_thresholds": {
-          "description": "Confidence bounds for routing: `{auto_label_min_confidence, show_suggestion_below}`",
+          "description": "Not read; see `annotation_routing`",
           "type": "object"
         },
         "schema_names": {
@@ -147,9 +184,22 @@
           "description": "How items become features. `{name: ...}`, optionally with `hyperparameters`. `name` takes `tfidf`, `count` or `sentence-transformers`, or a fully qualified import path",
           "type": "object"
         },
+        "vectorizer_kwargs": {
+          "description": "Flat form of `vectorizer.hyperparameters`; merged with `vectorizer_params`",
+          "type": "object"
+        },
+        "vectorizer_name": {
+          "default": "sklearn.feature_extraction.text.TfidfVectorizer",
+          "description": "Flat form of `vectorizer.name`",
+          "type": "string"
+        },
         "vectorizer_params": {
           "description": "Extra keyword arguments passed to the vectorizer constructor. A YAML list for `ngram_range` is coerced to the tuple sklearn wants",
           "type": "object"
+        },
+        "verification_sample_rate": {
+          "description": "Not read, and named at boot if set. The auto-label spot-check rate is `icl_labeling.verification.sample_rate`",
+          "type": "number"
         }
       },
       "type": "object"
@@ -4200,7 +4250,7 @@
       "type": "boolean"
     },
     "automatic_assignment": {
-      "description": "Assign items to annotators automatically as they arrive",
+      "description": "Potato 1.x assignment block. Not read, and named at boot if set; use `assignment_strategy`, `num_annotators_per_item` and `max_annotations_per_user`",
       "type": "object"
     },
     "automation": {
@@ -6740,7 +6790,7 @@
       "type": "object"
     },
     "prestudy": {
-      "description": "Legacy pre-study screening block. The only code that reads it is an unreferenced method, so it has no effect -- configure the screening phase through `phases` or `surveyflow` with `type: prestudy`",
+      "description": "Legacy pre-study screening block. Not read, and named at boot if set; add a phase with `type: prestudy` under `phases`",
       "type": "object"
     },
     "prolific": {
@@ -7295,7 +7345,7 @@
       "type": "object"
     },
     "surveyflow": {
-      "description": "Survey pages shown before and after annotation",
+      "description": "Potato 1.x survey pages. Not read in 2.x, and named at boot if set; survey pages go under `phases`",
       "type": "object"
     },
     "task_description": {

@@ -48,6 +48,7 @@ annotators can label calls the source missed.
 | `Channel` | Kept on the box when it is not 1 |
 | `Begin File` / `Begin Path`, `File Offset (s)` | The recording, and the start time within it, in a multi-file table |
 | `Confidence` | Kept on the box; `--min-confidence` filters on it |
+| `Box Source` | Kept as an attribute of the box; written by Potato's own `raven` export. The box is still an import in the new project |
 | An annotation column | The label |
 
 The label comes from `--label-column NAME` when given. Otherwise it comes from
@@ -120,6 +121,11 @@ python -m potato.export -c review-project/config.yaml -f audacity_labels -o expo
 `Selection`, `View`, `Channel`, `Begin Time (s)`, `End Time (s)`,
 `Low Freq (Hz)`, `High Freq (Hz)`, the label column (`Annotation`, or
 `--option label_column=Species`) and, when any box has one, `Confidence`.
+`Confidence` is the detector's score only on a box the reviewer kept
+unchanged. A box they drew or changed gets 1.0, as in the MegaDetector
+export, so a confidence threshold applied later keeps every reviewed box.
+When the boxes record where they came from, a `Box Source` column says
+which is which: `ai`, `ai (edited)`, `import`, `import (edited)` or `human`.
 A box with no frequency range is written from 0 Hz to the recording's
 Nyquist frequency, which comes from the item's `sample_rate` (the importer
 records it for WAV files) or from the WAV file's header. For other audio

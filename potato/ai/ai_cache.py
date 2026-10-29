@@ -1320,10 +1320,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
     def _generate_text_hint_for_visual(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate text-based hint when visual endpoint is not available."""
         description = config["annotation_schemes"][annotation_id].get("description", "")
-        labels = config["annotation_schemes"][annotation_id].get("labels", [])
-
-        if labels and isinstance(labels[0], dict):
-            labels = [l.get("name", str(l)) for l in labels]
+        # Every entry, not just a list whose first label is a dict.
+        from potato.server_utils.presentation_order import label_names
+        labels = label_names(config["annotation_schemes"][annotation_id])
 
         return {
             "hint": f"Review the {'image' if 'image' in config['annotation_schemes'][annotation_id]['annotation_type'] else 'video'} carefully. "

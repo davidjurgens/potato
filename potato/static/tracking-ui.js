@@ -51,7 +51,9 @@
             this.tracks = {};  // objectId -> track data
             this.activeTrackId = null;
             this.nextTrackId = 1;
-            this.autoAdvanceFrames = this.config.autoAdvanceFrames || 5;
+            // tracking_options.auto_advance_frames: frames to step forward after
+            // a box is drawn, so the next keyframe is one drag away. 0 stays put.
+            this.autoAdvanceFrames = Math.max(0, Number(this.config.autoAdvanceFrames) || 0);
             this.defaultInterpolation = this.config.interpolation || 'linear';
 
             // Interaction state
@@ -1155,6 +1157,7 @@
 
                     if (bbox.width > 5 && bbox.height > 5) {
                         self.addKeyframe(bbox);
+                        self._autoAdvance();
                     }
                 }
 
@@ -1316,6 +1319,22 @@
                     self.renderOverlay();
                 }
             });
+        }
+
+        /**
+         * Step forward `autoAdvanceFrames` frames after a drawn keyframe,
+         * stopping at the last frame. The video is paused first so the seek
+         * lands on the frame the annotator will draw on next.
+         */
+        _autoAdvance() {
+            if (!this.autoAdvanceFrames || !this.video) return;
+            var rate = this._frameRate();
+            var target = (this._getCurrentFrame() + this.autoAdvanceFrames) / rate;
+            if (isFinite(this.video.duration) && this.video.duration > 0) {
+                target = Math.min(target, this.video.duration - 0.5 / rate);
+            }
+            if (!this.video.paused) this.video.pause();
+            this.video.currentTime = Math.max(0, target);
         }
 
         _getCurrentFrame() {

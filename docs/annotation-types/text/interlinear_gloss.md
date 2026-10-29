@@ -144,6 +144,27 @@ how many there were. In FLExText and Toolbox, which pair glosses with
 morphemes one to one, a misaligned word's whole gloss goes on its first
 morpheme.
 
+## Agreement
+
+`/admin/iaa` scores each line of the analysis separately, with Krippendorff's
+alpha (nominal) and the pairwise percentage of agreement:
+
+| Group | Unit | Compared |
+|---|---|---|
+| `segmentation` | one word | the morpheme line |
+| `gloss` | one word | the whole gloss |
+| `morpheme_gloss` | one morpheme | each morpheme's gloss, on words every annotator segmented the same way |
+| `tier_<name>` | one word | each tier in `tiers` |
+
+Two cells agree when their text is identical after trimming. An empty cell
+counts as unanswered, so two annotators who both left a word blank do not
+agree on it. `morpheme_gloss` leaves out words segmented two ways, because
+their morphemes do not line up and comparing them by position would count a
+segmentation difference as a gloss difference. The free translation is not
+scored.
+
+`/admin/api/agreement` does not score this type and points to `/admin/iaa`.
+
 ## Example
 
 ```bash

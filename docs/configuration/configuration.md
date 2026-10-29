@@ -727,17 +727,9 @@ in `potato/item_state_management.py`:
 | `model_review` | Serves prelabelled items least-confident first, for review of model output ([model review](../ai-intelligence/model_review.md)) |
 | `engine` | Serves the labeling engine's requests (calibration, verification, audit, adjudication) in its priority order ([labeling engine](../labeling-engine/overview.md)) |
 
-### Legacy Assignment Configuration
-
-```yaml
-automatic_assignment:
-  on: true
-  output_filename: task_assignment.json
-  sampling_strategy: random  # random or ordered
-  labels_per_instance: 3
-  instance_per_annotator: 5
-  test_question_per_annotator: 0
-```
+The 1.x `automatic_assignment` block is not read; [Task
+Assignment](../advanced/task_assignment.md#moving-from-automatic_assignment)
+maps its keys onto these.
 
 ## UI and Layout Configuration
 
@@ -805,40 +797,30 @@ For detailed setup instructions and configuration options, see [AI Support Docum
 
 ## Advanced Features
 
-### SurveyFlow Configuration
+### Survey Pages and Screening
+
+Consent, screening and post-study survey pages are phases:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/intro.jsonl
-    - surveyflow/instruction.jsonl
-    - surveyflow/consent.jsonl
-  post_annotation:
-    - surveyflow/experience.jsonl
-    - surveyflow/demographic_questions.jsonl
-    - surveyflow/end.jsonl
-  testing:
-    - surveyflow/testing.jsonl
+phases:
+  order: [consent, prestudy, annotation, poststudy]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  prestudy:
+    type: prestudy
+    file: surveys/screener.json
+  poststudy:
+    type: poststudy
+    file: surveys/demographics.json
 ```
 
-### Prestudy Configuration
-
-```yaml
-prestudy:
-  on: true
-  minimum_score: 0.8
-  groundtruth_key: whether_match
-  question_key: Whether the presented sentences are discussing the same scientific finding
-  answer_mapping:
-    Yes: true
-    No: false
-  pass_page: surveyflow/prestudy_pass.jsonl
-  fail_page: surveyflow/prestudy_fail.jsonl
-```
+[Survey Flow](../workflow/surveyflow.md) covers the question files, and
+[Experiment Flow](../workflow/experiment_flow.md) covers `exit_when` for
+screening people out. The 1.x `surveyflow` and top-level `prestudy` blocks are
+not read, and Potato names them at boot if a config still sets them. To grade
+a qualification against known answers, use the
+[training phase](../workflow/training_phase.md).
 
 ### Active Learning
 

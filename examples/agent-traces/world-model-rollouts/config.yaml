@@ -37,10 +37,7 @@ user_config:
 # Two annotators per item, so the break-point agreement report has something to
 # compute. "Do annotators agree on WHEN the physics broke?" needs two of them,
 # and it is the number this schema exists to produce.
-automatic_assignment:
-  "on": true
-  instance_per_annotator: 3
-  annotators_per_instance: 2
+num_annotators_per_item: 2
 
 annotation_schemes:
   - annotation_type: rollout_evaluation

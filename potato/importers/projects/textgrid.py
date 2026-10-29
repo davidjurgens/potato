@@ -7,8 +7,9 @@ becomes one item; an audio or video file beside it with the same stem
 ``media/`` and played by the tiered annotation scheme. Each tier of the
 source becomes a tier of one ``tiered_annotation`` scheme, and every
 non-empty interval becomes a pre-annotation on that tier, so annotators open
-the item with the existing segmentation and correct it. The TextGrid and EAF
-exporters write it back out.
+the item with the existing segmentation and correct it. A TextGrid point tier
+(``TextTier``) becomes a ``point: true`` tier whose marks are instants. The
+TextGrid and EAF exporters write it back out.
 
 A tier whose intervals use few distinct values (phone labels, speaker codes:
 at most ``MAX_LABELS``) gets those values as its label set. A tier of free
@@ -60,6 +61,18 @@ class _TierFileImporter:
         """(tier, parent) for every tier the file declares."""
         return []
 
+    def _point_tiers(self, text: str) -> List[str]:
+        """Tiers that mark instants rather than intervals."""
+        return []
+
+    def _tier_details(self, text: str) -> Dict[str, Dict[str, Any]]:
+        """Per tier: linguistic_type, constraint and participant (EAF)."""
+        return {}
+
+    def _duration(self, text: str) -> Optional[float]:
+        """The recording length the file declares, in seconds."""
+        return None
+
     def _parse(self, text: str) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
@@ -87,6 +100,8 @@ class _TierFileImporter:
         tier_order: List[str] = []
         tier_values: Dict[str, set] = {}
         parents: Dict[str, str] = {}
+        point_tiers: set = set()
+        details: Dict[str, Dict[str, Any]] = {}
         media_type = "audio"
         parsed = []
         # A link inside the input folder that points out of it (a downloaded
@@ -111,6 +126,9 @@ class _TierFileImporter:
                     tier_values[tier] = set()
                 if parent and tier not in parents:
                     parents[tier] = parent
+            point_tiers.update(self._point_tiers(text))
+            for tier, info in self._tier_details(text).items():
+                details.setdefault(tier, info)
             for seg in segments:
                 tier = self._tier_of(seg)
                 if tier not in tier_values:
@@ -126,7 +144,7 @@ class _TierFileImporter:
                 media = None
             if media is not None and media.suffix.lower() in self.media_type_by_ext:
                 media_type = "video"
-            parsed.append((f, segments, media))
+            parsed.append((f, segments, media, self._duration(text)))
         if not parsed:
             raise ValueError(f"no readable {self.format_name} files at {path}")
 
@@ -137,8 +155,19 @@ class _TierFileImporter:
             categorical[tier] = 0 < len(values) <= MAX_LABELS
             labels = values if categorical[tier] else [tier]
             entry = {"name": tier, "tier_type": "independent", "labels": labels}
-            if parents.get(tier) in tier_values:
+            if tier in point_tiers:
+                # Praat TextTier: ToBI tones, break indices. Imported as a
+                # point tier, so the marks stay instants and export as points.
+                entry["point"] = True
+            elif parents.get(tier) in tier_values:
                 entry.update(tier_type="dependent", parent_tier=parents[tier])
+                constraint = _CONSTRAINTS.get((details.get(tier) or {}).get("constraint") or "")
+                entry["constraint_type"] = constraint or "included_in"
+            info = details.get(tier) or {}
+            if info.get("participant"):
+                entry["participant"] = info["participant"]
+            if info.get("linguistic_type"):
+                entry["linguistic_type"] = info["linguistic_type"]
             tiers.append(entry)
         result.schemes = [{
             "annotation_type": "tiered_annotation",
@@ -149,7 +178,8 @@ class _TierFileImporter:
             "tiers": tiers,
         }]
 
-        for f, segments, media in parsed:
+        dependent = {t["name"]: t["parent_tier"] for t in tiers if t.get("parent_tier")}
+        for f, segments, media, duration in parsed:
             stem = f.stem
             fields: Dict[str, Any] = {"text": f.name, "source_file": f.name}
             if media is not None:
@@ -171,12 +201,52 @@ class _TierFileImporter:
                     "label": text if categorical[tier] else tier,
                     "value": "" if categorical[tier] else text,
                     "parent_id": None,
+                    "_source_id": seg.get("annotation_id"),
+                    "_source_parent": seg.get("parent_annotation_id"),
                 })
+            _link_parents(by_tier, segments, dependent)
+            if duration is not None:
+                # The grid's own length; the last label usually ends before it.
+                fields["duration"] = duration
             item = ProjectItem(instance_id=stem, fields=fields)
             item.predictions[SCHEME_NAME] = {"annotations": by_tier}
             item.prediction_sources[SCHEME_NAME] = {"model": f"imported {self.format_name}"}
             result.items.append(item)
         return result
+
+
+#: ELAN constraint stereotypes, as tiered_annotation's constraint_type.
+_CONSTRAINTS = {
+    "Time_Subdivision": "time_subdivision",
+    "Included_In": "included_in",
+    "Symbolic_Association": "symbolic_association",
+    "Symbolic_Subdivision": "symbolic_subdivision",
+}
+
+
+def _link_parents(by_tier: Dict[str, list], segments, dependent: Dict[str, str]) -> None:
+    """Give each annotation on a dependent tier its parent's id.
+
+    A REF_ANNOTATION names its parent; a time-aligned child is the one inside
+    the parent's span. Without the link an EAF export writes children that
+    point at nothing, which ELAN's schema does not allow.
+    """
+    by_source = {ann["_source_id"]: ann for anns in by_tier.values() for ann in anns
+                 if ann.get("_source_id")}
+    for tier, parent_tier in dependent.items():
+        parents = by_tier.get(parent_tier) or []
+        for ann in by_tier.get(tier) or []:
+            parent = by_source.get(ann.get("_source_parent") or "")
+            if parent is None:
+                parent = next((p for p in parents
+                               if p["start_time"] <= ann["start_time"]
+                               and ann["end_time"] <= p["end_time"]), None)
+            if parent is not None:
+                ann["parent_id"] = parent["id"]
+    for anns in by_tier.values():
+        for ann in anns:
+            ann.pop("_source_id", None)
+            ann.pop("_source_parent", None)
 
 
 def _report_overlaps(f: Path, segments, tier_of, result) -> None:
@@ -209,6 +279,15 @@ class TextGridImporter(_TierFileImporter):
         from potato.server_utils.transcripts.align import textgrid_tier_names
         return [(name, None) for name in textgrid_tier_names(text) if name]
 
+    def _point_tiers(self, text: str) -> List[str]:
+        from potato.server_utils.transcripts.align import textgrid_point_tiers
+        return textgrid_point_tiers(text)
+
+    def _duration(self, text: str) -> Optional[float]:
+        from potato.server_utils.transcripts.align import textgrid_bounds
+        bounds = textgrid_bounds(text)
+        return bounds[1] if bounds else None
+
 
 class EAFImporter(_TierFileImporter):
     format_name = "eaf"
@@ -234,3 +313,7 @@ class EAFImporter(_TierFileImporter):
             result.warn(f"{f.name}: {info['unaligned_slots']} time slot(s) had no time; "
                         "placed between the aligned slots around them, as ELAN does")
         return info["tiers"]
+
+    def _tier_details(self, text: str) -> Dict[str, Dict[str, Any]]:
+        from potato.server_utils.transcripts.align import eaf_tier_info
+        return eaf_tier_info(text).get("details", {})

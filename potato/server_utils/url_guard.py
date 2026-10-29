@@ -136,6 +136,24 @@ def validate_url(url: str, allowlist: Optional[List[str]] = None):
     return parsed, resolve_public_addresses(hostname, port)
 
 
+def _pinned_host_adapter(hostname: str):
+    """An https adapter for a URL whose host is a pinned IP.
+
+    urllib3 takes SNI and the name to verify from the URL unless told
+    otherwise, so a pinned fetch used to send no SNI (servers that need it
+    fail the handshake, which is most CDNs) and ran with verification off.
+    """
+    from requests.adapters import HTTPAdapter
+
+    class Adapter(HTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            kwargs["server_hostname"] = hostname
+            kwargs["assert_hostname"] = hostname
+            super().init_poolmanager(*args, **kwargs)
+
+    return Adapter()
+
+
 def fetch(url: str, *, headers: Optional[dict] = None,
           timeout: int = DEFAULT_TIMEOUT,
           max_bytes: int = DEFAULT_MAX_BYTES,
@@ -155,8 +173,10 @@ def fetch(url: str, *, headers: Optional[dict] = None,
 
         # Connect to the address that passed validation rather than letting
         # requests re-resolve the name. The Host header keeps virtual hosting
-        # and TLS SNI working.
+        # working; for https the adapter sends the hostname as SNI and checks
+        # the certificate against it, since the URL itself now holds an IP.
         request_headers = dict(headers or {})
+        session = requests.Session()
         if addresses:
             family, addr = addresses[0]
             netloc_host = "[%s]" % addr if family == socket.AF_INET6 else addr
@@ -164,30 +184,51 @@ def fetch(url: str, *, headers: Optional[dict] = None,
                 netloc_host += ":%d" % parsed.port
             pinned = urlunparse(parsed._replace(netloc=netloc_host))
             request_headers["Host"] = parsed.netloc
+            if parsed.scheme == "https":
+                session.mount("https://", _pinned_host_adapter(parsed.hostname))
         else:
             pinned = current
 
-        response = requests.get(
-            pinned, headers=request_headers, timeout=timeout,
-            stream=True, allow_redirects=False,
-            # The pinned URL's hostname is an IP, so certificate verification
-            # would fail against the name the caller asked for. Verify only
-            # when we did not need to pin.
-            verify=not addresses,
-        )
+        try:
+            response = session.get(
+                pinned, headers=request_headers, timeout=timeout,
+                stream=True, allow_redirects=False,
+            )
+        except Exception:
+            session.close()
+            raise
 
         if response.is_redirect or response.is_permanent_redirect:
             location = response.headers.get("Location")
             response.close()
+            session.close()
             if not location:
                 raise URLNotAllowed("redirect with no Location header")
             current = requests.compat.urljoin(current, location)
             continue
 
-        _enforce_size(response, max_bytes)
+        # The caller streams the body, so the session has to outlive this
+        # function; closing the response closes it too.
+        _close_with(response, session)
+        try:
+            _enforce_size(response, max_bytes)
+        except URLNotAllowed:
+            response.close()
+            raise
         return response
 
     raise URLNotAllowed("too many redirects (more than %d)" % MAX_REDIRECTS)
+
+
+def _close_with(response, session) -> None:
+    close = response.close
+
+    def close_both():
+        try:
+            close()
+        finally:
+            session.close()
+    response.close = close_both
 
 
 def _enforce_size(response, max_bytes: int) -> None:

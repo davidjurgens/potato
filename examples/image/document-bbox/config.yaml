@@ -41,19 +41,19 @@ annotation_schemes:
     labels:
       - name: TITLE
         tooltip: "A title or heading"
-        key_binding: t
+        key_value: t
       - name: PARAGRAPH
         tooltip: "A text paragraph"
-        key_binding: p
+        key_value: p
       - name: LIST
         tooltip: "A bulleted or numbered list"
-        key_binding: l
+        key_value: l
       - name: QUOTE
         tooltip: "A quote or citation"
-        key_binding: q
+        key_value: q
       - name: OTHER
         tooltip: "Other region type"
-        key_binding: o
+        key_value: o
 
 user_config:
   allow_all_users: true

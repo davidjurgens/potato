@@ -573,7 +573,6 @@ Set to `false` to disable calibration (e.g., for debugging or when using RandomF
 | `classifier_params` | dict | `{}` | Extra parameters passed to classifier constructor |
 | `vectorizer_params` | dict | `{}` | Extra parameters passed to vectorizer constructor |
 | `use_icl_ensemble` | bool | `false` | Blend ICL predictions with classifier |
-| `annotation_routing` | bool | `false` | Enable LLM-based annotation routing |
 
 ## Architecture Overview
 

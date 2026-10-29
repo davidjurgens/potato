@@ -84,6 +84,11 @@ def agreement_server():
             "name": "reward",
             "description": "Is each step correct?",
         },
+        {
+            "annotation_type": "interlinear_gloss",
+            "name": "igt",
+            "description": "Gloss each word.",
+        },
     ]
     with TestConfigManager(
         "audit25_agreement",
@@ -129,6 +134,13 @@ def _annotate_everything(server):
                         **{"reward:::reward": json.dumps({"mode": "binary", "steps": [
                             {"index": k, "reward": (k + index + (annotator == "a2")) % 2}
                             for k in range(4)]})},
+                        # The same segmentation from both; the gloss of the
+                        # second word differs on odd items.
+                        **{"igt:::igt": json.dumps({"words": [
+                            {"word": "evlerde", "morphemes": "ev-ler-de", "gloss": "house-PL-LOC"},
+                            {"word": "oturdum", "morphemes": "otur-du-m",
+                             "gloss": ("live" if annotator == "a2" and index % 2 else "sit") + "-PST-1SG"},
+                        ], "translation": ""})},
                     ),
                 },
             )
@@ -313,3 +325,21 @@ class TestStructuredSchemasAreLeftToTheAgreementReport:
         entry = _agreement(agreement_server)["by_schema"]["reward"]
         assert entry.get("see") == "/admin/iaa"
         assert "krippendorff_alpha" not in entry and "percent_agreement" not in entry
+
+    def test_interlinear_gloss_points_to_admin_iaa(self, agreement_server):
+        # Reduced to label names, both annotators "chose" igt on every item
+        # and agreed perfectly, though half their glosses of one word differ.
+        entry = _agreement(agreement_server)["by_schema"]["igt"]
+        assert entry.get("see") == "/admin/iaa"
+        assert "krippendorff_alpha" not in entry
+
+    def test_interlinear_gloss_is_scored_by_admin_iaa(self, agreement_server):
+        response = requests.get(f"{agreement_server.base_url}/admin/iaa")
+        assert response.status_code == 200, response.text
+        metrics = response.json()["schemas"]["igt"]["metrics"]
+        assert metrics["n_items"] == 8
+        assert metrics["segmentation"]["percent_agreement"] == 1.0
+        # 16 words, the second word's gloss differs on 4 of 8 items.
+        assert metrics["gloss"]["n_units"] == 16
+        assert metrics["gloss"]["percent_agreement"] == 0.75
+        assert metrics["morpheme_gloss"]["percent_agreement"] == pytest.approx(44 / 48)

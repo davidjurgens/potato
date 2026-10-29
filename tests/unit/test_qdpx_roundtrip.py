@@ -414,3 +414,38 @@ class TestDetection:
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("a.txt", "hello")
         assert text_import_registry.detect_path(path) is None
+
+
+# ------------------------------------------------------- what is left out
+
+
+class TestLeftOutIsNamed:
+    """Media sources, memos and cases are not carried yet. Each is named."""
+
+    def test_media_sources_beside_text_are_named(self):
+        from tests.helpers.test_utils import create_test_directory
+        path = Path(create_test_directory("qdpx_media")) / "mixed.qde"
+        path.write_text(f"""<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="urn:QDA-XML:project:1.0" name="p">
+  <Sources>
+    <TextSource guid="s1" name="doc1"><PlainTextContent>{TEXT}</PlainTextContent></TextSource>
+    <AudioSource guid="a1" name="interview" path="internal://a1.m4a"/>
+    <AudioSource guid="a2" name="interview2" path="internal://a2.m4a"/>
+    <PictureSource guid="p1" name="photo" path="internal://p1.jpg"/>
+  </Sources>
+</Project>
+""", encoding="utf-8")
+        result = QDPXImporter().parse_path(path)
+        assert len(result.documents) == 1
+        (warning,) = [w for w in result.warnings if "Not imported" in w]
+        assert "2 <AudioSource>" in warning and "1 <PictureSource>" in warning
+
+    def test_memos_and_cases_are_named_on_export(self, tmp_path):
+        context = make_context()
+        context.config.update({"annotation_ui": {"memos": True}, "cases": {"enabled": True}})
+        _, result = export(tmp_path, context)
+        assert any("memos and cases" in w for w in result.warnings)
+
+    def test_a_plain_project_has_no_such_warning(self, tmp_path):
+        _, result = export(tmp_path, make_context())
+        assert not any("does not include" in w for w in result.warnings)

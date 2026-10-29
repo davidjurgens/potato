@@ -255,28 +255,36 @@ workload_checker_period: 300  # Check every 5 minutes
 
 ---
 
-## Alternative: Using Surveyflow for Completion
+## Alternative: A Completion Page of Your Own
 
-If you need more control over the completion page, you can use surveyflow instead of the built-in completion page:
+For more control than the built-in completion page, end the study with a
+`poststudy` phase that shows your own text and link:
 
-1. **Create an end page** (`surveyflow/end.jsonl`):
+1. **Create the page** (`surveys/end.json`):
 
 ```json
-{"id":"1","text":"Thanks for your participation! Click the link below to complete the study.","schema": "pure_display", "choices": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"]}
+[
+  {
+    "annotation_type": "pure_display",
+    "name": "finish",
+    "description": "Thanks for your participation! Click the link below to complete the study.",
+    "labels": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"],
+    "allow_html": true
+  }
+]
 ```
 
-2. **Configure surveyflow** in your YAML:
+2. **Add it as the last phase**:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/consent.jsonl
-  post_annotation:
-    - surveyflow/end.jsonl
+phases:
+  order: [consent, annotation, poststudy]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  poststudy:
+    type: poststudy
+    file: surveys/end.json
 ```
 
 ---

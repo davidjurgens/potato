@@ -1100,6 +1100,26 @@ class TieredAnnotationManager {
             this._onSegmentDragEnd(event.segment);
         });
 
+        // Point-tier annotations are Peaks points, not segments.
+        this.peaks.on('points.click', (event) => {
+            if (event && event.point) this.selectAnnotation(event.point.id);
+        });
+        this.peaks.on('points.dragend', (event) => {
+            const point = event && event.point;
+            if (!point) return;
+            for (const tierName in this.annotations) {
+                const ann = this.annotations[tierName].find(a => a.id === point.id);
+                if (ann) {
+                    ann.start_time = ann.end_time = point.time * 1000;
+                    if (this.tierViews[tierName]) this.tierViews[tierName].render();
+                    if (this.zoomedTimelineView) this.zoomedTimelineView.render();
+                    this._renderAnnotationList();
+                    this._saveData();
+                    return;
+                }
+            }
+        });
+
         // Waveform clicks arrive on the PEAKS INSTANCE, namespaced by view
         // name -- the view objects in the bundled build are not event
         // emitters and have no `.on` at all. `zoomview.on('dblclick', ...)`
@@ -1215,10 +1235,13 @@ class TieredAnnotationManager {
                 annotation.start_time = newStartMs;
                 annotation.end_time = newEndMs;
 
-                // Re-render tier canvas
+                // Re-render tier canvas. The zoomed timeline otherwise
+                // repaints only on timeupdate, so a drag made while paused
+                // left it drawing the old position.
                 if (this.tierViews[tierName]) {
                     this.tierViews[tierName].render();
                 }
+                if (this.zoomedTimelineView) this.zoomedTimelineView.render();
 
                 this._renderAnnotationList();
                 this._saveData();
@@ -1235,6 +1258,17 @@ class TieredAnnotationManager {
     _addSegmentToPeaks(annotation) {
         if (!this.peaks) return;
 
+        if (this.isPointTier(annotation.tier)) {
+            this.peaks.points.add({
+                id: annotation.id,
+                time: annotation.start_time / 1000,
+                labelText: annotation.label,
+                color: annotation.color || '#4ECDC4',
+                editable: true
+            });
+            return;
+        }
+
         this.peaks.segments.add({
             id: annotation.id,
             startTime: annotation.start_time / 1000,  // Convert ms to seconds
@@ -1246,13 +1280,37 @@ class TieredAnnotationManager {
     }
 
     /**
+     * Push one annotation's edited times to its Peaks.js segment or point.
+     */
+    _syncAnnotationTimeToPeaks(ann) {
+        if (!this.peaks || !ann) return;
+        try {
+            if (this.isPointTier(ann.tier)) {
+                const point = this.peaks.points.getPoint(ann.id);
+                if (point) point.update({ time: ann.start_time / 1000 });
+            } else {
+                const segment = this.peaks.segments.getSegment(ann.id);
+                if (segment) {
+                    segment.update({
+                        startTime: ann.start_time / 1000,
+                        endTime: ann.end_time / 1000
+                    });
+                }
+            }
+        } catch (e) {
+            // Not in Peaks (no waveform loaded)
+        }
+    }
+
+    /**
      * Sync all annotations to Peaks.js segments
      */
     _syncAnnotationsToPeaks() {
         if (!this.peaks) return;
 
-        // Clear existing segments
+        // Clear existing segments and points
         this.peaks.segments.removeAll();
+        if (this.peaks.points) this.peaks.points.removeAll();
 
         // Add all annotations as segments
         for (const tierName in this.annotations) {
@@ -1414,12 +1472,22 @@ class TieredAnnotationManager {
     /**
      * Create a new annotation
      */
+    /**
+     * Whether a tier marks instants (`point: true`) rather than intervals.
+     */
+    isPointTier(tierName) {
+        const tier = this.config.tiers.find(t => t.name === tierName);
+        return !!(tier && tier.point);
+    }
+
     createAnnotation(tierName, startTime, endTime, label) {
         const tier = this.config.tiers.find(t => t.name === tierName);
         if (!tier) {
             console.error('[TieredAnnotation] Unknown tier:', tierName);
             return null;
         }
+        // A point is an instant: it starts and ends at the same time.
+        if (tier.point) endTime = startTime;
 
         // For dependent tiers, find parent annotation
         let parentAnnotation = null;
@@ -1556,7 +1624,11 @@ class TieredAnnotationManager {
         // Remove from Peaks.js
         if (this.peaks) {
             try {
-                this.peaks.segments.removeById(annotationId);
+                if (this.isPointTier(tierName)) {
+                    this.peaks.points.removeById(annotationId);
+                } else {
+                    this.peaks.segments.removeById(annotationId);
+                }
             } catch (e) {
                 // Segment might not exist in Peaks
             }
@@ -1675,7 +1747,9 @@ class TieredAnnotationManager {
                     <span class="annotation-color" style="background-color: ${ann.color}"></span>
                     <span class="annotation-label">${this._escapeHtml(ann.label)}</span>
                     <span class="annotation-time">
-                        ${this._formatTime(ann.start_time / 1000)} - ${this._formatTime(ann.end_time / 1000)}
+                        ${tier.point
+                            ? this._formatTime(ann.start_time / 1000)
+                            : `${this._formatTime(ann.start_time / 1000)} - ${this._formatTime(ann.end_time / 1000)}`}
                     </span>
                     <button type="button" class="annotation-delete-btn" title="Delete">
                         <i class="fas fa-times"></i>
@@ -1718,10 +1792,14 @@ class TieredAnnotationManager {
      * Serialize annotations for storage
      */
     serialize() {
-        return {
+        const data = {
             annotations: this.annotations,
             time_slots: this._generateTimeSlots()
         };
+        // Seconds. The TextGrid export spans the whole recording with it.
+        const duration = this.mediaMetadata && this.mediaMetadata.duration;
+        if (duration && isFinite(duration)) data.media_duration = duration;
+        return data;
     }
 
     /**
@@ -1769,6 +1847,58 @@ class TieredAnnotationManager {
 /**
  * TierView - Handles rendering for a single tier
  */
+/** How close, in pixels, a pointer must be to a point to grab it. */
+const POINT_HIT_PX = 5;
+
+/**
+ * Draw a point-tier annotation: a vertical line at its time with a small
+ * flag carrying the label, so a run of close points stays readable.
+ */
+function drawPointMarker(ctx, manager, ann, x, y, height, isSelected, isHovered) {
+    const color = ann.color || '#cccccc';
+    ctx.save();
+    ctx.strokeStyle = isSelected ? '#FFD700' : color;
+    ctx.lineWidth = isSelected ? 3 : (isHovered ? 2.5 : 2);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y + height);
+    ctx.stroke();
+
+    ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'middle';
+    const label = ann.label || '';
+    const flagWidth = Math.min(ctx.measureText(label).width + 8, 120);
+    const flagHeight = Math.min(16, height);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, flagWidth, flagHeight);
+    if (isSelected) {
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, flagWidth, flagHeight);
+    }
+    ctx.fillStyle = manager._getContrastColor(color);
+    let text = label;
+    while (ctx.measureText(text).width > flagWidth - 8 && text.length > 1) {
+        text = text.slice(0, -1);
+    }
+    if (text !== label) text = text.slice(0, -1) + '…';
+    ctx.fillText(text, x + 4, y + flagHeight / 2);
+    ctx.restore();
+}
+
+/** Dashed line where a click on a point tier will place the point. */
+function drawPointPreview(ctx, x, y, height, color) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y + height);
+    ctx.stroke();
+    ctx.restore();
+}
+
 class TierView {
     constructor(manager, tierConfig, canvas) {
         this.manager = manager;
@@ -1829,6 +1959,14 @@ class TierView {
             // Check if within annotation bounds vertically
             if (y < 4 || y > this.canvas.height - 4) continue;
 
+            // A point is grabbed anywhere within a few pixels of its line.
+            if (this.tierConfig.point) {
+                if (Math.abs(x - x1) <= POINT_HIT_PX) {
+                    return { annotation: ann, type: 'point' };
+                }
+                continue;
+            }
+
             // Check start handle
             if (x >= x1 - 2 && x <= x1 + this.HANDLE_WIDTH) {
                 return { annotation: ann, type: 'start' };
@@ -1868,6 +2006,7 @@ class TierView {
                 this.canvas.style.cursor = 'ew-resize';
                 break;
             case 'body':
+            case 'point':
                 this.canvas.style.cursor = 'move';
                 break;
             default:
@@ -1913,8 +2052,8 @@ class TierView {
                     origEnd: part.annotation.end_time
                 };
                 this.canvas.style.cursor = 'ew-resize';
-            } else if (part.type === 'body') {
-                // Start moving the annotation
+            } else if (part.type === 'body' || part.type === 'point') {
+                // Start moving the annotation (a point moves as a whole)
                 this.dragState = {
                     type: 'move',
                     annotation: part.annotation,
@@ -2010,19 +2149,7 @@ class TierView {
             this.manager._renderAnnotationList();
 
             // Sync to Peaks.js if available
-            if (this.manager.peaks) {
-                try {
-                    const segment = this.manager.peaks.segments.getSegment(ann.id);
-                    if (segment) {
-                        segment.update({
-                            startTime: ann.start_time / 1000,
-                            endTime: ann.end_time / 1000
-                        });
-                    }
-                } catch (e) {
-                    // Segment might not exist
-                }
-            }
+            this.manager._syncAnnotationTimeToPeaks(ann);
 
             this.dragState = null;
             this._updateCursor();
@@ -2042,8 +2169,16 @@ class TierView {
             this.manager.selectionStart = null;
             this.manager.selectionEnd = null;
 
-            // Create annotation if selection is valid (minimum 0.05 seconds)
-            if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
+            if (this.tierConfig.point && endTime !== null) {
+                // A click on a point tier places a point where it lands.
+                if (this.manager.activeLabel) {
+                    this.manager.createAnnotation(
+                        this.tierConfig.name, endTime, endTime, this.manager.activeLabel);
+                } else {
+                    this.manager._showError('Please select a label first');
+                }
+            } else if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
+                // Create annotation if selection is valid (minimum 0.05 seconds)
                 const actualStart = Math.min(startTime, endTime);
                 const actualEnd = Math.max(startTime, endTime);
 
@@ -2202,6 +2337,11 @@ class TierView {
         const isHovered = this.hoveredHandle?.annotation?.id === ann.id;
         const hoverType = isHovered ? this.hoveredHandle.type : null;
 
+        if (this.tierConfig.point) {
+            drawPointMarker(this.ctx, this.manager, ann, x1, y, height, isSelected, isHovered);
+            return;
+        }
+
         // Draw filled rectangle (main body)
         this.ctx.fillStyle = ann.color || '#cccccc';
         this.ctx.fillRect(x1, y, x2 - x1, height);
@@ -2290,6 +2430,11 @@ class TierView {
         const tier = this.manager.config.tiers.find(t => t.name === this.manager.activeTier);
         const labelData = tier?.labels?.find(l => l.name === this.manager.activeLabel);
         const color = labelData?.color || '#4ECDC4';
+
+        if (this.tierConfig.point) {
+            drawPointPreview(this.ctx, this._timeToX(endTime), 4, this.canvas.height - 8, color);
+            return;
+        }
 
         // Draw semi-transparent preview
         this.ctx.fillStyle = color + '66';  // Add alpha
@@ -2396,6 +2541,13 @@ class ZoomedTimelineView {
                 // Check if in tier row vertically
                 if (y < tierY || y > tierY + tierHeight) continue;
 
+                if (tier.point) {
+                    if (Math.abs(x - x1) <= POINT_HIT_PX) {
+                        return { annotation: ann, tier: tier.name, type: 'point' };
+                    }
+                    continue;
+                }
+
                 // Check start handle
                 if (x >= x1 - 2 && x <= x1 + this.HANDLE_WIDTH) {
                     return { annotation: ann, tier: tier.name, type: 'start' };
@@ -2433,7 +2585,7 @@ class ZoomedTimelineView {
                     origEnd: part.annotation.end_time
                 };
                 this.canvas.style.cursor = 'ew-resize';
-            } else if (part.type === 'body') {
+            } else if (part.type === 'body' || part.type === 'point') {
                 this.dragState = {
                     type: 'move',
                     annotation: part.annotation,
@@ -2514,7 +2666,7 @@ class ZoomedTimelineView {
         const part = this._getAnnotationPartAtPosition(x, y);
         this.hoveredHandle = part;
         if (part) {
-            this.canvas.style.cursor = part.type === 'body' ? 'move' : 'ew-resize';
+            this.canvas.style.cursor = (part.type === 'body' || part.type === 'point') ? 'move' : 'ew-resize';
         } else {
             this.canvas.style.cursor = 'crosshair';
         }
@@ -2598,6 +2750,7 @@ class ZoomedTimelineView {
     _handleMouseUp(e) {
         this._stopAutoScroll();
         if (this.dragState) {
+            this.manager._syncAnnotationTimeToPeaks(this.dragState.annotation);
             this.manager._saveData();
             this.manager._renderAnnotationList();
             this.manager._renderAllTiers();
@@ -2617,7 +2770,14 @@ class ZoomedTimelineView {
             this.manager.selectionStart = null;
             this.manager.selectionEnd = null;
 
-            if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
+            if (this.manager.isPointTier(this.manager.activeTier) && endTime !== null) {
+                if (this.manager.activeLabel) {
+                    this.manager.createAnnotation(
+                        this.manager.activeTier, endTime, endTime, this.manager.activeLabel);
+                } else {
+                    this.manager._showError('Please select a label first');
+                }
+            } else if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
                 const actualStart = Math.min(startTime, endTime);
                 const actualEnd = Math.max(startTime, endTime);
 
@@ -2766,6 +2926,11 @@ class ZoomedTimelineView {
         const isSelected = this.manager.selectedAnnotation?.id === ann.id;
         const isHovered = this.hoveredHandle?.annotation?.id === ann.id;
 
+        if (this.manager.isPointTier(tierName)) {
+            drawPointMarker(ctx, this.manager, ann, x1, y, height, isSelected, isHovered);
+            return;
+        }
+
         // Draw main body
         ctx.fillStyle = ann.color || '#cccccc';
         ctx.fillRect(x1, y, x2 - x1, height);
@@ -2827,6 +2992,11 @@ class ZoomedTimelineView {
         const tier = this.manager.config.tiers.find(t => t.name === this.manager.activeTier);
         const labelData = tier?.labels?.find(l => l.name === this.manager.activeLabel);
         const color = labelData?.color || '#4ECDC4';
+
+        if (tier && tier.point) {
+            drawPointPreview(ctx, this._timeToX(endTime), y, height, color);
+            return;
+        }
 
         ctx.fillStyle = color + '66';
         ctx.fillRect(x1, y, x2 - x1, height);

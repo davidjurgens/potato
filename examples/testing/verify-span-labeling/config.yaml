@@ -47,19 +47,19 @@ annotation_schemes:
     labels:
       - name: PERSON
         color: "#FF6B6B"
-        key_binding: p
+        key_value: p
         tooltip: "Person name"
       - name: ORGANIZATION
         color: "#4ECDC4"
-        key_binding: o
+        key_value: o
         tooltip: "Organization name"
       - name: FUNCTION
         color: "#45B7D1"
-        key_binding: f
+        key_value: f
         tooltip: "Function or method name"
       - name: VARIABLE
         color: "#96CEB4"
-        key_binding: v
+        key_value: v
         tooltip: "Variable name"
 
 user_config:

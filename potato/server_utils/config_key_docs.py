@@ -270,7 +270,8 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="array|object", category=ANNOT,
     ),
     "surveyflow": _D(
-        "Survey pages shown before and after annotation",
+        "Potato 1.x survey pages. Not read in 2.x, and named at boot if set; "
+        "survey pages go under `phases`",
         type="object", category=ANNOT,
     ),
     "training": _D(
@@ -465,7 +466,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", default="fixed_order", category=ASSIGN,
     ),
     "automatic_assignment": _D(
-        "Assign items to annotators automatically as they arrive",
+        "Potato 1.x assignment block. Not read, and named at boot if set; use "
+        "`assignment_strategy`, `num_annotators_per_item` and "
+        "`max_annotations_per_user`",
         type="object", category=ASSIGN,
     ),
     "max_annotations_per_user": _D(
@@ -909,14 +912,69 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="object", category=AI,
     ),
     "active_learning.annotation_routing": _D(
-        "Route high-confidence predictions past the annotator instead of "
-        "asking",
+        "Not read: nothing routes items on model confidence, and the key is "
+        "named at boot if set. Accepting machine labels above a confidence "
+        "is a `labeling_engine` contract",
         type="boolean", default=False, category=AI,
     ),
     "active_learning.routing_thresholds": _D(
-        "Confidence bounds for routing: `{auto_label_min_confidence, "
-        "show_suggestion_below}`",
+        "Not read; see `annotation_routing`",
         type="object", category=AI,
+    ),
+    "active_learning.classifier_name": _D(
+        "Flat form of `classifier.name`",
+        type="string", default="sklearn.linear_model.LogisticRegression",
+        category=AI, see_also=("active_learning.classifier",),
+    ),
+    "active_learning.classifier_kwargs": _D(
+        "Flat form of `classifier.hyperparameters`; merged with "
+        "`classifier_params`",
+        type="object", category=AI, see_also=("active_learning.classifier",),
+    ),
+    "active_learning.vectorizer_name": _D(
+        "Flat form of `vectorizer.name`",
+        type="string",
+        default="sklearn.feature_extraction.text.TfidfVectorizer",
+        category=AI, see_also=("active_learning.vectorizer",),
+    ),
+    "active_learning.vectorizer_kwargs": _D(
+        "Flat form of `vectorizer.hyperparameters`; merged with "
+        "`vectorizer_params`",
+        type="object", category=AI, see_also=("active_learning.vectorizer",),
+    ),
+    "active_learning.cold_start_batch_size": _D(
+        "How many unannotated items `cold_start_strategy: llm` samples for "
+        "the LLM to score",
+        type="integer", default=20, category=AI,
+    ),
+    "active_learning.model_persistence_enabled": _D(
+        "Flat form of `model_persistence.enabled`",
+        type="boolean", default=False, category=AI,
+        see_also=("active_learning.model_persistence",),
+    ),
+    "active_learning.model_save_directory": _D(
+        "Flat form of `model_persistence.save_directory`",
+        type="string", category=AI,
+        see_also=("active_learning.model_persistence",),
+    ),
+    "active_learning.model_retention_count": _D(
+        "Flat form of `model_persistence.retention_count`",
+        type="integer", default=2, category=AI,
+        see_also=("active_learning.model_persistence",),
+    ),
+    "active_learning.llm_enabled": _D(
+        "Flat form of `llm.enabled`",
+        type="boolean", default=False, category=AI,
+        see_also=("active_learning.llm",),
+    ),
+    "active_learning.llm_config": _D(
+        "Flat form of the `llm` block",
+        type="object", category=AI, see_also=("active_learning.llm",),
+    ),
+    "active_learning.verification_sample_rate": _D(
+        "Not read, and named at boot if set. The auto-label spot-check rate "
+        "is `icl_labeling.verification.sample_rate`",
+        type="number", category=AI,
     ),
 
     "icl_labeling": _D(
@@ -2579,10 +2637,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="array", category=WORKFLOW,
     ),
     "prestudy": _D(
-        "Legacy pre-study screening block. The only code that reads it is an "
-        "unreferenced method, so it has no effect -- configure the screening "
-        "phase through `phases` or `surveyflow` with `type: prestudy`",
-        type="object", category=WORKFLOW, see_also=("phases", "surveyflow"),
+        "Legacy pre-study screening block. Not read, and named at boot if "
+        "set; add a phase with `type: prestudy` under `phases`",
+        type="object", category=WORKFLOW, see_also=("phases",),
     ),
 
     # ---------------------------------------------- assignment and sessions --

@@ -332,74 +332,19 @@ response that triggers a block is never kept.
 
 ---
 
-## Legacy Configuration
+## Moving from `automatic_assignment`
 
-The older `automatic_assignment` configuration is still supported for backwards compatibility:
+Potato 1.x configured assignment in an `automatic_assignment` block. Potato
+2.x does not read it, and names it at boot if a config still sets it. The
+keys map like this:
 
-```yaml
-automatic_assignment:
-  on: true
-  output_filename: task_assignment.json
-  sampling_strategy: random    # 'random' or 'ordered'
-  labels_per_instance: 3       # Number of labels per instance
-  instance_per_annotator: 5    # Instances per annotator
-  test_question_per_annotator: 0  # Test questions per annotator
-```
-
-### Legacy Options
-
-| Field | Description | Default |
-|-------|-------------|---------|
-| `on` | Enable automatic assignment | `false` |
-| `output_filename` | Output file for assignments | `task_assignment.json` |
-| `sampling_strategy` | `random` or `ordered` | `random` |
-| `labels_per_instance` | Target annotations per item | 3 |
-| `instance_per_annotator` | Items per annotator | 5 |
-| `test_question_per_annotator` | Test questions to insert | 0 |
-
-**Note**: If `on` is `false`, all instances will be displayed to each participant.
-
----
-
-## Test Questions
-
-You can insert test questions (attention checks) into the annotation queue. These are typically easy instances with known correct answers.
-
-### Defining Test Questions
-
-Add `_testing` to the instance ID in your data file:
-
-```csv
-text,id
-"This is test question 1",0_testing
-"This is test question 2",1_testing
-"This is test question 3",2_testing
-"Hello world",dkjfd
-"Hello tomorrow",998ds
-```
-
-Or in JSON format:
-
-```json
-[
-  {"id": "0_testing", "text": "This is a test question with an obvious answer"},
-  {"id": "1_testing", "text": "Another test question"},
-  {"id": "regular_item_1", "text": "Normal annotation item"}
-]
-```
-
-### Configuration
-
-```yaml
-automatic_assignment:
-  on: true
-  test_question_per_annotator: 2  # Insert 2 test questions per annotator
-```
-
-Potato will:
-1. Identify instances with `_testing` in their ID
-2. Randomly sample N test questions for each annotator
-3. Insert them into the annotation queue
+| `automatic_assignment` (1.x) | 2.x |
+|--------|--------|
+| `on: true`, `sampling_strategy` | `assignment_strategy` |
+| `labels_per_instance` | `num_annotators_per_item` |
+| `instance_per_annotator` | `max_annotations_per_user` |
+| `test_question_per_annotator`, `_testing` ids | `attention_checks` (see [Quality Control](../workflow/quality_control.md#attention-checks)) |
+| `output_filename` | none; assignments are part of each annotator's saved state |
 
 ---
 

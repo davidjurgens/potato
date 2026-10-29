@@ -44,7 +44,10 @@ annotation_schemes:
 
 With `attributes`, Potato builds the profiles by combining the levels you
 declare, which is the classic design: the levels are the experimental
-conditions.
+conditions. Each profile takes one level of every attribute at random. The
+draw is seeded by annotator, item and scheme, so different annotators see
+different designs and a reload shows the same cards. Profiles in one set are
+distinct while the attributes allow enough combinations.
 
 With `profiles_field`, each item carries its own profiles and Potato shows them
 as they are. The rows are built from the keys the profiles use, so no
@@ -88,23 +91,30 @@ attributes:
 
 ## Data Format
 
+The stored answer is the number of the chosen card, or `none`:
+
 ```json
-{
-  "model_preference": {
-    "chosen_profile": 2,
-    "profiles": [
-      {"Response Length": "Brief", "Tone": "Formal", "Includes Examples": "No"},
-      {"Response Length": "Detailed", "Tone": "Conversational", "Includes Examples": "Yes"},
-      {"Response Length": "Medium", "Tone": "Technical", "Includes Examples": "Yes"}
+{"model_preference": "2"}
+```
+
+For a scheme built from `attributes`, the profiles that annotator saw are
+recorded with the item's [presentation order](../../advanced/presentation_order.md),
+under the scheme name, in card order:
+
+```json
+"instance_id_to_presentation_order": {
+  "item_1": {
+    "model_preference": [
+      {"Response Length": "Brief (1-2 sentences)", "Tone": "Formal", "Includes Examples": "No", "Cites Sources": "Yes"},
+      {"Response Length": "Detailed (multiple paragraphs)", "Tone": "Conversational", "Includes Examples": "Yes", "Cites Sources": "No"},
+      {"Response Length": "Medium (1 paragraph)", "Tone": "Technical", "Includes Examples": "Yes", "Cites Sources": "Yes"}
     ]
   }
 }
 ```
 
-If "None of these" is selected:
-```json
-{"model_preference": {"chosen_profile": "none"}}
-```
+Card `"2"` is the second profile in that list. With `profiles_field`, the
+profiles are the item's own data.
 
 ## UI Description
 

@@ -97,3 +97,35 @@ def test_decode_boxes_reads_the_stored_shapes():
         assert (box["start_s"], box["end_s"], box["low_hz"], box["high_hz"]) == (1.0, 2.0, 100.0, 900.0)
         assert box["edited"] is True
     assert t.decode_boxes("") is None and t.decode_boxes("[]") == []
+
+
+def test_raven_reviewed_boxes_do_not_keep_the_detector_score():
+    """A box the reviewer resized was written with the detector's 0.8123, and
+    nothing in the table said it had been changed."""
+    from potato.server_utils.acoustic_tables import parse_raven, write_raven
+    boxes = [
+        {"start_s": 1.0, "end_s": 2.0, "low_hz": 100.0, "high_hz": 900.0, "label": "kept",
+         "source": "ai", "confidence": 0.61},
+        {"start_s": 3.0, "end_s": 4.5, "low_hz": 200.0, "high_hz": 800.0, "label": "resized",
+         "source": "ai", "confidence": 0.8123, "edited": True},
+        {"start_s": 5.0, "end_s": 6.0, "low_hz": 300.0, "high_hz": 700.0, "label": "drawn",
+         "source": "human"},
+    ]
+    table = write_raven(boxes)
+    rows = [line.split("\t") for line in table.strip().splitlines()]
+    header, body = rows[0], rows[1:]
+    conf, source = header.index("Confidence"), header.index("Box Source")
+    assert [(r[7], r[conf], r[source]) for r in body] == [
+        ("kept", "0.61", "ai"), ("resized", "1", "ai (edited)"), ("drawn", "1", "human")]
+    back = parse_raven(table)
+    # Read back as a note; the importing project decides the provenance.
+    assert [(b["label"], b["attributes"]["Box Source"]) for b in back] == [
+        ("kept", "ai"), ("resized", "ai (edited)"), ("drawn", "human")]
+    assert not any("edited" in b for b in back)
+
+
+def test_raven_without_provenance_has_no_source_column():
+    from potato.server_utils.acoustic_tables import write_raven
+    table = write_raven([{"start_s": 0, "end_s": 1, "low_hz": 1, "high_hz": 2, "label": "x",
+                          "confidence": 0.5}])
+    assert "Box Source" not in table and "\t0.5" in table

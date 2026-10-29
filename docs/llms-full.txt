@@ -3166,7 +3166,9 @@ Each of these produces a warning on the import rather than a silence:
   one no other CoNLL tool can read.
 - **Whitespace, through CoNLL-2003.** The format does not record it.
 - **Non-text QDA sources.** Picture, PDF, audio and video sources in a `.qdpx`
-  are not imported yet; text sources are.
+  are not imported yet; text sources are. The warnings count each kind skipped.
+- **QDA memos and cases on export.** The `.qdpx` export does not write them
+  yet, and warns when the project has them.
 - **Uncoded selections in a `.qdpx`.** A highlight with no code attached has
   nothing to import. Counted in the warnings.
 - **Label Studio Pairwise, Ranker, Taxonomy, BrushLabels and relations.** Left
@@ -3931,11 +3933,22 @@ per question:
 
 | Column | Meaning |
 |---|---|
-| `level` | Level of measurement: nominal (radio, select), ordinal (likert), interval (number, slider, VAS), MASI (multiselect and hierarchical multiselect, with partial credit for overlapping sets) |
+| `level` | Level of measurement: nominal (radio, select), ordinal (likert), interval (number, slider, VAS), MASI (multiselect and hierarchical multiselect, with partial credit for overlapping sets), positional (span; see below) |
 | `alpha` | Krippendorff's alpha over the units coded by two or more coders |
 | `ci95_low`, `ci95_high` | A percentile bootstrap interval, resampling units with replacement (`bootstrap` resamples, default 1000, seeded) |
 | `percent_agreement` | Share of coder pairs on a unit that gave the same answer |
 | `units`, `coders`, `pairable_values` | What the coefficient rests on |
+
+A `span` question is coded by highlighting, so its row is positional: every
+character of a coded item is a unit, labelled with the code of the span
+covering it or with none. A coder who read an item and highlighted nothing
+counts as "none" throughout, so a missed passage is a disagreement. Here
+`units` counts items (one per text field that has highlights) and
+`pairable_values` counts characters. `/admin/iaa` reports the same measure as
+positional alpha, but computes it per item and averages, so the two can
+differ: this row pools the characters of every item into one coefficient. It
+is not Krippendorff's unitizing alpha, which compares the highlighted
+segments rather than the characters in them.
 
 The bootstrap resamples units; it is not the coincidence-based bootstrap of
 Hayes and Krippendorff (2007). Krippendorff (2004) suggests relying on
@@ -5163,7 +5176,10 @@ for each frame, or none when the reviewer chose `empty`.
 
 The file holds one answer per image. When several people reviewed an image,
 the first by user id is written, and the export warns; `--option
-annotator=<user>` picks one person.
+annotator=<user>` picks one person. Camtrap DP and Darwin Core do the same,
+because there a second reviewer's boxes would be a second observation of the
+same animal, and GBIF would count it twice. Adjudicate disagreements first, or
+pick the reviewer whose answers to publish.
 
 ### Camtrap DP (`camtrap_dp`)
 
@@ -5175,7 +5191,7 @@ with the column names of the 1.0 table schemas.
   reviewed or not, with `mediaID` (the item id), `deploymentID`, `timestamp`,
   `filePath` (the source path), `filePublic` (`false`), `fileName` and
   `fileMediatype`.
-- `observations.csv`: for each reviewed item and annotator, one observation
+- `observations.csv`: for each reviewed item (from one reviewer, as above), one observation
   per box (`observationType` `animal`, `human` or `vehicle`, `scientificName`
   for species labels, `count` 1, `bboxX`/`bboxY`/`bboxWidth`/`bboxHeight` as
   fractions from the top-left corner); one per ticked species that has no
@@ -5313,6 +5329,7 @@ annotators can label calls the source missed.
 | `Channel` | Kept on the box when it is not 1 |
 | `Begin File` / `Begin Path`, `File Offset (s)` | The recording, and the start time within it, in a multi-file table |
 | `Confidence` | Kept on the box; `--min-confidence` filters on it |
+| `Box Source` | Kept as an attribute of the box; written by Potato's own `raven` export. The box is still an import in the new project |
 | An annotation column | The label |
 
 The label comes from `--label-column NAME` when given. Otherwise it comes from
@@ -5385,6 +5402,11 @@ python -m potato.export -c review-project/config.yaml -f audacity_labels -o expo
 `Selection`, `View`, `Channel`, `Begin Time (s)`, `End Time (s)`,
 `Low Freq (Hz)`, `High Freq (Hz)`, the label column (`Annotation`, or
 `--option label_column=Species`) and, when any box has one, `Confidence`.
+`Confidence` is the detector's score only on a box the reviewer kept
+unchanged. A box they drew or changed gets 1.0, as in the MegaDetector
+export, so a confidence threshold applied later keeps every reviewed box.
+When the boxes record where they came from, a `Box Source` column says
+which is which: `ai`, `ai (edited)`, `import`, `import (edited)` or `human`.
 A box with no frequency range is written from 0 Hz to the recording's
 Nyquist frequency, which comes from the item's `sample_rate` (the importer
 records it for WAV files) or from the WAV file's header. For other audio
@@ -6670,17 +6692,9 @@ in `potato/item_state_management.py`:
 | `model_review` | Serves prelabelled items least-confident first, for review of model output ([model review](../ai-intelligence/model_review.md)) |
 | `engine` | Serves the labeling engine's requests (calibration, verification, audit, adjudication) in its priority order ([labeling engine](../labeling-engine/overview.md)) |
 
-### Legacy Assignment Configuration
-
-```yaml
-automatic_assignment:
-  on: true
-  output_filename: task_assignment.json
-  sampling_strategy: random  # random or ordered
-  labels_per_instance: 3
-  instance_per_annotator: 5
-  test_question_per_annotator: 0
-```
+The 1.x `automatic_assignment` block is not read; [Task
+Assignment](../advanced/task_assignment.md#moving-from-automatic_assignment)
+maps its keys onto these.
 
 ## UI and Layout Configuration
 
@@ -6748,40 +6762,30 @@ For detailed setup instructions and configuration options, see [AI Support Docum
 
 ## Advanced Features
 
-### SurveyFlow Configuration
+### Survey Pages and Screening
+
+Consent, screening and post-study survey pages are phases:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/intro.jsonl
-    - surveyflow/instruction.jsonl
-    - surveyflow/consent.jsonl
-  post_annotation:
-    - surveyflow/experience.jsonl
-    - surveyflow/demographic_questions.jsonl
-    - surveyflow/end.jsonl
-  testing:
-    - surveyflow/testing.jsonl
+phases:
+  order: [consent, prestudy, annotation, poststudy]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  prestudy:
+    type: prestudy
+    file: surveys/screener.json
+  poststudy:
+    type: poststudy
+    file: surveys/demographics.json
 ```
 
-### Prestudy Configuration
-
-```yaml
-prestudy:
-  on: true
-  minimum_score: 0.8
-  groundtruth_key: whether_match
-  question_key: Whether the presented sentences are discussing the same scientific finding
-  answer_mapping:
-    Yes: true
-    No: false
-  pass_page: surveyflow/prestudy_pass.jsonl
-  fail_page: surveyflow/prestudy_fail.jsonl
-```
+[Survey Flow](../workflow/surveyflow.md) covers the question files, and
+[Experiment Flow](../workflow/experiment_flow.md) covers `exit_when` for
+screening people out. The 1.x `surveyflow` and top-level `prestudy` blocks are
+not read, and Potato names them at boot if a config still sets them. To grade
+a qualification against known answers, use the
+[training phase](../workflow/training_phase.md).
 
 ### Active Learning
 
@@ -7217,7 +7221,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `annotation_schemes` |  | array |  | The questions annotators answer. Each entry needs an annotation_type from the schema registry plus a name and description |  |
 | `phases` |  | array or object |  | Per-phase configuration. Either a list of phase objects or a mapping with an `order` key. Page types: consent, prestudy, instructions, training, annotation and poststudy, plus the runtime pages jspsych, headphone_check and external (oTree, Empirica, hosted surveys). `counterbalance` (a list of {pages, method: random \| latin_square}) orders groups of pages per participant. Phase-level annotation_schemes replace the top-level list rather than adding to it |  |
 | `pre_annotation` |  | object |  | Seed annotations to show as a starting point for each item | `agreement_metrics`, `allow_modification`, `enabled`, `field`, `highlight_low_confidence`, `predictions_file`, `show_confidence` |
-| `surveyflow` |  | object |  | Survey pages shown before and after annotation |  |
+| `surveyflow` |  | object |  | Potato 1.x survey pages. Not read in 2.x, and named at boot if set; survey pages go under `phases` |  |
 | `training` |  | object |  | Qualification phase annotators must pass before real items | `allow_retry`, `annotation_schemes`, `data_file`, `enabled`, `failure_action`, `feedback`, `passing_criteria` |
 
 ## Authentication / Login
@@ -7272,7 +7276,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
+| `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_kwargs`, `classifier_name`, `classifier_params`, `cold_start_batch_size`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `llm_config`, `llm_enabled`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `model_persistence_enabled`, `model_retention_count`, `model_save_directory`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_kwargs`, `vectorizer_name`, `vectorizer_params`, `verification_sample_rate` |
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd`, `prices` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `holdout`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
@@ -7435,7 +7439,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `prestudy` |  | object |  | Legacy pre-study screening block. The only code that reads it is an unreferenced method, so it has no effect -- configure the screening phase through `phases` or `surveyflow` with `type: prestudy` |  |
+| `prestudy` |  | object |  | Legacy pre-study screening block. Not read, and named at boot if set; add a phase with `type: prestudy` under `phases` |  |
 | `review_mode` |  | object |  | Hotkey review queue. Once the current item is complete the page moves on by itself, which turns keyboard-labelled schemes into press-key-and-advance | `advance_on`, `auto_advance`, `delay_ms`, `enabled` |
 | `review_workflow` |  | object |  | Reviewer routing and the kanban board at /admin/review. Keeps its own state per instance (pending, in_review, needs_second, adjudication, done) alongside the annotations | `auto_enroll`, `enabled`, `reviewers`, `routing` |
 | `schedule` |  | object |  | Sessions after the regular flow: waves, experience-sampling prompts and Delphi rounds, computed per participant at enrolment (when they finish the regular flow). See docs/workflow/scheduling.md | `delphi`, `experience_sampling`, `poll_seconds`, `scheduler`, `seed`, `timezone`, `waves` |
@@ -7447,7 +7451,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
 | `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
-| `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
+| `automatic_assignment` |  | object |  | Potato 1.x assignment block. Not read, and named at boot if set; use `assignment_strategy`, `num_annotators_per_item` and `max_annotations_per_user` |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `group_by_condition`, `groups` |
 | `conditions` |  | object |  | Between-subjects conditions. Each participant is assigned one cell (one level of every factor) on arrival and keeps it. Page `show_when` rules and question `display_logic` can test `condition.<factor>` | `assignment`, `balance_on`, `cells`, `factors`, `max_per_cell` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
@@ -7584,6 +7588,36 @@ labels:
 | `key_value` | No | Single-key keyboard shortcut for this label |
 | `abbreviation` | No | Short text for compact display (span overlays) |
 | `color` | No | CSS color for label-specific styling |
+
+Not every type reads every field. The table lists the keys each type reads
+on a structured label; `validate` warns about any other key, so
+`validate --strict` fails on it. `name`, `description`, `tooltip` and `color`
+are accepted everywhere because the codebook export and the labeling engine
+read them for any scheme, even where the annotation page does not show them.
+
+| Type | Label keys read besides `color`, `description`, `name`, `tooltip` |
+|------|------|
+| `audio_annotation` | `key_value` |
+| `confidence` | none |
+| `constant_sum` | `tooltip_file` |
+| `image_annotation` | `key_value`, `label_id`, `supercategory` |
+| `likert` | `displayed_label`, `label`, `text` |
+| `microscopy` | none |
+| `multiselect` | `displayed_label`, `key_value`, `label`, `text`, `tooltip_file`, `videopath` |
+| `radio` | `displayed_label`, `key_value`, `label`, `text`, `tooltip_file` |
+| `ranking` | `tooltip_file` |
+| `select` | none |
+| `slider` | `displayed_label`, `key_value`, `label`, `text`, `tooltip_file` |
+| `soft_label` | `tooltip_file` |
+| `span` | `abbreviation`, `displayed_label`, `key_value`, `label`, `text`, `tooltip_file` |
+| `spatial_annotation` | `key_value` |
+| `spectrogram_annotation` | `key_value` |
+| `triad_test` | `text` |
+| `video_annotation` | `key_value` |
+| `volume_annotation` | `dicom`, `key_value` |
+
+Labels on `multirate`, `pairwise`, `pure_display`, `text` must be plain strings; a structured label there is refused.
+`geo_annotation`, `interval_label`, `viewer_selection` check their own label keys and refuse unknown ones.
 
 
 ---
@@ -10910,14 +10944,14 @@ annotation_schemes:
 Write consent, instructions, and training content in the target language:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - consent
-    - instructions
-    - annotation
-  consent: surveyflow/consent_ja.html     # Japanese consent page
-  instructions: surveyflow/instructions_ja.html
+phases:
+  order: [consent, instructions, annotation]
+  consent:
+    type: consent
+    file: surveys/consent_ja.json         # Japanese consent questions
+  instructions:
+    type: instructions
+    file: surveys/instructions_ja.html
 ```
 
 ## Font Support for Non-Latin Scripts
@@ -14942,7 +14976,10 @@ annotation_schemes:
 
 With `attributes`, Potato builds the profiles by combining the levels you
 declare, which is the classic design: the levels are the experimental
-conditions.
+conditions. Each profile takes one level of every attribute at random. The
+draw is seeded by annotator, item and scheme, so different annotators see
+different designs and a reload shows the same cards. Profiles in one set are
+distinct while the attributes allow enough combinations.
 
 With `profiles_field`, each item carries its own profiles and Potato shows them
 as they are. The rows are built from the keys the profiles use, so no
@@ -14986,23 +15023,30 @@ attributes:
 
 ## Data Format
 
+The stored answer is the number of the chosen card, or `none`:
+
 ```json
-{
-  "model_preference": {
-    "chosen_profile": 2,
-    "profiles": [
-      {"Response Length": "Brief", "Tone": "Formal", "Includes Examples": "No"},
-      {"Response Length": "Detailed", "Tone": "Conversational", "Includes Examples": "Yes"},
-      {"Response Length": "Medium", "Tone": "Technical", "Includes Examples": "Yes"}
+{"model_preference": "2"}
+```
+
+For a scheme built from `attributes`, the profiles that annotator saw are
+recorded with the item's [presentation order](../../advanced/presentation_order.md),
+under the scheme name, in card order:
+
+```json
+"instance_id_to_presentation_order": {
+  "item_1": {
+    "model_preference": [
+      {"Response Length": "Brief (1-2 sentences)", "Tone": "Formal", "Includes Examples": "No", "Cites Sources": "Yes"},
+      {"Response Length": "Detailed (multiple paragraphs)", "Tone": "Conversational", "Includes Examples": "Yes", "Cites Sources": "No"},
+      {"Response Length": "Medium (1 paragraph)", "Tone": "Technical", "Includes Examples": "Yes", "Cites Sources": "Yes"}
     ]
   }
 }
 ```
 
-If "None of these" is selected:
-```json
-{"model_preference": {"chosen_profile": "none"}}
-```
+Card `"2"` is the second profile in that list. With `profiles_field`, the
+profiles are the item's own data.
 
 ## UI Description
 
@@ -16729,6 +16773,27 @@ Words that are still misaligned are exported as stored, and the export prints
 how many there were. In FLExText and Toolbox, which pair glosses with
 morphemes one to one, a misaligned word's whole gloss goes on its first
 morpheme.
+
+## Agreement
+
+`/admin/iaa` scores each line of the analysis separately, with Krippendorff's
+alpha (nominal) and the pairwise percentage of agreement:
+
+| Group | Unit | Compared |
+|---|---|---|
+| `segmentation` | one word | the morpheme line |
+| `gloss` | one word | the whole gloss |
+| `morpheme_gloss` | one morpheme | each morpheme's gloss, on words every annotator segmented the same way |
+| `tier_<name>` | one word | each tier in `tiers` |
+
+Two cells agree when their text is identical after trimming. An empty cell
+counts as unanswered, so two annotators who both left a word blank do not
+agree on it. `morpheme_gloss` leaves out words segmented two ways, because
+their morphemes do not line up and comparing them by position would count a
+segmentation difference as a gloss difference. The free translation is not
+scored.
+
+`/admin/api/agreement` does not score this type and points to `/admin/iaa`.
 
 ## Example
 
@@ -19727,7 +19792,7 @@ they never reach a stored answer. Reversed times are swapped.
 
 | Format | Output |
 |---|---|
-| `raven` | One Raven selection table per recording (`<recording>.selections.txt`). The label goes in an `Annotation` column (`--option label_column=Species` renames it) and `Confidence` is written when a box has one. A box with no frequency range is written from 0 Hz to the Nyquist frequency (from the item's `sample_rate`, or the header of a WAV file in the media directory) or to `max_freq`. Without any of these, `High Freq (Hz)` is left empty and the export warns |
+| `raven` | One Raven selection table per recording (`<recording>.selections.txt`). The label goes in an `Annotation` column (`--option label_column=Species` renames it) and `Confidence` is written when a box has one: the detector's score on a box kept unchanged, 1.0 on one a reviewer drew or changed. A `Box Source` column (`ai`, `ai (edited)`, `human`, ...) is added when the boxes record where they came from. A box with no frequency range is written from 0 Hz to the Nyquist frequency (from the item's `sample_rate`, or the header of a WAV file in the media directory) or to `max_freq`. Without any of these, `High Freq (Hz)` is left empty and the export warns |
 | `audacity_labels` | One Audacity label file per recording (`<recording>.labels.txt`), with a spectral line under each box that has a frequency range |
 | `jsonl`, `csv` and the other general formats | The JSON list as the scheme's value |
 
@@ -20178,8 +20243,8 @@ For object tracking across video frames with keyframe-based bounding box annotat
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
-| `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
+| `tracking_options.interpolation` | string | `"linear"` | How a new track fills frames between keyframes: `linear`, `cubic` (Catmull-Rom) or `constant` (hold the last keyframe) |
+| `tracking_options.auto_advance_frames` | integer | `0` | Frames to step forward after you draw a box, so the next keyframe is one drag away. `0` stays on the frame |
 | `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list; `per_keyframe: true` lets one change along the track. See [Per-Object Attributes](object_attributes.md) |
 
 **Model-assisted tracking**
@@ -20911,6 +20976,8 @@ Each tier in the `tiers` list can have:
 | `tier_type` | string | No | `"independent"` (default) or `"dependent"` |
 | `parent_tier` | string | For dependent | Name of parent tier |
 | `constraint_type` | string | No | Constraint relationship (see below) |
+| `point` | boolean | No | `true` for a tier of instants instead of intervals, such as ToBI tones or break indices. Click the tier to place a point with the active label; drag it to move it. A point tier is independent, and no tier can depend on it. It exports to TextGrid as a point tier (`TextTier`) |
+| `participant` | string | No | Speaker code written as the tier's `PARTICIPANT` in EAF exports. Set by `potato import` from an EAF file |
 | `description` | string | No | Tier description/tooltip |
 | `labels` | list | No | Available annotation labels |
 | `linguistic_type` | string | No | ELAN linguistic type (for export) |
@@ -20925,6 +20992,22 @@ Each label can have:
 | `color` | string | Hex color code (e.g., `"#4ECDC4"`) |
 | `tooltip` | string | Hover tooltip text |
 | `description` | string | Extended description |
+
+## Point Tiers
+
+```yaml
+tiers:
+  - name: words
+    labels: [word]
+  - name: tones
+    point: true
+    labels: ["H*", "L*", "L-L%", "H-H%"]
+```
+
+A point's `start_time` and `end_time` are the same. `potato import` turns a
+TextGrid point tier into a `point: true` tier, and the `textgrid` export writes
+it back as one. EAF has no point tiers, so the `eaf` export writes each point as
+an annotation that starts and ends on one time slot and says so in its warnings.
 
 ## Constraint Types
 
@@ -32089,7 +32172,7 @@ Returns:
       "fleiss_kappa": {"kappa": 0.78, "n_items_evaluated": 100, "n_raters": 3, "n_categories": 3, "interpretation": "Substantial"}
     },
     "regions": {
-      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "error": "Structured answers (steps, segments, regions or glosses) are scored in the agreement report at /admin/iaa, not here.",
       "see": "/admin/iaa"
     }
   },
@@ -32118,7 +32201,7 @@ Returns:
   `"krippendorff_alpha": null`, `"percent_agreement": 1.0` and
   `"interpretation": "Undefined"`. That is perfect agreement, not a failed
   computation.
-- Structured schemes (steps, segments, regions and other non-label answers)
+- Structured schemes (steps, segments, regions, glosses and other non-label answers)
   are skipped with an `error` pointing to `/admin/iaa`, which scores them.
 
 ---
@@ -45228,7 +45311,6 @@ Set to `false` to disable calibration (e.g., for debugging or when using RandomF
 | `classifier_params` | dict | `{}` | Extra parameters passed to classifier constructor |
 | `vectorizer_params` | dict | `{}` | Extra parameters passed to vectorizer constructor |
 | `use_icl_ensemble` | bool | `false` | Blend ICL predictions with classifier |
-| `annotation_routing` | bool | `false` | Enable LLM-based annotation routing |
 
 ## Architecture Overview
 
@@ -45635,22 +45717,12 @@ The weight interpolates linearly: early on, LLM predictions dominate (good with 
 
 This approach is inspired by FreeAL (Xiao et al., 2023) and the collaborative frameworks described in the LLM-based AL survey (Xia et al., 2025).
 
-## Advanced: Annotation Routing
+## Annotation Routing
 
-Noise-aware routing between LLM auto-labeling and human annotation, based on Yuan et al. (2024):
-
-```yaml
-active_learning:
-  annotation_routing: true
-  routing_thresholds:
-    auto_label_min_confidence: 0.9  # Auto-label above this
-    show_suggestion_below: 0.5      # Show LLM suggestion below this
-  verification_sample_rate: 0.2     # Spot-check rate for auto-labels
-```
-
-- **High LLM confidence (>0.9):** Auto-label, flag for periodic verification
-- **Medium confidence (0.5-0.9):** Route to human (most informative)
-- **Low confidence (<0.5):** Route to human with LLM suggestion shown
+`annotation_routing`, `routing_thresholds` and `verification_sample_rate` are
+accepted under `active_learning` but nothing reads them, so they route
+nothing; Potato names them at boot. To accept machine labels above a
+confidence, use a [labeling engine contract](../labeling-engine/contracts.md).
 
 ## Troubleshooting
 
@@ -46056,27 +46128,20 @@ The weight interpolates linearly as annotations accumulate, providing a smooth t
 
 ## Annotation Routing
 
-Noise-aware routing between LLM auto-labeling and human annotation (based on Yuan et al., 2024):
+`active_learning.annotation_routing`, `routing_thresholds` and
+`verification_sample_rate` are accepted in a config but nothing reads them, so
+they do not route anything; Potato names them at boot. Two things do what they
+describe:
 
-```yaml
-active_learning:
-  annotation_routing: true
-  routing_thresholds:
-    auto_label_min_confidence: 0.9
-    show_suggestion_below: 0.5
-  verification_sample_rate: 0.2
-```
-
-- **High LLM confidence (>0.9):** Auto-label with periodic spot-checking
-- **Medium confidence (0.5-0.9):** Route to human annotator (most informative)
-- **Low confidence (<0.5):** Route to human with LLM suggestion displayed
-
-The `verification_sample_rate` controls how often auto-labeled instances are spot-checked by humans.
+- The share of ICL labels sent back to annotators for blind checking is
+  `icl_labeling.verification.sample_rate` (see [Configuration
+  Options](#configuration-options)).
+- Accepting machine labels above a confidence, with a stated error bound, is a
+  [labeling engine contract](../labeling-engine/contracts.md).
 
 ## References
 
 - Mavromatis et al. (2024) "CoverICL: Selective Annotation for In-Context Learning via Active Graph Coverage." *EMNLP 2024*.
-- Yuan et al. (2024) "Hide and Seek in Noise Labels: Noise-Robust Collaborative Active Learning." *ACL 2024*.
 - Xiao et al. (2023) "FreeAL: Towards Human-Free Active Learning in the Era of Large Language Models." *EMNLP 2023*.
 
 ## Related Documentation
@@ -49594,74 +49659,19 @@ response that triggers a block is never kept.
 
 ---
 
-## Legacy Configuration
+## Moving from `automatic_assignment`
 
-The older `automatic_assignment` configuration is still supported for backwards compatibility:
+Potato 1.x configured assignment in an `automatic_assignment` block. Potato
+2.x does not read it, and names it at boot if a config still sets it. The
+keys map like this:
 
-```yaml
-automatic_assignment:
-  on: true
-  output_filename: task_assignment.json
-  sampling_strategy: random    # 'random' or 'ordered'
-  labels_per_instance: 3       # Number of labels per instance
-  instance_per_annotator: 5    # Instances per annotator
-  test_question_per_annotator: 0  # Test questions per annotator
-```
-
-### Legacy Options
-
-| Field | Description | Default |
-|-------|-------------|---------|
-| `on` | Enable automatic assignment | `false` |
-| `output_filename` | Output file for assignments | `task_assignment.json` |
-| `sampling_strategy` | `random` or `ordered` | `random` |
-| `labels_per_instance` | Target annotations per item | 3 |
-| `instance_per_annotator` | Items per annotator | 5 |
-| `test_question_per_annotator` | Test questions to insert | 0 |
-
-**Note**: If `on` is `false`, all instances will be displayed to each participant.
-
----
-
-## Test Questions
-
-You can insert test questions (attention checks) into the annotation queue. These are typically easy instances with known correct answers.
-
-### Defining Test Questions
-
-Add `_testing` to the instance ID in your data file:
-
-```csv
-text,id
-"This is test question 1",0_testing
-"This is test question 2",1_testing
-"This is test question 3",2_testing
-"Hello world",dkjfd
-"Hello tomorrow",998ds
-```
-
-Or in JSON format:
-
-```json
-[
-  {"id": "0_testing", "text": "This is a test question with an obvious answer"},
-  {"id": "1_testing", "text": "Another test question"},
-  {"id": "regular_item_1", "text": "Normal annotation item"}
-]
-```
-
-### Configuration
-
-```yaml
-automatic_assignment:
-  on: true
-  test_question_per_annotator: 2  # Insert 2 test questions per annotator
-```
-
-Potato will:
-1. Identify instances with `_testing` in their ID
-2. Randomly sample N test questions for each annotator
-3. Insert them into the annotation queue
+| `automatic_assignment` (1.x) | 2.x |
+|--------|--------|
+| `on: true`, `sampling_strategy` | `assignment_strategy` |
+| `labels_per_instance` | `num_annotators_per_item` |
+| `instance_per_annotator` | `max_annotations_per_user` |
+| `test_question_per_annotator`, `_testing` ids | `attention_checks` (see [Quality Control](../workflow/quality_control.md#attention-checks)) |
+| `output_filename` | none; assignments are part of each annotator's saved state |
 
 ---
 
@@ -50063,7 +50073,8 @@ given under a different arrangement.
 |---|---|---|
 | `radio`, `multiselect`, `select`, `multirate` | ✅ | ✅ |
 | `pairwise` | ✅ (source indices) | ✅ |
-| `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval`, `conjoint` | ✅ | ❌ not yet |
+| `conjoint` built from `attributes` | ✅ (the profiles shown) | always random |
+| `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval` | ✅ | ❌ not yet |
 
 Asking to randomise a scheme in the bottom row logs a warning rather than
 silently pretending to. The order is still recorded, so the data stays
@@ -50083,6 +50094,15 @@ indices rather than label names:
 
 The candidates differ per item, so "this annotator saw the item that was second
 in the data first" is the only fact an analyst can condition on.
+
+### Conjoint records its design
+
+A conjoint scheme built from `attributes` draws its profiles from the same
+seed, and the record is the list of profiles in card order, so a stored choice
+of `"2"` can be read against the second profile. See
+[Conjoint](../annotation-types/comparison/conjoint.md#data-format). A conjoint
+scheme with `profiles_field` shows the item's own profiles in data order and
+records nothing.
 
 ---
 
@@ -59737,23 +59757,19 @@ For advanced features including LLM integration, model persistence, and multi-sc
 
 ## Automatic task assignment
 
-Potato assigns annotation tasks to different annotators for you, which is
-most useful in a crowdsourcing setting where each instance needs only one
-annotator and each annotator gets a fixed amount of work.
+Potato assigns items to annotators as they arrive. `assignment_strategy` picks
+the order, `num_annotators_per_item` caps how many people label each item, and
+`max_annotations_per_user` caps how many items one person gets:
 
-Edit the `automatic_assignment` section of the configuration file:
-
-``` yaml
-"automatic_assignment": {
-   "on": true, # set false to turn off automatic assignment
-   "output_filename": "task_assignment.json", # saving path of the task assignment status
-   "sampling_strategy:": "random", # currently we only support random assignment
-   "labels_per_instance": 10, # number of labels for each instance
-   "instance_per_annotator": 50, # number of instances assigned for each annotator
-   "test_question_per_annotator": 2, # number of attention test questions for each annotator
-   "users": []
-},
+```yaml
+assignment_strategy: random
+num_annotators_per_item: 10
+max_annotations_per_user: 50
 ```
+
+The 1.x `automatic_assignment` block is not read. [Task
+Assignment](../advanced/task_assignment.md) lists the strategies and maps the
+old keys.
 
 ## Label suggestions
 Starting from 1.2.2.1, Potato supports displaying suggestions to improve the productivity of annotators. Currently we
@@ -60153,7 +60169,8 @@ python -m potato.export -c config.yaml -f qdpx -o ./export/
 A `.qdpx` is a ZIP holding `project.qde` (REFI-QDA XML) and one UTF-8 `.txt`
 per annotated item under `sources/`. Codes carry their hierarchy, descriptions
 and colours; span annotations become `PlainTextSelection` elements with a
-`Coding` each; annotators become `Users`.
+`Coding` each; annotators become `Users`. Memos and cases are not exported
+yet; the export warns when the project has them.
 
 Two things worth knowing:
 
@@ -60534,13 +60551,17 @@ From a camera-trap review project ([Camera traps](../guides/camera-traps.md)):
   MachineObservation when the model's identification was left unchanged and
   HumanObservation otherwise; `--option basis_of_record=...` forces one.
 
+All three write one reviewer per item: the first by user id, or the one
+named by `--option annotator=<user>`, and they warn when an item had several.
+
 ### Bioacoustics (raven, audacity_labels)
 
 The boxes of a
 [spectrogram_annotation](../annotation-types/multimedia/spectrogram_annotation.md)
 question, one file per recording: Raven selection tables, and Audacity label
 tracks (the spectral form when a box has frequencies). Both import back by
-file name. See [Bioacoustics](../guides/bioacoustics.md).
+file name. In the Raven table a box a reviewer drew or changed has
+`Confidence` 1.0, and `Box Source` records where each box came from. See [Bioacoustics](../guides/bioacoustics.md).
 
 ### Viewer selections (no dedicated format)
 
@@ -60590,7 +60611,8 @@ and counts per scheme.
 
 Krippendorff's alpha per question with a bootstrap interval, percent
 agreement and the units and coders it rests on, as `reliability.csv` and a
-Markdown table. See [Content analysis](../guides/content-analysis.md).
+Markdown table. Span questions get a positional row, with each character as a
+unit. See [Content analysis](../guides/content-analysis.md).
 
 ### Consensus (consensus)
 
@@ -66548,28 +66570,36 @@ workload_checker_period: 300  # Check every 5 minutes
 
 ---
 
-## Alternative: Using Surveyflow for Completion
+## Alternative: A Completion Page of Your Own
 
-If you need more control over the completion page, you can use surveyflow instead of the built-in completion page:
+For more control than the built-in completion page, end the study with a
+`poststudy` phase that shows your own text and link:
 
-1. **Create an end page** (`surveyflow/end.jsonl`):
+1. **Create the page** (`surveys/end.json`):
 
 ```json
-{"id":"1","text":"Thanks for your participation! Click the link below to complete the study.","schema": "pure_display", "choices": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"]}
+[
+  {
+    "annotation_type": "pure_display",
+    "name": "finish",
+    "description": "Thanks for your participation! Click the link below to complete the study.",
+    "labels": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"],
+    "allow_html": true
+  }
+]
 ```
 
-2. **Configure surveyflow** in your YAML:
+2. **Add it as the last phase**:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/consent.jsonl
-  post_annotation:
-    - surveyflow/end.jsonl
+phases:
+  order: [consent, annotation, poststudy]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  poststudy:
+    type: poststudy
+    file: surveys/end.json
 ```
 
 ---

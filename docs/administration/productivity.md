@@ -420,23 +420,19 @@ For advanced features including LLM integration, model persistence, and multi-sc
 
 ## Automatic task assignment
 
-Potato assigns annotation tasks to different annotators for you, which is
-most useful in a crowdsourcing setting where each instance needs only one
-annotator and each annotator gets a fixed amount of work.
+Potato assigns items to annotators as they arrive. `assignment_strategy` picks
+the order, `num_annotators_per_item` caps how many people label each item, and
+`max_annotations_per_user` caps how many items one person gets:
 
-Edit the `automatic_assignment` section of the configuration file:
-
-``` yaml
-"automatic_assignment": {
-   "on": true, # set false to turn off automatic assignment
-   "output_filename": "task_assignment.json", # saving path of the task assignment status
-   "sampling_strategy:": "random", # currently we only support random assignment
-   "labels_per_instance": 10, # number of labels for each instance
-   "instance_per_annotator": 50, # number of instances assigned for each annotator
-   "test_question_per_annotator": 2, # number of attention test questions for each annotator
-   "users": []
-},
+```yaml
+assignment_strategy: random
+num_annotators_per_item: 10
+max_annotations_per_user: 50
 ```
+
+The 1.x `automatic_assignment` block is not read. [Task
+Assignment](../advanced/task_assignment.md) lists the strategies and maps the
+old keys.
 
 ## Label suggestions
 Starting from 1.2.2.1, Potato supports displaying suggestions to improve the productivity of annotators. Currently we

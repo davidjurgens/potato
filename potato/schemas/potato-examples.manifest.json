@@ -3994,9 +3994,7 @@
         "pairwise"
       ],
       "category": "classification",
-      "config_keys": [
-        "surveyflow"
-      ],
+      "config_keys": [],
       "data_files": [
         "data/pairwise-example.json"
       ],
@@ -4016,9 +4014,7 @@
         "pairwise"
       ],
       "category": "classification",
-      "config_keys": [
-        "surveyflow"
-      ],
+      "config_keys": [],
       "data_files": [
         "data/pairwise-example.json"
       ],

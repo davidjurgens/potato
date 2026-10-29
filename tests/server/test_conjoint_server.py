@@ -168,3 +168,41 @@ class TestConjointServer:
         assert "Price" in response.text
         assert "conjoint-profile-card" in response.text
         assert "None of these" in response.text
+
+    # -- generated designs -------------------------------------------------
+    # The client used to pick each level from the lengths of the item id and
+    # the attribute name, so every annotator saw the same cards on every item
+    # whose id had the same length, and nothing recorded what was shown.
+
+    KEY = "_conjoint_profiles__preference"
+
+    def _design(self, session):
+        response = session.get(f"{self.server.base_url}/api/instance_data")
+        assert response.status_code == 200
+        return response.json()[self.KEY]
+
+    def test_the_server_sends_a_full_design(self):
+        session = self._get_session()
+        session.get(f"{self.server.base_url}/annotate")
+        design = self._design(session)
+        assert len(design) == 3
+        for profile in design:
+            assert profile["Speed"] in {"Fast", "Medium", "Slow"}
+            assert profile["Price"] in {"$10", "$20", "$50"}
+        assert len({tuple(p.values()) for p in design}) == 3   # distinct cards
+
+    def test_a_reload_shows_the_same_design_and_the_page_carries_it(self):
+        session = self._get_session()
+        page = session.get(f"{self.server.base_url}/annotate").text
+        first = self._design(session)
+        assert self._design(session) == first
+        # The embedded copy the page falls back to is the recorded one too.
+        assert json.dumps(first[0]["Speed"]) in page and self.KEY in page
+
+    def test_designs_vary_across_annotators(self):
+        designs = set()
+        for _ in range(6):
+            session = self._get_session()
+            session.get(f"{self.server.base_url}/annotate")
+            designs.add(json.dumps(self._design(session), sort_keys=True))
+        assert len(designs) > 1

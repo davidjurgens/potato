@@ -3899,6 +3899,8 @@ def render_page_with_annotations(username: str):
         # agreement while biasing the estimate.
         _apply_pairwise_order(var_elems["instance_data"], user_state,
                               username, instance_id)
+        apply_conjoint_profiles(var_elems["instance_data"], user_state,
+                                username, instance_id)
 
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
@@ -4785,7 +4787,10 @@ def get_label_suggestions(item, config, schema_content_to_prefill) -> set[Sugges
                 if label_suggestion == 'highlight':
                         #bad suggestion -- TODO make chance configurable
                         if random.randrange(0, 3) == 2:
-                            label_suggestions_json.add(SuggestedResponse(schema['name'], random.choice(schema['labels'])))
+                            # A name, not the label entry: a dict label here
+                            # put the whole dict into the suggestion.
+                            from potato.server_utils.presentation_order import label_names
+                            label_suggestions_json.add(SuggestedResponse(schema['name'], random.choice(label_names(schema))))
                             continue
 
                         label_suggestions_json.add(SuggestedResponse(schema['name'], s))
@@ -4926,6 +4931,30 @@ def _apply_pairwise_order(instance_data, user_state, username, instance_id):
         items = instance_data.get(items_key)
         if isinstance(items, list) and len(items) == len(order):
             instance_data[items_key] = [items[i] for i in order]
+
+
+def apply_conjoint_profiles(instance_data, user_state, username, instance_id):
+    """
+    Put each generated conjoint design into the item data, and record it.
+
+    The design goes in the presentation-order record beside pairwise orders,
+    so the choice an annotator made can be read against the profiles they
+    were shown, and an item they come back to shows the same cards. Schemes
+    with a ``profiles_field`` read their profiles from the item and are left
+    alone.
+    """
+    from potato.server_utils import presentation_order as _order
+
+    for scheme in config.get('annotation_schemes', []) or []:
+        name = scheme.get("name")
+        profiles = _order.conjoint_profiles(scheme, username, instance_id) if name else None
+        if not profiles:
+            continue
+        recorded = _order.record(user_state, instance_id, {name: profiles}).get(name)
+        if isinstance(recorded, list) and recorded and all(isinstance(p, dict) for p in recorded):
+            profiles = recorded
+        instance_data[_order.CONJOINT_PROFILES_KEY.format(name)] = profiles
+    return instance_data
 
 
 def randomize_options(soup, orders):

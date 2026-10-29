@@ -546,7 +546,7 @@
 
 /* Empty state */
 .annotation-list:empty::after {
-    content: 'No annotations yet. Select a label and drag on the timeline to create annotations.';
+    content: 'No annotations yet. Select a label and drag on the timeline to create annotations, or click on a point tier.';
     display: block;
     padding: 20px;
     text-align: center;

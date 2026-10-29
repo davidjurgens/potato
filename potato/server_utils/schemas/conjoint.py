@@ -20,6 +20,8 @@ from .identifier_utils import (
 )
 
 
+from potato.server_utils.presentation_order import CONJOINT_PROFILES_KEY
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROFILES_PER_SET = 3
@@ -132,7 +134,7 @@ def _generate_conjoint_layout_internal(annotation_scheme):
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="conjoint"
           data-schema-name="{escape_html_content(schema_name)}"
-          data-profiles-field="{escape_html_content(profiles_field or '')}"
+          data-profiles-field="{escape_html_content(profiles_field or CONJOINT_PROFILES_KEY.format(schema_name))}"
           {layout_attrs}>
         <fieldset schema_name="{escape_html_content(schema_name)}">
             <legend class="shadcn-conjoint-title">{escape_html_content(description)}</legend>
