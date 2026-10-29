@@ -59,6 +59,34 @@ assignment logic transparently treats them as high-coverage.
 When `stratify_by` is set, the fraction is applied **per stratum**, so every
 category contributes proportionally to the overlap sample.
 
+### Keep coders off each other's held items
+
+When an annotator would otherwise get no work, Potato hands out items other
+annotators hold but have not submitted, so nobody is stranded by someone who
+closed the tab. With `fixed_order`, the first coder holds most of the dataset,
+so the second coder, after the overlap items, is given the first coder's
+unfinished items and double-codes far more than the design asks. In one run a
+study that asked for 15 double-coded items got 41.
+
+```yaml
+assignment_hold_minutes: 30
+```
+
+With this set, an annotator who runs out of work is given items other
+annotators hold but have not reached yet, and those items leave the first
+annotator's queue, so they move rather than get coded twice. An item the holder
+has already been shown stays with them while they keep working: it is theirs
+if they were given it, or saved anything, within that many minutes. Once they
+have been gone longer, it moves to the next annotator who needs work, and the
+holder no longer has it when they come back.
+
+When every remaining item is on someone's screen, an annotator who arrives is
+told that the items are taken and to try again later. So is one who finishes
+the item in front of them while the rest are held: they stay in the study, and
+Check again gives them an item once a holder has been inactive for that long. Leave the setting unset
+to keep the default: nobody is sent away with no work, and held items are
+shared.
+
 ## Adaptive boost
 
 Adaptive boost expands the cap on an item whose early annotators disagreed.

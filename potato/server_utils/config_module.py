@@ -763,6 +763,7 @@ KNOWN_CONFIG_KEYS = {
     "alert_time_each_instance": None,
     "assignment_strategy": None,
     "instance_reclaim": None,
+    "assignment_hold_minutes": None,
     # Where item payloads live. In-memory by default; see potato/item_store.py
     # for the measurement that makes that the right default and the scale at
     # which "paged" starts to pay for itself.
@@ -2963,6 +2964,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Page-level show_when / exit_when and phases.counterbalance
     validate_phase_flow_config(config_data)
+    validate_annotation_phase_present(config_data)
 
     # Timed trials on the annotation page
     from potato.trial_timing import validate_trial_timing_config
@@ -6952,8 +6954,52 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
                 raise ConfigValidationError("agreement_metrics.refresh_interval must be an integer >= 10 seconds")
 
 
+#: How to run a study that is all survey or all jsPsych, until Potato runs one
+#: without an annotation phase.
+_NO_ANNOTATION_WORKAROUND = (
+    "For a study with nothing to annotate (all survey pages, or a jsPsych "
+    "task), add one item to the data file and a radio scheme with a single "
+    "label such as Finish, and list annotation last in phases.order. Not "
+    "pure_display: it saves nothing, so the item never completes and Next "
+    "returns the same page.")
+
+
+def validate_annotation_phase_present(config_data: Dict[str, Any]) -> None:
+    """Refuse a study with no annotation phase, which Potato cannot run yet.
+
+    With no annotation schemes the server crashed at startup (KeyError in
+    front_end). Leaving `annotation` out of `phases.order` did not skip it:
+    the phase was appended after the poststudy pages, so participants met the
+    annotation page after the debrief.
+    """
+    if not _collect_all_annotation_schemes(config_data):
+        raise ConfigValidationError(
+            "annotation_schemes is empty or missing; Potato needs at least one "
+            "annotation scheme. " + _NO_ANNOTATION_WORKAROUND)
+    phases = config_data.get("phases")
+    order = phases.get("order") if isinstance(phases, dict) else None
+    if not isinstance(order, list) or not order:
+        return
+
+    def is_annotation(name):
+        entry = phases.get(name) if isinstance(name, str) else None
+        return name == "annotation" or (
+            isinstance(entry, dict) and str(entry.get("type", "")).lower() == "annotation")
+
+    if not any(is_annotation(name) for name in order):
+        raise ConfigValidationError(
+            "phases.order has no annotation phase. Potato does not skip it: it "
+            "would run after the last page listed, after any debrief. Put "
+            "annotation where it belongs in phases.order. " + _NO_ANNOTATION_WORKAROUND)
+
+
 def validate_instance_reclaim_config(config_data: Dict[str, Any]) -> None:
     """Validate abandoned assignment reclaim configuration."""
+    minutes = config_data.get("assignment_hold_minutes")
+    if minutes is not None and (isinstance(minutes, bool)
+                                or not isinstance(minutes, (int, float)) or minutes <= 0):
+        raise ConfigValidationError(
+            "assignment_hold_minutes must be a positive number of minutes")
     if "instance_reclaim" not in config_data:
         return
 

@@ -137,3 +137,32 @@ class TestVolumeAnnotation(BasePlaywrightTest):
         page.wait_for_function(
             f"{MANAGER}.views.axial.img.src !== {json.dumps(before)}", timeout=10_000)
         assert "wc=-600.0" in page.evaluate(f"{MANAGER}.views.axial.img.src")
+
+
+@pytest.mark.playwright
+class TestVolumePolygonFillsTheMask(BasePlaywrightTest):
+    """A closed polygon was saved as a shape only, so it reached neither the
+    NIfTI nor the DICOM SEG mask nor Dice."""
+
+    def test_a_closed_polygon_paints_its_slice(self, page, volume_server):
+        self.register_and_login(page, volume_server)
+        _ready(page)
+        self.click_next(page)
+        _ready(page)
+        page.locator(".vol-label-btn[data-label='Bone']").click()
+        page.locator("[data-tool='polygon']").click()
+        box = page.locator(".vol-view[data-axis='axial'] .vol-overlay").bounding_box()
+        for fx, fy in ((0.3, 0.3), (0.6, 0.3), (0.6, 0.6), (0.3, 0.6)):
+            page.mouse.click(box["x"] + box["width"] * fx, box["y"] + box["height"] * fy)
+        page.keyboard.press("Enter")
+        k = page.evaluate(f"{MANAGER}.cursor.k")
+        assert _slices(page, "Bone") == [k]
+        filled = page.evaluate(
+            f"(() => {{ const p = {MANAGER}.masks.Bone.get({k}); "
+            f"return p.reduce((n, v) => n + v, 0); }})()")
+        assert filled > 0
+        assert page.evaluate(f"{MANAGER}.shapes.filter(s => s.type === 'polygon').length") == 0
+        self.wait_for_debounce(page)
+        stored = page.evaluate("fetch('/get_annotations?instance_id=nifti').then(r => r.json())")
+        saved = json.loads(stored["label_values"]["ct"]["_data"])
+        assert [int(key) for key in saved["masks"]["Bone"]] == [k]

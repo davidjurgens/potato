@@ -163,3 +163,85 @@ class TestReleasingAHold:
 
         ism.register_annotator(held, "a")
         assert ism._item_is_complete(held) is True
+
+
+def hold_manager(minutes, n_items=3):
+    potato.item_state_management.ITEM_STATE_MANAGER = None
+    ism = init_item_state_manager({
+        "num_annotators_per_item": 1, "assignment_hold_minutes": minutes,
+        "annotation_schemes": [{"annotation_type": "radio", "name": "s",
+                                "description": "d", "labels": ["a", "b"]}]})
+    ism.add_items({f"item_{i}": {"id": f"item_{i}", "text": f"s{i}"}
+                   for i in range(n_items)})
+    return ism
+
+
+class _Users(dict):
+    """User states the item manager can look up as holders."""
+
+    def get_user_state(self, user_id):
+        return self.get(user_id)
+
+
+@pytest.fixture
+def users(monkeypatch):
+    registry = _Users()
+    import potato.user_state_management as usm
+    monkeypatch.setattr(usm, "get_user_state_manager", lambda: registry)
+    return registry
+
+
+def arrive(ism, users, name):
+    """An annotator with room for several items logs in and sees the first."""
+    state = InMemoryUserState(name, max_assignments=10)
+    users[name] = state
+    ism.assign_instances_to_user(state)
+    if state.get_assigned_instance_ids():
+        state.current_instance_index = 0
+    return state
+
+
+class TestAssignmentHoldMinutes:
+    """Opt-in. An item the holder has been shown stays theirs while they are
+    active; an item they have not reached moves to whoever ran out. Relaxing
+    every hold made an overlap_sample study that asked for 15 double-coded
+    items get 41, and holding the whole queue let one idle annotator take
+    every item for the hold time."""
+
+    def test_unreached_items_move_and_nothing_is_double_held(self, users):
+        ism = hold_manager(30)
+        first = arrive(ism, users, "a")
+        assert assigned(first) == ["item_0", "item_1", "item_2"]
+        second = arrive(ism, users, "b")
+        third = arrive(ism, users, "c")
+        # a keeps the item on screen; b and c took the ones a had not reached.
+        assert assigned(first) == ["item_0"]
+        assert assigned(second) and assigned(third)
+        holders = [h for s in (first, second, third) for h in assigned(s)]
+        assert sorted(holders) == ["item_0", "item_1", "item_2"]
+        # Everyone is on an item now, so a fourth annotator waits.
+        assert assigned(arrive(ism, users, "d")) == []
+
+    def test_a_stale_hold_moves_the_item(self, users):
+        ism = hold_manager(30, n_items=1)
+        first = arrive(ism, users, "a")
+        for holds in ism.assignment_timestamps.values():
+            for who in holds:
+                holds[who] -= 31 * 60
+        assert assigned(arrive(ism, users, "b")) == ["item_0"]
+        # The lapsed holder loses it, so it is not coded twice.
+        assert assigned(first) == []
+
+    def test_off_by_default_shares_held_items(self, users):
+        ism = hold_manager(None, n_items=1)
+        first = arrive(ism, users, "a")
+        assert assigned(arrive(ism, users, "b")) == ["item_0"]
+        assert assigned(first) == ["item_0"], "the default does not move items"
+
+
+@pytest.mark.parametrize("value", [0, -5, "30", True])
+def test_assignment_hold_minutes_must_be_positive_minutes(value):
+    from potato.server_utils.config_module import (
+        ConfigValidationError, validate_instance_reclaim_config)
+    with pytest.raises(ConfigValidationError, match="assignment_hold_minutes"):
+        validate_instance_reclaim_config({"assignment_hold_minutes": value})

@@ -31,8 +31,13 @@ LEGACY_KEYS = {
     "icl_labeling": "labeling_engine (an llm source plus a threshold_legacy or "
                     "selective_risk contract)",
     "judge_calibration": "labeling_engine (judge sources with k_sample confidence)",
-    "pre_annotation": "labeling_engine (a static source)",
 }
+# pre_annotation is not deprecated. It shows a model's or an import's answer
+# as an editable starting point, which the engine's static source does not
+# do: there a label is accepted where a contract certifies it. Every importer
+# (camera traps, BirdNET, QDPX, ...) writes pre_annotation for exactly that,
+# and a warning that it would be removed sent users toward something else.
+# `migrate-config` still translates it for anyone who wants the engine.
 
 
 def _model_source(sid: str, m: Dict[str, Any], kind: Optional[str] = None) -> Dict[str, Any]:
@@ -219,7 +224,7 @@ def deprecation_warnings(cfg: Dict[str, Any]) -> List[str]:
     out = []
     for key, replacement in LEGACY_KEYS.items():
         block = cfg.get(key) or {}
-        present = block.get("enabled") or (key == "pre_annotation" and block)
+        present = block.get("enabled")
         if present:
             out.append(f"{key} still works, but the labeling engine now does this: use "
                        f"{replacement}. `potato label migrate-config` writes the "

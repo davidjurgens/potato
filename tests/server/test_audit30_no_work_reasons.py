@@ -136,3 +136,91 @@ class TestNoWorkReasons:
         finally:
             server.stop_server()
             cleanup_test_directory(test_dir)
+
+
+class TestHeldItems:
+    """Under assignment_hold_minutes the items are taken, not finished, and
+    "every item already has as many annotators as it needs" is false."""
+
+    def test_an_annotator_who_finds_every_item_held_is_told_so(self):
+        server, test_dir = _server(
+            "held", [{"id": "i1", "text": "t1"}],
+            {"num_annotators_per_item": 1, "assignment_hold_minutes": 20,
+             "max_annotations_per_user": 10})
+        try:
+            _annotate_page(_login(server, "alice"), server)
+            headline, body = _annotate_page(_login(server, "bob"), server)
+            assert headline == "Every item is taken right now", body[:400]
+            assert "20 minutes" in body
+        finally:
+            server.stop_server()
+            cleanup_test_directory(test_dir)
+
+    def test_the_active_annotator_waits_instead_of_finishing(self):
+        """u1's unreached items moved to u2 and u3. Saving the item on screen
+        and pressing Next used to send u1 to done, the one person working,
+        with room for nine more; when the other holds lapsed nobody was left."""
+        server, test_dir = _server(
+            "held_active", [{"id": f"i{n}", "text": f"t{n}"} for n in range(3)],
+            {"num_annotators_per_item": 1, "assignment_hold_minutes": 30,
+             "max_annotations_per_user": 10, "assignment_strategy": "fixed_order"})
+        try:
+            from potato.item_state_management import get_item_state_manager
+            from potato.user_state_management import get_user_state_manager
+            sessions = {u: _login(server, u) for u in ("u1", "u2", "u3")}
+            for s in sessions.values():
+                s.get(f"{server.base_url}/annotate")
+            u1 = sessions["u1"]
+            u1.post(f"{server.base_url}/updateinstance", json={
+                "instance_id": "i0", "span_annotations": [],
+                "annotations": {"verdict:::yes": "yes"}})
+            assert get_user_state_manager().get_user_state("u1").has_annotated("i0")
+            u1.post(f"{server.base_url}/annotate", json={"action": "next_instance"})
+            headline, body = _annotate_page(u1, server)
+            assert headline == "Every item is taken right now", body[:400]
+            state = get_user_state_manager().get_user_state("u1")
+            assert state.get_phase().name == "ANNOTATION"
+
+            # u2 walks away: their hold lapses, and u1's reload picks it up.
+            ism = get_item_state_manager()
+            ism.assignment_timestamps["i1"]["u2"] -= 31 * 60
+            import datetime
+            get_user_state_manager().get_user_state("u2").last_activity_time = (
+                datetime.datetime.now() - datetime.timedelta(minutes=31))
+            headline, body = _annotate_page(u1, server)
+            assert headline is None, headline
+            assert "i1" in state.get_assigned_instance_ids()
+        finally:
+            server.stop_server()
+            cleanup_test_directory(test_dir)
+
+    def test_the_waiting_annotator_finishes_once_the_last_item_is_saved(self):
+        """The held page is a wait, not a trap: when the item someone else
+        held is saved, nothing is left and the waiting annotator is done."""
+        server, test_dir = _server(
+            "held_finish", [{"id": f"i{n}", "text": f"t{n}"} for n in range(2)],
+            {"num_annotators_per_item": 1, "assignment_hold_minutes": 30,
+             "max_annotations_per_user": 10, "assignment_strategy": "fixed_order"})
+        try:
+            from potato.user_state_management import get_user_state_manager
+            u1, u2 = _login(server, "u1"), _login(server, "u2")
+            u1.get(f"{server.base_url}/annotate")
+            u2.get(f"{server.base_url}/annotate")
+            def save(s, iid):
+                s.post(f"{server.base_url}/updateinstance", json={
+                    "instance_id": iid, "span_annotations": [],
+                    "annotations": {"verdict:::yes": "yes"}})
+            states = get_user_state_manager()
+            save(u1, "i0")
+            u1.post(f"{server.base_url}/annotate", json={"action": "next_instance"})
+            assert _annotate_page(u1, server)[0] == "Every item is taken right now"
+            save(u2, "i1")
+            assert states.get_user_state("u2").has_annotated("i1")
+            u2.post(f"{server.base_url}/annotate", json={"action": "next_instance"})
+            # Both items are in: u1's next look at the page finishes them.
+            u1.get(f"{server.base_url}/annotate")
+            assert states.get_user_state("u1").get_phase().name == "DONE"
+            assert states.get_user_state("u2").get_phase().name == "DONE"
+        finally:
+            server.stop_server()
+            cleanup_test_directory(test_dir)

@@ -53,6 +53,20 @@ All notable changes to the Potato annotation platform are documented in this fil
 - `/admin/iaa` skipped `rubric_eval`; it is scored per criterion like
   `multirate`. The `reliability` export skipped `pairwise`; a binary scheme
   gets a nominal row and a scale scheme an interval one, in data order.
+- A polygon drawn on a volume segmentation was saved only as a shape, so it
+  was missing from the NIfTI and DICOM SEG masks and from 3D Dice. A closed
+  polygon now paints its region into the label's mask on that slice; boxes
+  stay shapes in `__shapes.json`.
+- `potato validate` said `pre_annotation` was planned for removal in 3.0, so
+  every imported project (camera traps, BirdNET, QDPX, ...) was flagged. It is
+  not deprecated: the labeling engine's `static` source accepts labels where a
+  contract certifies them and does not prefill an editable starting point.
+- A config with no annotation schemes passed `validate --strict` and then
+  crashed the server at startup, and leaving `annotation` out of
+  `phases.order` did not skip it: the phase ran after the last page listed,
+  after any debrief. `potato validate` now reports both as errors, with a note
+  on how to run a study with nothing to annotate (one item with a one-label
+  radio; a `pure_display` item never completes).
 - The export command read only JSON data files, so a project whose
   `data_files` are CSV or TSV exported with "Loaded 0 items" and every
   exporter that needs the item text lost it. CSV, TSV and parquet are read
@@ -238,6 +252,14 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Added
 
+- **`assignment_hold_minutes`**: when an annotator runs out of work, items
+  other annotators hold but have not reached move to them instead of being
+  shared, and an item the holder has been shown stays theirs while they have
+  been active within that many minutes (after that it moves too). An
+  annotator whose remaining items are all held is told so and stays in the
+  study instead of being finished. Without it, an `overlap_sample` study
+  with `fixed_order` double-coded 41 items where it asked for 15. Off by
+  default.
 - **`batch_assignment.randomize_within_list`**: each participant gets their
   list's items in their own order, seeded per participant, where everyone on a
   list used to see the file order.

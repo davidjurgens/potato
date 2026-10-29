@@ -52,6 +52,18 @@
         return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     }
 
+    /** Ray casting: whether (x, y) is inside the polygon ``points``. */
+    function polygonContains(points, x, y) {
+        let inside = false;
+        for (let a = 0, b = points.length - 1; a < points.length; b = a++) {
+            const [xa, ya] = points[a], [xb, yb] = points[b];
+            if ((ya > y) !== (yb > y) && x < (xb - xa) * (y - ya) / (yb - ya) + xa) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
     class VolumeAnnotationManager {
         constructor(container, inputId, config) {
             this.container = container;
@@ -521,13 +533,38 @@
         _closePolygon() {
             const poly = this._polygon;
             this._polygon = null;
-            if (poly && poly.points.length >= 3) {
+            if (poly && poly.points.length >= 3 && this.label) {
                 this._snapshot();
-                this.shapes.push(this._shape(poly.view, 'polygon', poly.points));
-                this._renderShapeList();
+                // A closed polygon paints its region into the label's mask on
+                // this slice. Stored as a shape, it reached neither the NIfTI
+                // nor the DICOM SEG mask nor Dice, though on a segmentation
+                // scheme it reads as a way to paint a region.
+                this._fillPolygon(poly.view, poly.points);
                 this._save();
             }
             this._refreshOverlays();
+        }
+
+        /** Set every cell whose centre is inside ``points`` (screen cells). */
+        _fillPolygon(view, points) {
+            const [cols, rows] = this._dims(view.axis);
+            const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+            const c0 = Math.max(0, Math.floor(Math.min(...xs)));
+            const c1 = Math.min(cols - 1, Math.ceil(Math.max(...xs)));
+            const r0 = Math.max(0, Math.floor(Math.min(...ys)));
+            const r1 = Math.min(rows - 1, Math.ceil(Math.max(...ys)));
+            let filled = 0;
+            for (let r = r0; r <= r1; r++) {
+                const y = r + 0.5;
+                for (let c = c0; c <= c1; c++) {
+                    if (!polygonContains(points, c + 0.5, y)) continue;
+                    const [i, j, k] = this._toVoxel(view, c, r);
+                    const plane = this._slice(this.label, k, true);
+                    plane[j * this.nI + i] = 1;
+                    filled++;
+                }
+            }
+            return filled;
         }
 
         _shape(view, type, screenPoints) {

@@ -66,6 +66,27 @@ phases:
     file: surveyflow/demographics.json
 ```
 
+`phases.order` must include the annotation phase, and the config needs at
+least one annotation scheme. Without either, `potato validate` reports an
+error and the server does not start.
+Potato cannot yet run a study with nothing to annotate. For one that is all
+survey pages or a jsPsych task, add one item to the data file and a radio
+scheme with a single label, and list `annotation` last in `phases.order`:
+
+```yaml
+annotation_schemes:
+  - annotation_type: radio
+    name: finish
+    description: Click Finish to end the study.
+    labels: [Finish]
+    label_requirement:
+      required: true
+```
+
+The participant clicks Finish, then Next, and reaches the end page. A
+`pure_display` scheme does not work here: it saves nothing, so the item never
+counts as done and Next shows the same page again.
+
 ### Phase Types
 
 Each file-based phase has a **`type`** that tells Potato which stage of the

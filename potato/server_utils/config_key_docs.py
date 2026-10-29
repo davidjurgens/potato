@@ -2693,6 +2693,18 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "sessions.attributes": _D(
         "Item fields lifted onto the session", type="array", category=ASSIGN,
     ),
+    "assignment_hold_minutes": _D(
+        "When an annotator would otherwise get no work, items other annotators "
+        "hold are handed out anyway, and both keep them. With this set, items "
+        "the holder has not reached move to the new annotator instead, and an "
+        "item the holder has been shown stays theirs while they were given it "
+        "or saved anything within this many minutes; after that it moves too. "
+        "Use it with "
+        "overlap_sample, where sharing held items double-codes more than the "
+        "design asks",
+        type="number", category=ASSIGN, minimum=0,
+        see_also=("instance_reclaim", "num_annotators_per_item"),
+    ),
     "instance_reclaim": _D(
         "Take assignments back from annotators who abandoned them so the items "
         "can go out again. `enabled` (false) and `timeout_hours` (24), plus "

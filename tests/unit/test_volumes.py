@@ -421,3 +421,19 @@ class TestEnhancedDicom:
         shutil.copy(enhanced_dir / "frames.dcm", tmp_path / "b.dcm")
         with pytest.raises(vol.VolumeError, match="multi-frame file in its own directory"):
             vol.read_volume(str(tmp_path))
+
+
+def test_overlapping_labels_resolve_to_the_later_label_in_the_nifti_map():
+    """A voxel painted with two labels is the later label in the scheme's
+    list in the single-label NIfTI map (documented in volume_annotation.md);
+    each label's own mask keeps it."""
+    from potato.media import volume_masks as vm
+    plane = np.zeros((3, 4), dtype=bool)
+    plane[1, 1] = True
+    stored = {str(0): vm.rle_encode(plane)}
+    annotation = {"masks": {"Lesion": stored, "Bone": stored}}
+    shape = (4, 3, 1)
+    assert vm.labelmap(annotation, shape, ["Lesion", "Bone"])[1, 1, 0] == 2
+    assert vm.labelmap(annotation, shape, ["Bone", "Lesion"])[1, 1, 0] == 2
+    assert vm.label_volume(annotation, shape, "Lesion")[1, 1, 0]
+    assert vm.label_volume(annotation, shape, "Bone")[1, 1, 0]

@@ -1031,6 +1031,11 @@ class ItemStateManager:
         # normal operation; cleared for the fallback pass in
         # `_assign_instances_to_user_inner` so holds can never deadlock a study.
         self._holds_are_binding = True
+        # assignment_hold_minutes: in the fallback pass, a hold by someone who
+        # was given the item or saved anything this recently stays binding.
+        # Off (None) keeps the rule that nobody is sent away with no work.
+        minutes = config.get('assignment_hold_minutes')
+        self.hold_seconds = float(minutes) * 60 if minutes else None
 
         # Track assignment timestamps for stale reclamation: {instance_id: {username: timestamp}}
         self.assignment_timestamps = defaultdict(dict)
@@ -1827,9 +1832,75 @@ class ItemStateManager:
         or not `instance_reclaim` is on to take them back properly.
         """
         if not self._holds_are_binding:
-            return len(self.instance_annotators[instance_id])
+            if not getattr(self, 'hold_seconds', None):
+                return len(self.instance_annotators[instance_id])
+            # The fallback pass with assignment_hold_minutes: an item the
+            # holder has been shown, while they are still working, stays
+            # theirs. Relaxing every hold handed coder 1's unfinished items to
+            # coder 2 the moment coder 2 ran out, and an overlap_sample study
+            # that asked for 15 double-coded items got 41. Items the holder
+            # has not reached are not counted; the fallback pass moves them
+            # (`_move_unreached_holds`) instead of sharing them.
+            return len(self.instance_annotators[instance_id]
+                       | {u for u in self.instance_assignees[instance_id]
+                          if self._hold_is_active(instance_id, u)})
         return len(self.instance_annotators[instance_id]
                    | self.instance_assignees[instance_id])
+
+    @staticmethod
+    def _holder_state(user_id: str):
+        try:
+            from potato.user_state_management import get_user_state_manager
+            return get_user_state_manager().get_user_state(user_id)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _holder_has_reached(ustate, instance_id: str) -> bool:
+        """Whether the holder has been shown ``instance_id``: it sits at or
+        before their current position in their queue."""
+        try:
+            return (ustate.instance_id_ordering.index(instance_id)
+                    <= ustate.get_current_instance_index())
+        except (AttributeError, ValueError):
+            return False
+
+    def _move_unreached_holds(self, receiver: 'UserState', instance_ids) -> None:
+        """Take items just given to ``receiver`` out of the queues of holders
+        whose hold did not bind (they had not reached the item, or have been
+        inactive past assignment_hold_minutes), so the item moves instead of
+        being coded twice. A lapsed holder used to keep the item: both saved
+        it, under a cap of one."""
+        receiver_id = getattr(receiver, 'user_id', None) or receiver.get_user_id()
+        for iid in instance_ids:
+            for holder_id in list(self.instance_assignees.get(iid, ())):
+                if holder_id == receiver_id:
+                    continue
+                holder = self._holder_state(holder_id)
+                if holder is None or holder.has_annotated(iid) \
+                        or self._hold_is_active(iid, holder_id):
+                    continue
+                self._reclaim_unannotated_assignment(
+                    holder, iid, reason="assignment_hold_minutes")
+
+    def _hold_is_active(self, instance_id: str, user_id: str) -> bool:
+        """Whether ``user_id``'s hold on ``instance_id`` binds under
+        assignment_hold_minutes: they have been shown the item, and were given
+        it or saved anything within that many minutes."""
+        ustate = self._holder_state(user_id)
+        if ustate is None or not self._holder_has_reached(ustate, instance_id):
+            return False
+        import time
+        now = time.time()
+        assigned = (self.assignment_timestamps.get(instance_id) or {}).get(user_id)
+        if assigned is not None and now - assigned <= self.hold_seconds:
+            return True
+        last = getattr(ustate, "last_activity_time", None)
+        try:
+            seen = last.timestamp() if hasattr(last, "timestamp") else float(last)
+        except (TypeError, ValueError):
+            return False
+        return now - seen <= self.hold_seconds
 
     def _item_is_saturated(self, instance_id: str) -> bool:
         """True if the item cannot be handed out right now.
@@ -2121,8 +2192,9 @@ class ItemStateManager:
             for iid in new_assignments:
                 self.instance_assignees[iid].add(username)
 
-            # Record timestamps for newly assigned instances
-            if self.reclaim_enabled:
+            # When each hold was taken: instance_reclaim reads it, and so does
+            # the fallback pass under assignment_hold_minutes.
+            if self.reclaim_enabled or getattr(self, 'hold_seconds', None):
                 import time
                 now = time.time()
                 for iid in new_assignments:
@@ -2155,11 +2227,15 @@ class ItemStateManager:
 
         # Nothing available under the strict rule. If some item is held but
         # unannotated, hand it out rather than declaring the study finished.
+        before = set(user_state.get_assigned_instance_ids())
         self._holds_are_binding = False
         try:
             assigned = self._assign_pass(user_state)
         finally:
             self._holds_are_binding = True
+        if assigned and getattr(self, 'hold_seconds', None):
+            self._move_unreached_holds(
+                user_state, set(user_state.get_assigned_instance_ids()) - before)
         if assigned:
             # The advice is only advice when it is not already taken: on a
             # study running instance_reclaim this used to tell the operator

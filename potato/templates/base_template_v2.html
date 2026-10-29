@@ -1007,7 +1007,7 @@
          last UMD global build: 0.161+ ships ES modules only, which would need
          an import map and would not work from a file:// mirror. -->
     {% if frontend_assets.volume_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='volume-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='volume-annotation.js') }}?v=2"></script>
     {% endif %}
     {% if frontend_assets.spatial_annotation | default(false) %}
     <script src="{{ url_for('static', filename='vendor/three-0.160.0.min.js') }}"></script>

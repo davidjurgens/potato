@@ -1,9 +1,9 @@
 # 3D Medical Volumes (DICOM & NIfTI)
 
 Segmenting CT and MR volumes: a DICOM series or a NIfTI file is shown in three
-linked views (axial, coronal, sagittal), and annotators paint label masks,
-draw boxes and polygons on slices, and fill the slices between painted ones by
-interpolation. Masks export as a NIfTI label volume or a DICOM SEG, and an
+linked views (axial, coronal, sagittal), and annotators paint label masks
+(with the brush, or by closing a polygon), draw boxes on slices, and fill the
+slices between painted ones by interpolation. Masks export as a NIfTI label volume or a DICOM SEG, and an
 RTSTRUCT on the item can provide the starting masks.
 
 ```yaml
@@ -98,10 +98,13 @@ images, as DICOM requires; a NIfTI export carries none.
 - **Brush** (<kbd>b</kbd>) and **Eraser** (<kbd>e</kbd>) paint and erase the
   selected label. A stroke on the coronal or sagittal view writes into every
   axial slice it crosses.
-- **Box** (<kbd>x</kbd>) and **Polygon** (<kbd>p</kbd>): drag a box; click
-  polygon points, then double-click or <kbd>Enter</kbd> to close
-  (<kbd>Esc</kbd> cancels). They are listed under the views, where a click
-  jumps to the slice and **Remove** deletes one.
+- **Polygon** (<kbd>p</kbd>): click points, then double-click or
+  <kbd>Enter</kbd> to close (<kbd>Esc</kbd> cancels). The closed polygon paints
+  its region into the selected label's mask on that slice, as the brush would,
+  so it is part of the exported mask and of Dice; undo takes it back.
+- **Box** (<kbd>x</kbd>): drag a box. Boxes are not mask voxels: they are
+  listed under the views, where a click jumps to the slice and **Remove**
+  deletes one, and they export to `__shapes.json`.
 - **Labels**: click one, or press its `key_value`.
 - **Window**: pick a preset, or right-drag on an image (left and right
   change the width, up and down the centre).
@@ -170,7 +173,8 @@ python -m potato.export -c config.yaml -f dicom_sr -o out/
 - `volume_nifti`: per annotator, `<item>__<schema>.nii.gz`, a uint8 label
   volume in the source file's voxel order and affine (0 is background, 1 the
   first label), `labels__<schema>.json` mapping values to names, and
-  `<item>__<schema>__shapes.json` with the boxes and polygons. Works for both
+  `<item>__<schema>__shapes.json` with the boxes, and any polygons saved by
+  2.13.0 or earlier. Works for both
   input kinds.
 - `dicom_seg`: per annotator, `<item>__<schema>.dcm`, a binary DICOM
   Segmentation with one segment per label that has voxels, referencing the
@@ -188,7 +192,7 @@ Label codes, the SR's exact contents and how to read both back are in
 The agreement report scores `volume_annotation` by 3D Dice per label between
 each pair of annotators of an item: 2|A∩B| / (|A| + |B|). A pair where
 neither painted a label is left out for that label rather than counted as
-agreeing. Boxes and polygons are not scored.
+agreeing. Boxes are not scored.
 
 ## Limits
 

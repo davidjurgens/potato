@@ -4042,6 +4042,11 @@
       },
       "type": "object"
     },
+    "assignment_hold_minutes": {
+      "description": "When an annotator would otherwise get no work, items other annotators hold are handed out anyway, and both keep them. With this set, items the holder has not reached move to the new annotator instead, and an item the holder has been shown stays theirs while they were given it or saved anything within this many minutes; after that it moves too. Use it with overlap_sample, where sharing held items double-codes more than the design asks",
+      "minimum": 0,
+      "type": "number"
+    },
     "assignment_strategy": {
       "description": "How items are handed out to annotators.",
       "enum": [

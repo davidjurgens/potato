@@ -7478,6 +7478,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
+| `assignment_hold_minutes` |  | number |  | When an annotator would otherwise get no work, items other annotators hold are handed out anyway, and both keep them. With this set, items the holder has not reached move to the new annotator instead, and an item the holder has been shown stays theirs while they were given it or saved anything within this many minutes; after that it moves too. Use it with overlap_sample, where sharing held items double-codes more than the design asks |  |
 | `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review, engine) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review, psychometric or engine (the labeling engine's human requests). `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Potato 1.x assignment block. Not read, and named at boot if set; use `assignment_strategy`, `num_annotators_per_item` and `max_annotations_per_user` |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `group_by_condition`, `groups`, `randomize_within_list` |
@@ -22040,9 +22041,9 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedi
 # 3D Medical Volumes (DICOM & NIfTI)
 
 Segmenting CT and MR volumes: a DICOM series or a NIfTI file is shown in three
-linked views (axial, coronal, sagittal), and annotators paint label masks,
-draw boxes and polygons on slices, and fill the slices between painted ones by
-interpolation. Masks export as a NIfTI label volume or a DICOM SEG, and an
+linked views (axial, coronal, sagittal), and annotators paint label masks
+(with the brush, or by closing a polygon), draw boxes on slices, and fill the
+slices between painted ones by interpolation. Masks export as a NIfTI label volume or a DICOM SEG, and an
 RTSTRUCT on the item can provide the starting masks.
 
 ```yaml
@@ -22137,10 +22138,13 @@ images, as DICOM requires; a NIfTI export carries none.
 - **Brush** (<kbd>b</kbd>) and **Eraser** (<kbd>e</kbd>) paint and erase the
   selected label. A stroke on the coronal or sagittal view writes into every
   axial slice it crosses.
-- **Box** (<kbd>x</kbd>) and **Polygon** (<kbd>p</kbd>): drag a box; click
-  polygon points, then double-click or <kbd>Enter</kbd> to close
-  (<kbd>Esc</kbd> cancels). They are listed under the views, where a click
-  jumps to the slice and **Remove** deletes one.
+- **Polygon** (<kbd>p</kbd>): click points, then double-click or
+  <kbd>Enter</kbd> to close (<kbd>Esc</kbd> cancels). The closed polygon paints
+  its region into the selected label's mask on that slice, as the brush would,
+  so it is part of the exported mask and of Dice; undo takes it back.
+- **Box** (<kbd>x</kbd>): drag a box. Boxes are not mask voxels: they are
+  listed under the views, where a click jumps to the slice and **Remove**
+  deletes one, and they export to `__shapes.json`.
 - **Labels**: click one, or press its `key_value`.
 - **Window**: pick a preset, or right-drag on an image (left and right
   change the width, up and down the centre).
@@ -22209,7 +22213,8 @@ python -m potato.export -c config.yaml -f dicom_sr -o out/
 - `volume_nifti`: per annotator, `<item>__<schema>.nii.gz`, a uint8 label
   volume in the source file's voxel order and affine (0 is background, 1 the
   first label), `labels__<schema>.json` mapping values to names, and
-  `<item>__<schema>__shapes.json` with the boxes and polygons. Works for both
+  `<item>__<schema>__shapes.json` with the boxes, and any polygons saved by
+  2.13.0 or earlier. Works for both
   input kinds.
 - `dicom_seg`: per annotator, `<item>__<schema>.dcm`, a binary DICOM
   Segmentation with one segment per label that has voxels, referencing the
@@ -22227,7 +22232,7 @@ Label codes, the SR's exact contents and how to read both back are in
 The agreement report scores `volume_annotation` by 3D Dice per label between
 each pair of annotators of an item: 2|A∩B| / (|A| + |B|). A pair where
 neither painted a label is left out for that label rather than counted as
-agreeing. Boxes and polygons are not scored.
+agreeing. Boxes are not scored.
 
 ## Limits
 
@@ -29016,6 +29021,27 @@ phases:
     type: poststudy
     file: surveyflow/demographics.json
 ```
+
+`phases.order` must include the annotation phase, and the config needs at
+least one annotation scheme. Without either, `potato validate` reports an
+error and the server does not start.
+Potato cannot yet run a study with nothing to annotate. For one that is all
+survey pages or a jsPsych task, add one item to the data file and a radio
+scheme with a single label, and list `annotation` last in `phases.order`:
+
+```yaml
+annotation_schemes:
+  - annotation_type: radio
+    name: finish
+    description: Click Finish to end the study.
+    labels: [Finish]
+    label_requirement:
+      required: true
+```
+
+The participant clicks Finish, then Next, and reaches the end page. A
+`pure_display` scheme does not work here: it saves nothing, so the item never
+counts as done and Next shows the same page again.
 
 ### Phase Types
 
@@ -40319,14 +40345,19 @@ URL: https://potatoannotator.readthedocs.io/en/latest/labeling-engine/migration/
 
 Potato's older machine-labeling features keep working in 2.11. Nothing in an
 existing config stops working, and nothing changes behaviour until you add a
-`labeling_engine` block. Three keys now print an informational message at
+`labeling_engine` block. Two keys now print an informational message at
 boot pointing to the engine; they are planned for removal in 3.0:
 
 | Older key | Engine equivalent |
 |---|---|
 | `icl_labeling` | an `llm` source, with a `threshold_legacy` contract for the old rule and a `selective_risk` contract beside it |
 | `judge_calibration` | `judge` sources with `k_sample` confidence; its blind sample becomes calibration requests |
-| `pre_annotation` | a `static` source |
+
+`pre_annotation` is not deprecated. It shows a model's or an import's answers
+as an editable starting point, and the importers write it for that. The
+engine's `static` source is different: its labels are accepted only where a
+contract certifies them. `migrate-config` still translates `pre_annotation` to
+a `static` source if that is what you want.
 
 [Solo Mode](../solo-mode/solo_mode.md), judge alignment and the interactive
 AI assistant (`ai_support`) are not deprecated. Solo Mode is one expert
@@ -54764,6 +54795,34 @@ assignment logic transparently treats them as high-coverage.
 
 When `stratify_by` is set, the fraction is applied **per stratum**, so every
 category contributes proportionally to the overlap sample.
+
+### Keep coders off each other's held items
+
+When an annotator would otherwise get no work, Potato hands out items other
+annotators hold but have not submitted, so nobody is stranded by someone who
+closed the tab. With `fixed_order`, the first coder holds most of the dataset,
+so the second coder, after the overlap items, is given the first coder's
+unfinished items and double-codes far more than the design asks. In one run a
+study that asked for 15 double-coded items got 41.
+
+```yaml
+assignment_hold_minutes: 30
+```
+
+With this set, an annotator who runs out of work is given items other
+annotators hold but have not reached yet, and those items leave the first
+annotator's queue, so they move rather than get coded twice. An item the holder
+has already been shown stays with them while they keep working: it is theirs
+if they were given it, or saved anything, within that many minutes. Once they
+have been gone longer, it moves to the next annotator who needs work, and the
+holder no longer has it when they come back.
+
+When every remaining item is on someone's screen, an annotator who arrives is
+told that the items are taken and to try again later. So is one who finishes
+the item in front of them while the rest are held: they stay in the study, and
+Check again gives them an item once a holder has been inactive for that long. Leave the setting unset
+to keep the default: nobody is sent away with no work, and held items are
+shared.
 
 ## Adaptive boost
 
@@ -73173,7 +73232,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **182 top-level config keys**, **80 annotation types**, and
+It currently covers **183 top-level config keys**, **80 annotation types**, and
 **31 display types**.
 
 ### Editor validation

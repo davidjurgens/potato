@@ -238,3 +238,14 @@ def test_judge_calibration_keeps_its_prompt_schemas_and_sample_size():
     assert judge["confidence"] == {"method": "k_sample", "samples": 3}
     assert block["budgets"]["human_labels"] == 120
     assert any("sample_size of 120" in n for n in notes)
+
+
+def test_pre_annotation_is_not_flagged_for_removal():
+    """It prefills an editable starting point, which the engine's static source
+    does not do, and every importer writes it; validate flagged every import."""
+    cfg = {"pre_annotation": {"enabled": True, "field": "predictions",
+                              "allow_modification": True}}
+    assert deprecation_warnings(cfg) == []
+    # migrate-config still offers the translation.
+    block, _notes = translate(cfg)
+    assert block and any(s["kind"] == "static" for s in block["sources"])

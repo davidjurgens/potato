@@ -2755,6 +2755,9 @@ def annotate():
         elif _engine_assigns():
             return _engine_no_work_page(username, user_state)
         else:
+            waiting = _held_items_wait_page(username, user_state)
+            if waiting is not None:
+                return waiting
             logger.debug(f"User {username} has no remaining assignments, advancing phase")
             last_item = user_state.get_current_instance_id()
             get_user_state_manager().advance_phase(username)
@@ -2790,8 +2793,11 @@ def annotate():
     # The item this action leaves. Adaptive escalation counts a blank answer
     # only from an annotator who has gone past the item, so it is checked
     # again once they have.
-    left_from = user_state.get_current_instance_id()
-    left_index = user_state.get_current_instance_index()
+    try:
+        left_from = user_state.get_current_instance_id()
+        left_index = user_state.get_current_instance_index()
+    except Exception:
+        left_from, left_index = None, -1
 
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")
@@ -2857,6 +2863,9 @@ def annotate():
                 elif _engine_assigns():
                     return _engine_no_work_page(username, user_state)
                 else:
+                    if _held_items_wait_page(username, user_state) is not None:
+                        # The GET renders the held page (top of this route).
+                        return redirect(url_for("annotate"))
                     logger.debug(f"User {username} completed all assignments at end-of-list")
                     session.pop("potato_reviewing", None)
                     get_user_state_manager().advance_phase(username)
@@ -2935,7 +2944,7 @@ def annotate():
         logger.debug(f'Action "{action}" - no specific handling')
 
     # Forward only: Previous leaves the item unfinished, not answered.
-    if left_from and user_state.get_current_instance_index() > left_index:
+    if left_from and getattr(user_state, "get_current_instance_index", lambda: -1)() > left_index:
         get_item_state_manager().reevaluate_adaptive_boost(left_from)
 
     # After processing the action, check again if user has completed all assignments
@@ -2955,6 +2964,9 @@ def annotate():
         elif _engine_assigns():
             return _engine_no_work_page(username, user_state)
         else:
+            if _held_items_wait_page(username, user_state) is not None:
+                # The GET renders the held page (top of this route).
+                return redirect(url_for("annotate"))
             logger.debug(f"User {username} has completed all assignments, advancing phase")
             get_user_state_manager().advance_phase(username)
             if left_from:
@@ -8020,6 +8032,46 @@ def _engine_no_work_page(username, user_state):
     )
 
 
+def _held_items_wait_page(username, user_state):
+    """The no-work page for someone who would otherwise be finished while
+    items they could take are held by others under assignment_hold_minutes.
+
+    Moving unreached items out of an active annotator's queue meant that,
+    once they saved the item on screen, they had nothing left and were
+    advanced to done, the one person still working, with room for more.
+    When the holds lapse nobody was left to take the items. Returns None when
+    the setting is off or the user is finished.
+    """
+    ism = get_item_state_manager()
+    if not getattr(ism, "hold_seconds", None):
+        return None
+    cap = _configured_annotator_cap()
+    if not isinstance(cap, int) or cap < 0:
+        return None
+    quota = getattr(user_state, "max_assignments", -1)
+    if quota is not None and quota >= 0:
+        from potato.quality_control import count_dataset_items
+        if count_dataset_items(user_state.get_annotated_instance_ids()) >= quota:
+            return None
+    try:
+        pending = [iid for iid in ism.get_instance_ids()
+                   if len(ism.instance_annotators.get(iid, ())) < cap
+                   and not user_state.has_annotated(iid)
+                   and ism.instance_assignees.get(iid, set()) - {username}]
+    except Exception:
+        logger.debug("held-items check failed", exc_info=True)
+        return None
+    if not pending:
+        return None
+    reason, headline, explanation, advice = _diagnose_no_work(username, user_state)
+    logger.info("%s is waiting on %d held item(s): %s", username, len(pending), advice)
+    return render_template(
+        "no_work_available.html",
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        no_work_reason=reason, no_work_headline=headline,
+        no_work_explanation=explanation)
+
+
 def _diagnose_no_work(username, user_state):
     """Why did assignment return nothing for this user?
 
@@ -8123,6 +8175,29 @@ def _diagnose_no_work(username, user_state):
                 "category_based assignment grants these only by passing a "
                 "training phase on categorized questions. Add training, or "
                 "set category_assignment.dynamic.enabled: true",
+            )
+
+    hold_seconds = getattr(ism, "hold_seconds", None)
+    if hold_seconds:
+        try:
+            cap = _configured_annotator_cap()
+            open_items = [iid for iid in ism.get_instance_ids()
+                          if not isinstance(cap, int) or cap < 0
+                          or len(ism.instance_annotators.get(iid, ())) < cap]
+        except Exception:
+            open_items = []
+            logger.debug("no-work diagnosis: hold check failed", exc_info=True)
+        if open_items:
+            minutes = f"{hold_seconds / 60:g}"
+            return (
+                "held",
+                "Every item is taken right now",
+                "Each remaining item is with another annotator who is working "
+                "on it. An item comes back if they stop working for "
+                f"{minutes} minutes, so try again later.",
+                f"{len(open_items)} item(s) still need annotations but are held "
+                f"by annotators active within assignment_hold_minutes={minutes} "
+                "— wait, add annotators later, or lower the setting",
             )
 
     return (

@@ -4,8 +4,8 @@ Agreement on volume_annotation masks: 3D Dice per label.
 For each item two or more people labelled, every pair of annotators is
 compared label by label over the whole volume: Dice = 2|A and B| / (|A|+|B|).
 A pair where neither painted the label says nothing about that label and is
-left out, rather than counted as perfect agreement. Boxes and polygons are
-not scored here.
+left out, rather than counted as perfect agreement. Boxes are not scored
+here; a closed polygon is painted into the mask and is.
 
 With three or more annotators on an item, STAPLE (Warfield et al. 2004) also
 estimates each annotator's sensitivity and specificity per label against the
