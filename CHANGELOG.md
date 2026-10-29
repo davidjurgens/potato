@@ -4,6 +4,24 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Fixed
+
+- `/admin/api/agreement` compared multiselect answers as whole sets, so
+  {neutrophil, T cell} against {neutrophil} was complete disagreement and the
+  kappas could come out negative for annotators who mostly agreed. Multi-label
+  schemas now report Krippendorff's alpha with MASI distance and mean Jaccard,
+  as `/admin/iaa` does, with `"metric_type": "masi"` and no kappas.
+- A survey question marked `required: true` was enforced only in the browser.
+  A plain POST to `/consent` or `/prestudy` left it unanswered and moved on, so
+  an `exit_when` screen-out on that question never ran. The server now holds
+  the participant on the page, as it already did for `required_label`; a
+  question hidden by its `display_logic` is not required.
+- `docs/workflow/surveyflow.md` showed survey questions in the 1.x format
+  (`text`, `schema`, `choices`, `right_label`), which the server refuses at
+  boot, a `language` list that does not exist, and a phase `header` key that
+  nothing reads. The examples now use the scheme format, and the legacy
+  section says `surveyflow` is no longer read.
+
 ## [2.13.0] - Science Viewers, Scheduled Sessions and Consensus
 
 This release adds viewers and formats for signals, chemistry, spectra,

@@ -1616,6 +1616,68 @@ class AdminDashboard:
             return {"error": f"Failed to get crowdsourcing data: {str(e)}"}, 500
 
 
+    def _multilabel_agreement(self, valid_items) -> Dict[str, Any]:
+        """Agreement for a multi-label schema, the way /admin/iaa measures it.
+
+        Each annotator's answer is a set of labels. Comparing whole sets as
+        nominal categories scored {neutrophil, T cell} against {neutrophil} as
+        complete disagreement, and Cohen's and Fleiss' kappa on those sets
+        reported -0.5 for annotators who agreed on most labels. Krippendorff's
+        alpha with MASI distance credits partial overlap, and mean Jaccard is
+        the plain overlap; both are the shared helpers /admin/iaa uses.
+        """
+        from potato.server_utils.iaa import multilabel
+
+        long_rows = []
+        sets_by_user: Dict[str, Dict[str, frozenset]] = defaultdict(dict)
+        for item_id, annots in valid_items.items():
+            for annot in annots:
+                labels = frozenset(annot["names"])
+                long_rows.append((annot["user"], item_id, labels))
+                sets_by_user[annot["user"]][item_id] = labels
+
+        # With min_overlap: 1 an item can have a single annotator. If none has
+        # two there is no pair to compare, mean Jaccard is NaN, and jsonify
+        # writes a bare NaN that response.json() cannot parse.
+        if not any(len(annots) >= 2 for annots in valid_items.values()):
+            return {
+                "error": "No items with 2+ annotators",
+                "items_count": len(valid_items),
+            }
+        jaccard = multilabel.mean_jaccard(sets_by_user)
+        result = {
+            "metric_type": "masi",
+            "items_evaluated": len(valid_items),
+            "total_annotations": len(long_rows),
+            "mean_jaccard": round(jaccard, 4) if jaccard == jaccard else None,
+            "metric_note": (
+                "Multi-label answers are compared as sets: Krippendorff's alpha "
+                "with MASI distance, and mean Jaccard overlap. Cohen's and "
+                "Fleiss' kappa are not reported because they treat each set "
+                "as one category. /admin/iaa has the same measures."
+            ),
+        }
+        if len({labels for _u, _i, labels in long_rows}) < 2:
+            result.update({
+                "krippendorff_alpha": None,
+                "percent_agreement": 1.0,
+                "interpretation": "Undefined",
+                "note": (
+                    "every annotator chose the same labels on every item, so "
+                    "chance agreement is 1 and alpha is undefined. Perfect "
+                    "agreement, not a failed computation; percent_agreement "
+                    "shows it."
+                ),
+            })
+            return result
+        alpha_value = multilabel.alpha_masi(long_rows)
+        if alpha_value != alpha_value:      # NaN: no pairable answers
+            result.update({"krippendorff_alpha": None, "interpretation": "Undefined"})
+            return result
+        result["krippendorff_alpha"] = round(float(alpha_value), 4)
+        result["interpretation"] = self._interpret_alpha(alpha_value)
+        return result
+
     def get_agreement_metrics(self) -> Dict[str, Any]:
         """
         Get inter-annotator agreement metrics using Krippendorff's alpha.
@@ -1792,6 +1854,11 @@ class AdminDashboard:
                         "error": f"No items with {min_overlap}+ annotators",
                         "items_count": len(annotations_by_item)
                     }
+                    continue
+
+                if kind == dispatcher.SchemaKind.MULTILABEL:
+                    metrics["by_schema"][schema_name] = self._multilabel_agreement(
+                        valid_items)
                     continue
 
                 # Format for simpledorff

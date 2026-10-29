@@ -781,6 +781,13 @@ the machine-machine and pooled figures.
 - `cohen_kappa` (mean of pairwise kappas) and `fleiss_kappa` are computed for
   nominal schemas only. Interval schemas (`likert`, `slider`, `number` with
   numeric answers) report Krippendorff's alpha alone.
+- Multi-label schemas (`multiselect`, `hierarchical_multiselect` and
+  `card_sort`) have `"metric_type": "masi"`; one capped at a single choice
+  (`max_selections: 1`) is scored as nominal instead. Each annotator's
+  answer is a set of labels: `krippendorff_alpha` uses MASI distance, so a
+  partial overlap counts as partial agreement, and `mean_jaccard` is the mean
+  pairwise overlap. They have no kappas, which would treat each set as one
+  category. `/admin/iaa` reports the same two figures.
 - When every annotator gave the same answer on every item, alpha and both kappas
   are undefined: `krippendorff_alpha` is `null`, `percent_agreement` is `1.0`,
   `interpretation` is `"Undefined"`, and `note` explains it. That schema is left

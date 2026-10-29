@@ -58,7 +58,7 @@ from potato.flask_server import (
     init_user_state, UserAuthenticator, UserPhase,
     move_to_prev_instance, move_to_next_instance, go_to_id,
     get_annotations_for_user_on, get_span_annotations_for_user_on,
-    _instance_meets_required_annotation_rules,
+    _instance_meets_required_annotation_rules, _scheme_is_required,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
     get_users, get_total_annotations, update_annotation_state,
@@ -197,6 +197,11 @@ def _unmet_required_labels(user_state) -> list:
     example "I agree"). The page enforced it in the browser only, and the
     route advanced on any POST, so a participant who answered "I disagree"
     reached the annotation phase with one crafted request.
+
+    A question marked ``required: true`` needs any answer. That was checked in
+    the browser only, so a bare POST to /prestudy skipped a required screener
+    question, and an ``exit_when`` rule on it never ran. A question hidden by
+    its own ``display_logic`` is skipped, as on annotation pages.
     """
     phase, page = user_state.get_current_phase_and_page()
     schemes = (config.get("_phase_page_schemes") or {}).get(page) or []
@@ -205,7 +210,9 @@ def _unmet_required_labels(user_state) -> list:
     stored = (getattr(user_state, "phase_to_page_to_label_to_value", {}) or {}).get(phase, {}).get(page, {}) or {}
     selected = {}
     for label, value in stored.items():
-        if value in (None, False, "", "false", "off"):
+        if value is None or value is False:
+            continue
+        if isinstance(value, str) and value.strip().lower() in ("", "false", "off"):
             continue
         chosen = selected.setdefault(label.get_schema(), set())
         chosen.add(label.get_name())
@@ -213,14 +220,29 @@ def _unmet_required_labels(user_state) -> list:
         # with the answer in the value.
         if isinstance(value, str):
             chosen.add(value)
+    hidden = set()
+    if any(s.get("display_logic") for s in schemes):
+        try:
+            from potato.server_utils.display_logic import compute_hidden_schemas
+            from potato.server_utils.phase_flow import collect_flow_answers
+            hidden = compute_hidden_schemas(schemes, collect_flow_answers(config, user_state))
+        except Exception:
+            logger.warning("display_logic could not be evaluated on %s; every "
+                           "required question there counts as visible", page,
+                           exc_info=True)
     unmet = []
     for scheme in schemes:
-        required = (scheme.get("label_requirement") or {}).get("required_label")
-        if not required:
+        name = scheme.get("name")
+        if name in hidden:
             continue
-        required = {required} if isinstance(required, str) else set(required)
-        if not (selected.get(scheme.get("name"), set()) & required):
-            unmet.append(scheme.get("name"))
+        lr = scheme.get("label_requirement")
+        required = lr.get("required_label") if isinstance(lr, dict) else None
+        if required:
+            required = {required} if isinstance(required, str) else set(required)
+            if not (selected.get(name, set()) & required):
+                unmet.append(name)
+        elif _scheme_is_required(scheme) and not selected.get(name):
+            unmet.append(name)
     return unmet
 
 

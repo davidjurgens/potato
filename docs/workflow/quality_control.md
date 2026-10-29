@@ -580,6 +580,13 @@ Returns:
 - `cohen_kappa` (pairwise, with the mean) and `fleiss_kappa` are computed for
   nominal schemas only. A schema scored on an interval scale gets
   Krippendorff's alpha alone.
+- Multi-label schemas (`multiselect`, `hierarchical_multiselect` and
+  `card_sort`) have `"metric_type": "masi"`; one capped at a single choice
+  (`max_selections: 1`) is scored as nominal instead. Each annotator's
+  answer is a set of labels: `krippendorff_alpha` uses MASI distance, so a
+  partial overlap counts as partial agreement, and `mean_jaccard` is the mean
+  pairwise overlap. They have no kappas, which would treat each set as one
+  category. `/admin/iaa` reports the same two figures.
 - `overall` averages each figure over the schemas that produced one, and is
   empty when no schema did.
 - When every annotator gave the same label on every item, chance agreement is

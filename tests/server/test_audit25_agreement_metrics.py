@@ -219,12 +219,23 @@ class TestAgreementMetricsProduceNumbers:
         """
         reasons = _agreement(agreement_server)["by_schema"]["reasons"]
         assert "error" not in reasons, reasons
-        assert reasons["metric_type"] == "nominal"
         assert reasons["items_evaluated"] == 8
-        # A real number, not NaN: the two annotators differ on three of eight.
-        assert isinstance(reasons["krippendorff_alpha"], float)
-        assert -1.0 <= reasons["krippendorff_alpha"] <= 1.0
-        assert reasons["krippendorff_alpha"] != pytest.approx(1.0)
+        assert reasons["total_annotations"] == 16
+
+    def test_a_multiselect_is_compared_as_sets_of_labels(self, agreement_server):
+        """Partial overlap is partial agreement.
+
+        Comparing whole sets as nominal categories counted {age, meds} against
+        {meds} as total disagreement, and the kappas on those sets came out
+        negative for annotators who mostly agreed. The expected alpha is
+        NLTK's AnnotationTask with masi_distance on the same data (0.4854);
+        Jaccard by hand is (1+1+0+1+0.5+1+0.5+1)/8 = 0.75.
+        """
+        reasons = _agreement(agreement_server)["by_schema"]["reasons"]
+        assert reasons["metric_type"] == "masi"
+        assert reasons["krippendorff_alpha"] == pytest.approx(0.4854, abs=2e-4)
+        assert reasons["mean_jaccard"] == pytest.approx(0.75, abs=1e-4)
+        assert "fleiss_kappa" not in reasons and "cohen_kappa" not in reasons
 
     def test_one_annotator_per_item_is_not_counted_as_overlap(
             self, agreement_server):

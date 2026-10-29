@@ -115,53 +115,69 @@ Each phase references a data file containing the questions or content for that p
 
 #### JSON Format for Survey Questions
 
+A question file is a JSON array of annotation schemes, written the same way as
+the entries in `annotation_schemes`. Every question needs `annotation_type`,
+`name` and `description`; the server refuses to start on a file where one is
+missing, and names the entry.
+
 ```json
 [
   {
-    "id": "consent_1",
-    "text": "I certify that I am at least 18 years of age.",
-    "schema": "radio",
-    "choices": ["I agree", "I disagree"],
-    "label_requirement": {"right_label": ["I agree"]}
+    "name": "age_consent",
+    "annotation_type": "radio",
+    "description": "I certify that I am at least 18 years of age.",
+    "labels": ["I agree", "I disagree"],
+    "label_requirement": {"required_label": ["I agree"]}
   },
   {
-    "id": "consent_2",
-    "text": "I have read and understood the information above.",
-    "schema": "radio",
-    "choices": ["Yes", "No"],
-    "label_requirement": {"right_label": ["Yes"]}
+    "name": "read_consent",
+    "annotation_type": "radio",
+    "description": "I have read and understood the information above.",
+    "labels": ["Yes", "No"],
+    "label_requirement": {"required_label": ["Yes"]}
   }
 ]
 ```
 
-#### Supported Schema Types
+#### Question Types
+
+Survey questions use the same annotation types as `annotation_schemes`. The
+usual ones are:
 
 - `radio` - Single choice from options
-- `checkbox` / `multiselect` - Multiple selections
+- `multiselect` - Multiple selections
 - `text` - Free text response
 - `number` - Numeric input
-- `likert` - Likert scale rating
+- `likert` - Likert scale rating (`size`, `min_label`, `max_label`)
 - `select` - Dropdown selection
+
+Standard instruments such as `phq-9` or `bfi-10` can be added by ID with
+`instrument:` or `instruments:` on the phase; see
+[Survey Instruments](../advanced/survey_instruments.md).
 
 ### Label Requirements
 
-Control which answers are acceptable to proceed:
+`label_requirement` decides whether a participant can leave the page:
 
 ```json
 {
-  "id": "age_check",
-  "text": "Are you at least 18 years old?",
-  "schema": "radio",
-  "choices": ["Yes", "No"],
-  "label_requirement": {
-    "right_label": ["Yes"],
-    "required": true
-  }
+  "name": "age_check",
+  "annotation_type": "radio",
+  "description": "Are you at least 18 years old?",
+  "labels": ["Yes", "No"],
+  "label_requirement": {"required_label": ["Yes"]}
 }
 ```
 
-- `right_label`: List of acceptable answers (user must select one to proceed)
-- `required`: Whether the question must be answered
+- `required_label`: the answers that let the participant continue. Any other
+  answer keeps them on the page.
+- `required: true`: the question must be answered, with any answer.
+
+Both are checked by the server when the page is submitted, not only by the
+browser, so a participant cannot skip a required question by posting the page
+directly. A question hidden by its `display_logic` is not required. To screen
+people out on an answer instead of holding them on the page, use `exit_when`
+(see [Experiment Flow](experiment_flow.md)).
 
 ## Pre-Screening Questions
 
@@ -186,17 +202,19 @@ phases:
 ```json
 [
   {
-    "id": "1",
-    "text": "What is your native language?",
-    "schema": "select",
-    "use_predefined_labels": "language",
+    "name": "country",
+    "annotation_type": "select",
+    "description": "Which country do you live in?",
+    "use_predefined_labels": "country",
     "label_requirement": {"required": true}
   },
   {
-    "id": "2",
-    "text": "How familiar are you with this topic?",
-    "schema": "likert",
-    "choices": ["Not at all", "Slightly", "Moderately", "Very", "Extremely"],
+    "name": "familiarity",
+    "annotation_type": "likert",
+    "description": "How familiar are you with this topic?",
+    "size": 5,
+    "min_label": "Not at all",
+    "max_label": "Extremely",
     "label_requirement": {"required": true}
   }
 ]
@@ -220,42 +238,32 @@ phases:
 ```json
 [
   {
-    "id": "gender",
-    "text": "What gender do you most closely identify with?",
-    "schema": "radio",
-    "choices": ["Male", "Female", "Non-binary", "Prefer not to say"],
+    "name": "gender",
+    "annotation_type": "radio",
+    "description": "What gender do you most closely identify with?",
+    "labels": ["Male", "Female", "Non-binary", "Prefer not to say"],
     "label_requirement": {"required": true}
   },
   {
-    "id": "feedback",
-    "text": "Please share any feedback about this study (optional)",
-    "schema": "text"
+    "name": "feedback",
+    "annotation_type": "text",
+    "description": "Please share any feedback about this study (optional)"
   }
 ]
 ```
 
 ## Built-in Question Templates
 
-Potato provides predefined label sets for common survey questions:
+A `select` question can take its options from one of three built-in lists
+with `use_predefined_labels`: `country`, `ethnicity` or `religion`.
 
-### Countries
 ```json
-{"schema": "select", "use_predefined_labels": "country"}
-```
-
-### Languages
-```json
-{"schema": "select", "use_predefined_labels": "language"}
-```
-
-### Ethnicity
-```json
-{"schema": "select", "use_predefined_labels": "ethnicity"}
-```
-
-### Religion
-```json
-{"schema": "select", "use_predefined_labels": "religion"}
+{
+  "name": "religion",
+  "annotation_type": "select",
+  "description": "What is your religion?",
+  "use_predefined_labels": "religion"
+}
 ```
 
 ## Complete Example
@@ -306,14 +314,15 @@ annotation_schemes:
 
 ## Free Response Fields
 
-Add optional text input to any question:
+A `radio` or `multiselect` question can add a free-text box after its
+options with `has_free_response`:
 
 ```json
 {
-  "id": "gender",
-  "text": "What is your gender?",
-  "schema": "radio",
-  "choices": ["Woman", "Man", "Non-binary", "Prefer not to disclose", "Prefer to self-describe"],
+  "name": "gender_self",
+  "annotation_type": "radio",
+  "description": "What is your gender?",
+  "labels": ["Woman", "Man", "Non-binary", "Prefer not to disclose", "Prefer to self-describe"],
   "has_free_response": {"instruction": "Please specify:"},
   "label_requirement": {"required": true}
 }
@@ -378,63 +387,24 @@ length), `all`/`any` logic, and troubleshooting are documented in
 python potato/flask_server.py start examples/advanced/surveyflow-conditional-logic/config.yaml -p 8000
 ```
 
-## Page Headers
-
-Customize the header text displayed on each survey page:
-
-```yaml
-phases:
-  prestudy:
-    type: prestudy
-    file: surveyflow/consent.json
-    header: "Please answer all consent questions"
-```
-
 ---
 
-## Legacy Surveyflow Configuration
+## Moving from `surveyflow`
 
-> **Note:** The configuration format below is deprecated but still supported for backward compatibility. New projects should use the `phases` configuration format shown above.
+Potato 1.x configured survey pages in a `surveyflow` block. Potato 2.x does
+not read it: a config that still has one starts, but shows no survey pages.
+Move the pages into `phases`:
 
-The legacy `surveyflow` configuration uses this format:
-
-```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/consent.jsonl
-    - surveyflow/demographics.jsonl
-  post_annotation:
-    - surveyflow/exit_survey.jsonl
-```
-
-### Migration Guide
-
-To migrate from legacy `surveyflow` to the modern `phases` system:
-
-| Legacy | Modern |
+| `surveyflow` (1.x) | `phases` (2.x) |
 |--------|--------|
-| `surveyflow.on: true` | Use `phases` section |
-| `surveyflow.pre_annotation` | `phases.prestudy` or `phases.consent` |
+| `surveyflow.on: true` | a `phases` section |
+| `surveyflow.pre_annotation` | `phases.consent` or `phases.prestudy` |
 | `surveyflow.post_annotation` | `phases.poststudy` |
 | `surveyflow.testing` | `training.data_file` |
-| `.jsonl` files | `.json` files (array format) |
-
-### Legacy surveyflow_html_layout
-
-If you were using `surveyflow_html_layout` to customize survey page appearance:
-
-```yaml
-# Legacy
-surveyflow_html_layout: "templates/survey-layout.html"
-
-# Modern equivalent - customize via UI configuration
-ui_configuration:
-  phase_layout: "templates/survey-layout.html"
-```
+| `.jsonl` question files | `.json` files holding an array of schemes |
+| `id`, `text`, `schema`, `choices` | `name`, `description`, `annotation_type`, `labels` |
+| `label_requirement.right_label` | `label_requirement.required_label` |
+| `surveyflow_html_layout` | `task_layout` on the phase |
 
 ## Related Documentation
 
