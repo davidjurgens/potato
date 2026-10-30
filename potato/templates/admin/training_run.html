@@ -29,6 +29,8 @@
   .tr-fact dt { font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
                 letter-spacing: 0.03em; color: var(--muted-foreground); }
   .tr-fact dd { margin: 0.1rem 0 0; font-size: 0.95rem; }
+  .tr-fact-wide { grid-column: 1 / -1; }
+  .tr-fact-wide dd { overflow-wrap: anywhere; font-size: 0.85rem; }
   .tr-err { background: hsl(0 65% 96%); border: 1px solid hsl(0 55% 88%);
             color: hsl(0 50% 30%); border-radius: var(--radius);
             padding: 0.6rem 0.8rem; font-size: 0.875rem; white-space: pre-wrap; }
@@ -54,6 +56,7 @@
       <div class="tr-fact"><dt>{{ ui_lang.training_col_status|default('Status') }}</dt>
         <dd><span class="tr-pill {{ 'ok' if run.status == 'success' else 'err' if run.status == 'error' else 'cancel' if run.status == 'cancelled' else 'run' }}">{{ run.status }}</span></dd></div>
       <div class="tr-fact"><dt>{{ ui_lang.training_col_trainer|default('Trainer') }}</dt><dd>{{ run.trainer }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_backend|default('Ran on') }}</dt><dd>{{ run.backend or 'local' }}{% if run.host %} <span class="tr-mono">{{ run.host }}</span>{% endif %}</dd></div>
       <div class="tr-fact"><dt>{{ ui_lang.training_col_schemas|default('Schemas') }}</dt><dd>{{ run.schema_names|join(', ') }}</dd></div>
       <div class="tr-fact"><dt>{{ ui_lang.training_trigger|default('Triggered by') }}</dt><dd>{{ run.trigger }}</dd></div>
       <div class="tr-fact"><dt>{{ ui_lang.training_col_train|default('Train') }}</dt><dd>{{ run.n_train }}</dd></div>
@@ -64,6 +67,13 @@
       <div class="tr-fact"><dt>{{ ui_lang.training_split_seed|default('Split seed') }}</dt><dd class="tr-mono">{{ run.split_seed }}</dd></div>
       <div class="tr-fact"><dt>{{ ui_lang.training_model_version|default('Model version') }}</dt>
         <dd class="tr-mono">{{ run.model_version or '—' }}</dd></div>
+      {%- set heldout = (run.metrics or {}).get('heldout_score') %}
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_score|default('Held-out score') }}</dt>
+        <dd>{% if heldout is number %}{{ '%.3f'|format(heldout) }}
+          <span class="tr-empty">{{ run.metrics.get('heldout_metric', '') }}</span>
+          {%- else %}<span class="tr-empty">not scored</span>{% endif %}</dd></div>
+      <div class="tr-fact tr-fact-wide"><dt>{{ ui_lang.training_params|default('Parameters') }}</dt>
+        <dd class="tr-mono">{% if run.params %}{{ run.params|tojson }}{% else %}<span class="tr-empty">{{ ui_lang.training_params_defaults|default("the trainer's defaults") }}</span>{% endif %}</dd></div>
     </dl>
     <p class="tr-note">
       {{ ui_lang.training_seed_note|default('The split seed decides which items are held out. Keep it fixed:

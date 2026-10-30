@@ -198,7 +198,11 @@ class TestMissingDependencies:
         config = EmbeddingVizConfig(enabled=True)
         manager = EmbeddingVisualizationManager(config, {})
 
-        with patch.object(manager, '_get_diversity_manager', return_value=None):
+        # "No items loaded" is stated here rather than assumed: the item store
+        # is a process-wide singleton, and test_data_archive leaves the
+        # single-choice example's items in it.
+        with patch.object(manager, '_get_diversity_manager', return_value=None), \
+                patch.object(manager, '_get_item_state_manager', return_value=None):
             result = manager.get_visualization_data()
 
         # Reports rather than crashing…

@@ -1748,6 +1748,12 @@ async function saveAnnotations({ background = false } = {}) {
         // Sync currentAnnotations from DOM to ensure we have the latest state
         // This handles cases where change events may not have fired (e.g., JS clicks)
         syncAnnotationsFromDOM();
+        // Span prelabels the annotator kept are theirs once they move on: on
+        // a navigation save, not on an autosave while they are still here.
+        if (!background && window.spanManager
+                && typeof window.spanManager.commitPrelabels === 'function') {
+            await window.spanManager.commitPrelabels();
+        }
         // Save both label and span annotations via /updateinstance
         const spanAnnotations = extractSpanAnnotationsFromDOM();
         debugLog('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);

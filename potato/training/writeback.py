@@ -41,7 +41,7 @@ from potato.training import store
 logger = logging.getLogger(__name__)
 
 __all__ = ["WritebackReport", "ingest_predictions", "rehydrate_predictions",
-           "clear_published", "PREDICTION_FIELD"]
+           "clear_published", "withdraw_rejected", "PREDICTION_FIELD"]
 
 #: The item-data key prelabels live under. Matches what the importers write
 #: and what `quality_control.extract_pre_annotations` reads.
@@ -65,6 +65,7 @@ class WritebackReport:
     n_skipped_schema_not_enabled: int = 0
     n_skipped_rejected: int = 0
     n_skipped_missing_item: int = 0
+    n_skipped_empty: int = 0
     schemas_enabled: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
@@ -77,8 +78,12 @@ class WritebackReport:
             "n_skipped_schema_not_enabled": self.n_skipped_schema_not_enabled,
             "n_skipped_rejected": self.n_skipped_rejected,
             "n_skipped_missing_item": self.n_skipped_missing_item,
+            "n_skipped_empty": self.n_skipped_empty,
             "schemas_enabled": list(self.schemas_enabled),
             "warnings": list(self.warnings),
+            # The sentence the docs' troubleshooting quotes; the status
+            # endpoint had only the counts.
+            "summary": self.summary,
         }
 
     @property
@@ -90,6 +95,14 @@ class WritebackReport:
             return "Published %d prediction(s) as prelabels." % self.n_written
         return ("Read %d prediction(s) and published none. See the skip "
                 "counts." % self.n_read)
+
+
+def _is_empty(payload: Any) -> bool:
+    if payload is None or payload == "" or payload == [] or payload == {}:
+        return True
+    if isinstance(payload, dict) and set(payload) <= {"segments", "objects"}:
+        return not any(payload.values())
+    return False
 
 
 def _writeback_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,6 +190,11 @@ def ingest_predictions(run, predictions_path: str,
             if confidence is not None and float(confidence) < min_confidence:
                 report.n_skipped_low_confidence += 1
                 continue
+            if _is_empty(payload):
+                # No spans, no shapes, no segments: nothing to show, and
+                # counting it as written overstated what annotators see.
+                report.n_skipped_empty += 1
+                continue
 
             to_publish.append((instance_id, schema_name, payload))
 
@@ -261,6 +279,8 @@ def rehydrate_predictions(config: Dict[str, Any], item_manager) -> int:
             continue
         if (record["instance_id"], record["schema_name"]) in rejected:
             continue
+        if _is_empty(record.get("payload")):
+            continue
         confidence = record.get("confidence")
         if confidence is not None and float(confidence) < min_confidence:
             continue
@@ -273,6 +293,24 @@ def rehydrate_predictions(config: Dict[str, Any], item_manager) -> int:
         logger.info("Restored %d model prediction(s) from previous runs",
                     restored)
     return restored
+
+
+def withdraw_rejected(config: Dict[str, Any], instance_id: str,
+                      schema_name: str, item_manager=None) -> bool:
+    """Take down a training prelabel the moment a reviewer rejects it.
+
+    The rejected-pairs rule applied only when predictions were published, at
+    the next run or restart, so a rejected prelabel stayed on the page until
+    then. A prelabel training did not write (one imported with the data) is
+    left alone.
+    """
+    if not (config.get("model_training") or {}).get("enabled"):
+        return False
+    if not store.has_prediction(config, instance_id, schema_name):
+        return False
+    return bool(clear_published(config, [{"instance_id": instance_id,
+                                          "schema_name": schema_name}],
+                                item_manager))
 
 
 def clear_published(config: Dict[str, Any], records, item_manager=None) -> int:

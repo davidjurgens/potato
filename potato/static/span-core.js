@@ -2328,7 +2328,49 @@ class SpanManager {
     /**
      * Save a span with additional parts (discontinuous span).
      */
+    /**
+     * Store the prelabel spans still on the item as this annotator's.
+     *
+     * /api/spans hands over a model's (or an import's) spans, flagged
+     * `prelabel`, while the annotator has none of their own here. They are
+     * shown and editable but not stored, so an untouched prelabel is saved
+     * on Next, as every other type's is; and before a span of the
+     * annotator's own is saved, because the reload after that save returns
+     * only stored spans and would drop them.
+     */
+    async commitPrelabels() {
+        const spans = (this.annotations && this.annotations.spans) || [];
+        const pending = spans.filter(s => s.prelabel);
+        if (!pending.length || !this.currentInstanceId) {
+            return;
+        }
+        const bySchema = {};
+        for (const span of pending) {
+            const schema = span.schema || this.currentSchema;
+            (bySchema[schema] = bySchema[schema] || []).push({
+                name: span.label, start: span.start, end: span.end,
+                title: span.title || span.label, value: 1,
+                target_field: span.target_field || '', span_id: span.id
+            });
+        }
+        for (const [schema, state] of Object.entries(bySchema)) {
+            const response = await fetch('/updateinstance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({type: 'span', schema: schema, state: state,
+                                      instance_id: this.currentInstanceId})
+            });
+            if (!response.ok) {
+                console.error('[SpanManager] Failed to save prelabel spans:',
+                              await response.text());
+                return;
+            }
+        }
+        pending.forEach(s => { s.prelabel = false; });
+    }
+
     async saveSpanWithParts(span) {
+        await this.commitPrelabels();
         try {
             const postData = {
                 type: "span",
@@ -2374,6 +2416,7 @@ class SpanManager {
     }
 
     async saveSpan(span) {
+        await this.commitPrelabels();
         try {
             const spanState = {
                 name: span.label,
@@ -2461,8 +2504,10 @@ class SpanManager {
             this.annotations.spans = this.annotations.spans.filter(s => s.id !== spanId);
         }
 
-        if (!span) {
-            // Even if span not found in state, we already removed the overlay visually
+        if (!span || span.prelabel) {
+            // Even if span not found in state, we already removed the overlay
+            // visually. A prelabel span was never stored, so there is nothing
+            // to delete on the server; the rest stay pending.
             return;
         }
 

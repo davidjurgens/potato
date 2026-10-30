@@ -173,6 +173,7 @@ class SklearnTextTrainer(Trainer):
                 % schema.name)
 
         report.status("running", "building pipeline")
+        self._device = self._device_for(spec, params, report)
         pipeline = self._build_pipeline(params, schema, report)
 
         if report.should_stop():
@@ -215,6 +216,7 @@ class SklearnTextTrainer(Trainer):
             # What the model was fitted on, so prediction feeds it the same.
             "input": "media" if use_media else "text",
             "calibration": getattr(self, "_calibration", {}),
+            "device": getattr(self, "_device", None),
             "label_order": label_order, "n_train": len(features),
             "bundle_digest": bundle.digest,
             # Recorded so a reloaded model can be refused if it predates a
@@ -244,6 +246,12 @@ class SklearnTextTrainer(Trainer):
             raise TrainerError("No fitted model at %s" % model_path)
         with open(model_path, "rb") as fh:
             pipeline = pickle.load(fh)
+        # The model may have been fitted on another machine; encode on this
+        # one's device, not the one recorded at fit time.
+        vectorizer = getattr(pipeline, "named_steps", {}).get("vectorizer")
+        if vectorizer is not None and hasattr(vectorizer, "device"):
+            from potato.training.devices import resolve_device
+            vectorizer.device = resolve_device(spec.limits.device)
         use_media = None
         card_path = os.path.join(artifact_dir, META_FILE)
         if os.path.isfile(card_path):
@@ -382,6 +390,21 @@ class SklearnTextTrainer(Trainer):
             return item.media
         return item.text or ""
 
+    def _device_for(self, spec: TrainingSpec, params: Dict[str, Any],
+                    report: ProgressReporter) -> Optional[str]:
+        """The torch device for an embedding vectorizer, or None.
+
+        None for TF-IDF and any other vectorizer that never touches torch, so
+        a bag-of-words run does not import torch just to ask.
+        """
+        name = params.get("vectorizer") or _DEFAULT_VECTORIZER
+        if name not in ("sentence-transformers",) + _IMAGE_VECTORIZERS:
+            return None
+        from potato.training.devices import describe_device, resolve_device
+        device = resolve_device(spec.limits.device, log=report.log)
+        report.log("info", "Embedding on %s" % describe_device(device))
+        return device
+
     def _build_pipeline(self, params: Dict[str, Any], schema,
                         report: ProgressReporter):
         from sklearn.pipeline import Pipeline
@@ -404,7 +427,8 @@ class SklearnTextTrainer(Trainer):
             from potato.active_learning_manager import \
                 SentenceTransformerVectorizer
             return SentenceTransformerVectorizer(
-                model_name=kwargs.pop("model_name", "all-MiniLM-L6-v2"))
+                model_name=kwargs.pop("model_name", "all-MiniLM-L6-v2"),
+                device=getattr(self, "_device", None))
 
         if name in ("clip", "image"):
             try:
@@ -419,7 +443,8 @@ class SklearnTextTrainer(Trainer):
             return ImageEmbeddingVectorizer(
                 model_name=kwargs.pop("model_name", DEFAULT_IMAGE_MODEL),
                 cache_dir=kwargs.pop("cache_dir", None),
-                image_root=kwargs.pop("image_root", None))
+                image_root=kwargs.pop("image_root", None),
+                device=getattr(self, "_device", None))
 
         return self._by_dotted_path(name, kwargs, _DEFAULT_VECTORIZER, report,
                                     "vectorizer")

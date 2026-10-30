@@ -83,11 +83,15 @@ class SchemaSpec:
     #: Which item field holds the input (an image path, an audio path). None
     #: means the project's ``text_key``.
     source_field: Optional[str] = None
+    #: The question annotators were shown. A generative trainer uses it as
+    #: the instruction, since it is what the target text answers.
+    description: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {"name": self.name, "annotation_type": self.annotation_type,
                 "kind": self.kind, "labels": list(self.labels),
-                "source_field": self.source_field}
+                "source_field": self.source_field,
+                "description": self.description}
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SchemaSpec":
@@ -95,7 +99,8 @@ class SchemaSpec:
                    annotation_type=data.get("annotation_type", ""),
                    kind=data.get("kind", "unsupported"),
                    labels=tuple(data.get("labels") or ()),
-                   source_field=data.get("source_field"))
+                   source_field=data.get("source_field"),
+                   description=str(data.get("description") or ""))
 
 
 @dataclass(frozen=True)
@@ -306,12 +311,16 @@ class FitResult:
     metrics: Dict[str, float] = field(default_factory=dict)
     label_order: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
+    #: The split the trainer chose its checkpoint or stopping point on, if
+    #: any. A score on that split is optimistic, so the headline held-out
+    #: score is then taken from a split the trainer never looked at.
+    selected_on: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {"model_version": self.model_version,
                 "artifact_paths": self.artifact_paths,
                 "metrics": self.metrics, "label_order": self.label_order,
-                "notes": self.notes}
+                "notes": self.notes, "selected_on": self.selected_on}
 
 
 class ProgressReporter:
@@ -380,6 +389,31 @@ class Trainer(ABC):
 
     #: Whether one run can fit several schemas at once.
     multi_schema: ClassVar[bool] = False
+
+    #: Runs only on the ``local`` backend: the trainer calls a service the
+    #: server can reach, with a secret that must not be shipped to a host.
+    local_only: ClassVar[bool] = False
+
+    @classmethod
+    def server_params(cls, config: Dict[str, Any], schema_names: Sequence[str],
+                      params: Dict[str, Any]) -> Dict[str, Any]:
+        """Values from the project config the trainer needs, added to the
+        run's spec (not to the run's recorded parameters). Keys start with
+        ``_``. Never secrets: the spec is a file, and remote runs ship it."""
+        return {}
+
+    @classmethod
+    def config_problem(cls, config: Dict[str, Any]) -> Optional[str]:
+        """Why this project's config cannot run the trainer, or None.
+        Short: the Training page shows it beside the trainer's name."""
+        return None
+
+    @classmethod
+    def run_environment(cls, config: Dict[str, Any],
+                        params: Dict[str, Any]) -> Dict[str, str]:
+        """Environment variables for a local run's process, which is where
+        secrets go."""
+        return {}
 
     @classmethod
     def available(cls) -> Tuple[bool, str]:

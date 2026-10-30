@@ -37,6 +37,7 @@ __all__ = [
     "build_bundle",
     "schema_specs_from_config",
     "detect_modality",
+    "guess_modality",
 ]
 
 #: Default split fractions. Deliberately includes a test set even for small
@@ -116,6 +117,27 @@ def detect_modality(schemes: Sequence[Dict[str, Any]],
     return "text"
 
 
+def guess_modality(config: Dict[str, Any], scheme: Dict[str, Any],
+                   items: Sequence[Dict[str, Any]]) -> str:
+    """What a bundle for *scheme* would be, from a sample of item data.
+
+    The same rule :func:`build_bundle` applies, run before any bundle
+    exists, so the start form can offer image trainers for an image project
+    and text trainers for a text one.
+    """
+    text_key = (config.get("item_properties", {}) or {}).get("text_key", "text")
+    rows = []
+    for data in items:
+        if not isinstance(data, dict):
+            continue
+        reference = _media_reference(data, scheme.get("source_field"))
+        row = {"text": str(data.get(text_key, "") or "")}
+        if reference:
+            row["media"] = reference
+        rows.append(row)
+    return detect_modality([scheme], rows)
+
+
 def schema_specs_from_config(config: Dict[str, Any],
                              schema_names: Sequence[str],
                              label_index: Optional[Dict[str, List[str]]] = None
@@ -146,7 +168,8 @@ def schema_specs_from_config(config: Dict[str, Any],
             annotation_type=scheme.get("annotation_type", ""),
             kind=kind_of_schema(scheme),
             labels=tuple(labels),
-            source_field=scheme.get("source_field")))
+            source_field=scheme.get("source_field"),
+            description=str(scheme.get("description") or "")))
     return tuple(specs)
 
 
@@ -258,14 +281,38 @@ def _labels_of(value_map: Any) -> List[str]:
             if value not in (None, "", False, 0, "false")]
 
 
-def _target_for(spec: SchemaSpec, value_map: Any) -> Any:
+def _target_for(spec: SchemaSpec, value_map: Any,
+                scheme: Optional[Dict[str, Any]] = None) -> Any:
     """The training target for one schema kind."""
+    scheme = scheme or {"annotation_type": spec.annotation_type,
+                        "name": spec.name}
+    if spec.kind == "temporal":
+        from potato.server_utils.annotation_values import temporal_segments
+        return [s for s in temporal_segments(scheme, value_map)
+                if s.get("label") not in (None, "")]
+    # A type that stores its whole answer under one fixed key -- pairwise
+    # {"selection": "A"}, ranking {"rank_order": ...} -- reads as that key
+    # below, so every pairwise item trained as the label "selection".
+    from potato.server_utils.iaa.dispatcher import packed_answer
+    packed = packed_answer(scheme, value_map)
+    if packed is not None:
+        if spec.kind == "multilabel":
+            return packed
+        return packed[0] if len(packed) == 1 else None
     if spec.kind == "multilabel":
         return _labels_of(value_map)
     if spec.kind == "span":
         return (value_map or {}).get("_spans", []) if isinstance(value_map, dict) else []
     if spec.kind in ("geometry", "grounding"):
         return (value_map or {}).get("_objects", []) if isinstance(value_map, dict) else []
+    if spec.kind == "text":
+        # A text box stores {"text_box": "what they wrote"}. The label-name
+        # reading below would return the key, "text_box", for every item.
+        if isinstance(value_map, dict):
+            texts = [str(v) for v in value_map.values()
+                     if isinstance(v, str) and v.strip()]
+            return texts[0] if texts else None
+        return str(value_map) if value_map not in (None, "") else None
     if spec.kind in ("ordinal", "continuous"):
         if isinstance(value_map, dict) and len(value_map) == 1:
             only = list(value_map.values())[0]
@@ -278,6 +325,45 @@ def _target_for(spec: SchemaSpec, value_map: Any) -> Any:
         except (TypeError, ValueError):
             return _label_of(value_map)
     return _label_of(value_map)
+
+
+def _as_text(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("text", "content", "response", "output", "answer"):
+            if isinstance(value.get(key), str):
+                return value[key]
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return "" if value is None else str(value)
+
+
+def _item_text(item_data: Dict[str, Any], text_key: str) -> str:
+    """The item's text. A list (pairwise candidates, ``list_as_text``) is
+    joined with blank lines; ``str()`` of it gave a Python list literal."""
+    value = item_data.get(text_key, "")
+    if isinstance(value, (list, tuple)):
+        return "\n\n".join(_as_text(v) for v in value)
+    return _as_text(value) if value else ""
+
+
+def _candidates(scheme: Dict[str, Any], item_data: Dict[str, Any]) -> List[str]:
+    """The responses a pairwise scheme compares, in data order (A, B)."""
+    if (scheme.get("annotation_type") or "") != "pairwise":
+        return []
+    value = item_data.get(scheme.get("items_key") or "text")
+    if not isinstance(value, (list, tuple)) or len(value) < 2:
+        return []
+    return [_as_text(v) for v in value]
+
+
+#: Item fields that hold what a pair of responses answers, first found wins.
+PROMPT_KEYS = ("prompt", "question", "instruction", "query", "input", "context")
+
+
+def _pair_prompt(item_data: Dict[str, Any]) -> str:
+    for key in PROMPT_KEYS:
+        if isinstance(item_data.get(key), str) and item_data[key].strip():
+            return item_data[key]
+    return ""
 
 
 def _media_reference(item_data: Dict[str, Any],
@@ -437,7 +523,7 @@ def build_bundle(
     def unlabeled(iid, item_data):
         if include_unlabeled:
             row = {"instance_id": iid,
-                   "text": str(item_data.get(text_key, "") or "")}
+                   "text": _item_text(item_data, text_key)}
             attach_media(row, item_data)
             unlabeled_rows.append(row)
 
@@ -459,15 +545,26 @@ def build_bundle(
                                    annotation_type=by_name.get(name, {}).get(
                                        "annotation_type", ""),
                                    kind=spec_kind)
-            target = _target_for(fake_spec, resolved[name])
+            target = _target_for(fake_spec, resolved[name], by_name.get(name))
             if target is None or target == [] or target == "":
                 continue
             targets[name] = target
 
             if spec_kind == "multilabel":
                 seen_labels[name].update(str(t) for t in target)
-            elif spec_kind in ("nominal",):
+            elif spec_kind in ("nominal", "ordinal", "preference"):
                 seen_labels[name].add(str(target))
+            elif spec_kind in ("geometry", "temporal"):
+                seen_labels[name].update(
+                    str(o.get("label")) for o in target
+                    if isinstance(o, dict) and o.get("label") not in (None, ""))
+            elif spec_kind == "span":
+                # A tagger's output layer is this vocabulary; without it a
+                # span bundle declared no labels at all.
+                seen_labels[name].update(
+                    str(s.get("name") or s.get("label"))
+                    for s in target if isinstance(s, dict)
+                    and (s.get("name") or s.get("label")))
 
         if not targets:
             stats.n_skipped_no_label += 1
@@ -476,11 +573,17 @@ def build_bundle(
 
         row: Dict[str, Any] = {
             "instance_id": iid,
-            "text": str(item_data.get(text_key, "") or ""),
+            "text": _item_text(item_data, text_key),
             "targets": targets,
         }
 
         attach_media(row, item_data)
+        candidates = _candidates(by_name.get(schema_names[0], {}), item_data)
+        if candidates:
+            row["candidates"] = candidates
+            prompt = _pair_prompt(item_data)
+            if prompt:
+                row["prompt"] = prompt
 
         rows.append(row)
 

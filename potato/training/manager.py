@@ -22,15 +22,20 @@ import json
 import logging
 import os
 import signal
+import hashlib
+import hmac
+import secrets
 import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from potato.training import store
 from potato.training.base import ResourceLimits, TrainingSpec
-from potato.training.events import (EXIT_MEANINGS, EXIT_OK, parse_line)
+from potato.training.events import (EVENT_TYPES, EXIT_CANCELLED,
+                                    EXIT_MEANINGS, EXIT_OK, parse_line)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +50,105 @@ _IDLE_STATUS = {
     "phase": "", "current": 0, "total": 0, "eta_s": None,
     "metrics": {}, "warnings": [], "errors": [], "skip_reason": "",
 }
+
+
+class _EventSink:
+    """Applies v1 protocol events to the status dict and the events file.
+
+    One instance per run. The local worker's stdout loop and an external
+    agent's ``/progress`` posts both feed it, so the two transports cannot
+    drift apart in what they report.
+    """
+
+    def __init__(self, manager: "TrainingManager", events_path: str):
+        self._manager = manager
+        self._lock = threading.Lock()
+        self._fh = open(events_path, "a")
+        self.metrics: Dict[str, Any] = {}
+        self.result: Optional[Dict[str, Any]] = None
+        self.error: Optional[Dict[str, Any]] = None
+
+    def apply(self, payload: Dict[str, Any]) -> None:
+        if not isinstance(payload, dict) \
+                or payload.get("event") not in EVENT_TYPES:
+            return
+        manager = self._manager
+        with self._lock:
+            if self._fh is not None:
+                self._fh.write(json.dumps(payload) + "\n")
+                self._fh.flush()
+
+            kind = payload["event"]
+            if kind == "status":
+                manager._set(state=payload.get("state", "running"),
+                             step=payload.get("step", ""))
+            elif kind == "progress":
+                manager._set(phase=payload.get("phase", ""),
+                             current=payload.get("current", 0),
+                             total=payload.get("total", 0),
+                             eta_s=payload.get("eta_s"))
+            elif kind == "metric":
+                self.metrics["%s_%s" % (payload.get("split", ""),
+                                        payload.get("name", ""))] = \
+                    payload.get("value")
+                manager._set(metrics=dict(self.metrics))
+            elif kind == "log":
+                if payload.get("level") in ("warning", "error"):
+                    with manager._lock:
+                        bucket = ("errors" if payload["level"] == "error"
+                                  else "warnings")
+                        manager._status[bucket] = (
+                            manager._status[bucket]
+                            + [payload.get("msg", "")])[-20:]
+            elif kind == "result":
+                self.result = payload
+            elif kind == "error":
+                self.error = payload
+
+    def close(self) -> None:
+        with self._lock:
+            if self._fh is not None:
+                self._fh.close()
+                self._fh = None
+
+
+@dataclass
+class ExternalJob:
+    """A run handed to an agent instead of a local subprocess.
+
+    Lives in memory for the life of the run: there is one slot, and a job
+    whose server restarted has lost the supervisor that would record it, so
+    persisting it would only resurrect something nobody is watching.
+    """
+
+    run_id: str
+    backend: str
+    backend_type: str
+    spec: Dict[str, Any]
+    run_dir: str
+    sink: _EventSink
+    #: SHA-256 of the one-run token an auto-launched agent was given.
+    launch_token_digest: str = ""
+    state: str = "queued"          # queued | claimed | done
+    claimed_by: str = ""
+    agent_info: Dict[str, Any] = field(default_factory=dict)
+    created_at: float = field(default_factory=time.time)
+    last_contact: float = 0.0
+    cancel_requested: bool = False
+    cancel_at: float = 0.0
+    completion: Optional[Dict[str, Any]] = None
+    done: threading.Event = field(default_factory=threading.Event)
+
+    def accepts_launch_token(self, token: str) -> bool:
+        if not self.launch_token_digest or not token:
+            return False
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(digest, self.launch_token_digest)
+
+    def public(self) -> Dict[str, Any]:
+        return {"job_id": self.run_id, "backend": self.backend,
+                "state": self.state, "cancelled": self.cancel_requested,
+                "spec": self.spec}
 
 
 class TrainingManager:
@@ -63,6 +167,11 @@ class TrainingManager:
         self._last_finished_at: float = 0.0
         #: Annotation count at the last auto-triggered run, for the debounce.
         self._last_trained_count: int = 0
+        #: The run an agent is working on, when the backend is not local.
+        self._job: Optional[ExternalJob] = None
+        self._launcher = None
+        #: Set when an agent asks for work, so a long-poll wakes at once.
+        self._job_posted = threading.Condition(self._lock)
 
         training = self.config.get("model_training", {}) or {}
         self.enabled = bool(training.get("enabled", False))
@@ -106,7 +215,8 @@ class TrainingManager:
     def start_run(self, trainer: str, schema_names: Sequence[str],
                   params: Optional[Dict[str, Any]] = None,
                   trigger: str = "manual",
-                  limits: Optional[ResourceLimits] = None
+                  limits: Optional[ResourceLimits] = None,
+                  backend: Optional[str] = None
                   ) -> Dict[str, Any]:
         """Build a bundle and launch a run.
 
@@ -124,8 +234,42 @@ class TrainingManager:
         if not schema_names:
             return {"started": False, "error": "No schema selected"}
 
+        # A scheme that does not exist, or that the trainer cannot learn, is
+        # refused now: it used to start, build a bundle and then fail.
+        from potato.training.config_check import run_problems
+        problems = run_problems(self.config, trainer, schema_names)
+        if problems:
+            return {"started": False, "error": " ".join(problems),
+                    "http_status": 400}
+
+        from potato.training.registry import resolve_params
+        try:
+            params = resolve_params(self.config, trainer, params)
+        except ValueError as exc:
+            return {"started": False, "error": str(exc)}
+
+        from potato.training.backends import (default_backend_name,
+                                              load_backends)
+        backend = backend or default_backend_name(self.config)
+        backends = load_backends(self.config)
+        if backend not in backends:
+            return {"started": False,
+                    "error": "No training backend named %r; configure it "
+                             "under model_training.backends" % backend}
+        from potato.training.registry import get_trainer_class
+        try:
+            local_only = bool(getattr(get_trainer_class(trainer), "local_only",
+                                      False))
+        except Exception:  # noqa: BLE001 - a broken trainer fails in the worker
+            local_only = False
+        if local_only and backends[backend].type != "local":
+            return {"started": False,
+                    "error": "%s runs only on the local backend: it calls a "
+                             "model service from this server, with its "
+                             "credentials. Choose backend 'local'." % trainer}
+
         run = store.TrainingRun(
-            run_id=store.new_run_id(), trainer=trainer,
+            run_id=store.new_run_id(), trainer=trainer, backend=backend,
             schema_names=list(schema_names), status="building",
             trigger=trigger, split_seed=self.split_seed,
             params=dict(params or {}))
@@ -140,7 +284,10 @@ class TrainingManager:
         self._stop_event.clear()
         self._set(state="building", run_id=run.run_id, trainer=trainer,
                   step="building bundle", metrics={}, warnings=[], errors=[],
-                  skip_reason="", phase="", current=0, total=0)
+                  skip_reason="", phase="", current=0, total=0,
+                  # The last run's write-back counts, which a failed run
+                  # would otherwise keep reporting as its own.
+                  writeback=None)
 
         self._supervisor = threading.Thread(
             target=self._supervise, args=(run,), name="training-%s" % run.run_id,
@@ -149,6 +296,34 @@ class TrainingManager:
         return {"started": True, "run_id": run.run_id}
 
     # ----------------------------------------------------- auto-retrain
+
+    def _restore_retrain_baseline(self) -> None:
+        """After a restart, count from now, not from zero.
+
+        The counters live in memory. Starting from zero, the first save after
+        a restart retrained whatever update_frequency said, and
+        min_interval_s did not apply. When the store has an earlier run, its
+        finish time is the interval's start and the annotations already
+        there are the count's. A project with no run yet keeps zero: it
+        trains once it has update_frequency annotations.
+        """
+        if getattr(self, "_baseline_restored", False):
+            return
+        self._baseline_restored = True
+        try:
+            runs = store.list_runs(self.config, limit=1)
+            last = runs[0] if runs else None
+        except Exception:  # noqa: BLE001
+            last = None
+        if last is None:
+            return
+        if last.finished_at and not self._last_finished_at:
+            self._last_finished_at = float(last.finished_at)
+        if not self._last_trained_count:
+            try:
+                self._last_trained_count = self._annotation_count()
+            except Exception:  # noqa: BLE001
+                logger.debug("Could not count annotations", exc_info=True)
 
     def maybe_auto_retrain(self) -> Dict[str, Any]:
         """Start a run if enough has changed since the last one.
@@ -172,9 +347,21 @@ class TrainingManager:
         if not trainer or not schemas:
             return self._skip("auto_retrain needs both a trainer and schemas")
 
+        # The Training page and the API ask before running a trainer whose
+        # licence needs confirming; a config-started run has to say so in
+        # the config, or it would train an AGPL model nobody agreed to.
+        from potato.training.registry import trainer_info
+        info = trainer_info(trainer)
+        if info is not None and info.licence_ack \
+                and settings.get("accept_licence") is not True:
+            return self._skip(
+                "%s is licensed %s; set model_training.auto_retrain."
+                "accept_licence: true to confirm" % (trainer, info.licence))
+
         if self.is_running():
             return self._skip("a run is already in progress")
 
+        self._restore_retrain_baseline()
         min_interval = float(settings.get("min_interval_s", 600))
         since = time.time() - self._last_finished_at
         if self._last_finished_at and since < min_interval:
@@ -203,7 +390,8 @@ class TrainingManager:
 
         outcome = self.start_run(trainer, schemas,
                                  params=settings.get("params") or {},
-                                 trigger="auto")
+                                 trigger="auto",
+                                 backend=settings.get("backend"))
         if not outcome.get("started"):
             # Give the delta back so the next save can try again.
             with self._lock:
@@ -242,13 +430,18 @@ class TrainingManager:
         spec_path = os.path.join(self.run_dir(run.run_id), "spec.json")
         spec.write(spec_path)
 
-        run.status = "running"
-        run.started_at = time.time()
-        store.record_run(self.config, run)
-        self._set(state="running", step="starting")
+        from potato.training.backends import load_backends
+        backend = load_backends(self.config).get(run.backend)
 
         try:
-            self._launch_and_drain(run, spec_path)
+            if backend is not None and backend.is_remote:
+                self._run_external(run, spec, backend)
+            else:
+                run.status = "running"
+                run.started_at = time.time()
+                store.record_run(self.config, run)
+                self._set(state="running", step="starting")
+                self._launch_and_drain(run, spec_path)
         except Exception as exc:
             self.logger.exception("Training run %s failed", run.run_id)
             self._finish(run, "error", error=str(exc),
@@ -291,12 +484,27 @@ class TrainingManager:
             device=training.get("device", "auto"),
             num_threads=training.get("num_threads"))
 
+        params = dict(run.params or {})
+        params.update(self._trainer_class(run.trainer, "server_params",
+                                          self.config, run.schema_names,
+                                          dict(run.params or {})) or {})
         return TrainingSpec(
             run_id=run.run_id, trainer=run.trainer,
             schemas=schema_specs_from_config(
                 self.config, run.schema_names, bundle.manifest.get("labels")),
-            bundle_dir=bundle_dir, workdir=workdir, params=run.params,
+            bundle_dir=bundle_dir, workdir=workdir, params=params,
             seed=self.split_seed, limits=limits)
+
+    def _trainer_class(self, name: str, hook: str, *args):
+        """Call a trainer classmethod hook; None when the trainer will not
+        import here (the worker reports that failure itself)."""
+        from potato.training.registry import get_trainer_class
+        try:
+            return getattr(get_trainer_class(name), hook)(*args)
+        except Exception:  # noqa: BLE001
+            self.logger.debug("Trainer hook %s.%s failed", name, hook,
+                              exc_info=True)
+            return None
 
     def _context_from_live_state(self):
         """An ExportContext from the running server's managers.
@@ -335,6 +543,8 @@ class TrainingManager:
         stderr_path = os.path.join(run_dir, "stderr.log")
 
         env = dict(os.environ)
+        env.update(self._trainer_class(run.trainer, "run_environment",
+                                       self.config, dict(run.params or {})) or {})
         env["PYTHONUNBUFFERED"] = "1"
         env.setdefault("MPLBACKEND", "Agg")
         cache = os.environ.get("POTATO_MODEL_CACHE")
@@ -370,63 +580,37 @@ class TrainingManager:
             if training.get("max_wall_seconds"):
                 deadline = time.time() + float(training["max_wall_seconds"])
 
-            result_event: Optional[Dict[str, Any]] = None
-            error_event: Optional[Dict[str, Any]] = None
-            metrics: Dict[str, Any] = {}
+            sink = _EventSink(self, events_path)
+            try:
+                with open(stdout_path, "w") as stdout_fh:
+                    for line in process.stdout:
+                        stdout_fh.write(line)
+                        payload = parse_line(line)
+                        if payload is None:
+                            # A third-party progress bar must not kill a
+                            # good run.
+                            continue
+                        sink.apply(payload)
 
-            with open(events_path, "w") as events_fh, \
-                    open(stdout_path, "w") as stdout_fh:
-                for line in process.stdout:
-                    stdout_fh.write(line)
-                    payload = parse_line(line)
-                    if payload is None:
-                        # A third-party progress bar must not kill a good run.
-                        continue
-                    events_fh.write(json.dumps(payload) + "\n")
-                    events_fh.flush()
-
-                    kind = payload["event"]
-                    if kind == "status":
-                        self._set(state=payload.get("state", "running"),
-                                  step=payload.get("step", ""))
-                    elif kind == "progress":
-                        self._set(phase=payload.get("phase", ""),
-                                  current=payload.get("current", 0),
-                                  total=payload.get("total", 0),
-                                  eta_s=payload.get("eta_s"))
-                    elif kind == "metric":
-                        metrics["%s_%s" % (payload.get("split", ""),
-                                           payload.get("name", ""))] = \
-                            payload.get("value")
-                        self._set(metrics=dict(metrics))
-                    elif kind == "log":
-                        if payload.get("level") in ("warning", "error"):
-                            with self._lock:
-                                bucket = ("errors"
-                                          if payload["level"] == "error"
-                                          else "warnings")
-                                self._status[bucket] = (
-                                    self._status[bucket] + [payload.get("msg", "")])[-20:]
-                    elif kind == "result":
-                        result_event = payload
-                    elif kind == "error":
-                        error_event = payload
-
-                    if self._stop_event.is_set():
-                        continue
-                    if deadline and time.time() > deadline:
-                        self.logger.warning(
-                            "Run %s exceeded its wall-clock limit", run.run_id)
-                        self._terminate(process)
-                        deadline = None
+                        if self._stop_event.is_set():
+                            continue
+                        if deadline and time.time() > deadline:
+                            self.logger.warning(
+                                "Run %s exceeded its wall-clock limit",
+                                run.run_id)
+                            self._wall_limited = run.run_id
+                            self._terminate(process)
+                            deadline = None
+            finally:
+                sink.close()
 
             returncode = process.wait()
 
         with self._lock:
             self._process = None
 
-        self._record_completion(run, returncode, result_event, error_event,
-                                metrics)
+        self._record_completion(run, returncode, sink.result, sink.error,
+                                sink.metrics)
 
     def _record_completion(self, run: store.TrainingRun, returncode: int,
                            result_event: Optional[Dict[str, Any]],
@@ -442,6 +626,16 @@ class TrainingManager:
         if self._stop_event.is_set():
             self._finish(run, "cancelled", error="Cancelled by an operator",
                          error_code="cancelled")
+            return
+
+        if getattr(self, "_wall_limited", None) == run.run_id:
+            # Stopped by the limit, and the worker then exits as if
+            # cancelled; "exited with code 4 (cancelled)" named neither.
+            limit = (self.config.get("model_training", {}) or {}).get(
+                "max_wall_seconds")
+            self._finish(run, "error", error_code="timeout",
+                         error="Stopped: the run took longer than "
+                               "model_training.max_wall_seconds (%s s)." % limit)
             return
 
         if returncode < 0:
@@ -517,9 +711,274 @@ class TrainingManager:
             self.logger.exception("Could not record run %s", run.run_id)
 
         self._last_finished_at = run.finished_at
-        self._set(state=status, step="",
+        # "a run is already in progress" is not true any more.
+        self._set(state=status, step="", skip_reason="",
                   metrics=fields.get("metrics", {}) or {},
                   errors=([fields["error"]] if fields.get("error") else []))
+
+    # ------------------------------------------------------ external runs
+
+    def _server_target(self) -> Tuple[str, int, str]:
+        """``(host, port, scheme)`` an ssh forward should point at.
+
+        The forward is opened on this machine, so a server listening on every
+        interface is reached on loopback.
+        """
+        host = str(self.config.get("host") or "127.0.0.1")
+        if host in ("0.0.0.0", "::", ""):
+            host = "127.0.0.1"
+        scheme = ("https" if self.config.get("ssl_cert")
+                  and self.config.get("ssl_key") else "http")
+        return host, int(self.config.get("port", 8000)), scheme
+
+    def _run_external(self, run: store.TrainingRun, spec: TrainingSpec,
+                      backend) -> None:
+        """Hand a built run to an agent and wait for it to report back."""
+        run_dir = self.run_dir(run.run_id)
+        sink = _EventSink(self, os.path.join(run_dir, "events.jsonl"))
+        job = ExternalJob(run_id=run.run_id, backend=backend.name,
+                          backend_type=backend.type, spec=spec.to_dict(),
+                          run_dir=run_dir, sink=sink)
+        token = ""
+        if backend.type == "ssh":
+            # One token, one run. It reaches the agent on stdin, so it never
+            # shows in `ps` on a shared machine, and it stops working when the
+            # run ends.
+            token = secrets.token_urlsafe(32)
+            job.launch_token_digest = hashlib.sha256(
+                token.encode("utf-8")).hexdigest()
+
+        run.status = "queued"
+        # The record defaults to this machine's name, which is wrong for every
+        # remote run; the launcher or the claiming agent fills in the real one.
+        run.host = (backend.host if backend.type == "ssh"
+                    else "agent %s (not yet claimed)" % backend.name)
+        store.record_run(self.config, run)
+        with self._lock:
+            self._job = job
+            self._job_posted.notify_all()
+        self._set(state="queued",
+                  step=("connecting to %s" % backend.host
+                        if backend.type == "ssh"
+                        else "waiting for agent %r to ask for work"
+                        % backend.name))
+
+        launcher = None
+        try:
+            if backend.type == "ssh":
+                from potato.training.launchers import LaunchError, SSHLauncher
+
+                launcher = SSHLauncher(
+                    backend, root=self.root,
+                    log=lambda level, msg: sink.apply(
+                        _log_event(level, msg)),
+                    step=lambda text: self._set(step=text))
+                with self._lock:
+                    self._launcher = launcher
+                try:
+                    launcher.start(run.run_id, token, self._server_target())
+                except Exception as exc:  # noqa: BLE001
+                    message = str(exc) if isinstance(exc, LaunchError) \
+                        else "%s: %s" % (type(exc).__name__, exc)
+                    self._end_job(job, EXIT_CANCELLED
+                                  if job.cancel_requested else 1,
+                                  code="launch_failed", message=message)
+                if launcher.host_description:
+                    run.host = launcher.host_description
+                    store.record_run(self.config, run)
+
+            if not job.done.is_set():
+                self._wait_for_job(job, backend, launcher)
+
+            ok = bool(sink.result) and not sink.error \
+                and not self._stop_event.is_set()
+            if launcher is not None and ok and backend.fetch_artifacts:
+                self._set(step="fetching artifacts")
+                try:
+                    launcher.fetch_artifacts(
+                        run.run_id, os.path.join(run_dir, "artifacts"))
+                except Exception as exc:  # noqa: BLE001
+                    sink.apply(_log_event(
+                        "warning", "Could not fetch the model artifacts "
+                        "from %s: %s" % (backend.host, exc)))
+        finally:
+            if launcher is not None:
+                try:
+                    launcher.close(run.run_id)
+                except Exception:
+                    self.logger.debug("Launcher cleanup failed",
+                                      exc_info=True)
+            sink.close()
+            with self._lock:
+                self._job = None
+                self._launcher = None
+
+        completion = job.completion or {}
+        if completion.get("code") and sink.error is None:
+            sink.error = {"event": "error", "code": completion["code"],
+                          "message": completion.get("message", "")}
+        # An agent reports where it ran and where it left the model. The
+        # run's host defaulted to this server's name, so `not run.host` never
+        # let the agent's through, and the artifact_uri was dropped outright.
+        if completion.get("host") and backend.type != "ssh":
+            run.host = str(completion["host"])[:200]
+        if completion.get("artifact_uri"):
+            run.artifact_uri = str(completion["artifact_uri"])[:1000]
+        self._record_completion(run, int(completion.get("returncode", 1)),
+                                sink.result, sink.error, sink.metrics)
+
+    def _wait_for_job(self, job: ExternalJob, backend, launcher) -> None:
+        training = self.config.get("model_training", {}) or {}
+        max_wall = training.get("max_wall_seconds")
+        deadline = (time.time() + float(max_wall)) if max_wall else None
+
+        while not job.done.wait(1.0):
+            now = time.time()
+            if job.cancel_requested:
+                if job.state == "queued":
+                    self._end_job(job, EXIT_CANCELLED)
+                elif now - job.cancel_at > self.grace_seconds:
+                    if launcher is not None:
+                        launcher.kill_agent()
+                    self._end_job(job, EXIT_CANCELLED)
+                continue
+
+            if launcher is not None and launcher.agent_exited():
+                # Its last /complete may still be in flight.
+                if job.done.wait(5.0):
+                    break
+                self._end_job(
+                    job, 1, code="agent_exited",
+                    message="The agent on %s exited (code %s) without "
+                            "reporting a result. %s"
+                            % (backend.host, launcher.agent_returncode(),
+                               launcher.agent_stderr_tail()))
+                continue
+
+            if job.state == "claimed" and \
+                    now - job.last_contact > backend.heartbeat_timeout_s:
+                if launcher is not None:
+                    launcher.kill_agent()
+                self._end_job(
+                    job, 1, code="backend_silent",
+                    message="No word from the agent on %s for %d seconds"
+                            % (backend.name, backend.heartbeat_timeout_s))
+                continue
+
+            if job.state == "queued" and backend.queue_timeout_s and \
+                    now - job.created_at > float(backend.queue_timeout_s):
+                self._end_job(
+                    job, 1, code="no_agent",
+                    message="No agent named %r asked for work within %d "
+                            "seconds. Start one with: potato training agent"
+                            % (backend.name, int(backend.queue_timeout_s)))
+                continue
+
+            if deadline and now > deadline:
+                self.logger.warning("Run %s exceeded its wall-clock limit",
+                                    job.run_id)
+                deadline = None
+                job.cancel_requested = True
+                job.cancel_at = now
+                job.completion = {"returncode": 1, "code": "timeout",
+                                  "message": "The run exceeded "
+                                             "model_training.max_wall_seconds"}
+
+    def _end_job(self, job: ExternalJob, returncode: int, code: str = "",
+                 message: str = "", **extra: Any) -> None:
+        with self._lock:
+            if job.done.is_set():
+                return
+            completion = dict(job.completion or {})
+            completion.setdefault("returncode", returncode)
+            if code:
+                completion.setdefault("code", code)
+                completion.setdefault("message", message)
+            completion.update(extra)
+            job.completion = completion
+            job.state = "done"
+            job.done.set()
+
+    # Called by potato.training.protocol on the request thread.
+
+    def current_job(self, run_id: Optional[str] = None
+                    ) -> Optional[ExternalJob]:
+        with self._lock:
+            job = self._job
+        if job is None or (run_id and job.run_id != run_id):
+            return None
+        return job
+
+    def claim_job(self, backend_name: str, agent_info: Dict[str, Any],
+                  wait_s: float = 0.0) -> Optional[ExternalJob]:
+        """Give a polling agent the queued run for its backend, if any.
+
+        Long-polls up to *wait_s* so an idle agent is told about a new run as
+        soon as it is posted rather than on its next poll.
+        """
+        deadline = time.time() + max(0.0, min(float(wait_s), 60.0))
+        with self._job_posted:
+            while True:
+                job = self._job
+                if job is not None and job.state == "queued" \
+                        and job.backend == backend_name \
+                        and job.backend_type == "agent" \
+                        and not job.cancel_requested:
+                    self._mark_claimed(job, agent_info)
+                    return job
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return None
+                self._job_posted.wait(min(remaining, 5.0))
+
+    def touch_job(self, job: ExternalJob,
+                  agent_info: Optional[Dict[str, Any]] = None) -> None:
+        """Record contact from the agent working on *job*."""
+        with self._lock:
+            if job.state == "queued":
+                self._mark_claimed(job, agent_info or {})
+            job.last_contact = time.time()
+
+    def _mark_claimed(self, job: ExternalJob,
+                      agent_info: Dict[str, Any]) -> None:
+        job.state = "claimed"
+        job.claimed_by = str(agent_info.get("host") or job.backend)
+        job.agent_info = dict(agent_info or {})
+        job.last_contact = time.time()
+        run = self._current_run
+        if run is not None and run.run_id == job.run_id:
+            run.status = "running"
+            run.started_at = time.time()
+            if agent_info.get("host") and job.backend_type == "agent":
+                run.host = str(agent_info["host"])[:200]
+            try:
+                store.record_run(self.config, run)
+            except Exception:
+                self.logger.debug("Could not record claim", exc_info=True)
+        self._set(state="running",
+                  step="running on %s" % job.claimed_by)
+
+    def job_progress(self, job: ExternalJob,
+                     events: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        self.touch_job(job)
+        if not job.done.is_set():
+            for payload in events:
+                job.sink.apply(payload)
+        return {"cancelled": bool(job.cancel_requested)}
+
+    def complete_job(self, job: ExternalJob,
+                     body: Dict[str, Any]) -> Dict[str, Any]:
+        self.touch_job(job)
+        for payload in body.get("events") or []:
+            job.sink.apply(payload)
+        try:
+            returncode = int(body.get("returncode", 1))
+        except (TypeError, ValueError):
+            returncode = 1
+        self._end_job(job, returncode,
+                      host=str(body.get("host", ""))[:200],
+                      artifact_uri=str(body.get("artifact_uri", ""))[:1000])
+        return {"ok": True}
 
     # --------------------------------------------------------------- cancel
 
@@ -527,15 +986,25 @@ class TrainingManager:
         with self._lock:
             current = self._status.get("run_id")
             process = self._process
+            job = self._job
 
-        if process is None:
+        if process is None and job is None:
             return {"cancelled": False, "error": "No run is in progress"}
         if run_id and run_id != current:
             return {"cancelled": False,
                     "error": "Run %s is not the one in progress" % run_id}
 
         self._stop_event.set()
-        self._terminate(process)
+        if process is not None:
+            self._terminate(process)
+        if job is not None:
+            # An agent is told in the response to its next /progress; there is
+            # no inbound call to make, which is what lets it sit behind NAT.
+            with self._lock:
+                job.cancel_requested = True
+                job.cancel_at = time.time()
+                self._job_posted.notify_all()
+            self._set(step="cancelling")
         return {"cancelled": True, "run_id": current}
 
     def _terminate(self, process: subprocess.Popen) -> None:
@@ -577,11 +1046,28 @@ class TrainingManager:
         """Stop any in-flight run. Called at interpreter exit."""
         with self._lock:
             process = self._process
+            job = self._job
+            launcher = self._launcher
         if process is not None and process.poll() is None:
             self._stop_event.set()
             self._terminate(process)
+        if job is not None:
+            self._stop_event.set()
+            job.cancel_requested = True
+            job.cancel_at = time.time()
+            if launcher is not None:
+                try:
+                    launcher.kill_agent()
+                except Exception:
+                    pass
+            self._end_job(job, EXIT_CANCELLED)
         if self._supervisor and self._supervisor.is_alive():
             self._supervisor.join(timeout=5.0)
+
+
+def _log_event(level: str, msg: str) -> Dict[str, Any]:
+    from potato.training.events import event
+    return event("log", level=level, msg=msg)
 
 
 _TRAINING_MANAGER: Optional[TrainingManager] = None

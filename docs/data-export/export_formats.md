@@ -962,6 +962,33 @@ python -m potato.export --config config.yaml --format textgrid --output ./export
     Praat, be refined there, and come back in. See
     [Transcript Format Support](../annotation-types/multimedia/transcript_formats.md).
 
+### Timeline segments (segments)
+
+This format exports the segments of
+[audio_annotation](../annotation-types/multimedia/audio_annotation.md) and
+[video_annotation](../annotation-types/multimedia/video_annotation.md)
+questions, which the CSV, TSV and JSONL exports carry only as a JSON string in
+one column.
+
+```bash
+python -m potato.export --config config.yaml --format segments --output ./export/
+```
+
+- `segments.jsonl` has one line per segment: `instance_id`, `user_id`,
+  `schema`, `start`, `end`, `duration` (seconds), `label`, and `media` when the
+  item names its recording (the scheme's `source_field`, a field such as
+  `audio_url`, or the item's text field, as the audio widget reads it).
+- `rttm/<user_id>.rttm` is the same segments as NIST RTTM, the input
+  pyannote.metrics, dscore and md-eval score diarization and sound events
+  against. Each annotator gets a file, because one RTTM file is one reference.
+  With more than one audio or video question, each question's files go under
+  `rttm/<schema>/`. The file column is the recording's name without its
+  extension (the item id when the item names no file; `<name>__<item id>`
+  when two items' recordings share a name), and spaces in a label become
+  `_`, since RTTM fields are separated by spaces. A zero-length segment is
+  in `segments.jsonl` and left out of the RTTM files, which have no way to
+  score it.
+
 ### Agent Evaluation (agent_eval)
 
 Export agent trace evaluation results with aggregated scores, step-level ratings, and error taxonomies.

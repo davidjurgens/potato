@@ -398,6 +398,13 @@ def record_verdict(config: Dict[str, Any], verdict: ReviewVerdict) -> None:
          verdict.timestamp or time.time()),
     )
     conn.commit()
+    if verdict.verdict == "reject":
+        try:
+            from potato.training.writeback import withdraw_rejected
+            withdraw_rejected(config, verdict.instance_id, verdict.schema_name)
+        except Exception:  # noqa: BLE001 - the verdict is stored either way
+            logger.debug("Could not withdraw the rejected prelabel",
+                         exc_info=True)
 
 
 def load_verdicts(config: Dict[str, Any]) -> List[ReviewVerdict]:

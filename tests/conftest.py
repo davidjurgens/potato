@@ -65,9 +65,17 @@ def app():
     # Register routes
     from potato.routes import configure_routes
     configure_routes(flask_app, TEST_CONFIG)
+    flask_app._potato_routes_config = TEST_CONFIG
 
     yield flask_app
 
 @pytest.fixture(scope="function")
 def client(app):
+    # Any test that builds its own app -- create_app(), FlaskTestServer --
+    # calls potato.routes.configure_routes, which rebinds the module's `app`
+    # and `config`. The handlers this session app serves read those globals,
+    # so point them back at this app's config for each test that uses it.
+    from potato import routes
+    routes.app = app
+    routes.config = app._potato_routes_config
     return app.test_client()

@@ -145,6 +145,26 @@ _DB_DEPS = [
 _MYSQL_DEPS = [
     "mysql-connector-python>=8.0",
 ]
+# In-tool model training (potato/training). sklearn-text needs none of
+# these. Each trainer names its extra in its install hint; all stay out of
+# `all` because torch is a multi-gigabyte install. ultralytics-detect is
+# AGPL-3.0 and in no extra: installing it is the user's own decision.
+_EMBEDDING_DEPS = [
+    "sentence-transformers>=3.0.0",
+]
+_TRAIN_TEXT_DEPS = [
+    "torch>=2.1.0",
+    "transformers>=4.46.0",
+    "peft>=0.13.0",
+]
+_TRAIN_VISION_DEPS = _TRAIN_TEXT_DEPS + [
+    "pillow>=10.0.0",
+    "torchvision>=0.16.0",
+]
+_TRAIN_AUDIO_DEPS = _TRAIN_TEXT_DEPS + [
+    "soundfile>=0.12.0",
+]
+_TRAIN_LLM_DEPS = list(_TRAIN_TEXT_DEPS)
 # Local speech-to-text and speaker diarization. faster-whisper is Whisper
 # compiled through CTranslate2: no cloud API, no per-minute charge, and it runs
 # on CPU. Used by `potato transcripts --transcribe` and by Think-Aloud Mode's
@@ -262,6 +282,16 @@ setup(
         # OpenStack clouds: Jetstream2, campus clouds, EGI.
         "deploy-openstack": _DEPLOY_DEPS + ["openstacksdk>=3.0.0"],
         "vision": _VISION_DEPS,
+        # Training extras. `embeddings` is also what the sentence-transformers
+        # and CLIP vectorizers need, which users were told to install by hand.
+        "embeddings": _EMBEDDING_DEPS,
+        "train-text": _TRAIN_TEXT_DEPS + _EMBEDDING_DEPS,
+        "train-vision": _TRAIN_VISION_DEPS,
+        "train-audio": _TRAIN_AUDIO_DEPS,
+        "train-llm": _TRAIN_LLM_DEPS,
+        "train": sorted(set(_TRAIN_TEXT_DEPS + _EMBEDDING_DEPS
+                            + _TRAIN_VISION_DEPS + _TRAIN_AUDIO_DEPS
+                            + _TRAIN_LLM_DEPS)),
         "transcribe": _TRANSCRIBE_DEPS,
         "decision": _DECISION_DEPS,
         "signals": _SIGNAL_DEPS,

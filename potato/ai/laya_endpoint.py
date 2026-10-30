@@ -24,6 +24,8 @@ ai_config keys:
     max_options per-question cap, default 100 (laya-serve's one-pass cap;
                 laya's docs note >20 options wants a larger head_max_len)
     head_max_len  optional token budget for the question head
+    calibration path to a calibration.json from a ``decision-calibrate``
+                training run, applied to every answer (decision_calibration.py)
     state_key   the state is passed as ``{state_key: text}``; default 'text',
                 the same as the systemone client, so one checkpoint gives
                 the same answers in this process and behind laya-serve. An
@@ -142,7 +144,7 @@ class LayaEndpoint(DecisionModelEndpoint):
             raise
         except Exception as e:
             raise AIEndpointRequestError(f"laya prediction failed: {e}")
-        return [parse_systemone_answers(r, questions) for r in results]
+        return [self._calibrated(parse_systemone_answers(r, questions)) for r in results]
 
     def health_check(self) -> bool:
         """True when the model loads; the first call downloads and builds it."""

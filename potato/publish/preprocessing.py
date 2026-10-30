@@ -122,7 +122,13 @@ def _partition_splits(rows: List[dict], spec: Dict[str, float],
     hash of ``seed:instance_id`` maps into the cumulative fraction bands.
     """
     import hashlib
-    names = list(spec.keys())
+    # Bands in a fixed order, not the mapping's. With the config's key order,
+    # writing {test, train, val} instead of {train, val, test}, or a tool
+    # that sorts YAML keys, moved held-out items into train with nothing
+    # changed that anyone would call a split setting.
+    canonical = ("train", "val", "validation", "dev", "test")
+    names = [n for n in canonical if n in spec] + sorted(
+        n for n in spec if n not in canonical)
     total = sum(spec.values()) or 1.0
     fractions = [spec[n] / total for n in names]
     bounds, acc = [], 0.0

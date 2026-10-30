@@ -373,7 +373,24 @@ class DecisionModelEndpoint(BaseAIEndpoint):
         """Answer every question about ``state`` in one request."""
         self._check_questions(questions)
         response = self._decide_raw(state, questions)
-        return parse_systemone_answers(response, questions)
+        return self._calibrated(parse_systemone_answers(response, questions))
+
+    def _calibrated(self, answers: List[DecisionAnswer]) -> List[DecisionAnswer]:
+        """Apply ``ai_config.calibration`` (a file a ``decision-calibrate``
+        training run wrote) to parsed answers; unchanged without one."""
+        path = (getattr(self, "ai_config", None) or {}).get("calibration")
+        if not path:
+            return answers
+        if getattr(self, "_calibration_path", None) != path:
+            from potato.ai.decision_calibration import load_calibration
+            try:
+                self._calibration = load_calibration(str(path))
+            except (OSError, ValueError) as e:
+                raise AIEndpointRequestError(
+                    f"Could not read the decision-model calibration {path}: {e}")
+            self._calibration_path = path
+        from potato.ai.decision_calibration import apply_calibration
+        return apply_calibration(answers, self._calibration)
 
     def decide_batch(self, states: List[str],
                      questions: List[DecisionQuestion]) -> List[List[DecisionAnswer]]:

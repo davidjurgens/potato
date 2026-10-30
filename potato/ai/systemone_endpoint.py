@@ -12,6 +12,8 @@ ai_config keys:
     timeout    seconds, default 30
     max_options  per-question option cap; default 255 (Jev). Set 52 for OpenJev
                if its shim's multi-pass split is not wanted.
+    calibration  path to a calibration.json from a ``decision-calibrate``
+               training run, applied to every answer (decision_calibration.py)
     state_key  the state is sent as ``{state_key: text}``; default 'text'.
                An empty value sends the bare string.
 """

@@ -96,6 +96,9 @@ _KIND_BY_TYPE = {
     "span_link": SchemaKind.SPAN,
     "tree_annotation": SchemaKind.SPAN,
     # Text
+    # `text` is the type name the schema registry uses for a free-text box;
+    # `textbox` alone left every real one UNSUPPORTED.
+    "text": SchemaKind.TEXT,
     "textbox": SchemaKind.TEXT,
     "text_edit": SchemaKind.TEXT,
     # Geometry / temporal (stored as a JSON blob under a single ``_data`` key)

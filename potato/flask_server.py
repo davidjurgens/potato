@@ -1218,6 +1218,13 @@ def load_user_data(config: dict):
         user_dirs = [d for d in os.listdir(user_data_dir) if os.path.isdir(os.path.join(user_data_dir, d))]
 
         for user_dir in user_dirs:
+            if not os.path.isfile(os.path.join(user_data_dir, user_dir,
+                                               "user_state.json")):
+                # Not an annotator: the training run store (training/) and
+                # other tools' folders live here too, and each boot warned
+                # about them.
+                logger.debug("Skipping %s: no user_state.json", user_dir)
+                continue
             try:
                 usm.load_user_state(os.path.join(user_data_dir, user_dir))
             except ValueError as e:
@@ -3779,6 +3786,44 @@ def _json_script_elements(values: dict) -> str:
         for key, value in values.items())
 
 
+def visible_pre_annotations(username: str, instance_id: str, item):
+    """``(pre_annotation_data, engine_request, held_out)``: the machine
+    answers this person may see on this item.
+
+    The page and ``/api/spans`` both ask this, so a span prelabel the page
+    would not show is not handed to the span manager either.
+    """
+    # Extract pre-annotation data if quality control is enabled
+    pre_annotation_data = None
+    qc_manager = get_quality_control_manager()
+    if qc_manager:
+        pre_annotation_data = qc_manager.extract_pre_annotations(instance_id, item.get_data())
+
+    # The labeling engine's request on this item, if this person holds one.
+    # A blind request (calibration, certification, audit) is how the engine
+    # learns how often the machines are wrong, so nothing a machine said may
+    # reach the page: no pre-annotation, no inline judge, no AI assistant. A
+    # shown (verify) request seeds the machine's answer through the same
+    # pre-annotation path, which also records it as a seed.
+    engine_request = None
+    if config.get("labeling_engine", {}).get("enabled"):
+        from potato.labeling_engine.integration.hooks import request_context
+        engine_request = request_context(username, instance_id)
+        if engine_request is not None and engine_request.get("visibility") == "blind":
+            pre_annotation_data = None
+        elif engine_request is not None and (engine_request.get("shown") or {}).get("value") is not None:
+            pre_annotation_data = {**(pre_annotation_data or {}),
+                                   engine_request["schema"]: engine_request["shown"]["value"]}
+
+    # The study's no-assistance comparison group (ai_support.holdout): no
+    # pre-annotation, no inline judge, and (below) no AI or chat assets.
+    from potato.assist_holdout import is_held_out as _is_held_out
+    held_out = _is_held_out(config, username, instance_id)
+    if held_out:
+        pre_annotation_data = None
+    return pre_annotation_data, engine_request, held_out
+
+
 def render_page_with_annotations(username: str):
     '''
     When annotating, shows the current instance to the user with any annotations
@@ -3814,39 +3859,15 @@ def render_page_with_annotations(username: str):
         if _qc is not None:
             _qc.record_item_served(username, instance_id)
 
-    # Extract pre-annotation data if quality control is enabled
-    pre_annotation_data = None
-    qc_manager = get_quality_control_manager()
-    if qc_manager:
-        pre_annotation_data = qc_manager.extract_pre_annotations(instance_id, item.get_data())
+    pre_annotation_data, engine_request, assist_held_out = \
+        visible_pre_annotations(username, instance_id, item)
 
     # LLM-judge inline suggestion (judge ↔ human alignment). Reads a persisted
     # judge prediction for this instance/schema; optionally computes on demand.
+    # Withheld on the same terms as the pre-annotations.
     judge_prediction = _get_inline_judge_prediction(instance_id, item)
-
-    # The labeling engine's request on this item, if this person holds one.
-    # A blind request (calibration, certification, audit) is how the engine
-    # learns how often the machines are wrong, so nothing a machine said may
-    # reach the page: no pre-annotation, no inline judge, no AI assistant. A
-    # shown (verify) request seeds the machine's answer through the same
-    # pre-annotation path, which also records it as a seed.
-    engine_request = None
-    if config.get("labeling_engine", {}).get("enabled"):
-        from potato.labeling_engine.integration.hooks import request_context
-        engine_request = request_context(username, instance_id)
-        if engine_request is not None and engine_request.get("visibility") == "blind":
-            pre_annotation_data = None
-            judge_prediction = None
-        elif engine_request is not None and (engine_request.get("shown") or {}).get("value") is not None:
-            pre_annotation_data = {**(pre_annotation_data or {}),
-                                   engine_request["schema"]: engine_request["shown"]["value"]}
-
-    # The study's no-assistance comparison group (ai_support.holdout): no
-    # pre-annotation, no inline judge, and (below) no AI or chat assets.
-    from potato.assist_holdout import is_held_out as _is_held_out
-    assist_held_out = _is_held_out(config, username, instance_id)
-    if assist_held_out:
-        pre_annotation_data = None
+    if assist_held_out or (engine_request is not None
+                           and engine_request.get("visibility") == "blind"):
         judge_prediction = None
 
     # Signal-based triage: why was this item prioritized in the queue?
@@ -4197,6 +4218,7 @@ def render_page_with_annotations(username: str):
 
     # Get pre-annotation configuration
     pre_annotation_config = {}
+    qc_manager = get_quality_control_manager()
     if qc_manager:
         pre_annotation_config = qc_manager.get_pre_annotation_config()
 
@@ -4442,9 +4464,16 @@ def render_page_with_annotations(username: str):
                             f"labels {sorted(str(k) for k in known)}; nothing "
                             f"will be pre-selected")
                 else:
-                    annotations[schema_name]['slider'] = str(predicted_value)
+                    # A trained model's prediction is {"label": "3",
+                    # "confidence": ...}; its str() was stored as the value.
+                    if isinstance(predicted_value, (dict, list)):
+                        names = _prelabel_names(predicted_value)
+                        predicted_value = names[0] if names else ""
+                    if predicted_value not in (None, ""):
+                        annotations[schema_name]['slider'] = str(predicted_value)
             elif scheme['annotation_type'] in ('image_annotation', 'spatial_annotation',
-                                               'tiered_annotation', 'spectrogram_annotation'):
+                                               'tiered_annotation', 'spectrogram_annotation',
+                                               'audio_annotation'):
                 # Image annotations live in a single hidden input under the
                 # "_data" label. The DOM walk below has a dedicated fallback for
                 # it (`if not input_fields and label == "_data"`), which sets the
@@ -4471,11 +4500,15 @@ def render_page_with_annotations(username: str):
                             f"{len(dropped)} entr{'y' if len(dropped) == 1 else 'ies'} "
                             f"left out because they are not boxes with a start_s and "
                             f"end_s ({', '.join(dropped[:5])})")
+                # An audio timeline is also one object, {"segments":
+                # [{start_time, end_time, label}]}, read back by
+                # AudioAnnotationManager._loadExistingAnnotations().
                 if isinstance(predicted_value, str):
                     annotations[schema_name]['_data'] = predicted_value
                 elif isinstance(predicted_value, list) or (
                         isinstance(predicted_value, dict)
-                        and scheme['annotation_type'] == 'tiered_annotation'):
+                        and scheme['annotation_type'] in ('tiered_annotation',
+                                                          'audio_annotation')):
                     annotations[schema_name]['_data'] = json.dumps(predicted_value)
                 else:
                     logger.warning(
@@ -4483,6 +4516,31 @@ def render_page_with_annotations(username: str):
                         f"list of annotation objects or a JSON string, got "
                         f"{type(predicted_value).__name__}"
                     )
+            elif (scheme['annotation_type'] == 'pairwise'
+                  and str(scheme.get('mode') or 'binary').lower() == 'binary'):
+                # A preference model (llm-dpo) predicts in data order, "A"
+                # being the first candidate. The page stores the letter of the
+                # card SHOWN first, so under randomize_order the prediction
+                # is swapped to where this annotator sees that candidate, by
+                # the same order the page lays the cards out in.
+                choices = [n for n in _prelabel_names(predicted_value)
+                           if n in ('A', 'B', 'tie', 'neither')]
+                if choices:
+                    from potato.server_utils import presentation_order as _po
+                    order = _po.item_order(scheme, item.get_data(), username,
+                                           instance_id)
+                    if order:
+                        recorded = _po.record(user_state, instance_id,
+                                              {schema_name: order})
+                        order = recorded.get(schema_name) or order
+                    shown = _po.source_pairwise_values(
+                        scheme, {'selection': choices[0]}, order or [0, 1])
+                    annotations[schema_name]['selection'] = shown['selection']
+                else:
+                    logger.warning(
+                        f"Pre-annotation '{predicted_value}' for pairwise schema "
+                        f"'{schema_name}' is not A, B, tie or neither; nothing "
+                        f"will be pre-selected")
             elif scheme['annotation_type'] == 'span':
                 # Already applied, further up, by
                 # _span_annotations_from_pre_annotations(). Spans are markup in
@@ -5605,8 +5663,17 @@ def configure_app(flask_app):
     from potato.server_utils.session_config import configure_session
     configure_session(app, config)
 
-    # Configure routes from the routes module
-    from routes import configure_routes
+    # Configure routes from the routes module. By its package name: the bare
+    # `from routes import` loaded potato/routes.py a second time as a module
+    # called `routes`, so anything that later imported `potato.routes` ran the
+    # file's @app.route decorators again with different function objects, and
+    # Flask refused with "overwriting an existing endpoint function: home".
+    # It also left the served handlers in a module nothing else imported, so
+    # a monkeypatch or a lazy import of `potato.routes` reached a copy that
+    # was never configured.
+    # Function-level on purpose: routes.py imports this module at its top, and
+    # its decorators must run after create_app() has rebound `app`.
+    from potato.routes import configure_routes  # noqa: cross-import
     configure_routes(app, config)
 
     # Conditionally register web agent blueprints only when needed
@@ -5862,11 +5929,16 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
     if config.get("model_training", {}).get("enabled", False):
         from potato.training.manager import (get_training_manager,
                                              init_training_manager)
+        from potato.training.protocol import training_api_bp
         from potato.training.routes import training_bp
         if get_training_manager() is None:
             init_training_manager(config)
         if "training" not in flask_app.blueprints:
             flask_app.register_blueprint(training_bp)
+        # The agent protocol. Token-authenticated, so it sits under /api/ with
+        # no session; see potato/training/protocol.py.
+        if "training_api" not in flask_app.blueprints:
+            flask_app.register_blueprint(training_api_bp)
         logger.info("Registered model-training blueprint")
 
     # Dataset publishing (HuggingFace / Zenodo / local archive). Always on for
@@ -7000,6 +7072,12 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'download-models':
         from potato.models_cli import main as models_main
         sys.exit(models_main(sys.argv[2:]))
+
+    # ``training`` runs the training agent and manages its backends. The agent
+    # runs on a machine with no config file, so it cannot take the server's.
+    if len(sys.argv) > 1 and sys.argv[1] == 'training':
+        from potato.training.cli import main as training_main
+        sys.exit(training_main(sys.argv[2:]))
 
     # ``vendor`` installs the large browser libraries some features need. It
     # takes bundle names, not a config file.

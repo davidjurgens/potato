@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "a27f367abf80738c",
-    "version": "53"
+    "sha256": "5a13ac74e5453e7d",
+    "version": "54"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -24,8 +24,8 @@
     "version": "6"
   },
   "audio-annotation.js": {
-    "sha256": "78327d8ec22280d9",
-    "version": "8"
+    "sha256": "5cc0c875b1651b55",
+    "version": "10"
   },
   "audio-dialogue.css": {
     "sha256": "141904f6914ed5e2",
@@ -468,8 +468,8 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "740a114a7e3651bb",
-    "version": "26"
+    "sha256": "996f01df39d740c9",
+    "version": "27"
   },
   "span-link-manager.js": {
     "sha256": "6461cb278105a953",

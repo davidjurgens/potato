@@ -697,6 +697,13 @@ KNOWN_CONFIG_KEYS = {
         "device": None,
         "num_threads": None,
         "writeback": {"schemas", "min_confidence", "field", "include_unlabeled"},
+        # Where runs execute (training/backends.py). Entries are validated by
+        # validate_backends_config, which knows the per-type keys.
+        "backend": None,
+        "backends": None,
+        "max_predictions_mb": None,
+        # Per-trainer parameter defaults, merged under a run's own params.
+        "trainer_params": None,
     },
     # The labeling engine (potato/labeling_engine): machines label, humans
     # calibrate and certify. Sources, cascade and contracts are lists of
@@ -841,6 +848,8 @@ def normalize_config_before_validation(
         task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
         config_data['task_dir'] = task_dir
         logger.debug(f"Resolved task_dir to: {task_dir}")
+
+    _absolute_calibration_paths(config_data)
 
     _apply_require_fully_annotated(config_data)
     _normalize_runtime_phases(config_data)
@@ -1826,6 +1835,57 @@ def _warn_engine_budget_too_small(engine_cfg) -> None:
 
 #: Deprecation notes already printed in this process.
 _DEPRECATION_NOTES_SHOWN = set()
+
+def _absolute_calibration_paths(config_data: Dict[str, Any]) -> None:
+    """A decision model's ``calibration`` file, relative to task_dir.
+
+    The endpoint opens the path as given, which is relative to whatever
+    directory the server was started from, not the project's.
+    """
+    task_dir = config_data.get("task_dir")
+    if not isinstance(task_dir, str):
+        return
+
+    def fix(holder: Dict[str, Any]) -> None:
+        path = holder.get("calibration")
+        if isinstance(path, str) and path and not os.path.isabs(path):
+            holder["calibration"] = os.path.normpath(os.path.join(task_dir, path))
+
+    engine = config_data.get("labeling_engine")
+    if isinstance(engine, dict):
+        for source in engine.get("sources") or []:
+            if isinstance(source, dict) and isinstance(source.get("options"), dict):
+                fix(source["options"])
+    solo = config_data.get("solo_mode")
+    if isinstance(solo, dict):
+        for model in solo.get("labeling_models") or []:
+            if isinstance(model, dict):
+                fix(model)
+
+
+def validate_training_backends_config(config_data: Dict[str, Any]) -> None:
+    """model_training: backends, trainer_params, splits, writeback,
+    auto_retrain, and decision-model calibration files (training/config_check.py).
+
+    Checked at boot because the first sign of a misspelt ``pyhton`` would
+    otherwise be a failed run, after a bundle build and an ssh connection.
+    """
+    from potato.training.config_check import training_config_problems
+    problems = training_config_problems(config_data)
+    training = config_data.get("model_training")
+    if not isinstance(training, dict):
+        if problems:
+            raise ConfigValidationError("; ".join(problems))
+        return
+    if "backends" in training or "backend" in training:
+        from potato.training.backends import validate_backends_config
+        problems.extend(validate_backends_config(config_data))
+    if "trainer_params" in training:
+        from potato.training.registry import validate_trainer_params
+        problems.extend(validate_trainer_params(training["trainer_params"]))
+    if problems:
+        raise ConfigValidationError("; ".join(problems))
+
 
 def validate_labeling_engine_config(config_data: Dict[str, Any]) -> None:
     """Refuse to start on an invalid ``labeling_engine`` block.
@@ -3053,6 +3113,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     validate_solo_mode_config(config_data)
 
     validate_labeling_engine_config(config_data)
+    validate_training_backends_config(config_data)
 
     # Validate declared machine annotators if present.
     validate_machine_annotators_config(config_data)

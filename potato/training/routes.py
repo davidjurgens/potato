@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from functools import wraps
 
 from flask import Blueprint, jsonify, render_template, request
@@ -67,6 +68,9 @@ def training_page():
         runs=manager.history(limit=25),
         trainers=_trainer_rows(),
         schemas=_schema_rows(),
+        backends=_backend_rows(),
+        trainer_params=(_config().get("model_training", {}) or {}).get(
+            "trainer_params") or {},
         writeback=(_config().get("model_training", {}) or {}).get("writeback", {}))
 
 
@@ -156,8 +160,54 @@ def api_start_run():
 
     outcome = _manager().start_run(trainer, schemas,
                                    params=body.get("params") or {},
-                                   trigger="api")
-    return jsonify(outcome), (200 if outcome.get("started") else 409)
+                                   trigger="api",
+                                   backend=body.get("backend") or None)
+    status = 200 if outcome.get("started") else outcome.pop("http_status", 409)
+    return jsonify(outcome), status
+
+
+@training_bp.route("/api/backends", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_backends():
+    return jsonify({"backends": _backend_rows()})
+
+
+@training_bp.route("/api/backends/<name>/check", methods=["POST"])
+@admin_required
+@_enabled_required
+@_same_origin_required
+def api_check_backend(name):
+    """Connect to a backend and report its Python, GPUs and gaps.
+
+    For an ssh backend this opens a real connection, so it takes a few
+    seconds. The local backend is not checked here: answering would mean
+    importing torch into the server process.
+    """
+    from potato.training.backends import load_backends
+
+    backend = load_backends(_config()).get(name)
+    if backend is None:
+        return jsonify({"ok": False,
+                        "message": "No backend named %r" % name}), 404
+    if backend.type == "local":
+        return jsonify({"ok": True, "message":
+                        "Runs on this machine; the run log names the device."})
+    if backend.type == "agent":
+        from potato.training import store
+        rows = [r for r in store.list_backends(_config())
+                if r["name"] == name]
+        if not rows:
+            return jsonify({"ok": False, "message":
+                            "No token issued. Run: potato training register "
+                            "%s <config.yaml>" % name})
+        seen = rows[0].get("last_seen")
+        return jsonify({"ok": bool(seen), "agent": rows[0], "message": (
+            "Last heard from %d seconds ago" % (time.time() - seen)
+            if seen else "Token issued; no agent has connected yet.")})
+
+    from potato.training.launchers import check_backend
+    return jsonify(check_backend(backend))
 
 
 @training_bp.route("/api/runs/<run_id>/cancel", methods=["POST"])
@@ -201,20 +251,75 @@ def api_retract(run_id):
 # -------------------------------------------------------------- helpers
 
 def _trainer_rows():
-    from potato.training.registry import list_trainers
-    return list_trainers()
+    """Trainers with their parameter names, for the start form's hint, and
+    what in this project's config stops one from running."""
+    from potato.training.registry import get_trainer_class, list_trainers
+
+    config = _config()
+    rows = list_trainers()
+    for row in rows:
+        try:
+            cls = get_trainer_class(row["name"])
+            schema = cls.params_schema() or {}
+            row["param_names"] = sorted(schema.get("properties") or {})
+            row["config_problem"] = cls.config_problem(config) or ""
+        except Exception:  # noqa: BLE001 - an unimportable trainer is data
+            row["param_names"] = []
+            row["config_problem"] = ""
+    return rows
+
+
+def _backend_rows():
+    from potato.training.backends import default_backend_name, load_backends
+
+    config = _config()
+    default = default_backend_name(config)
+    rows = []
+    for backend in load_backends(config).values():
+        row = backend.to_public_dict()
+        row["default"] = backend.name == default
+        rows.append(row)
+    return rows
+
+
+def _item_sample(limit: int = 50):
+    """Item data for the first *limit* items, or [] when there is no store."""
+    try:
+        from potato.item_state_management import get_item_state_manager
+        manager = get_item_state_manager()
+        ids = manager.get_instance_ids()[:limit]
+        return [manager.get_item(i).get_data() for i in ids]
+    except Exception:  # noqa: BLE001 - no store in some test harnesses
+        return []
 
 
 def _schema_rows():
     """Schemes in this project, with the trainers that could fit each."""
-    from potato.training.registry import kind_of_schema, trainers_for_schema
+    from potato.training.dataset import guess_modality
+    from potato.training.registry import (get_trainer_class, kind_of_schema,
+                                          trainers_for_schema)
+
+    sample = _item_sample()
+    config = _config()
+
+    def runnable(name):
+        # decision-calibrate fits every radio scheme, and runs only with a
+        # decision model configured.
+        try:
+            return not get_trainer_class(name).config_problem(config)
+        except Exception:  # noqa: BLE001
+            return True
 
     rows = []
     for scheme in _config().get("annotation_schemes", []) or []:
         name = scheme.get("name")
         if not name:
             continue
-        matches = trainers_for_schema(scheme)
+        # Without the modality an image trainer was offered, and preselected,
+        # for a text scheme, and failed only after the bundle was built.
+        modality = guess_modality(_config(), scheme, sample) if sample else None
+        matches = [t for t in trainers_for_schema(scheme, modality=modality)
+                   if runnable(t.name)]
         rows.append({
             "name": name,
             "annotation_type": scheme.get("annotation_type", ""),

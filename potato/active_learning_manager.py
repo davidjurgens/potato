@@ -74,9 +74,14 @@ class SentenceTransformerVectorizer:
     is only imported when this vectorizer is actually used.
     """
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2",
+                 device: Optional[str] = None):
         self.model_name = model_name
+        #: A torch device string, or None for sentence-transformers' own
+        #: choice. Set by the trainer from ``model_training.device``.
+        self.device = device
         self._model = None
+        self._fitted = False
 
     def __sklearn_tags__(self):
         # Inside a Pipeline, scikit-learn >= 1.6 asks every step for its tags
@@ -85,14 +90,39 @@ class SentenceTransformerVectorizer:
         from sklearn.base import BaseEstimator
         return BaseEstimator.__sklearn_tags__(self)
 
+    def __getstate__(self):
+        # The encoder is reloaded on the next transform. Pickled, it made every
+        # saved model the size of the encoder, and a model fitted on a CUDA
+        # host could not be unpickled on a machine without CUDA.
+        state = dict(self.__dict__)
+        state["_model"] = None
+        return state
+
+    def __setstate__(self, state):
+        state.setdefault("device", None)
+        # Only a fitted vectorizer is ever saved, inside a fitted pipeline.
+        state.setdefault("_fitted", True)
+        self.__dict__.update(state)
+
     def fit(self, X, y=None):
         from sentence_transformers import SentenceTransformer
-        self._model = SentenceTransformer(self.model_name)
+        if self.device:
+            self._model = SentenceTransformer(self.model_name,
+                                              device=self.device)
+        else:
+            self._model = SentenceTransformer(self.model_name)
+        self._fitted = True
         return self
 
     def transform(self, X):
         if self._model is None:
-            raise RuntimeError("SentenceTransformerVectorizer has not been fitted yet")
+            if not self._fitted:
+                raise RuntimeError("SentenceTransformerVectorizer is not "
+                                   "fitted; call fit() first")
+            # Fitted, saved and reloaded: the encoder was left out of the
+            # pickle. It is pretrained and frozen, so loading it again is the
+            # whole of the fit.
+            self.fit(X)
         return self._model.encode(list(X), show_progress_bar=False)
 
     def fit_transform(self, X, y=None):
@@ -993,7 +1023,9 @@ class ActiveLearningManager:
             self._finish_run(
                 run, status="success", model_version=model_path,
                 n_train=len(training_data["texts"]),
-                metrics={"accuracy": metrics.accuracy,
+                # Scored on the items it was fitted on, so named for that:
+                # the Training page shows only held-out scores.
+                metrics={"train_accuracy": metrics.accuracy,
                          "training_time": metrics.training_time,
                          "instance_count": metrics.instance_count})
 

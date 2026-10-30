@@ -59,6 +59,10 @@ __all__ = [
     "load_predictions",
     "predictions_for_instance",
     "delete_predictions_for_run",
+    "register_backend",
+    "backend_for_token",
+    "touch_backend",
+    "list_backends",
 ]
 
 
@@ -89,7 +93,8 @@ class TrainingRun:
 
     run_id: str
     trainer: str
-    #: ``"local"`` for the subprocess worker, ``"external:<name>"`` otherwise.
+    #: ``"local"`` for the subprocess worker, otherwise the name of a backend
+    #: under ``model_training.backends``.
     backend: str = "local"
     schema_names: List[str] = field(default_factory=list)
     kinds: List[str] = field(default_factory=list)
@@ -113,6 +118,10 @@ class TrainingRun:
     error_code: str = ""
     pid: Optional[int] = None
     host: str = ""
+    #: Where an agent backend left the model, ``host:/path``. The server
+    #: holds only the predictions for such a run; ``artifact_dir`` is its
+    #: own copy of what came back.
+    artifact_uri: str = ""
 
     def __post_init__(self) -> None:
         if not self.created_at:
@@ -140,12 +149,46 @@ class TrainingRun:
 # --------------------------------------------------------------- persistence
 
 _MIGRATION = None
+_BACKENDS_MIGRATION = None
+_ARTIFACT_URI_MIGRATION = None
+
+
+def _artifact_uri_migration():
+    from potato.persistence import Migration
+    return Migration(
+        name="0003_training_run_artifact_uri",
+        sql="ALTER TABLE training_runs ADD COLUMN artifact_uri "
+            "TEXT NOT NULL DEFAULT '';",
+    )
+
+
+def _backends_migration():
+    from potato.persistence import Migration
+    return Migration(
+        name="0002_training_backends",
+        sql="""
+        CREATE TABLE IF NOT EXISTS training_backends (
+            project      TEXT NOT NULL,
+            name         TEXT NOT NULL,
+            token_digest TEXT NOT NULL,
+            created_at   REAL NOT NULL,
+            last_seen    REAL,
+            agent_info   TEXT NOT NULL DEFAULT '{}',
+            PRIMARY KEY (project, name)
+        );
+        """,
+    )
 
 
 def _db(task_dir: str):
     from potato.persistence import Migration, get_db, register_migration
 
-    global _MIGRATION
+    global _MIGRATION, _BACKENDS_MIGRATION
+    if _BACKENDS_MIGRATION is None:
+        _BACKENDS_MIGRATION = _backends_migration()
+    global _ARTIFACT_URI_MIGRATION
+    if _ARTIFACT_URI_MIGRATION is None:
+        _ARTIFACT_URI_MIGRATION = _artifact_uri_migration()
     if _MIGRATION is None:
         _MIGRATION = Migration(
             name="0001_training_runs",
@@ -205,6 +248,8 @@ def _db(task_dir: str):
             """,
         )
     register_migration(_MIGRATION)
+    register_migration(_BACKENDS_MIGRATION)
+    register_migration(_ARTIFACT_URI_MIGRATION)
     return get_db(task_dir)
 
 
@@ -237,8 +282,8 @@ def record_run(config: Dict[str, Any], run: TrainingRun) -> None:
                 status, trigger, created_at, started_at, finished_at,
                 n_train, n_val, n_test, split_seed, params, metrics,
                 artifact_dir, model_version, bundle_digest, error, error_code,
-                pid, host)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                pid, host, artifact_uri)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(project, run_id) DO UPDATE SET
                trainer=excluded.trainer, backend=excluded.backend,
                schema_names=excluded.schema_names, kinds=excluded.kinds,
@@ -252,14 +297,15 @@ def record_run(config: Dict[str, Any], run: TrainingRun) -> None:
                model_version=excluded.model_version,
                bundle_digest=excluded.bundle_digest,
                error=excluded.error, error_code=excluded.error_code,
-               pid=excluded.pid, host=excluded.host""",
+               pid=excluded.pid, host=excluded.host,
+               artifact_uri=excluded.artifact_uri""",
         (_project(config), run.run_id, run.trainer, run.backend,
          json.dumps(run.schema_names), json.dumps(run.kinds),
          run.status, run.trigger, run.created_at, run.started_at,
          run.finished_at, run.n_train, run.n_val, run.n_test, run.split_seed,
          json.dumps(run.params), json.dumps(run.metrics), run.artifact_dir,
          run.model_version, run.bundle_digest, run.error, run.error_code,
-         run.pid, run.host),
+         run.pid, run.host, run.artifact_uri),
     )
     conn.commit()
 
@@ -278,7 +324,8 @@ def _row_to_run(row) -> TrainingRun:
         metrics=json.loads(row["metrics"] or "{}"),
         artifact_dir=row["artifact_dir"], model_version=row["model_version"],
         bundle_digest=row["bundle_digest"], error=row["error"],
-        error_code=row["error_code"], pid=row["pid"], host=row["host"])
+        error_code=row["error_code"], pid=row["pid"], host=row["host"],
+        artifact_uri=row["artifact_uri"] if "artifact_uri" in row.keys() else "")
 
 
 def load_run(config: Dict[str, Any], run_id: str) -> Optional[TrainingRun]:
@@ -492,6 +539,20 @@ def record_predictions(
     return len(predictions)
 
 
+def has_prediction(config: Dict[str, Any], instance_id: str,
+                   schema_name: str) -> bool:
+    """Whether training stored a prediction for this item and scheme."""
+    try:
+        row = _db(_task_dir(config)).execute(
+            "SELECT 1 FROM training_predictions WHERE project = ? AND "
+            "instance_id = ? AND schema_name = ?",
+            (_project(config), str(instance_id), str(schema_name))).fetchone()
+    except Exception:
+        logger.debug("Could not read training predictions", exc_info=True)
+        return False
+    return row is not None
+
+
 def load_predictions(config: Dict[str, Any], run_id: Optional[str] = None
                      ) -> List[Dict[str, Any]]:
     """Every stored prediction, optionally filtered to one run.
@@ -559,3 +620,85 @@ def delete_predictions_for_run(config: Dict[str, Any], run_id: str) -> int:
         (_project(config), run_id))
     conn.commit()
     return cur.rowcount or 0
+
+
+# ------------------------------------------------------------- backends
+
+def _token_digest(token: str) -> str:
+    # Unsalted SHA-256, as potato.server_utils.agent_tokens does: the tokens
+    # are 256 random bits, so there is no dictionary for a salt to defeat.
+    import hashlib
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def register_backend(config: Dict[str, Any], name: str) -> str:
+    """Issue a token for a manually started agent and return it.
+
+    Registering a name again replaces its token, which is how a leaked token
+    is rotated. The plaintext is returned once and never stored.
+    """
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    conn = _db(_task_dir(config))
+    conn.execute(
+        """INSERT INTO training_backends
+               (project, name, token_digest, created_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(project, name) DO UPDATE SET
+               token_digest = excluded.token_digest,
+               created_at = excluded.created_at""",
+        (_project(config), name, _token_digest(token), time.time()))
+    conn.commit()
+    return token
+
+
+def backend_for_token(config: Dict[str, Any], token: str) -> Optional[str]:
+    """The registered backend name a token belongs to, or None."""
+    import hmac
+
+    if not token:
+        return None
+    digest = _token_digest(token)
+    conn = _db(_task_dir(config))
+    rows = conn.execute(
+        "SELECT name, token_digest FROM training_backends WHERE project = ?",
+        (_project(config),)).fetchall()
+    for row in rows:
+        if hmac.compare_digest(row["token_digest"], digest):
+            return row["name"]
+    return None
+
+
+def touch_backend(config: Dict[str, Any], name: str,
+                  agent_info: Optional[Dict[str, Any]] = None) -> None:
+    conn = _db(_task_dir(config))
+    if agent_info is None:
+        conn.execute(
+            "UPDATE training_backends SET last_seen = ? "
+            "WHERE project = ? AND name = ?",
+            (time.time(), _project(config), name))
+    else:
+        conn.execute(
+            "UPDATE training_backends SET last_seen = ?, agent_info = ? "
+            "WHERE project = ? AND name = ?",
+            (time.time(), json.dumps(agent_info), _project(config), name))
+    conn.commit()
+
+
+def list_backends(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Registered agents: name, when registered, when last heard from."""
+    conn = _db(_task_dir(config))
+    rows = conn.execute(
+        "SELECT name, created_at, last_seen, agent_info "
+        "FROM training_backends WHERE project = ? ORDER BY name",
+        (_project(config),)).fetchall()
+    out = []
+    for row in rows:
+        try:
+            info = json.loads(row["agent_info"] or "{}")
+        except ValueError:
+            info = {}
+        out.append({"name": row["name"], "created_at": row["created_at"],
+                    "last_seen": row["last_seen"], "agent_info": info})
+    return out

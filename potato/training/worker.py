@@ -212,6 +212,26 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
         predictions_path = ""
 
     metrics = dict(result.metrics)
+    if predictions_path:
+        try:
+            from potato.training.evaluation import (read_predictions,
+                                                    score_predictions)
+            heldout = score_predictions(bundle,
+                                        read_predictions(predictions_path),
+                                        spec.schemas,
+                                        selected_on=result.selected_on)
+            for name, value in heldout.items():
+                metrics[name] = value
+                split, _, metric = name.partition("_")
+                if split in ("val", "test") and isinstance(value, float):
+                    report.metric(split, metric, value)
+            if "heldout_score" in heldout:
+                report.log("info", "Held-out %s: %.3f"
+                           % (heldout["heldout_metric"],
+                              heldout["heldout_score"]))
+        except Exception as exc:  # noqa: BLE001
+            report.log("warning", "Could not score the held-out "
+                                  "predictions: %s" % exc)
     try:
         extra = trainer.evaluate(spec, spec.workdir, bundle, "val", report)
         for name, value in (extra or {}).items():

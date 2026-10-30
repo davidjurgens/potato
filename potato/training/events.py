@@ -176,6 +176,17 @@ class CollectingReporter(ProgressReporter):
     def log(self, level: str, msg: str) -> None:
         self.events.append(event("log", level=level, msg=msg))
 
+    # The worker's own three, so `worker.run` can be driven in-process.
+    def artifact(self, path: str, bytes_: Optional[int] = None) -> None:
+        self.events.append(event("artifact", path=path, bytes=bytes_))
+
+    def result(self, status: str, **fields: Any) -> None:
+        self.events.append(event("result", status=status, **fields))
+
+    def error(self, code: str, message: str, install_hint: str = "") -> None:
+        self.events.append(event("error", code=code, message=message,
+                                 install_hint=install_hint))
+
     def should_stop(self) -> bool:
         return bool(self._should_stop())
 

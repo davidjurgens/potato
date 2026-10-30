@@ -81,10 +81,15 @@ class TestRegistry:
         matches = [t.name for t in registry.trainers_for_schema(radio)]
         assert "sklearn-text" in matches
 
-    def test_free_text_has_no_trainer(self):
-        """TEXT has no automatic target, so offering a trainer would lie."""
-        assert registry.trainers_for_schema(
-            {"annotation_type": "textbox", "name": "notes"}) == []
+    def test_free_text_gets_only_a_generative_trainer(self):
+        """What annotators wrote is a target only for a model that writes.
+        A classifier offered for free text would learn one class per
+        distinct answer. `text` is the type name the registry uses;
+        `textbox` used to be the only one classified."""
+        for annotation_type in ("text", "textbox"):
+            matches = [t.name for t in registry.trainers_for_schema(
+                {"annotation_type": annotation_type, "name": "notes"})]
+            assert matches == ["llm-sft"], annotation_type
 
     def test_an_unknown_type_has_no_trainer(self):
         assert registry.trainers_for_schema(

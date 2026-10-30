@@ -58,6 +58,8 @@ NON_CV_EXPORTERS = {
     # The labeling engine's resolved labels and certificate: whatever each
     # scheme stores, so no shape row of its own.
     "labeling_engine",
+    # Audio and video timeline segments: times, not shapes.
+    "segments",
     # Science and scheduling tables with no image geometry: molecules
     # (molfile/SD), spectrum peaks, signal intervals and BIDS events, ontology
     # term rows, and scheduled-session records.

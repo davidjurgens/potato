@@ -170,6 +170,7 @@ def _register_builtin_exporters():
     from .adjudication_exporter import AdjudicationExporter
     from .labeling_engine_exporter import LabelingEngineExporter
     from .schedule_exporter import ScheduleExporter
+    from .segments_exporter import SegmentsExporter
 
     exporters = [
         COCOExporter(),
@@ -260,6 +261,7 @@ def _register_builtin_exporters():
         LabelingEngineExporter(),
         # Scheduled sessions, compliance and the notification log.
         ScheduleExporter(),
+        SegmentsExporter(),
     ]
 
     # Optional exporters with external dependencies

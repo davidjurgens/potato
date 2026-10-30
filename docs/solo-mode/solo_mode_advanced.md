@@ -723,8 +723,9 @@ solo_mode:
       timeout: null                    # unset = the endpoint's own default
       think: null                      # unset = the endpoint's default; true/false overrides
       # Endpoint-specific options, passed to the endpoint unchanged. Only these
-      # five keys are read: device, batch_size, head_max_len, max_options,
-      # state_key (decision models such as laya and systemone use them).
+      # six keys are read: device, batch_size, head_max_len, max_options,
+      # state_key and calibration (decision models such as laya and systemone
+      # use them; calibration is a decision-calibrate run's calibration.json).
 
   # LLM models for prompt revision (defaults to labeling_models if empty)
   revision_models:

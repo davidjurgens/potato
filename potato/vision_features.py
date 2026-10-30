@@ -183,8 +183,11 @@ class ImageEmbeddingVectorizer:
     def __init__(self, model_name: str = DEFAULT_IMAGE_MODEL,
                  cache_dir: Optional[str] = None,
                  image_root: Optional[str] = None,
-                 media_dir: Optional[str] = None):
+                 media_dir: Optional[str] = None,
+                 device: Optional[str] = None):
         self.model_name = model_name
+        #: A torch device string, or None for sentence-transformers' choice.
+        self.device = device
         self.image_root = image_root
         self.media_dir = media_dir
         self._model = None
@@ -215,7 +218,11 @@ class ImageEmbeddingVectorizer:
                  "Image embeddings")
         from sentence_transformers import SentenceTransformer
 
-        self._model = SentenceTransformer(self.model_name)
+        if getattr(self, "device", None):
+            self._model = SentenceTransformer(self.model_name,
+                                              device=self.device)
+        else:
+            self._model = SentenceTransformer(self.model_name)
         return self
 
     def transform(self, X: Sequence[str]):

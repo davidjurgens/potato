@@ -95,7 +95,10 @@ with status 1 and names the source.
   answers in-process and behind `laya-serve`; `options: {state_key: ""}`
   sends the bare string instead. On rating scales (`likert`, `slider`) Laya's
   scores can barely follow the scale: check a few items before relying on
-  it.
+  it. `options: {calibration: <path>}` applies a calibration fitted to the
+  study's labels by a `decision-calibrate` training run, and a `laya` source's
+  `model` can be a `laya-finetune` run's `artifacts/model`; see
+  [Model training](../ai-intelligence/model_training.md#decision-models-decision-calibrate-and-laya-finetune).
 - **`detector`** (`image_annotation`): `keep_threshold` (0.35), boxes at or
   above it are the prediction; `candidate_threshold` (0.05), boxes between the
   two lower the image's confidence; `label_map`, detector class to scheme

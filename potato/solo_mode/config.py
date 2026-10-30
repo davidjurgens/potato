@@ -528,7 +528,7 @@ class SoloModeConfig:
 #: Model-config keys that are specific to one endpoint type and are passed to
 #: it as they are (see ModelConfig.options).
 ENDPOINT_OPTION_KEYS = ('device', 'batch_size', 'head_max_len', 'max_options',
-                        'state_key')
+                        'state_key', 'calibration')
 
 
 def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:

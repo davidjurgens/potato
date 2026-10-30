@@ -247,6 +247,12 @@ Annotations are saved as JSON:
 }
 ```
 
+The `segments` export writes these as one JSONL row per segment and as RTTM
+files for diarization tools; see
+[Timeline segments](../../data-export/export_formats.md#timeline-segments-segments).
+A model can be trained on them in Potato with the `hf-audio-tagger` trainer
+([Model training](../../ai-intelligence/model_training.md#hf-audio-tagger)).
+
 ## Keyboard Shortcuts
 
 | Key | Action |

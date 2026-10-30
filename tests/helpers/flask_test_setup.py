@@ -1059,11 +1059,14 @@ class FlaskTestServer:
                     try:
                         from potato.training.manager import (
                             clear_training_manager, init_training_manager)
+                        from potato.training.protocol import training_api_bp
                         from potato.training.routes import training_bp
                         clear_training_manager()
                         init_training_manager(config)
                         if 'training' not in app.blueprints:
                             app.register_blueprint(training_bp)
+                        if 'training_api' not in app.blueprints:
+                            app.register_blueprint(training_api_bp)
                     except ImportError:
                         pass
 

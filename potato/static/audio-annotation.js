@@ -521,6 +521,31 @@ class SpectrogramRenderer {
 // Export SpectrogramRenderer
 window.SpectrogramRenderer = SpectrogramRenderer;
 
+/**
+ * Who put a segment on the timeline: the same keys and meaning as the image
+ * widget's (image-annotation.js). A model's segment arrived with `source`,
+ * `ai_model` and `confidence`, and the save kept only id, times and label,
+ * so an accepted model segment was stored as if an annotator had drawn it.
+ */
+const SEGMENT_PROVENANCE_KEYS = ['source', 'ai_model', 'confidence', 'edited',
+                                 'carried_over', 'import_format'];
+
+function copySegmentProvenance(target, src) {
+    for (const key of SEGMENT_PROVENANCE_KEYS) {
+        if (src && src[key] !== undefined) {
+            target[key] = src[key];
+        }
+    }
+    return target;
+}
+
+/** A segment someone else proposed, changed by the annotator. */
+function markSegmentEdited(segment) {
+    if (segment.source && segment.source !== 'human') {
+        segment.edited = true;
+    }
+}
+
 class AudioAnnotationManager {
     /**
      * Create an AudioAnnotationManager instance.
@@ -1489,6 +1514,9 @@ class AudioAnnotationManager {
         // Update our tracking
         const segmentData = this.segments.find(s => s.id === segmentId);
         if (segmentData) {
+            if (segmentData.label !== label) {
+                markSegmentEdited(segmentData);
+            }
             segmentData.label = label;
             if (color) segmentData.color = color;
         }
@@ -1514,6 +1542,10 @@ class AudioAnnotationManager {
         const segmentData = this.segments.find(s => s.id === segment.id);
 
         if (segmentData) {
+            if (segmentData.startTime !== segment.startTime
+                    || segmentData.endTime !== segment.endTime) {
+                markSegmentEdited(segmentData);
+            }
             segmentData.startTime = segment.startTime;
             segmentData.endTime = segment.endTime;
         }
@@ -1752,15 +1784,7 @@ class AudioAnnotationManager {
         if (!this.inputEl) return;
         this._declareCompleteness();
 
-        const data = {
-            segments: this.segments.map(s => ({
-                id: s.id,
-                start_time: s.startTime,
-                end_time: s.endTime,
-                label: s.label,
-                annotations: s.annotations || {}
-            }))
-        };
+        const data = this.serialize();
 
         this.inputEl.value = JSON.stringify(data);
         // Assigning `.value` fires nothing, so without this the shared autosave
@@ -1822,6 +1846,16 @@ class AudioAnnotationManager {
                     if (segmentData && seg.annotations) {
                         segmentData.annotations = seg.annotations;
                     }
+                    if (segmentData) {
+                        copySegmentProvenance(segmentData, seg);
+                    }
+                }
+                // createSegment saved each segment before its answers and
+                // provenance were restored, so the input held the last (or
+                // only) segment without them, and an untouched prelabel was
+                // stored that way. Save once more, with everything restored.
+                if (data.segments.length) {
+                    this._saveData();
                 }
                 audioDebugLog('Loaded existing annotations:', data.segments.length, 'segments');
             }
@@ -1845,13 +1879,13 @@ class AudioAnnotationManager {
      */
     serialize() {
         return {
-            segments: this.segments.map(s => ({
+            segments: this.segments.map(s => copySegmentProvenance({
                 id: s.id,
                 start_time: s.startTime,
                 end_time: s.endTime,
                 label: s.label,
                 annotations: s.annotations || {}
-            }))
+            }, s))
         };
     }
 
@@ -1871,13 +1905,19 @@ class AudioAnnotationManager {
 
         // Load segments
         for (const seg of data.segments) {
-            this.createSegment(
+            const created = this.createSegment(
                 seg.start_time,
                 seg.end_time,
                 seg.label,
                 this._getLabelColor(seg.label),
                 seg.id
             );
+            if (created) {
+                copySegmentProvenance(created, seg);
+            }
+        }
+        if (data.segments.length) {
+            this._saveData();
         }
     }
 

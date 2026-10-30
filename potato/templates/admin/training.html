@@ -52,6 +52,14 @@
   .tr-progress > span { display: block; height: 100%; background: var(--primary);
                         width: 0; transition: width 0.2s ease; }
   .tr-note { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.35rem; }
+  .tr-params { margin-top: 0.75rem; max-width: 44rem; }
+  .tr-params textarea {
+    padding: 0.4rem 0.55rem; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--background);
+    color: var(--foreground); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem; min-height: 2.75rem; width: 100%; box-sizing: border-box;
+    resize: vertical; }
+  .tr-optional { font-weight: 400; color: var(--muted-foreground); }
   .tr-unavailable { color: var(--muted-foreground); }
   .tr-live { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
 </style>
@@ -77,13 +85,15 @@
         <select id="trainer-select">
           {% for t in trainers %}
             <option value="{{ t.name }}"
-                    data-available="{{ '1' if t.available else '0' }}"
+                    data-available="{{ '1' if t.available and not t.config_problem else '0' }}"
                     data-hint="{{ t.install_hint }}"
                     data-reason="{{ t.unavailable_reason }}"
                     data-ack="{{ '1' if t.licence_ack else '0' }}"
                     data-licence="{{ t.licence }}"
-                    {% if not t.available %}disabled{% endif %}>
-              {{ t.name }}{% if not t.available %} — {{ ui_lang.training_not_installed|default('not installed') }}{% endif %}
+                    data-params="{{ t.param_names|join(', ') }}"
+                    data-defaults='{{ (trainer_params.get(t.name) or {})|tojson }}'
+                    {% if not t.available or t.config_problem %}disabled{% endif %}>
+              {{ t.name }}{% if not t.available %} — {{ ui_lang.training_not_installed|default('not installed') }}{% elif t.config_problem %} — {{ t.config_problem }}{% endif %}
             </option>
           {% endfor %}
         </select>
@@ -99,10 +109,28 @@
           {% endfor %}
         </select>
       </div>
+      <div class="tr-field">
+        <label for="backend-select">{{ ui_lang.training_backend|default('Runs on') }}</label>
+        <select id="backend-select">
+          {% for b in backends %}
+            <option value="{{ b.name }}" data-type="{{ b.type }}"
+                    {% if b.default %}selected{% endif %}>{{ b.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="shadcn-button shadcn-button-outline" id="check-btn"
+              type="button" hidden>{{ ui_lang.training_check|default('Check') }}</button>
       <button class="shadcn-button" id="start-btn">{{ ui_lang.training_start|default('Train now') }}</button>
       <button class="shadcn-button shadcn-button-outline" id="cancel-btn" hidden>{{ ui_lang.training_cancel|default('Cancel run') }}</button>
     </div>
     <p class="tr-note" id="trainer-note"></p>
+    <div class="tr-field tr-params">
+      <label for="params-input">{{ ui_lang.training_params|default('Parameters') }}
+        <span class="tr-optional">{{ ui_lang.training_params_optional|default('JSON, optional') }}</span></label>
+      <textarea id="params-input" rows="2" spellcheck="false" autocomplete="off"
+                aria-describedby="params-note" placeholder='{"lora": true}'></textarea>
+      <p class="tr-note" id="params-note"></p>
+    </div>
     <p class="tr-status" id="start-status" role="status" aria-live="polite"></p>
     {% endif %}
 
@@ -139,6 +167,7 @@
             <th scope="col">{{ ui_lang.training_col_run|default('Run') }}</th>
             <th scope="col">{{ ui_lang.training_col_status|default('Status') }}</th>
             <th scope="col">{{ ui_lang.training_col_trainer|default('Trainer') }}</th>
+            <th scope="col">{{ ui_lang.training_col_backend|default('Ran on') }}</th>
             <th scope="col">{{ ui_lang.training_col_schemas|default('Schemas') }}</th>
             <th scope="col">{{ ui_lang.training_col_train|default('Train') }}</th>
             <th scope="col">{{ ui_lang.training_col_val|default('Val') }}</th>
@@ -154,12 +183,16 @@
               <span class="tr-pill {{ 'ok' if r.status == 'success' else 'err' if r.status == 'error' else 'cancel' if r.status == 'cancelled' else 'run' }}">{{ r.status }}</span>
             </td>
             <td>{{ r.trainer }}</td>
+            <td{% if r.host %} title="{{ r.host }}"{% endif %}>{{ r.backend or 'local' }}</td>
             <td>{{ r.schema_names|join(', ') }}</td>
             <td class="tr-num">{{ r.n_train }}</td>
             <td class="tr-num">{{ r.n_val }}</td>
             <td class="tr-num">
-              {%- set score = r.metrics.get('accuracy') or r.metrics.get('train_accuracy') -%}
-              {%- if score is not none %}{{ '%.3f'|format(score) }}{% else %}<span class="tr-empty">not scored</span>{% endif -%}
+              {#- Only a score measured on val or test goes here. Training-set
+                  accuracy used to fill this column, and a model scores well
+                  on the data it was fitted on whatever it learned. -#}
+              {%- set score = r.metrics.get('heldout_score') -%}
+              {%- if score is number %}<span title="{{ r.metrics.get('heldout_metric', '') }}">{{ '%.3f'|format(score) }}</span>{% else %}<span class="tr-empty">not scored</span>{% endif -%}
             </td>
             <td class="tr-num">
               {%- if r.duration %}{{ '%.1fs'|format(r.duration) }}{% else %}<span class="tr-empty">—</span>{% endif -%}
@@ -193,10 +226,12 @@
             <td>{{ t.modalities|join(', ') }}</td>
             <td>{{ t.licence }}{% if t.licence_ack %} <span class="tr-pill">{{ ui_lang.training_ack_required|default('confirm before use') }}</span>{% endif %}</td>
             <td>
-              {%- if t.available -%}
-                <span class="tr-pill ok">{{ ui_lang.training_yes|default('yes') }}</span>
-              {%- else -%}
+              {%- if not t.available -%}
                 <span class="tr-unavailable">{{ t.install_hint or t.unavailable_reason or ui_lang.training_no|default('no') }}</span>
+              {%- elif t.config_problem -%}
+                <span class="tr-unavailable">{{ t.config_problem }}</span>
+              {%- else -%}
+                <span class="tr-pill ok">{{ ui_lang.training_yes|default('yes') }}</span>
               {%- endif -%}
             </td>
           </tr>
@@ -217,6 +252,8 @@
   var noteEl     = document.getElementById("trainer-note");
   var trainerSel = document.getElementById("trainer-select");
   var schemaSel  = document.getElementById("schema-select");
+  var backendSel = document.getElementById("backend-select");
+  var checkBtn   = document.getElementById("check-btn");
   var live       = document.getElementById("live");
   var liveState  = document.getElementById("live-state");
   var liveStep   = document.getElementById("live-step");
@@ -233,10 +270,45 @@
     statusEl.className = "tr-status" + (kind ? " " + kind : "");
   }
 
+  var paramsEl = document.getElementById("params-input");
+  var paramsNote = document.getElementById("params-note");
+  // Filled from model_training.trainer_params for the chosen trainer until
+  // the admin types in it; after that, switching trainer keeps their text.
+  var paramsEdited = false;
+  if (paramsEl) {
+    paramsEl.addEventListener("input", function () { paramsEdited = true; });
+  }
+
+  function describeParams(opt) {
+    if (!paramsEl) { return; }
+    var defaults = {};
+    try { defaults = JSON.parse(opt.dataset.defaults || "{}"); } catch (e) { defaults = {}; }
+    if (!paramsEdited) {
+      paramsEl.value = Object.keys(defaults).length ? JSON.stringify(defaults) : "";
+    }
+    if (paramsNote) {
+      paramsNote.textContent = opt.dataset.params
+        ? "Takes: " + opt.dataset.params + "." +
+          (Object.keys(defaults).length ? " Filled in from model_training.trainer_params." : "")
+        : "";
+    }
+  }
+
+  function readParams() {
+    var text = paramsEl ? paramsEl.value.trim() : "";
+    if (!text) { return {}; }
+    var value = JSON.parse(text);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Parameters must be a JSON object, such as {\"lora\": true}.");
+    }
+    return value;
+  }
+
   function describeTrainer() {
     if (!trainerSel || !noteEl) { return; }
     var opt = trainerSel.options[trainerSel.selectedIndex];
     if (!opt) { noteEl.textContent = ""; return; }
+    describeParams(opt);
     if (opt.dataset.available !== "1") {
       noteEl.textContent = opt.dataset.hint
         ? "Not installed. " + opt.dataset.hint
@@ -319,28 +391,110 @@
 
   if (trainerSel) {
     trainerSel.addEventListener("change", describeTrainer);
+  }
+
+  // Offer only the trainers that fit the chosen schema (its kind, and the
+  // project's modality); an installed trainer that does not fit is disabled
+  // rather than hidden, so the list reads the same for every schema.
+  var trainerChosen = false;
+  if (trainerSel) {
+    trainerSel.addEventListener("change", function () { trainerChosen = true; });
+  }
+  function syncTrainers() {
+    if (!trainerSel || !schemaSel) { return; }
+    var schemaOpt = schemaSel.options[schemaSel.selectedIndex];
+    var fits = schemaOpt ? (schemaOpt.dataset.trainers || "").split(",").filter(Boolean) : [];
+    var firstFit = null;
+    Array.prototype.forEach.call(trainerSel.options, function (opt) {
+      var installed = opt.dataset.available === "1";
+      var fit = fits.indexOf(opt.value) >= 0;
+      opt.disabled = !installed || !fit;
+      if (!opt.dataset.label) { opt.dataset.label = opt.textContent.trim(); }
+      opt.textContent = opt.dataset.label + (installed && !fit ? " (not for this schema)" : "");
+      if (installed && fit && firstFit === null) { firstFit = opt; }
+    });
+    var current = trainerSel.options[trainerSel.selectedIndex];
+    // Until someone picks a trainer, the default is chosen here, not by
+    // the menu's order: alphabetically, decision-calibrate came first, the
+    // trainer that makes one paid request per item.
+    if ((!current || current.disabled || !trainerChosen) && firstFit) {
+      // sklearn-text needs nothing installed, so it is the default when it fits.
+      var plain = Array.prototype.find.call(trainerSel.options, function (o) {
+        return o.value === "sklearn-text" && !o.disabled;
+      });
+      trainerSel.value = (plain || firstFit).value;
+    }
     describeTrainer();
+  }
+  if (schemaSel) {
+    schemaSel.addEventListener("change", function () { syncTrainers(); say(""); });
+  }
+  syncTrainers();
+
+  function syncCheck() {
+    if (!backendSel || !checkBtn) { return; }
+    var opt = backendSel.options[backendSel.selectedIndex];
+    checkBtn.hidden = !opt || opt.dataset.type === "local";
+  }
+  if (backendSel) {
+    backendSel.addEventListener("change", function () { syncCheck(); say(""); });
+    syncCheck();
+  }
+  if (checkBtn) {
+    checkBtn.addEventListener("click", function () {
+      var name = backendSel.value;
+      checkBtn.disabled = true;
+      say("Checking " + name + "…");
+      post("{{ url_for('training.api_backends') }}/" +
+           encodeURIComponent(name) + "/check", {})
+        .then(function (res) {
+          var d = res.data || {};
+          var text = d.message || (res.ok ? "Reachable." : "Check failed.");
+          if (d.missing && d.missing.length) {
+            text += " Not installed there: " + d.missing.join(", ") + ".";
+          }
+          var unusable = (d.gpus || []).filter(function (g) { return g.supported === false; });
+          if (unusable.length) {
+            text += " Its torch has no kernels for " + unusable.map(function (g) {
+              return "GPU " + g.index + " (" + g.name + ")";
+            }).join(", ") + ", so runs skip " + (unusable.length === 1 ? "it." : "them.");
+          }
+          say(text, d.ok ? "ok" : "err");
+        })
+        .catch(function (err) { say("Check failed: " + err, "err"); })
+        .then(function () { checkBtn.disabled = false; });
+    });
   }
 
   if (startBtn) {
     startBtn.addEventListener("click", function () {
       var trainer = trainerSel && trainerSel.value;
       var schema = schemaSel && schemaSel.value;
+      var backend = backendSel ? backendSel.value : null;
       if (!trainer || !schema) {
         say("Pick a trainer and a schema.", "err");
+        return;
+      }
+      var params;
+      try {
+        params = readParams();
+      } catch (err) {
+        say("Parameters: " + err.message, "err");
+        if (paramsEl) { paramsEl.focus(); }
         return;
       }
       startBtn.disabled = true;
       say("Starting…");
 
       post("{{ url_for('training.api_start_run') }}",
-           {trainer: trainer, schemas: [schema]})
+           {trainer: trainer, schemas: [schema], backend: backend, params: params})
         .then(function (res) {
           if (!res.ok || !res.data.started) {
             if (res.data && res.data.needs_licence_ack) {
               if (window.confirm(res.data.error + "\n\nProceed?")) {
                 return post("{{ url_for('training.api_start_run') }}",
                             {trainer: trainer, schemas: [schema],
+                             backend: backend, params: params,
                              accept_licence: true}).then(function (again) {
                   if (again.ok && again.data.started) {
                     currentRun = again.data.run_id;

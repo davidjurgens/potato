@@ -3127,8 +3127,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "model_training.auto_retrain": _D(
         "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`, "
         "`min_interval_s` (default 600, seconds since the last run), "
-        "`update_frequency` (default 25, new annotations since the last run) "
-        "and `params` (passed to the trainer)",
+        "`update_frequency` (default 25, new annotations since the last run), "
+        "`params` (passed to the trainer) and `accept_licence` (true to "
+        "confirm the licence of a trainer that asks, such as "
+        "`ultralytics-detect`)",
         type="object", category=AI,
     ),
     "model_training.max_wall_seconds": _D(
@@ -3142,6 +3144,31 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
     "model_training.num_threads": _D(
         "CPU threads for one run", type="integer", category=AI,
+    ),
+    "model_training.backend": _D(
+        "Backend runs use unless one is chosen on the Training page: `local` "
+        "or a name under `model_training.backends`",
+        type="string", default="local", category=AI,
+    ),
+    "model_training.backends": _D(
+        "Named places to run training. `type: ssh` (Potato connects, copies "
+        "its code and starts the agent; keys `host`, `user`, `port`, "
+        "`identity_file`, `python`, `gpus`, `min_free_gpu_mb`, `remote_dir`, "
+        "`fetch_artifacts`, `max_artifact_mb`, `keep_remote`, `ssh_options`, "
+        "`env`, `packages`, `num_threads`, `connect_timeout_s`) or "
+        "`type: agent` (a `potato training agent` started by hand). Both "
+        "take `heartbeat_timeout_s` and `queue_timeout_s`",
+        type="object", category=AI,
+    ),
+    "model_training.trainer_params": _D(
+        "Parameter defaults per trainer, such as `hf-text-classification: "
+        "{model_name: ..., lora: true}`. A run's own parameters override "
+        "them. Names a trainer does not take are refused",
+        type="object", category=AI,
+    ),
+    "model_training.max_predictions_mb": _D(
+        "Largest predictions upload accepted from a remote agent",
+        type="number", default=512, category=AI,
     ),
     "model_training.writeback": _D(
         "Publish a run's predictions as prelabels", type="object", category=AI,

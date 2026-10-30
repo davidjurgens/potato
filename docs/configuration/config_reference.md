@@ -126,7 +126,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
 | `labeling_engine` |  | object |  | Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet | `budgets`, `cascade`, `contracts`, `crowd`, `distill`, `enabled`, `features`, `humans`, `redaction`, `runtime`, `schemas`, `sources` |
-| `model_training` |  | object |  | Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels | `aggregation`, `auto_retrain`, `device`, `enabled`, `grace_seconds`, `max_ram_mb`, `max_wall_seconds`, `num_threads`, `retain_runs`, `split_seed`, `splits`, `writeback` |
+| `model_training` |  | object |  | Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels | `aggregation`, `auto_retrain`, `backend`, `backends`, `device`, `enabled`, `grace_seconds`, `max_predictions_mb`, `max_ram_mb`, `max_wall_seconds`, `num_threads`, `retain_runs`, `split_seed`, `splits`, `trainer_params`, `writeback` |
 
 ## Qualitative Coding (QDA)
 

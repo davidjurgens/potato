@@ -78,3 +78,33 @@ class TestRoutesImportOrder:
         # useful if nothing has served by then.
         probe = _probe()
         assert probe.get("HAS_SERVED") is False
+
+
+#: Builds an app, then imports routes by its package name the way a test or a
+#: blueprint does. Before the fix this raised "View function mapping is
+#: overwriting an existing endpoint function: home", because create_app's
+#: bare `from routes import` had loaded the same file as a second module.
+_TWO_NAMES_PROBE = r"""
+import sys
+from potato.flask_server import create_app
+app = create_app()
+from potato import routes
+print("BARE_MODULE", "routes" in sys.modules)
+print("SERVED_HOME_IS_PACKAGE_HOME", app.view_functions.get("home") is routes.home)
+"""
+
+
+class TestRoutesLoadOnce:
+    def test_importing_potato_routes_after_create_app_does_not_collide(self):
+        result = subprocess.run(
+            [sys.executable, "-c", _TWO_NAMES_PROBE],
+            capture_output=True, text=True, timeout=300, cwd=REPO_ROOT)
+        assert result.returncode == 0, result.stderr[-2000:]
+        out = dict(line.split(" ", 1) for line in result.stdout.splitlines()
+                   if line.startswith(("BARE_MODULE", "SERVED_HOME")))
+        assert out["BARE_MODULE"].strip() == "False", (
+            "routes.py was loaded as a top-level module `routes` as well as "
+            "`potato.routes`; its decorators then run twice")
+        # The handlers the app serves are the ones every other import sees,
+        # so a monkeypatch of potato.routes reaches what is served.
+        assert out["SERVED_HOME_IS_PACKAGE_HOME"].strip() == "True"

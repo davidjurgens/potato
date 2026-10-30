@@ -3694,6 +3694,24 @@ def admin_item_state():
         }), 500
 
 
+def _plain_annotations(value):
+    """``{schema: {label: value}}`` from a state keyed by Label objects.
+
+    jsonify sorts keys, and Label objects cannot be ordered: the endpoint
+    answered "'<' not supported between instances of 'Label' and 'Label'"
+    for any item someone had annotated.
+    """
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, inner in value.items():
+        if hasattr(key, "get_schema") and hasattr(key, "get_name"):
+            out.setdefault(str(key.get_schema()), {})[str(key.get_name())] = inner
+        else:
+            out[str(key)] = _plain_annotations(inner) if isinstance(inner, dict) else inner
+    return out
+
+
 @app.route("/admin/item_state/<item_id>", methods=["GET"])
 def admin_item_state_detail(item_id):
     """
@@ -3732,7 +3750,8 @@ def admin_item_state_detail(item_id):
             if user_state:
                 user_annotations = user_state.get_all_annotations()
                 if item_id in user_annotations:
-                    item_annotations[username] = user_annotations[item_id]
+                    item_annotations[username] = _plain_annotations(
+                        user_annotations[item_id])
 
         return jsonify({
             "item_id": item_id,
@@ -6871,6 +6890,22 @@ def get_span_data(instance_id):
 
     # Get span annotations (returns a list of SpanAnnotation objects)
     spans = get_span_annotations_for_user_on(username, instance_id)
+    from_prelabel = False
+    if not spans:
+        # The page marks up a span prelabel when the annotator has no spans
+        # here; hand the same spans to the span manager, or they are drawn
+        # but not editable, and Next saves none of them -- every other type
+        # saves its untouched prelabel as the annotator's answer.
+        try:
+            from potato.flask_server import (  # noqa: cross-import
+                _span_annotations_from_pre_annotations, visible_pre_annotations)
+            pre_data, _, _ = visible_pre_annotations(username, instance_id,
+                                                     instance)
+            spans = _span_annotations_from_pre_annotations(pre_data, config) or []
+            from_prelabel = bool(spans)
+        except Exception:  # noqa: BLE001 - a prelabel must not break the page
+            logger.debug("Could not read span prelabels", exc_info=True)
+            spans = []
     logger.debug(f"Found {len(spans)} spans")
 
     # Convert to frontend-friendly format
@@ -6960,6 +6995,10 @@ def get_span_data(instance_id):
         }
         if span_target_field:
             span_entry['target_field'] = span_target_field
+        if from_prelabel:
+            # Not stored for this annotator yet: the span manager saves it on
+            # Next, or before it saves a span of their own.
+            span_entry['prelabel'] = True
 
         # Include additional_parts for discontinuous spans
         additional_parts = span.get_additional_parts() if hasattr(span, 'get_additional_parts') else getattr(span, 'additional_parts', [])

@@ -178,6 +178,8 @@ class TestBuiltinExportersRegistered:
             "ontology_terms",
             # Scheduled sessions (waves, experience sampling, Delphi).
             "schedule",
+            # Audio and video timeline segments (JSONL, RTTM).
+            "segments",
             # Trial data from runtime phase pages (project SQLite).
             "jspsych", "runtime",
             # Interchange: W3C Web Annotation, Frictionless, Psych-DS.
@@ -306,6 +308,8 @@ class TestTheFormatListIsPinned:
         "ontology_terms",
         # scheduled sessions
         "schedule",
+        # audio and video timeline segments
+        "segments",
         # adjudication outcome
         "adjudication",
         # labeling engine deliverable
