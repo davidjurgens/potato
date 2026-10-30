@@ -48,11 +48,7 @@ import yaml
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
-import numpy as np
-import pandas as pd
 from tqdm import tqdm
-import simpledorff
-from simpledorff.metrics import nominal_metric, interval_metric
 
 import flask
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response

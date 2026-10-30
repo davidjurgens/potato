@@ -19,7 +19,6 @@ Key API Endpoints Used:
 For more information, see: https://docs.prolific.com/api-reference
 """
 import os.path
-import pandas as pd
 import requests
 from collections import OrderedDict, defaultdict
 import threading
@@ -72,6 +71,8 @@ class ProlificBase(object):
         response = requests.get(url, headers=self.headers)
         if response.status_code == 200:
             data = response.json()  # If the response contains JSON data
+            # Lazy: pandas costs a third of the server's boot import time.
+            import pandas as pd
             studies = pd.DataFrame.from_records(data['results'])
             print('You currently have %s studies'%len(data['results']))
             print(studies[['id','name','study_type','internal_name','status']].to_records())

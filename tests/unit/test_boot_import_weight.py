@@ -33,6 +33,9 @@ FORBIDDEN_AT_BOOT = [
     "boto3", "botocore", "openstack", "paramiko",
     # The in-process decision model (potato/ai/laya_endpoint.py).
     "laya",
+    # A third of boot import time; flask_server imported both and used
+    # neither. Agreement, CSV loading and Prolific import them when used.
+    "pandas", "simpledorff",
 ]
 
 # Optional packages a core-only `pip install potato-annotation` does NOT have.

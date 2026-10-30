@@ -14,7 +14,7 @@ import argparse
 from itertools import combinations
 import simpledorff
 from simpledorff.metrics import *
-import ujson
+import json
 import pandas as pd
 
 from collections import defaultdict
@@ -215,7 +215,7 @@ def main(args):
     """
     # Load annotation data from JSON file
     with open(args.file, "r") as f:
-        annotations = [ujson.loads(line)["annotations"] for line in f]
+        annotations = [json.loads(line)["annotations"] for line in f]
 
     # Extract unique user IDs from all annotations
     users = set([a["user"] for ann in annotations for a in ann])
