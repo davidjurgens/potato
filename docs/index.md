@@ -205,6 +205,7 @@ over prose when writing a config or calling the API.
 - [Judge Calibration](ai-intelligence/judge_calibration.md) - Auto-label with LLM judges + blind human calibration (accuracy, IAA, ECE)
 - [Active Learning](ai-intelligence/active_learning_guide.md) - ML-based prioritization
 - [Active Learning Strategies](ai-intelligence/active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
+- [Model Training](ai-intelligence/model_training.md) - Train models on the study's annotations, here or on a GPU server, and publish their predictions as prelabels
 - [ICL Labeling](ai-intelligence/icl_labeling.md) - In-context learning for labeling
 - [Visual AI Support](ai-intelligence/visual_ai_support.md) - YOLO and vision LLM support for image/video annotation
 - [Chat Support](ai-intelligence/chat_support.md) - LLM-powered sidebar for annotator assistance
@@ -372,6 +373,7 @@ over prose when writing a config or calling the API.
 | Set up multilingual interface | [Multilingual](configuration/multilingual.md) |
 | Resolve annotator disagreements | [Adjudication](administration/adjudication.md) |
 | Label a dataset with models, certified by a human sample | [Labeling Engine](labeling-engine/overview.md) |
+| Train a model on your annotations | [Model Training](ai-intelligence/model_training.md) |
 | Browse the REST API | [API Reference](api-reference/api_reference.md) |
 
 ---

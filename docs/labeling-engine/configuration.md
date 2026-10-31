@@ -98,7 +98,7 @@ with status 1 and names the source.
   it. `options: {calibration: <path>}` applies a calibration fitted to the
   study's labels by a `decision-calibrate` training run, and a `laya` source's
   `model` can be a `laya-finetune` run's `artifacts/model`; see
-  [Model training](../ai-intelligence/model_training.md#decision-models-decision-calibrate-and-laya-finetune).
+  [Model training](../ai-intelligence/model_training.md#decision-models).
 - **`detector`** (`image_annotation`): `keep_threshold` (0.35), boxes at or
   above it are the prediction; `candidate_threshold` (0.05), boxes between the
   two lower the image's confidence; `label_map`, detector class to scheme
@@ -205,8 +205,8 @@ With `features.distill` on:
 On an image study the distilled model is an image classifier: `sklearn-text`
 fits a classifier over CLIP embeddings (`clip-ViT-B-32`) of each image file,
 where a text model would have read only the image's URL. That needs
-`sentence-transformers` and `pillow` (`pip install sentence-transformers
-pillow`); without them distillation logs the install hint and the cascade
+`sentence-transformers` and `pillow` (`pip install
+'potato-annotation[embeddings]' pillow`); without them distillation logs the install hint and the cascade
 stays as configured. Images must be stored locally (under `media_directory`,
 or a path relative to `task_dir`): remote URLs are not downloaded, so items
 that point at another host are left out of training and the distilled tier

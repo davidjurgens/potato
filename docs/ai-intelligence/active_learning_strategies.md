@@ -206,7 +206,7 @@ active_learning:
     model_name: "all-MiniLM-L6-v2"  # 80MB, fast, 384-dim
 ```
 
-**Installation:** `pip install sentence-transformers`
+**Installation:** `pip install 'potato-annotation[embeddings]'`
 
 **Model options:**
 - `all-MiniLM-L6-v2` — Fast, good quality (default)
@@ -254,7 +254,7 @@ confidence, use a [labeling engine contract](../labeling-engine/contracts.md).
 - Set `max_instances_to_reorder` to limit the pool size
 
 **Sentence-transformers not found:**
-- Install: `pip install sentence-transformers`
+- Install: `pip install 'potato-annotation[embeddings]'`
 - The package is only imported when configured, not at startup
 
 ## References

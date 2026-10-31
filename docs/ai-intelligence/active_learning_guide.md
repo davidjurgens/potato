@@ -547,7 +547,7 @@ active_learning:
     model_name: "all-MiniLM-L6-v2"
 ```
 
-Requires: `pip install sentence-transformers`
+Requires: `pip install 'potato-annotation[embeddings]'`
 
 ## Probability Calibration
 

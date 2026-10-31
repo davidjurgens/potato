@@ -48,6 +48,51 @@ extra (`huggingface_hub`, `boto3`, Authlib):
 pip install 'potato-annotation[hosting]'
 ```
 
+### Optional extras
+
+A plain install runs the annotation server and the admin pages, including
+agreement scores and `sklearn-text` training. The features below need an
+extra, and import its libraries only when they are used. Several extras go in one command: `pip install 'potato-annotation[ai,formats]'`.
+
+| Extra | For |
+|---|---|
+| `ai` | LLM label suggestions and the chat assistant: the OpenAI, Anthropic, Ollama and Gemini clients |
+| `formats` | PDF, Word, Markdown, code and Excel source documents |
+| `export` | Parquet export |
+| `viz` | UMAP for the embedding visualization |
+| `auth` | Google, GitHub and OIDC sign-in (Authlib) |
+| `saml` | SAML sign-in. Needs the system's libxmlsec1 |
+| `hosting` | Backups to HuggingFace or S3, and SSO, on a server you run |
+| `deploy`, `deploy-aws`, `deploy-openstack` | `potato deploy` to a VM provider, to AWS, or to OpenStack clouds such as Jetstream2 |
+| `huggingface` | HuggingFace Hub and `datasets` |
+| `publish` | Dataset publishing to HuggingFace, with Parquet |
+| `s3`, `gcs`, `azure` | Data sources in S3, Google Cloud Storage or Azure Blob Storage |
+| `db` | SQL data sources (SQLAlchemy; install the database driver separately) |
+| `mysql` | The MySQL user-state backend |
+| `langchain` | The LangChain integration |
+| `fiftyone` | The FiftyOne annotation backend |
+| `mcp` | The MCP server for coding agents (`potato mcp`) |
+| `preview` | `potato preview --screenshot` (Playwright) |
+| `agent` | `mcp` and `preview` together |
+| `transcribe` | Local speech-to-text and speaker diarization |
+| `wsi` | Whole-slide images (SVS, NDPI, MRXS, pyramidal TIFF) |
+| `volumes` | DICOM series and NIfTI volumes |
+| `microscopy` | OME-Zarr and OME-TIFF |
+| `chemistry` | RDKit, for grading chemical structures and InChI in the export |
+| `astro` | FITS images |
+| `signals` | WFDB records and Parquet sensor tables for time series |
+| `spectra` | mzML mass spectra |
+| `vision` | The server-side SAM endpoints, and HEIC and RAW images |
+| `decision` | Running the Laya decision model in the server process |
+| `embeddings` | `sentence-transformers`, for embedding vectorizers, diversity ordering and the `setfit` trainer |
+| `train-text`, `train-vision`, `train-audio`, `train-llm` | The [model trainers](../ai-intelligence/model_training.md#trainers) for text, images, audio and LLMs |
+| `train` | All four `train-*` extras |
+| `all` | `ai`, `formats`, `viz`, `export`, `huggingface`, `auth`, `langchain`, `db`, `mysql`, `deploy`, `hosting`, `preview`, `mcp` and `transcribe` |
+
+`vision`, `decision`, `embeddings` and the `train-*` extras install PyTorch,
+which is several gigabytes, so `all` leaves them out. It also leaves out
+`fiftyone`, `saml` and the science extras.
+
 Or skip Python entirely and use the published image, which has everything
 installed:
 

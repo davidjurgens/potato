@@ -186,6 +186,10 @@ Models label the dataset, and people supply labels for a blind random sample. Th
 
 Potato reorders your annotation queue based on model uncertainty so annotators label the most informative instances first. Supports uncertainty sampling, BADGE, BALD, diversity, and hybrid strategies ([docs](docs/ai-intelligence/active_learning_guide.md)).
 
+### Model Training
+
+Train a model on the study's own annotations from the admin Training page, on the annotation server, on a GPU machine over ssh, or on a machine that polls for jobs. There are 15 trainers: a scikit-learn classifier that needs no extra install, transformer classifiers for text, spans and images, box and outline detectors, an audio segment tagger, LLM fine-tuning on free-text answers and pairwise preferences, and calibration or fine-tuning of the decision models. Each run is scored on held-out items, and its predictions can go back into the study as prelabels for annotators to correct ([docs](docs/ai-intelligence/model_training.md)).
+
 ### Solo Mode
 
 A human-LLM collaborative workflow where the system learns from annotator feedback and progressively transitions to autonomous LLM labeling as agreement improves ([docs](docs/solo-mode/solo_mode.md)).
@@ -329,6 +333,7 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 | Using HuggingFace Models | [docs/ai-intelligence/huggingface_models.md](docs/ai-intelligence/huggingface_models.md) |
 | Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |
 | Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
+| Model Training | [docs/ai-intelligence/model_training.md](docs/ai-intelligence/model_training.md) |
 | Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
 | Labeling Engine | [docs/labeling-engine/overview.md](docs/labeling-engine/overview.md) |
 | Qualitative Data Analysis (QDA) | [docs/advanced/qda.md](docs/advanced/qda.md) |

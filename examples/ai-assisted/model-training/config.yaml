@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Model Training Example
+#
+# Annotators label 160 product reviews as positive or negative. Once some are
+# labelled, the admin Training page fits a classifier on those labels, scores
+# it on held-out reviews, and writes its predictions onto the reviews nobody
+# has labelled yet. The next annotator sees each of those reviews with the
+# model's answer already selected, to confirm or change.
+#
+# The trainer here, sklearn-text, needs nothing beyond a plain install. The
+# reviews and their gold labels (data/gold.json) are synthetic.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/ai-assisted/model-training/config.yaml -p 8000
+#
+# Label some reviews. By hand, or with three simulated annotators who answer
+# from the gold labels, mostly correctly, 40 reviews each, one after another:
+#   python -m potato.simulator --server http://localhost:8000 --users 3 \
+#     --strategy gold_standard --competence good=1.0 --max-annotations 40 \
+#     --gold-file examples/ai-assisted/model-training/data/gold.json \
+#     --sequential --fast-mode --no-export
+#
+# Then:
+#   - open http://localhost:8000/admin/training with the admin key below,
+#     pick sklearn-text and the sentiment scheme, and click Train now
+#   - when the run finishes, log in as a new username: the unlabelled reviews
+#     come with the model's answer selected
+#
+# See docs/ai-intelligence/model_training.md.
+
+annotation_task_name: "Review Sentiment (model training demo)"
+
+data_files:
+  - "data/reviews.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+
+require_password: false
+admin_api_key: "demo-admin-key"
+
+# One label per review, so the simulated annotators cover 120 different
+# reviews and leave 40 for the model to prelabel.
+max_annotations_per_item: 1
+
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    description: "Is this review positive or negative?"
+    labels:
+      - "positive"
+      - "negative"
+    sequential_key_binding: true
+
+model_training:
+  enabled: true
+  writeback:
+    # Show this scheme's predictions to annotators as prelabels.
+    schemas: ["sentiment"]
+    # Predict on the reviews nobody has labelled, not only the held-out ones.
+    include_unlabeled: true
+    # Leave out predictions the model is less sure of.
+    min_confidence: 0.6

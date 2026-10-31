@@ -3,7 +3,7 @@
     "advanced": 77,
     "agent-testing": 3,
     "agent-traces": 56,
-    "ai-assisted": 7,
+    "ai-assisted": 8,
     "audio": 11,
     "classification": 34,
     "conversation": 4,
@@ -19,7 +19,7 @@
     "text": 2,
     "video": 8
   },
-  "count": 260,
+  "count": 261,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -3279,6 +3279,26 @@
       "path": "examples/ai-assisted/llm-chat/config.yaml",
       "run": "potato start examples/ai-assisted/llm-chat/config.yaml -p 8000",
       "task_name": "Sentiment Classification with Chat Support"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [],
+      "data_files": [
+        "data/reviews.json"
+      ],
+      "description": "",
+      "dir": "examples/ai-assisted/model-training",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "model-training",
+      "path": "examples/ai-assisted/model-training/config.yaml",
+      "run": "potato start examples/ai-assisted/model-training/config.yaml -p 8000",
+      "task_name": "Review Sentiment (model training demo)"
     },
     {
       "annotation_types": [

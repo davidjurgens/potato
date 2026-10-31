@@ -58,3 +58,20 @@ def test_binarycif_without_msgpack_says_what_to_install(monkeypatch):
     monkeypatch.setitem(sys.modules, "msgpack", None)   # import raises ImportError
     with pytest.raises(StructureError, match=r"pip install msgpack"):
         parse_bcif(b"\x80")
+
+
+def test_every_extra_is_in_the_installation_table():
+    """docs/deployment/installation.md lists every extra setup.py declares."""
+    tree = ast.parse(open(os.path.join(REPO, "setup.py"), encoding="utf-8").read())
+    extras = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.keyword) and node.arg == "extras_require":
+            extras = [k.value for k in node.value.keys]
+    assert extras, "extras_require not found in setup.py"
+    doc = open(os.path.join(REPO, "docs", "deployment", "installation.md"),
+               encoding="utf-8").read()
+    rows = [line for line in doc.splitlines() if line.startswith("| `")]
+    listed = {name for row in rows
+              for name in re.findall(r"`([a-z0-9-]+)`", row.split("|")[1])}
+    assert sorted(set(extras) - listed) == []
+    assert sorted(listed - set(extras)) == []

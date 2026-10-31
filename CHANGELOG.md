@@ -4,6 +4,84 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Model training
+
+- **Runs on a GPU server or another machine.** `model_training.backends`
+  names where runs execute: `local` (this machine; `device: auto` picks CUDA,
+  then Apple's Metal, then the CPU), `ssh` (Potato starts the run on a host
+  it can reach over ssh and streams progress and the model back) and `agent`
+  (a machine Potato cannot reach runs `potato training agent` and polls for
+  jobs). `potato training check <backend> config.yaml` reports the remote
+  Python, its GPUs and any GPU the installed torch has no kernels for;
+  `gpus: auto` skips those.
+- **Fourteen new trainers**, beside `sklearn-text`. Text:
+  `hf-text-classification` (also an LLM with LoRA), `hf-token-classification`
+  for spans, `setfit`. Images: `hf-image-classification`,
+  `torchvision-detect` and `ultralytics-detect` for boxes,
+  `torchvision-segment` and `ultralytics-segment` for outlines. Audio:
+  `hf-audio-tagger`, which turns frame predictions into segments. LLMs:
+  `llm-sft` on free-text answers and `llm-dpo` on binary pairwise
+  preferences. Decision models: `decision-calibrate` fits a temperature
+  (optionally with a per-option offset) to Jev, OpenJev, laya-serve or Laya,
+  `laya-finetune` fine-tunes Laya, and `openjev-finetune` fine-tunes OpenJev
+  with `wev train`. The ultralytics trainers are AGPL-3.0 and need the licence
+  acknowledged before a run.
+- **Every run is scored on held-out items**, with a metric that fits the
+  answer: macro-F1 for labels, mAP50 for boxes and outlines, segment F1 for
+  audio, token F1 for spans, accuracy for preferences, exact accuracy and
+  mean absolute error for sliders. The Runs table shows that score; it used
+  to show training accuracy.
+- **More prelabels show.** Write-back prelabels now render for audio
+  segments, pairwise preferences (on the card the annotator sees under
+  `randomize_order`) and model outlines. Span prelabels reach the span
+  editor, so they can be edited or deleted, and are saved on Next like every
+  other prelabel.
+- **Decision models take a `calibration` file**, the `calibration.json` a
+  `decision-calibrate` run writes, as an option of a labeling-engine
+  `kind: decision` source or of a `solo_mode.labeling_models` entry.
+- **More settings are checked by `validate` and at server start.** Both now
+  fail on unknown keys under `writeback` and `auto_retrain` (with the intended key
+  for a near miss such as `accept_license`), split names other than `train`, `val` and `test`,
+  write-back schemes that do not exist, an out-of-range `min_confidence`, an
+  `auto_retrain` trainer that cannot train its schemes, and a calibration
+  file that is not there. A run on a missing scheme or one the trainer does
+  not handle is refused with `400` before its data is gathered.
+- New settings: `model_training.trainer_params` (per-trainer defaults) and
+  `model_training.auto_retrain.accept_licence`.
+- New extras: `embeddings` (`sentence-transformers`), `train-text`,
+  `train-vision`, `train-audio`, `train-llm`, and `train` for all four. None
+  is in `all`.
+- New example: `examples/ai-assisted/model-training/`, 160 reviews with gold
+  labels the simulator can annotate from, trained with `sklearn-text`.
+
+### Export
+
+- **`segments` format**: one JSONL row per audio or video segment, plus an
+  RTTM file per annotator. Recordings that share a file name get distinct
+  RTTM ids, and zero-length segments stay in the JSONL but not the RTTM.
+
+### Fixed
+
+- Items landed in different splits depending on the order
+  `model_training.splits` listed `train`, `val` and `test`.
+- A training run's data left out pairwise answers stored as
+  `{"selection": ...}`, free-text answers, audio segments and span labels.
+- `/admin/item_state/<id>` could answer `500`: it sorted `Label` objects,
+  which do not compare.
+- A prelabel rejected in review stayed on the item until a restart or a new
+  run; it now comes down at once.
+- On the Training page the "running" badge stayed after a run finished, and
+  **Cancel run** and **Check** showed with no run in progress and on the
+  local backend.
+
+### Changed
+
+- The server no longer imports pandas at startup: on a clean install the
+  import of `potato.flask_server` went from 0.61 s to 0.42 s.
+- `install_requires` no longer lists joblib, threadpoolctl, six, soupsieve,
+  pytz, python-dateutil or ujson, which no module under `potato/` imports. The first five
+  still install as dependencies of pandas, scikit-learn and beautifulsoup4.
+
 ## [2.13.1] - Pairwise Order, Agreement and Export Fixes
 
 Fixes for bugs found in 2.13.0 and earlier, and a few new settings. The

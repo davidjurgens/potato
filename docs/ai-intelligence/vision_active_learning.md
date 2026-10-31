@@ -31,7 +31,7 @@ Those two rows are the whole change: a strategy that works on text works on imag
 ## Setup
 
 ```bash
-pip install sentence-transformers Pillow
+pip install 'potato-annotation[embeddings]' pillow
 ```
 
 Both are optional. Their absence produces a message naming the install command

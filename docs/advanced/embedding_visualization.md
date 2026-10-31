@@ -12,10 +12,8 @@ The embedding visualization is a 2D map of your corpus in the admin dashboard. I
 The embedding visualization requires the following dependencies:
 
 ```bash
-# Required dependencies
-pip install umap-learn>=0.5.0
-pip install sentence-transformers  # Already required for diversity_ordering
-pip install scikit-learn  # Already required for diversity_ordering
+# UMAP, and sentence-transformers for the embeddings
+pip install 'potato-annotation[viz,embeddings]'
 ```
 
 Additionally, **diversity ordering must be enabled** in your configuration, as the visualization uses the embeddings computed by the DiversityManager.

@@ -62,6 +62,10 @@
   .tr-optional { font-weight: 400; color: var(--muted-foreground); }
   .tr-unavailable { color: var(--muted-foreground); }
   .tr-live { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+  /* The flex and button display rules here and in the shared stylesheet beat
+     the hidden attribute: a finished run kept its "running" badge, and Cancel
+     and Check showed with no run and on the local backend. */
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -128,7 +132,7 @@
       <label for="params-input">{{ ui_lang.training_params|default('Parameters') }}
         <span class="tr-optional">{{ ui_lang.training_params_optional|default('JSON, optional') }}</span></label>
       <textarea id="params-input" rows="2" spellcheck="false" autocomplete="off"
-                aria-describedby="params-note" placeholder='{"lora": true}'></textarea>
+                aria-describedby="params-note" placeholder="{}"></textarea>
       <p class="tr-note" id="params-note"></p>
     </div>
     <p class="tr-status" id="start-status" role="status" aria-live="polite"></p>
@@ -286,6 +290,10 @@
     if (!paramsEdited) {
       paramsEl.value = Object.keys(defaults).length ? JSON.stringify(defaults) : "";
     }
+    // An example built from a parameter this trainer takes; a fixed one
+    // suggested {"lora": true} to trainers that refuse it.
+    var names = (opt.dataset.params || "").split(/,\s*/).filter(Boolean);
+    paramsEl.placeholder = names.length ? '{"' + names[0] + '": …}' : "{}";
     if (paramsNote) {
       paramsNote.textContent = opt.dataset.params
         ? "Takes: " + opt.dataset.params + "." +
@@ -299,7 +307,7 @@
     if (!text) { return {}; }
     var value = JSON.parse(text);
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error("Parameters must be a JSON object, such as {\"lora\": true}.");
+      throw new Error("Parameters must be a JSON object, such as {\"epochs\": 5}.");
     }
     return value;
   }

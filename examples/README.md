@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 260 examples, generated from the configs themselves.
+All 261 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (77)
@@ -370,7 +370,7 @@ The `Types` column lists the annotation types each one uses.
 | [`web-agent-review/`](agent-traces/web-agent-review/) | Web Agent Trace Review | `likert`, `multiselect`, `radio`, `text` |
 | [`world-model-rollouts/`](agent-traces/world-model-rollouts/) | World-model rollout evaluation | `rollout_evaluation`, `text` |
 
-### ai-assisted/ (7)
+### ai-assisted/ (8)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -379,6 +379,7 @@ The `Types` column lists the annotation types each one uses.
 | [`judge-calibration/`](ai-assisted/judge-calibration/) | Judge Calibration Demo | `radio` |
 | [`keyword-highlights/`](ai-assisted/keyword-highlights/) | Sentiment Analysis with Keyword Highlights | `radio`, `span` |
 | [`llm-chat/`](ai-assisted/llm-chat/) | Sentiment Classification with Chat Support | `radio` |
+| [`model-training/`](ai-assisted/model-training/) | Review Sentiment (model training demo) | `radio` |
 | [`ollama-ai-demo/`](ai-assisted/ollama-ai-demo/) | AI-Assisted Product Review Analysis | `radio` |
 | [`span-ai-keywords-demo/`](ai-assisted/span-ai-keywords-demo/) | Span Annotation with AI & Admin Keywords | `span` |
 

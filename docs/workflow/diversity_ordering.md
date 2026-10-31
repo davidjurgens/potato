@@ -107,7 +107,7 @@ diversity_ordering:
 Install the required dependencies:
 
 ```bash
-pip install sentence-transformers scikit-learn
+pip install 'potato-annotation[embeddings]'
 ```
 
 These are optional dependencies that enable the diversity ordering feature. Without them, the feature will be disabled and a warning will be logged.
@@ -161,7 +161,7 @@ Install sentence-transformers and scikit-learn
 
 **Solution**: Install dependencies:
 ```bash
-pip install sentence-transformers scikit-learn
+pip install 'potato-annotation[embeddings]'
 ```
 
 ### Slow startup with many items
