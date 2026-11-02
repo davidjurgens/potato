@@ -13,7 +13,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from potato.eval_datasets.models import Dataset, DatasetVersion, Example
-from potato.eval_datasets.storage import DatasetStore, filter_examples
+from potato.eval_datasets.storage import (DatasetStore, check_dataset_name,
+                                          filter_examples)
 
 
 def _now() -> str:
@@ -44,6 +45,7 @@ class BaseVersionedStore(DatasetStore):
     # ----- DatasetStore: datasets -----
 
     def create_dataset(self, name: str, description: str = "") -> Dataset:
+        check_dataset_name(name)
         existing = self._load_meta(name)
         if existing is not None:
             return existing
@@ -105,6 +107,10 @@ class BaseVersionedStore(DatasetStore):
             by_id[e.id] = e  # add or replace
         merged = list(by_id.values())
         return self._commit_version(ds, merged, note or f"add {len(examples)} example(s)")
+
+    def replace_examples(self, name: str, examples: List[Example], note: str = "") -> DatasetVersion:
+        ds = self._require(name)
+        return self._commit_version(ds, list(examples), note or f"replace with {len(examples)} example(s)")
 
     def update_example(self, name: str, example: Example, note: str = "") -> DatasetVersion:
         ds = self._require(name)

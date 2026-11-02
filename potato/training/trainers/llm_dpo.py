@@ -15,6 +15,11 @@ the scheme's ``items_key`` list, in data order, so "A" is the first.
 "No preference" answers are left out: they say nothing about which response
 is better.
 
+A ``trajectory_edit`` scheme gives the same triple without a choice: the
+task is the prompt, the corrected steps are chosen and the original steps
+rejected. Its predictions say whether the model prefers the correction ("A")
+to the original, on held-out traces that have one.
+
 With LoRA, the default, the reference model is the same model with its
 adapter switched off, so DPO needs no second copy in memory. Reference
 log-probabilities are computed once, before training, since they never change.
@@ -53,7 +58,14 @@ def preference_triples(rows: Iterable[Dict[str, Any]], schema: str
     """``({row, prompt, chosen, rejected}, n_ties_or_unusable)``."""
     out, skipped = [], 0
     for row in rows:
-        choice = str((row.get("targets") or {}).get(schema, "")).strip().upper()
+        target = (row.get("targets") or {}).get(schema, "")
+        if isinstance(target, dict) and target.get("chosen") and target.get("rejected"):
+            # A corrected agent trace: the correction over the original.
+            out.append({"row": row, "prompt": str(row.get("prompt") or ""),
+                        "chosen": str(target["chosen"]),
+                        "rejected": str(target["rejected"])})
+            continue
+        choice = str(target).strip().upper()
         candidates = row.get("candidates") or []
         if choice not in CHOICES or len(candidates) < 2:
             skipped += 1
@@ -80,7 +92,7 @@ class LLMDPOTrainer(Trainer):
     description: ClassVar[str] = (
         "Direct Preference Optimization of an LLM (LoRA by default) on "
         "which of two responses annotators preferred.")
-    kinds: ClassVar[Tuple[str, ...]] = ("preference",)
+    kinds: ClassVar[Tuple[str, ...]] = ("preference", "trajectory")
     modalities: ClassVar[Tuple[str, ...]] = ("text",)
     install_hint: ClassVar[str] = INSTALL_HINT
     licence: ClassVar[str] = "Apache-2.0"
@@ -139,7 +151,8 @@ class LLMDPOTrainer(Trainer):
         problems = []
         if schema.kind not in self.kinds:
             problems.append("Schema %r is %s; this trainer learns from binary "
-                            "pairwise preferences." % (schema.name, schema.kind))
+                            "pairwise preferences or corrected agent traces."
+                            % (schema.name, schema.kind))
         if bundle.split_size("train") < int(params["min_instances"]):
             problems.append(
                 "Only %d items in the train split; this trainer needs at "

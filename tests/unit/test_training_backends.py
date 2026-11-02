@@ -60,6 +60,14 @@ def project():
             "labgpu": {"type": "agent", "heartbeat_timeout_s": 60},
         },
     }
+    # Write-back publishes into the item store. Without one of its own this
+    # fixture borrowed whichever an earlier test left behind, so the ssh run
+    # passed in the file and failed alone or after another file.
+    import potato.item_state_management as ism_module
+    ism_module.clear_item_state_manager()
+    ism_module.init_item_state_manager(config).add_items(
+        {str(k): v for k, v in context.items.items()})
+
     manager = TrainingManager(config)
     manager._context_from_live_state = lambda: context
 
@@ -73,6 +81,7 @@ def project():
     finally:
         manager.shutdown()
         manager_module._TRAINING_MANAGER, protocol._config = saved
+        ism_module.clear_item_state_manager()
         server.shutdown()
         cleanup_test_directory(tmp)
 

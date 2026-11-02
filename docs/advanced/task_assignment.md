@@ -248,9 +248,27 @@ See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for ful
 
 #### 8. LLM Confidence Assignment (`llm_confidence`)
 
-**Not implemented.** The value is accepted and items are assigned at random.
-The server warns about it at boot. Use `active_learning` for uncertainty-ranked
-assignment, or `model_review` to serve the least confident predictions first.
+Serves items in order of the model's confidence in its prelabel, lowest
+first. The confidences come from the prelabels in item data: the ones
+[model training](../ai-intelligence/model_training.md) write-back publishes,
+or a `pre_annotation` field supplied with the data. An item's confidence is
+the lowest over its schemes.
+
+```yaml
+assignment_strategy: llm_confidence
+```
+
+Every item is still served, in three groups:
+
+1. Items with a prelabel that has a confidence, lowest first.
+2. Items with a prelabel that has no confidence.
+3. Items with no prelabel, in their configured order.
+
+`model_review` differs in leaving out the third group, which suits a review
+pass over model output. `llm_confidence` is for a study where every item needs
+a label and the model's doubtful items should be labelled first. The order is
+read each time items are assigned, so a training run that writes new
+prelabels reorders the rest of the queue.
 
 ---
 
@@ -276,7 +294,7 @@ All three are top-level keys. Potato does not read a nested `assignment:` block.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `active_learning`, `category_based`, `diversity_clustering`, `batch`, `priority`, `psychometric`, `model_review`, `engine`, `llm_confidence` (not implemented; falls back to random) |
+| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `active_learning`, `category_based`, `diversity_clustering`, `batch`, `priority`, `psychometric`, `model_review`, `engine`, `llm_confidence` |
 | `max_annotations_per_user` | integer | Maximum annotations per user (-1 = unlimited) |
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
 | `random_seed` | integer | Seed for reproducible random assignment (default 1234) |

@@ -18,6 +18,7 @@ import threading
 from typing import List, Optional
 
 from potato.eval_datasets.models import Dataset, Example
+from potato.eval_datasets.storage import InvalidDatasetName, check_dataset_name
 from potato.eval_datasets.storage_base import BaseVersionedStore
 
 
@@ -28,7 +29,13 @@ class FileDatasetStore(BaseVersionedStore):
         os.makedirs(self._root, exist_ok=True)
 
     def _dataset_dir(self, name: str) -> str:
-        return os.path.join(self._root, name)
+        check_dataset_name(name)
+        path = os.path.join(self._root, name)
+        root = os.path.realpath(self._root)
+        if os.path.dirname(os.path.realpath(path)) != root:
+            raise InvalidDatasetName("Dataset name %r names a path outside %s"
+                                     % (name, self._root))
+        return path
 
     def _meta_path(self, name: str) -> str:
         return os.path.join(self._dataset_dir(name), "meta.json")

@@ -352,7 +352,7 @@ The API behind the form still uses `-1` for no limit.
   - `least_annotated`: Prioritize items with fewest annotations
   - `max_diversity`: Prioritize items with highest disagreement
   - `active_learning`: Serves the pool in active-learning order (needs `active_learning.enabled`)
-  - `llm_confidence`: Not implemented — falls back to random selection
+  - `llm_confidence`: Least-confident prelabel first; items with no prelabel last
 
   The dashboard exposes this subset. See
   [Available Strategies](../configuration/configuration.md#available-strategies)

@@ -7925,6 +7925,11 @@
         "catalog_anchor_label": {},
         "catalog_anchor_placeholder": {},
         "catalog_build_index": {},
+        "catalog_builtin": {
+          "default": "built-in",
+          "description": "Marker beside a built-in slice, such as model-found-nothing, on the Catalog page",
+          "type": "string"
+        },
         "catalog_clusters_label": {},
         "catalog_discover_button": {},
         "catalog_discover_desc": {},
@@ -7968,6 +7973,20 @@
         "catalog_status_indexed_suffix": {},
         "catalog_status_matching_instances": {},
         "catalog_status_name_required": {},
+        "catalog_status_pinned_mid": {
+          "description": "Catalog status line after pinning, between the count of new items and the total",
+          "type": "string"
+        },
+        "catalog_status_pinned_total": {
+          "default": "pinned in all",
+          "description": "Catalog status line after pinning, after the total pinned count",
+          "type": "string"
+        },
+        "catalog_status_pinning": {
+          "default": "Pinning\u2026",
+          "description": "Catalog status line while a slice is being pinned for training",
+          "type": "string"
+        },
         "catalog_status_results_suffix": {},
         "catalog_status_saved": {},
         "catalog_status_searching": {},
@@ -7979,6 +7998,15 @@
         "catalog_th_threshold": {},
         "catalog_threshold_label": {},
         "catalog_to_dataset_button": {},
+        "catalog_to_training_button": {
+          "default": "Train on these",
+          "description": "Label of the Catalog button that pins a slice's items to the train split of later training runs",
+          "type": "string"
+        },
+        "catalog_to_training_title": {
+          "description": "Tooltip of the Catalog's Train on these button",
+          "type": "string"
+        },
         "catalog_topk_label": {},
         "catalog_traces_suffix": {},
         "catalog_unlabeled": {},

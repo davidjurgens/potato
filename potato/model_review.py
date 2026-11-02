@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import statistics
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -49,6 +50,27 @@ DEFAULT_WORST_FRACTION = 0.2
 
 #: Keys a prediction payload has used for its confidence.
 CONFIDENCE_KEYS = ("confidence", "score", "probability", "prob")
+
+
+def prediction_field(config: Dict[str, Any]) -> str:
+    """The item field prelabels are read from, as the annotation page reads it.
+
+    ``model_training.writeback.field`` when write-back publishes prelabels and
+    no ``pre_annotation`` block is enabled, otherwise ``pre_annotation.field``.
+    The review queue, the catalog and assignment each read
+    ``pre_annotation.field`` alone, so with a write-back ``field`` other than
+    ``predictions`` they looked in an empty field while annotators saw
+    prelabels.
+    """
+    pre = config.get("pre_annotation") or {}
+    if not isinstance(pre, dict):
+        pre = {}
+    if not pre.get("enabled", False):
+        from potato.quality_control import writeback_prelabel_settings
+        writeback = writeback_prelabel_settings(config)
+        if writeback:
+            return str(writeback.get("field") or "predictions")
+    return str(pre.get("field") or "predictions")
 
 
 # ------------------------------------------------------------- reading them
@@ -82,6 +104,26 @@ class PredictionSummary:
         }
 
 
+def _confidence_value(value: Any) -> Optional[float]:
+    """A confidence as a finite float, or None.
+
+    NaN is missing, not a score: pandas and ``json.dumps`` both write it, and
+    it compares false with everything, so one NaN scrambles a sort. A
+    numeric string ("0.05", from a CSV) is a score.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = float(value.strip())
+        except ValueError:
+            return None
+    if not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
 def _confidences(payload: Any) -> List[float]:
     """Every confidence in one scheme's prediction payload."""
     found: List[float] = []
@@ -89,9 +131,9 @@ def _confidences(payload: Any) -> List[float]:
     def visit(node):
         if isinstance(node, dict):
             for key in CONFIDENCE_KEYS:
-                value = node.get(key)
-                if isinstance(value, (int, float)) and not isinstance(value, bool):
-                    found.append(float(value))
+                value = _confidence_value(node.get(key))
+                if value is not None:
+                    found.append(value)
                     break
             for value in node.values():
                 if isinstance(value, (list, dict)):
@@ -427,6 +469,41 @@ def load_verdicts(config: Dict[str, Any]) -> List[ReviewVerdict]:
         timestamp=row["updated_at"]) for row in rows]
 
 
+def prelabel_provenance(config: Dict[str, Any], instance_ids: Sequence[str]
+                        ) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    """Which training run wrote each prelabel, and how that run scored.
+
+    ``{instance_id: {schema: {run_id, trainer, heldout_score,
+    heldout_metric}}}`` for the ids that have a stored model-training
+    prediction. Prelabels supplied with the data have no run and are left
+    out. A run that retention has since deleted keeps its id, with
+    ``trainer`` empty.
+    """
+    if not instance_ids:
+        return {}
+    try:
+        from potato.training import store
+        pairs = store.prediction_runs(config, instance_ids)
+    except Exception:
+        logger.debug("Could not read prediction provenance", exc_info=True)
+        return {}
+
+    runs: Dict[str, Any] = {}
+    out: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for (instance_id, schema_name), run_id in pairs.items():
+        if run_id not in runs:
+            runs[run_id] = store.load_run(config, run_id)
+        run = runs[run_id]
+        metrics = (run.metrics or {}) if run is not None else {}
+        out.setdefault(instance_id, {})[schema_name] = {
+            "run_id": run_id,
+            "trainer": run.trainer if run is not None else "",
+            "heldout_score": metrics.get("heldout_score"),
+            "heldout_metric": metrics.get("heldout_metric", ""),
+        }
+    return out
+
+
 def summarize_project(item_state_manager, config: Dict[str, Any]
                       ) -> Dict[str, Any]:
     """
@@ -435,8 +512,7 @@ def summarize_project(item_state_manager, config: Dict[str, Any]
     One entry point so the admin page and the API cannot disagree about what
     counts as reviewed.
     """
-    qc = config.get("pre_annotation", {}) or {}
-    field_name = qc.get("field", "predictions")
+    field_name = prediction_field(config)
     schema_names = [s.get("name") for s in
                     (config.get("annotation_schemes") or []) if s.get("name")]
 
@@ -461,10 +537,12 @@ def summarize_project(item_state_manager, config: Dict[str, Any]
                              n_empty_total=len(set(empty_ids)),
                              n_prelabelled_total=sum(1 for s in summaries if not s.empty))
 
+    queue = review_order(summaries)
     return {
         "n_items": len(summaries),
         "n_prelabelled": sum(1 for s in summaries if not s.empty),
-        "queue": review_order(summaries),
+        "queue": queue,
+        "provenance": prelabel_provenance(config, queue),
         "worst_first": worst_fraction(summaries),
         "empty_prediction_ids": empty_ids,
         "n_empty": len(empty_ids),

@@ -176,8 +176,9 @@ class TestRegistry:
         assert "llm-dpo" not in names({"annotation_type": "pairwise",
                                        "name": "p", "mode": "scale"})
         assert names({"annotation_type": "image_annotation", "name": "b"},
-                     "image") == ["torchvision-detect", "torchvision-segment",
-                                  "ultralytics-detect", "ultralytics-segment"]
+                     "image") == ["label-studio-ml", "torchvision-detect",
+                                  "torchvision-segment", "ultralytics-detect",
+                                  "ultralytics-segment"]
         assert names({"annotation_type": "audio_annotation", "name": "c"},
                      "audio") == ["hf-audio-tagger"]
 

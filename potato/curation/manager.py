@@ -130,9 +130,8 @@ class CurationManager:
         try:
             from potato import model_review
 
-            qc = (self.config.get("pre_annotation") or {})
             summary = model_review.summarize_predictions(
-                instance_id, data, qc.get("field", "predictions"),
+                instance_id, data, model_review.prediction_field(self.config),
                 [s.get("name") for s in
                  (self.config.get("annotation_schemes") or []) if s.get("name")])
             enriched["_n_predictions"] = summary.n_predictions

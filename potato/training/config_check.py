@@ -20,6 +20,11 @@ AUTO_RETRAIN_KEYS = ("enabled", "trainer", "schemas", "min_interval_s",
                      "update_frequency", "params", "backend", "accept_licence")
 WRITEBACK_KEYS = ("schemas", "min_confidence", "field", "include_unlabeled")
 
+#: Trainable scheme types whose predictions the annotation page cannot show.
+#: A corrected trace is a rewrite of the whole trace, and the trajectory_edit
+#: widget starts from the agent's original.
+NO_PRELABEL_TYPES = ("trajectory_edit",)
+
 #: Spellings people reach for, and the key they meant.
 _NEAR = {"accept_license": "accept_licence", "acceptLicence": "accept_licence",
          "schema": "schemas", "minimum_confidence": "min_confidence",
@@ -144,6 +149,13 @@ def training_config_problems(config: Dict[str, Any]) -> List[str]:
             if name not in schemes:
                 problems.append("%s.writeback.schemas names %r, which is not an "
                                 "annotation scheme" % (where, name))
+            elif (schemes[name].get("annotation_type") or "") in NO_PRELABEL_TYPES:
+                problems.append(
+                    "%s.writeback.schemas names %r, a %s scheme, which has no "
+                    "prelabel display: its predictions are stored and scored "
+                    "but annotators would never see them. Leave it out of "
+                    "writeback.schemas." % (where, name,
+                                            schemes[name]["annotation_type"]))
         floor = writeback.get("min_confidence")
         if floor is not None and not (_number(floor) and 0 <= floor <= 1):
             problems.append("%s.writeback.min_confidence must be a number "

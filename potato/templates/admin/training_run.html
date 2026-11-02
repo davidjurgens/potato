@@ -43,6 +43,16 @@
   .tr-log .lvl-error   { color: hsl(0 55% 38%); }
   .tr-note { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.4rem;
              max-width: 70ch; line-height: 1.5; }
+  .tr-form { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: flex-end; }
+  .tr-form label { display: flex; flex-direction: column; font-size: 0.8rem;
+                   font-weight: 600; gap: 0.25rem; }
+  .tr-form select, .tr-form input { font: inherit; font-weight: 400; font-size: 0.875rem;
+                   padding: 0.35rem 0.5rem; border: 1px solid var(--border);
+                   border-radius: var(--radius); background: var(--background);
+                   color: var(--foreground); min-width: 0; }
+  .tr-form input { width: 16rem; max-width: 100%; }
+  .tr-result { font-size: 0.85rem; margin-top: 0.5rem; }
+  .tr-result.err { color: hsl(0 55% 38%); }
 </style>
 </head>
 <body>
@@ -124,6 +134,36 @@
     {% endif %}
   </section>
 
+  {%- set split_counts = {} %}
+  {%- for _iid, _split in (splits or {}).items() %}{% set _ = split_counts.update({_split: split_counts.get(_split, 0) + 1}) %}{% endfor %}
+  {% if split_counts %}
+  <section class="dashboard-card tr-card" aria-labelledby="pin-h">
+    <h2 id="pin-h">{{ ui_lang.training_pin_heading|default('Keep this split as a dataset') }}</h2>
+    {% if datasets_enabled %}
+    <form class="tr-form" id="pin-form">
+      <label>{{ ui_lang.training_pin_split|default('Split') }}
+        <select id="pin-split">
+          {% for name in ['val', 'test', 'train'] if split_counts.get(name) %}
+          <option value="{{ name }}">{{ name }} ({{ split_counts[name] }} items)</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>{{ ui_lang.training_pin_dataset|default('Dataset name') }}
+        <input id="pin-dataset" type="text" required autocomplete="off"
+               value="{{ run.schema_names|join('-') }}-heldout">
+      </label>
+      <button class="shadcn-button" type="submit" id="pin-btn">{{ ui_lang.training_pin_button|default('Save as dataset version') }}</button>
+    </form>
+    <p class="tr-result" id="pin-result" role="status" aria-live="polite"></p>
+    {% endif %}
+    <p class="tr-note">
+      {{ ui_lang.training_pin_note|default('Saves the items with their agreed human labels as a new version of the dataset.
+      A version does not change, so later models can be compared on the same items in Datasets.') }}
+      {% if not datasets_enabled %}{{ ui_lang.training_pin_disabled|default('Datasets are not enabled for this project: set datasets.enabled: true.') }}{% endif %}
+    </p>
+  </section>
+  {% endif %}
+
   <section class="dashboard-card tr-card" aria-labelledby="log-h">
     <h2 id="log-h">{{ ui_lang.training_log_heading|default('Log') }}</h2>
     {% set log_events = events|selectattr('event', 'equalto', 'log')|list %}
@@ -138,5 +178,43 @@
     {% endif %}
   </section>
 </main>
+{% if datasets_enabled and split_counts %}
+<script>
+(function () {
+  var form = document.getElementById("pin-form");
+  var result = document.getElementById("pin-result");
+  var button = document.getElementById("pin-btn");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var dataset = document.getElementById("pin-dataset").value.trim();
+    if (!dataset) { return; }
+    button.disabled = true;
+    result.className = "tr-result";
+    result.textContent = "Saving…";
+    fetch({{ url_for('training.api_pin_split', run_id=run.run_id)|tojson }}, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "same-origin",
+      body: JSON.stringify({dataset: dataset,
+                            split: document.getElementById("pin-split").value})
+    }).then(function (r) { return r.json().then(function (d) { return {ok: r.ok, d: d}; }); })
+      .then(function (res) {
+        if (res.ok) {
+          result.textContent = "Saved " + res.d.imported + " items as version " +
+            res.d.version.version_id + " of " + res.d.dataset + ".";
+        } else {
+          result.className = "tr-result err";
+          result.textContent = res.d.error || "Could not save the split.";
+        }
+      })
+      .catch(function () {
+        result.className = "tr-result err";
+        result.textContent = "Could not reach the server.";
+      })
+      .then(function () { button.disabled = false; });
+  });
+})();
+</script>
+{% endif %}
 </body>
 </html>

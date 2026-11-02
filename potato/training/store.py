@@ -151,6 +151,7 @@ class TrainingRun:
 _MIGRATION = None
 _BACKENDS_MIGRATION = None
 _ARTIFACT_URI_MIGRATION = None
+_PINNED_MIGRATION = None
 
 
 def _artifact_uri_migration():
@@ -159,6 +160,24 @@ def _artifact_uri_migration():
         name="0003_training_run_artifact_uri",
         sql="ALTER TABLE training_runs ADD COLUMN artifact_uri "
             "TEXT NOT NULL DEFAULT '';",
+    )
+
+
+def _pinned_migration():
+    from potato.persistence import Migration
+    return Migration(
+        name="0004_training_pinned_items",
+        sql="""
+        CREATE TABLE IF NOT EXISTS training_pinned_items (
+            project     TEXT NOT NULL,
+            instance_id TEXT NOT NULL,
+            reason      TEXT NOT NULL,
+            source      TEXT NOT NULL DEFAULT '',
+            added_by    TEXT NOT NULL DEFAULT '',
+            added_at    REAL NOT NULL,
+            PRIMARY KEY (project, instance_id, reason)
+        );
+        """,
     )
 
 
@@ -186,9 +205,11 @@ def _db(task_dir: str):
     global _MIGRATION, _BACKENDS_MIGRATION
     if _BACKENDS_MIGRATION is None:
         _BACKENDS_MIGRATION = _backends_migration()
-    global _ARTIFACT_URI_MIGRATION
+    global _ARTIFACT_URI_MIGRATION, _PINNED_MIGRATION
     if _ARTIFACT_URI_MIGRATION is None:
         _ARTIFACT_URI_MIGRATION = _artifact_uri_migration()
+    if _PINNED_MIGRATION is None:
+        _PINNED_MIGRATION = _pinned_migration()
     if _MIGRATION is None:
         _MIGRATION = Migration(
             name="0001_training_runs",
@@ -250,6 +271,7 @@ def _db(task_dir: str):
     register_migration(_MIGRATION)
     register_migration(_BACKENDS_MIGRATION)
     register_migration(_ARTIFACT_URI_MIGRATION)
+    register_migration(_PINNED_MIGRATION)
     return get_db(task_dir)
 
 
@@ -489,6 +511,28 @@ def training_split_ids(config: Dict[str, Any], run_id: str) -> set:
     return {r["instance_id"] for r in rows}
 
 
+def heldout_in_other_runs(config: Dict[str, Any], instance_ids: Iterable[str],
+                          run_id: str) -> Dict[str, List[str]]:
+    """``{run_id: [ids]}``: which of *instance_ids* other runs held out
+    (val or test)."""
+    wanted = {str(i) for i in instance_ids}
+    if not wanted:
+        return {}
+    try:
+        rows = _db(_task_dir(config)).execute(
+            "SELECT run_id, instance_id FROM training_run_items "
+            "WHERE project = ? AND run_id != ? AND split IN ('val', 'test')",
+            (_project(config), run_id)).fetchall()
+    except Exception:
+        logger.debug("Could not read held-out splits", exc_info=True)
+        return {}
+    out: Dict[str, List[str]] = {}
+    for r in rows:
+        if r["instance_id"] in wanted:
+            out.setdefault(r["run_id"], []).append(r["instance_id"])
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def all_training_split_ids(config: Dict[str, Any]) -> set:
     """Instance ids any recorded run fitted on.
 
@@ -612,6 +656,26 @@ def predictions_for_instance(config: Dict[str, Any], instance_id: str
     return out
 
 
+def prediction_runs(config: Dict[str, Any],
+                    instance_ids: Optional[Iterable[str]] = None
+                    ) -> Dict[Tuple[str, str], str]:
+    """``{(instance_id, schema_name): run_id}`` for the stored predictions.
+
+    The stored prediction for a pair is the latest run's, so this names the
+    run behind the prelabel an annotator sees.
+    """
+    try:
+        rows = _db(_task_dir(config)).execute(
+            "SELECT instance_id, schema_name, run_id FROM training_predictions "
+            "WHERE project = ?", (_project(config),)).fetchall()
+    except Exception:
+        return {}
+    wanted = None if instance_ids is None else {str(i) for i in instance_ids}
+    return {(row["instance_id"], row["schema_name"]): row["run_id"]
+            for row in rows
+            if wanted is None or row["instance_id"] in wanted}
+
+
 def delete_predictions_for_run(config: Dict[str, Any], run_id: str) -> int:
     """Retract a run's predictions -- the undo for a bad write-back."""
     conn = _db(_task_dir(config))
@@ -620,6 +684,67 @@ def delete_predictions_for_run(config: Dict[str, Any], run_id: str) -> int:
         (_project(config), run_id))
     conn.commit()
     return cur.rowcount or 0
+
+
+# ---------------------------------------------------------- pinned items
+
+#: Why an item was pinned to the train split. ``hard_example`` comes from a
+#: catalog slice, such as the items the model found nothing on.
+PIN_REASONS = ("hard_example",)
+
+
+def pin_items(config: Dict[str, Any], instance_ids: Sequence[str],
+              reason: str = "hard_example", source: str = "",
+              added_by: str = "") -> int:
+    """Pin items to the train split of every later run. Returns how many
+    were new."""
+    if reason not in PIN_REASONS:
+        raise ValueError("Unknown pin reason %r; expected one of %s"
+                         % (reason, ", ".join(PIN_REASONS)))
+    conn = _db(_task_dir(config))
+    before = conn.total_changes
+    now = time.time()
+    conn.executemany(
+        """INSERT OR IGNORE INTO training_pinned_items
+               (project, instance_id, reason, source, added_by, added_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        [(_project(config), str(i), reason, source, added_by, now)
+         for i in dict.fromkeys(str(i) for i in instance_ids)])
+    conn.commit()
+    return conn.total_changes - before
+
+
+def unpin_items(config: Dict[str, Any], instance_ids: Optional[Sequence[str]] = None,
+                reason: str = "hard_example") -> int:
+    """Unpin the given items, or every item pinned for *reason*."""
+    conn = _db(_task_dir(config))
+    if instance_ids is None:
+        cur = conn.execute(
+            "DELETE FROM training_pinned_items WHERE project = ? AND reason = ?",
+            (_project(config), reason))
+    else:
+        cur = conn.executemany(
+            "DELETE FROM training_pinned_items "
+            "WHERE project = ? AND reason = ? AND instance_id = ?",
+            [(_project(config), reason, str(i)) for i in instance_ids])
+    conn.commit()
+    return cur.rowcount or 0
+
+
+def pinned_items(config: Dict[str, Any]) -> Dict[str, List[str]]:
+    """``{reason: [instance_id, ...]}``, oldest first."""
+    try:
+        rows = _db(_task_dir(config)).execute(
+            "SELECT instance_id, reason FROM training_pinned_items "
+            "WHERE project = ? ORDER BY added_at, instance_id",
+            (_project(config),)).fetchall()
+    except Exception:
+        logger.debug("Could not read pinned items", exc_info=True)
+        return {}
+    out: Dict[str, List[str]] = {}
+    for row in rows:
+        out.setdefault(row["reason"], []).append(row["instance_id"])
+    return out
 
 
 # ------------------------------------------------------------- backends

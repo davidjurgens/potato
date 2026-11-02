@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from potato.eval_datasets.config import DatasetsConfig
 from potato.eval_datasets.export import export_examples
@@ -150,7 +150,10 @@ class DatasetsManager:
 
     def import_from_instances(self, dataset_name: str, instance_ids=None,
                               include_annotations: bool = False,
-                              note: str = "", aggregation_method: str = "majority") -> DatasetVersion:
+                              note: str = "", aggregation_method: str = "majority",
+                              split: Optional[str] = None, replace: bool = False,
+                              drop_inputs: Sequence[str] = (),
+                              schemes: Optional[Sequence[str]] = None) -> DatasetVersion:
         """Curate dataset examples from the live task's loaded instances.
 
         Each instance's raw data becomes an example's ``inputs`` (the instance id
@@ -159,6 +162,12 @@ class DatasetsManager:
         is ``"majority"`` (per-instance majority vote, default) or ``"dawid_skene"``
         (batch worker-reliability-weighted consensus). Otherwise references are left
         unset (score against ``metadata['outputs']`` / a target, or add later).
+
+        ``split`` sets every example's split. ``replace`` makes the new version
+        hold only these examples rather than adding them to the latest one.
+        ``drop_inputs`` names item-data fields left out of ``inputs`` (a model's
+        prelabels, which an evaluation must not see). ``schemes`` keeps only
+        those schemes' ``reference_outputs``.
         """
         from potato.item_state_management import get_item_state_manager
         ism = get_item_state_manager()
@@ -170,9 +179,21 @@ class DatasetsManager:
                                         aggregation_method=aggregation_method)
         if not examples:
             raise ValueError("No matching instances to import")
+        wanted = set(schemes) if schemes is not None else None
+        for example in examples:
+            if split:
+                example.split = split
+            if drop_inputs:
+                example.inputs = {k: v for k, v in example.inputs.items()
+                                  if k not in drop_inputs}
+            if wanted is not None and isinstance(example.reference_outputs, dict):
+                example.reference_outputs = {
+                    k: v for k, v in example.reference_outputs.items()
+                    if k in wanted} or None
         self.store.create_dataset(dataset_name)
-        return self.store.add_examples(
-            dataset_name, examples, note=note or f"import {len(examples)} instance(s)")
+        write = self.store.replace_examples if replace else self.store.add_examples
+        return write(dataset_name, examples,
+                     note=note or f"import {len(examples)} instance(s)")
 
     def import_from_traces(self, dataset_name: str, source: Optional[str] = None,
                            include_annotations: bool = False,

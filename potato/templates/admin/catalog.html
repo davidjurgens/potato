@@ -149,12 +149,13 @@
       <tbody>
         {% for s in slices %}
         <tr data-slice="{{ s.name }}">
-          <td>{{ s.name }}</td>
+          <td>{{ s.name }}{% if s.builtin %} <span class="cat-mono">({{ ui_lang.catalog_builtin|default('built-in') }})</span>{% endif %}</td>
           <td class="cat-mono">{{ s.query or s.anchor_id or ui_lang.catalog_all_placeholder|default('(all)') }}</td>
           <td class="cat-mono">{{ '%.2f'|format(s.threshold) }}</td>
           <td>
             <button class="shadcn-button shadcn-button-outline s-resolve" data-name="{{ s.name }}">{{ ui_lang.catalog_resolve_button|default('Resolve') }}</button>
             <button class="shadcn-button shadcn-button-outline s-todataset" data-name="{{ s.name }}">{{ ui_lang.catalog_to_dataset_button|default('→ Dataset') }}</button>
+            {% if training_enabled %}<button class="shadcn-button shadcn-button-outline s-totrain" data-name="{{ s.name }}" title="{{ ui_lang.catalog_to_training_title|default('Every later training run trains on these items once they have a human label, instead of holding some out') }}">{{ ui_lang.catalog_to_training_button|default('Train on these') }}</button>{% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -238,6 +239,19 @@
     const r = await post(`/admin/catalog/api/slices/${b.dataset.name}/to_dataset`, {dataset});
     if (r.ok) { st.className = "cat-status ok"; st.textContent = `${L.catalog_status_imported_prefix || "Imported "}${r.data.imported}${L.catalog_status_imported_mid || " into '"}${dataset}${L.catalog_status_imported_suffix || "'."}`; }
     else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+  }));
+
+  document.querySelectorAll(".s-totrain").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("slice-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_pinning || "Pinning…");
+    b.disabled = true;
+    try {
+      const r = await post("{{ url_for('training.api_pin') if training_enabled else '' }}", {slice: b.dataset.name});
+      if (r.ok) {
+        st.className = "cat-status ok";
+        st.textContent = `${b.dataset.name}: ${r.data.pinned} ${L.catalog_status_pinned_mid || "item(s) added to the next training run's train split"} (${r.data.total} ${L.catalog_status_pinned_total || "pinned in all"}).`;
+      } else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+    } finally { b.disabled = false; }
   }));
 
   // Escape untrusted text (LLM labels + trace excerpts) before innerHTML.

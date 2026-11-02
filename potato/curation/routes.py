@@ -61,10 +61,22 @@ def catalog_page():
     return render_template(
         "admin/catalog.html",
         indexed=len(mgr.index),
-        slices=[s.to_dict() for s in mgr.slices.list()],
+        # Built-ins too: the docs send people here for `model-found-nothing`,
+        # and the page listed saved slices only.
+        slices=[dict(s.to_dict(), builtin=mgr.slices.is_builtin(s.name))
+                for s in mgr.slices.list_all()],
         topics=[t.summary() for t in mgr.topics.list()],
         embeddings_available=_embeddings_available(),
+        training_enabled=_training_enabled(),
     )
+
+
+def _training_enabled() -> bool:
+    try:
+        from potato.training.manager import get_training_manager
+        return get_training_manager() is not None
+    except Exception:
+        return False
 
 
 def _embeddings_available() -> bool:

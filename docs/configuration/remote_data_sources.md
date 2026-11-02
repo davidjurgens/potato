@@ -313,7 +313,7 @@ Either way, a replay never moves the stored cursor backwards, so the poller cann
 Everything else works. Two notes:
 
 - `category_based` only routes live rows that carry your configured `category_key`; others land in the uncategorized pool.
-- `active_learning`, `llm_confidence`, `diversity_clustering` and `psychometric` fall back to random selection for items they have not scored yet, so newly ingested rows are served immediately and ranked once scores exist.
+- `active_learning`, `diversity_clustering` and `psychometric` fall back to random selection for items they have not scored yet, so newly ingested rows are served immediately and ranked once scores exist. `llm_confidence` serves rows with no prelabel after the prelabelled ones, in the order they arrived.
 
 ##### Per-user quota
 

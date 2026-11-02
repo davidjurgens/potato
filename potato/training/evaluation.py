@@ -18,6 +18,10 @@ preference     as nominal: which response was preferred (ties not scored)
 geometry       COCO mAP at IoU 0.5 and averaged over 0.5 to 0.95
 temporal       precision, recall and F1 over segments matched at IoU 0.5
 continuous     exact-value accuracy, mean absolute error (a slider's steps)
+trajectory     how often the model favours the corrected agent trace over
+               the original; token F1 against the correction for a writer
+trace          per-step accuracy and macro-F1 over correct/neutral/wrong,
+               and whether the first wrong step is the annotators' one
 =============  ==========================================================
 
 Metric names carry the split: ``val_accuracy``, ``test_macro_f1``. Each split
@@ -56,6 +60,10 @@ HEADLINE = {
     # A slider asked as a decision question has a few steps; an exact step is
     # the headline, and the distance is mae.
     "continuous": "accuracy",
+    "trajectory": "closer_to_correction",
+    # Most steps in most traces are correct, so accuracy flatters a model that
+    # never says "wrong".
+    "trace": "step_macro_f1",
 }
 
 #: IoU at which a predicted segment matches an annotated one.
@@ -375,6 +383,75 @@ def _score_segments(gold: List[Any], predicted: List[Any]) -> Dict[str, float]:
 
 # --------------------------------------------------------------- scoring
 
+def _score_trajectories(gold: List[Any], predicted: List[Any]) -> Dict[str, float]:
+    """A preference model answers "A" (the correction) or "B"; a writer
+    answers with steps, which count as closer to the correction when their
+    token F1 against it beats their F1 against the original."""
+    closer, f1s, writer = 0, [], False
+    for target, payload in zip(gold, predicted):
+        label = _label(payload) if isinstance(payload, dict) else None
+        if label in ("A", "B"):
+            closer += label == "A"
+            continue
+        if payload is None:
+            continue
+        writer = True
+        text = _text(payload)
+        f1 = _token_f1(str(target.get("chosen", "")), text)
+        f1s.append(f1)
+        closer += f1 > _token_f1(str(target.get("rejected", "")), text)
+    metrics = {"closer_to_correction": closer / len(gold)}
+    if writer:
+        metrics["token_f1"] = sum(f1s) / len(gold)
+    return metrics
+
+
+def _step_rewards(payload: Any) -> Dict[int, int]:
+    """``{step_index: reward}`` from a process-reward prediction."""
+    steps = payload.get("steps") if isinstance(payload, dict) else payload
+    out: Dict[int, int] = {}
+    for n, step in enumerate(steps if isinstance(steps, list) else []):
+        if isinstance(step, dict):
+            try:
+                out[int(step.get("index", n))] = int(step.get("reward"))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _first_error(rewards: Dict[int, int]) -> Optional[int]:
+    wrong = [i for i, r in rewards.items() if r == -1]
+    return min(wrong) if wrong else None
+
+
+def _score_traces(gold: List[Any], predicted: List[Any]) -> Dict[str, float]:
+    """Step labels pooled over traces, and the first wrong step per trace,
+    the question a first_error annotator answered."""
+    step_gold: List[str] = []
+    step_pred: List[Optional[str]] = []
+    first_hits = 0
+    for target, payload in zip(gold, predicted):
+        predicted_rewards = _step_rewards(payload)
+        rated = {i: r for i, r in enumerate(target) if r is not None}
+        for index, reward in rated.items():
+            step_gold.append(str(reward))
+            guess = predicted_rewards.get(index)
+            step_pred.append(None if guess is None else str(guess))
+        first_hits += _first_error(rated) == _first_error(
+            {i: r for i, r in predicted_rewards.items() if i in rated})
+    if not step_gold:
+        return {}
+    labels = _score_labels(step_gold, step_pred, ordinal=False)
+    return {"step_accuracy": labels["accuracy"],
+            "step_macro_f1": labels["macro_f1"],
+            "first_error_accuracy": first_hits / len(gold),
+            "n_steps": float(len(step_gold)),
+            # Per step: a trace cut by max_length has a prediction (the
+            # early steps) but no rating for the rest.
+            "step_coverage": sum(1 for p in step_pred if p is not None)
+            / len(step_pred)}
+
+
 def score_split(rows: Iterable[Dict[str, Any]],
                 predictions: Dict[Tuple[str, str], Any],
                 schema_name: str, kind: str) -> Tuple[Dict[str, float], int]:
@@ -421,6 +498,12 @@ def score_split(rows: Iterable[Dict[str, Any]],
         metrics = _score_geometry(ids, gold_raw, pred_raw)
     elif kind == "temporal":
         metrics = _score_segments(gold_raw, pred_raw)
+    elif kind == "trajectory":
+        metrics = _score_trajectories(gold_raw, pred_raw)
+    elif kind == "trace":
+        metrics = _score_traces(gold_raw, pred_raw)
+        if not metrics:
+            return {}, n
     else:
         return {}, n
 

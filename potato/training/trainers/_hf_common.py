@@ -328,6 +328,31 @@ def ensure_pad_token(tokenizer, model=None) -> None:
         model.config.pad_token_id = tokenizer.pad_token_id
 
 
+def context_limit(tokenizer, model) -> Optional[int]:
+    """The most tokens one input to *model* can hold, or None if unknown.
+
+    The smaller of the tokenizer's ``model_max_length`` (a placeholder of
+    about 1e30 when the tokenizer does not know) and the model's position
+    table. RoBERTa-family position ids start past the padding index, so 514
+    positions hold 512 tokens.
+    """
+    limits = []
+    declared = getattr(tokenizer, "model_max_length", None)
+    if isinstance(declared, int) and 0 < declared < 1_000_000:
+        limits.append(declared)
+    config = getattr(model, "config", None)
+    positions = getattr(config, "max_position_embeddings", None)
+    if isinstance(positions, int) and positions > 0:
+        if getattr(config, "model_type", "") in _OFFSET_POSITIONS:
+            positions -= int(getattr(config, "pad_token_id", 1) or 1) + 1
+        limits.append(positions)
+    return min(limits) if limits else None
+
+
+_OFFSET_POSITIONS = ("roberta", "xlm-roberta", "camembert", "longformer",
+                     "data2vec-text", "xmod")
+
+
 def rows_with_target(rows: Iterable[Dict[str, Any]], schema: str
                      ) -> List[Dict[str, Any]]:
     out = []

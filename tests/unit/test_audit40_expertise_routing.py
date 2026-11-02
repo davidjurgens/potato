@@ -315,7 +315,10 @@ class TestTheDynamicSubKeysAreDocumented:
 
 class TestReorderingSaysWhetherItIsServed:
 
-    def test_the_stub_strategy_is_disclosed_at_boot(self, caplog):
+    def test_llm_confidence_is_no_longer_a_disclosed_stub(self, caplog):
+        """It used to assign at random and warn at boot. It ranks by stored
+        prelabel confidence now (tests/unit/test_llm_confidence_assignment.py),
+        so a warning that it is random would be false."""
         import logging
 
         from potato.item_state_management import ItemStateManager, clear_item_state_manager
@@ -327,10 +330,8 @@ class TestReorderingSaysWhetherItIsServed:
                                   "annotation_schemes": [],
                                   "assignment_strategy": "llm_confidence"})
             clear_item_state_manager()
-        assert any("llm_confidence" in r.getMessage() and "random" in r.getMessage()
-                   for r in caplog.records), (
-            "a strategy that assigns at random sat in the same enum as the "
-            "ones that work, disclosed only by a source comment")
+        assert not any("llm_confidence" in r.getMessage()
+                       for r in caplog.records)
 
     def test_a_working_strategy_is_not_warned_about(self, caplog):
         import logging

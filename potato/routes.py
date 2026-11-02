@@ -3140,6 +3140,36 @@ def get_ai_suggestion():
         return jsonify(res)
 
 
+def _trained_step_ratings(trained, n_steps):
+    """A written-back step-model rating as prelabel suggestions, keeping only
+    steps that exist with a reward the scheme stores (-1, 0, 1). Item data
+    can be edited by hand or come from another tool, and the widget would
+    drop a bad entry without saying so."""
+    import math
+
+    if not isinstance(trained, dict) or not isinstance(trained.get("steps"), list):
+        return []
+    out, seen = [], set()
+    for step in trained["steps"]:
+        if not isinstance(step, dict):
+            continue
+        index, reward = step.get("index"), step.get("reward")
+        if isinstance(index, bool) or not isinstance(index, int) \
+                or not 0 <= index < n_steps or index in seen:
+            continue
+        if isinstance(reward, bool) or reward not in (-1, 0, 1):
+            continue
+        confidence = step.get("confidence")
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) \
+                or not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            confidence = None
+        seen.add(index)
+        out.append({"index": index, "reward": int(reward),
+                    "confidence": confidence,
+                    "reasoning": "Rated by the project's trained step model"})
+    return out
+
+
 # Per-(instance, schema) cache of LLM step pre-labels so repeated clicks on the
 # "AI pre-label" button don't re-query the model. Keyed by (instance_id, schema).
 _PRM_PRELABEL_CACHE: dict = {}
@@ -3184,6 +3214,17 @@ def prm_prelabel():
     steps = data.get(steps_key) if isinstance(data, dict) else None
     if not isinstance(steps, list) or not steps:
         return jsonify({"steps": [], "error": f"No steps found under '{steps_key}'"}), 200
+
+    # A prm-reward run's written-back rating comes first: it was trained on
+    # this project's own step labels, and it costs no judge call.
+    try:
+        from potato.model_review import prediction_field
+        trained = (data.get(prediction_field(config)) or {}).get(schema_name)
+    except AttributeError:
+        trained = None
+    rated = _trained_step_ratings(trained, len(steps))
+    if rated:
+        return jsonify({"steps": rated, "cached": False, "source": "model"})
 
     cache_key = (str(instance_id), schema_name)
     cached = _PRM_PRELABEL_CACHE.get(cache_key)
@@ -4640,21 +4681,37 @@ def model_review_verdict():
     Stored separately from annotations on purpose: "the model was right" and
     "a human independently chose this label" are different facts, and storing
     the first as the second makes model precision unmeasurable.
+
+    A ``correct`` verdict moves the item into every later training run's
+    train split, so a verdict is accepted only from the annotator the item
+    is assigned to (or an admin with ``X-API-Key``), and only same-origin.
     """
-    if 'username' not in session:
+    from potato.server_utils.origin_check import is_same_origin
+
+    if not is_same_origin():
+        return jsonify({"error": "Cross-origin request rejected"}), 403
+    as_admin = validate_admin_api_key(request.headers.get('X-API-Key'))
+    if 'username' not in session and not as_admin:
         return jsonify({"error": "Not authenticated"}), 401
 
     body = request.get_json(silent=True) or {}
     instance_id = body.get("instance_id")
     if not instance_id:
         return jsonify({"error": "instance_id is required"}), 400
+    if not as_admin:
+        user_state = get_user_state(session['username'])
+        if user_state is None or str(instance_id) not in {
+                str(i) for i in user_state.get_assigned_instance_ids()}:
+            return jsonify({"error": "Item %s is not assigned to you"
+                            % instance_id}), 403
 
     from potato import model_review
 
     try:
         model_review.record_verdict(config, model_review.ReviewVerdict(
             instance_id=str(instance_id),
-            reviewer=session['username'],
+            reviewer=session['username'] if not as_admin else
+            session.get('username') or "admin",
             verdict=str(body.get("verdict") or ""),
             schema_name=str(body.get("schema_name") or ""),
             note=str(body.get("note") or ""),

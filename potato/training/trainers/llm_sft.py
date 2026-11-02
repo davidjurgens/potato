@@ -1,7 +1,10 @@
 """Supervised fine-tuning of an LLM on what annotators wrote.
 
 For free-text schemes (``annotation_type: text``): a summary, a rewrite, a
-rationale, a correction. Each labelled item becomes one example. The prompt
+rationale, a correction. Each labelled item becomes one example. For a
+``trajectory_edit`` scheme the prompt holds the task and the agent's original
+steps and the target is the steps as the annotator corrected them, so the
+model learns to repair a trace; traces nobody edited are left out. The prompt
 is the scheme's description (the question annotators were shown) followed by
 the item's text, and the target is the agreed answer. The loss is computed on
 the answer's tokens only, so the model learns to answer rather than to
@@ -73,6 +76,15 @@ def encode_example(tokenizer, prompt: str, answer: Optional[str],
             "labels": [-100] * len(prompt_ids) + answer_ids}
 
 
+def answer_text(target: Any) -> str:
+    """The text to learn. A corrected trace's target is ``{chosen,
+    rejected}``: the model learns to write the correction, from a prompt
+    holding the task and the original steps."""
+    if isinstance(target, dict) and "chosen" in target:
+        return str(target["chosen"])
+    return str(target)
+
+
 def _dtype_keyword() -> str:
     """``dtype`` from transformers 4.56 on, ``torch_dtype`` before."""
     import transformers
@@ -102,7 +114,7 @@ class LLMSFTTrainer(Trainer):
     description: ClassVar[str] = (
         "Fine-tunes an LLM, with a LoRA adapter by default, to write what "
         "annotators wrote in a text scheme.")
-    kinds: ClassVar[Tuple[str, ...]] = ("text",)
+    kinds: ClassVar[Tuple[str, ...]] = ("text", "trajectory")
     modalities: ClassVar[Tuple[str, ...]] = ("text",)
     install_hint: ClassVar[str] = INSTALL_HINT
     licence: ClassVar[str] = "Apache-2.0"
@@ -164,8 +176,9 @@ class LLMSFTTrainer(Trainer):
         if schema is None:
             return ["No schema was selected for training."]
         problems = []
-        if schema.kind != "text":
-            problems.append("Schema %r is %s; this trainer learns free text."
+        if schema.kind not in self.kinds:
+            problems.append("Schema %r is %s; this trainer learns free text "
+                            "or corrected agent traces."
                             % (schema.name, schema.kind))
         if bundle.split_size("train") < int(params["min_instances"]):
             problems.append(
@@ -247,7 +260,8 @@ class LLMSFTTrainer(Trainer):
             return [encode_example(
                 tokenizer, build_prompt(tokenizer, instruction,
                                         r.get("text", ""), system, chat),
-                str(r["targets"][schema.name]), max_length) for r in rows]
+                answer_text(r["targets"][schema.name]), max_length)
+                for r in rows]
 
         train_examples = examples(train)
         val_examples = examples(val)
@@ -309,7 +323,7 @@ class LLMSFTTrainer(Trainer):
             hf.save_model(model, tokenizer, spec.workdir)
 
         hf.write_card(spec.workdir, {
-            "trainer": self.name, "schema": schema.name, "kind": "text",
+            "trainer": self.name, "schema": schema.name, "kind": schema.kind,
             "base_model": params["model_name"], "lora": params["lora"],
             "instruction": instruction, "system_prompt": system, "chat": chat,
             "max_length": max_length,

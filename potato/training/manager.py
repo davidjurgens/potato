@@ -447,6 +447,33 @@ class TrainingManager:
             self._finish(run, "error", error=str(exc),
                          error_code="supervisor_failed")
 
+    def _forced_train_ids(self, schema_names: Sequence[str]
+                          ) -> Dict[str, List[str]]:
+        """Items that train whatever their split: reviewer corrections and
+        pinned items.
+
+        A ``correct`` verdict counts when it names one of the run's schemes
+        or none. Reading verdicts is best effort: a project with no review
+        table trains on its hash splits as before.
+        """
+        forced: Dict[str, List[str]] = {}
+        wanted = set(schema_names)
+        try:
+            from potato import model_review
+            corrected = sorted({
+                v.instance_id for v in model_review.load_verdicts(self.config)
+                if v.verdict == "correct"
+                and (not v.schema_name or v.schema_name in wanted)})
+        except Exception:
+            self.logger.debug("Could not read review verdicts", exc_info=True)
+            corrected = []
+        if corrected:
+            forced["corrected"] = corrected
+        for reason, ids in store.pinned_items(self.config).items():
+            if ids:
+                forced["pinned_" + reason] = ids
+        return forced
+
     def _build(self, run: store.TrainingRun, bundle_dir: str,
                workdir: str) -> TrainingSpec:
         from potato.export.cli import build_export_context
@@ -460,12 +487,27 @@ class TrainingManager:
             context = self._context_from_live_state()
 
         writeback = (self.config.get("model_training", {}) or {}).get("writeback") or {}
+        forced = self._forced_train_ids(run.schema_names)
         bundle, stats, split_ids = build_bundle(
             context, bundle_dir, run.schema_names,
             split_spec=self.split_spec, split_seed=self.split_seed,
             aggregation=self.aggregation,
-            include_unlabeled=bool(writeback.get("include_unlabeled", False)))
+            include_unlabeled=bool(writeback.get("include_unlabeled", False)),
+            force_train=forced)
 
+        trained_forced = {i for ids in forced.values() for i in ids} & set(
+            split_ids.get("train", ()))
+        earlier = store.heldout_in_other_runs(self.config, trained_forced,
+                                              run.run_id)
+        if earlier:
+            n = len({i for ids in earlier.values() for i in ids})
+            stats.warnings.append(
+                "%d item(s) this run trains on because they are corrections or "
+                "pinned were held out by earlier runs (%s). Scoring this model "
+                "on those runs' val or test items, or on a dataset saved from "
+                "them, includes items it trained on."
+                % (n, ", ".join("%s: %d" % (r, len(ids))
+                                for r, ids in sorted(earlier.items()))))
         store.record_run_items(self.config, run.run_id, split_ids)
         run.n_train = stats.splits.get("train", 0)
         run.n_val = stats.splits.get("val", 0)
@@ -476,6 +518,15 @@ class TrainingManager:
 
         if stats.warnings:
             self._set(warnings=list(stats.warnings))
+            # Into the run's own log too: the status dict is replaced by the
+            # next run, and the run page reads the log.
+            try:
+                with open(os.path.join(self.run_dir(run.run_id),
+                                       "events.jsonl"), "a") as fh:
+                    for warning in stats.warnings:
+                        fh.write(json.dumps(_log_event("warning", warning)) + "\n")
+            except OSError:
+                self.logger.debug("Could not log bundle warnings", exc_info=True)
 
         training = self.config.get("model_training", {}) or {}
         limits = ResourceLimits(

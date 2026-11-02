@@ -469,8 +469,8 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "How items are handed out: random, fixed_order, active_learning, "
         "max_diversity, least_annotated, category_based, diversity_clustering, "
         "batch, priority, model_review, psychometric or engine (the labeling "
-        "engine's human requests). `llm_confidence` is accepted and assigns at "
-        "random -- it is not implemented",
+        "engine's human requests) or llm_confidence (least-confident prelabel "
+        "first, items with no prelabel last)",
         type="string", default="fixed_order", category=ASSIGN,
     ),
     "automatic_assignment": _D(
@@ -1110,6 +1110,33 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     # predates the coverage ratchet and sits on the legacy exemption list;
     # new ones are documented here so the published JSON Schema, the config
     # reference and describe_config_key all know about them.
+    "ui_language.catalog_to_training_button": _D(
+        "Label of the Catalog button that pins a slice's items to the train "
+        "split of later training runs",
+        type="string", default="Train on these", category=UI,
+    ),
+    "ui_language.catalog_to_training_title": _D(
+        "Tooltip of the Catalog's Train on these button",
+        type="string", category=UI,
+    ),
+    "ui_language.catalog_status_pinning": _D(
+        "Catalog status line while a slice is being pinned for training",
+        type="string", default="Pinning…", category=UI,
+    ),
+    "ui_language.catalog_status_pinned_mid": _D(
+        "Catalog status line after pinning, between the count of new items "
+        "and the total",
+        type="string", category=UI,
+    ),
+    "ui_language.catalog_status_pinned_total": _D(
+        "Catalog status line after pinning, after the total pinned count",
+        type="string", default="pinned in all", category=UI,
+    ),
+    "ui_language.catalog_builtin": _D(
+        "Marker beside a built-in slice, such as model-found-nothing, on the "
+        "Catalog page",
+        type="string", default="built-in", category=UI,
+    ),
     "ui_language.jump_unannotated_label": _D(
         "Caption between the header's jump-to-unlabeled buttons (shown at "
         "1200px and wider)",

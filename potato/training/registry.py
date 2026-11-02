@@ -176,6 +176,11 @@ def kind_of_schema(scheme: Dict[str, Any]) -> str:
     if ((scheme.get("annotation_type") or "") == "pairwise"
             and str(scheme.get("mode") or "binary").lower() == "binary"):
         return "preference"
+    # A corrected agent trace is an (original, corrected) pair: an SFT target
+    # and a DPO preference at once. Agreement has no kind for it, because two
+    # annotators' corrections are not compared field by field.
+    if (scheme.get("annotation_type") or "") == "trajectory_edit":
+        return "trajectory"
     try:
         from potato.server_utils.iaa.dispatcher import classify_schema
         return str(classify_schema(scheme).value)
@@ -458,17 +463,37 @@ def _register_builtins() -> None:
     register_lazy(
         "llm-sft", "potato.training.trainers.llm_sft", "LLMSFTTrainer",
         hint="pip install 'potato-annotation[train-llm]'",
-        kinds=("text",), modalities=("text",),
+        kinds=("text", "trajectory"), modalities=("text",),
         description="Fine-tunes an LLM (LoRA by default) to write what "
-                    "annotators wrote in a free-text scheme.",
+                    "annotators wrote in a free-text scheme, or to rewrite "
+                    "an agent trace the way annotators corrected it.",
         licence="Apache-2.0", commercial_use=True)
 
     register_lazy(
         "llm-dpo", "potato.training.trainers.llm_dpo", "LLMDPOTrainer",
         hint="pip install 'potato-annotation[train-llm]'",
-        kinds=("preference",), modalities=("text",),
+        kinds=("preference", "trajectory"), modalities=("text",),
         description="Direct Preference Optimization of an LLM (LoRA by "
-                    "default) on which of two responses annotators preferred.",
+                    "default) on which of two responses annotators preferred, "
+                    "or on corrected over original agent traces.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "label-studio-ml", "potato.training.trainers.label_studio_ml",
+        "LabelStudioMLTrainer", hint="",
+        kinds=("nominal", "multilabel", "span", "geometry"),
+        modalities=("text", "image"),
+        description="Uses an existing Label Studio ML backend's /predict: "
+                    "nothing is trained here, but its predictions are "
+                    "scored, written back and reviewed like a trained "
+                    "model's.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "prm-reward", "potato.training.trainers.prm_reward", "PRMRewardTrainer",
+        hint="pip install 'potato-annotation[train-text]'",
+        kinds=("trace",), modalities=("text",),
+        annotation_types=("process_reward",),
+        description="Process reward model: fine-tunes a transformer to rate "
+                    "each step of an agent trace correct, neutral or wrong.",
         licence="Apache-2.0", commercial_use=True)
 
 

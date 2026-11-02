@@ -112,8 +112,8 @@ def assist_effect(config: Dict[str, Any], user_states: Dict[str, Any],
                           "to hold assistance back from a share of annotators' items.")
         return report
 
-    pa = config.get("pre_annotation") or {}
-    field = str(pa.get("field") or "predictions") if isinstance(pa, dict) else "predictions"
+    from potato.model_review import prediction_field
+    field = prediction_field(config)
     gold = gold or {}
     schemes = [s for s in config.get("annotation_schemes") or []
                if isinstance(s, dict) and s.get("annotation_type") in CATEGORICAL]

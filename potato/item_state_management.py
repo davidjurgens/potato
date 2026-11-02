@@ -890,7 +890,9 @@ class AssignmentStrategy(Enum):
     - RANDOM: Maximizes diversity and reduces bias
     - FIXED_ORDER: Ensures consistent ordering across users
     - ACTIVE_LEARNING: Prioritizes items with high uncertainty
-    - LLM_CONFIDENCE: Uses AI model confidence for prioritization
+    - LLM_CONFIDENCE: Serves every item, least-confident model prediction
+      first, then items whose predictions carry no confidence, then items
+      with no prediction in their configured order
     - MAX_DIVERSITY: Prioritizes items with high disagreement
     - LEAST_ANNOTATED: Prioritizes items with fewest annotations
     - CATEGORY_BASED: Assigns items matching user's qualified categories
@@ -1086,17 +1088,6 @@ class ItemStateManager:
             self.assignment_strategy = AssignmentStrategy.PRIORITY
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
-
-        if self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
-            # It sits in the same enum as the strategies that work, and its
-            # only disclosure was a source comment and a DEBUG line. Measured:
-            # the order it serves is shuffled against the configured order even
-            # with a fitted classifier available.
-            self.logger.warning(
-                "assignment_strategy: llm_confidence is not implemented and "
-                "assigns items at random. Use active_learning for "
-                "uncertainty-ranked assignment, or model_review to serve the "
-                "least confident predictions first.")
 
         # Set up random seed for assignment strategies
         self.random_seed = config.get('random_seed', 1234)
@@ -1957,8 +1948,7 @@ class ItemStateManager:
         """
         from potato import model_review
 
-        qc = self.config.get('pre_annotation', {}) or {}
-        field_name = qc.get('field', 'predictions')
+        field_name = model_review.prediction_field(self.config)
         schema_names = [s.get('name') for s in
                         self.config.get('annotation_schemes', []) or []
                         if s.get('name')]
@@ -1979,6 +1969,47 @@ class ItemStateManager:
                 iid, data, field_name, schema_names))
 
         return model_review.review_order(summaries)
+
+    def _llm_confidence_candidates(self, user_state: 'UserState') -> list:
+        """
+        Every item this user may take, least confident prediction first.
+
+        Unlike ``_model_review_candidates`` nothing is left out: an item with
+        no prediction is still work, so it is served last, in queue order,
+        rather than dropped, and the study can finish. Predictions without a
+        confidence come between the two, for the reason ``review_order``
+        gives. Shared with ``has_unlabeled_items_for_user``.
+        """
+        from potato import model_review
+
+        field_name = model_review.prediction_field(self.config)
+        schema_names = [s.get('name') for s in
+                        self.config.get('annotation_schemes', []) or []
+                        if s.get('name')]
+
+        scored, unscored, unpredicted = [], [], []
+        for position, iid in enumerate(list(self.remaining_instance_ids)):
+            if self._item_is_complete(iid):
+                if iid in self.remaining_instance_ids:
+                    self.remaining_instance_ids.remove(iid)
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if self._already_with_user(user_state, iid):
+                continue
+            item = self._store.get(iid)
+            data = item.get_data() if item is not None else {}
+            summary = model_review.summarize_predictions(
+                iid, data, field_name, schema_names)
+            if summary.empty:
+                unpredicted.append(iid)
+            elif summary.min_confidence is None:
+                unscored.append(iid)
+            else:
+                scored.append((summary.min_confidence, position, iid))
+
+        scored.sort()
+        return [iid for _, _, iid in scored] + unscored + unpredicted
 
     def _holds_unannotated_item(self, user_state: 'UserState') -> bool:
         """True if the user is already holding something they have not answered.
@@ -2029,6 +2060,9 @@ class ItemStateManager:
             # item the model predicted nothing on), and /annotate
             # redirect-loops between "you have work" and "there is none".
             return bool(self._model_review_candidates(user_state))
+
+        if self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
+            return bool(self._llm_confidence_candidates(user_state))
 
         if self.assignment_strategy == AssignmentStrategy.ENGINE:
             # The engine's ledger is the queue: work exists exactly when it
@@ -2422,21 +2456,13 @@ class ItemStateManager:
                 user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
-            # LLM confidence assignment strategy (currently falls back to random)
-            unlabeled_items = []
-            for iid in list(self.remaining_instance_ids):
-                if self._item_is_complete(iid):
-                    if iid in self.remaining_instance_ids:
-                        self.remaining_instance_ids.remove(iid)
-                    continue
-                if self._item_is_saturated(iid):
-                    continue
-                if not self._already_with_user(user_state, iid):
-                    unlabeled_items.append(iid)
-            if not unlabeled_items:
+            candidates = self._llm_confidence_candidates(user_state)
+            if not candidates:
                 return 0
-            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
-            self.logger.debug(f"LLM confidence (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
+            to_assign = candidates[:instances_to_assign]
+            self.logger.debug(
+                f"LLM confidence: assigning {to_assign} (least confident first) "
+                f"to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
                 user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)

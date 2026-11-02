@@ -323,8 +323,9 @@ other key.
 | `setfit` | `radio`, `select`, `likert`, `multiselect` | text | `potato-annotation[embeddings]` |
 | `hf-token-classification` | `span` | text | `potato-annotation[train-text]` |
 | `hf-image-classification` | `radio`, `select`, `likert`, `multiselect` | images | `potato-annotation[train-vision]` |
-| `llm-sft` | `text` (free-text answers) | text | `potato-annotation[train-llm]` |
-| `llm-dpo` | `pairwise` in `binary` mode | text | `potato-annotation[train-llm]` |
+| `llm-sft` | `text` (free-text answers), `trajectory_edit` | text | `potato-annotation[train-llm]` |
+| `llm-dpo` | `pairwise` in `binary` mode, `trajectory_edit` | text | `potato-annotation[train-llm]` |
+| `prm-reward` | `process_reward` | agent traces | `potato-annotation[train-text]` |
 | `torchvision-detect` | `image_annotation` | images | `potato-annotation[train-vision]` |
 | `ultralytics-detect` | `image_annotation` | images | `pip install ultralytics` (AGPL-3.0) |
 | `torchvision-segment` | `image_annotation` (outlines) | images | `potato-annotation[train-vision]` |
@@ -333,6 +334,7 @@ other key.
 | `decision-calibrate` | `radio`, `select`, `likert`, `slider` | text | nothing; a configured decision model |
 | `laya-finetune` | `radio`, `select`, `likert`, `slider` | text | `potato-annotation[decision]` |
 | `openjev-finetune` | `radio`, `select`, `likert`, `slider` | text | `pip install wev-ai`; a GPU with about 16 GB free |
+| `label-studio-ml` | `radio`, `select`, `multiselect`, `span`, `image_annotation` | text, images | nothing; a running Label Studio ML backend |
 
 `pip install "potato-annotation[train]"` installs what the text, image,
 audio and LLM trainers need. Laya (`[decision]`), `wev-ai` and `ultralytics`
@@ -600,6 +602,13 @@ Default model: `Qwen/Qwen2.5-0.5B-Instruct`.
 | `precision` | `auto` | As in [Parameters](#parameters). |
 | `min_instances` | 20 | |
 
+For a `trajectory_edit` scheme, the prompt is the task and the agent's
+original steps, and the target is the steps as the annotator corrected them,
+so the model learns to repair a trace. Traces nobody edited are left out.
+Each step is written as `Step N` followed by its fields (`action: ...`,
+`thought: ...`), and the final answer follows the last step when the scheme
+has `final_answer_key`.
+
 The checkpoint kept is the one with the lowest val loss. Predictions are
 generated greedily for the val, test and unlabelled items. A prediction's
 confidence is the model's mean probability for the tokens it generated, which
@@ -625,6 +634,12 @@ answered with the tie option are left out, since they say nothing about which
 response is better. DPO raises the likelihood of the preferred response
 relative to the other one, measured against a frozen reference copy of the
 starting model; `beta` limits how far the model may move from that reference.
+
+A `trajectory_edit` scheme gives the same three parts without a choice:
+the task is the prompt, the corrected steps are the preferred response, and
+the original steps the other one. Traces nobody edited are left out. A
+prediction says whether the model prefers the correction (`A`) or the
+original (`B`), and is made only for held-out traces that have a correction.
 
 A LoRA adapter is trained by default. The reference is then the same model
 with the adapter switched off, so no second copy is held in memory.
@@ -655,6 +670,116 @@ that preference as its confidence. As a prelabel, the preferred response's
 card is selected when the annotator opens the item. With `randomize_order`,
 the selection follows the response to wherever this annotator sees it. The
 saved adapter generates text and loads with peft like any other adapter.
+
+### Agent traces
+
+A `trajectory_edit` prediction has no prelabel display: the widget starts
+from the agent's original trace. Its predictions are stored and scored, and
+the server does not start with the scheme in `writeback.schemas`, since
+nobody would see its prelabels. The held-out score is `closer_to_correction`: for
+`llm-dpo`, the share of held-out traces where the model prefers the
+correction; for `llm-sft`, the share where the written steps are closer, by
+token F1, to the correction than to the original (`token_f1` against the
+correction is reported beside it).
+
+### `prm-reward`
+
+`prm-reward` trains a process reward model on a `process_reward` scheme:
+annotators rate each step of a trace correct, neutral or wrong, or click the
+first wrong step. The trace is one input, the task followed by `Step 1`,
+`Step 2` and so on, and a transformer encoder learns a three-way rating at
+each step's last token, so each rating is made with the steps before it in
+view. Steps nobody rated are left out of the loss. Default model:
+`answerdotai/ModernBERT-base`, chosen for its 8,192-token context.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `answerdotai/ModernBERT-base` | An encoder with a fast tokenizer. |
+| `max_length` | 1024 | Tokens per trace. Steps past it are neither trained on nor rated, and the run log counts them. |
+| `epochs` | 6 | |
+| `batch_size` | 8 | Traces per step. |
+| `learning_rate` | 5e-5, or 3e-4 with LoRA | |
+| `lora` | none | |
+| `patience` | 2 | Epochs without a higher val step macro-F1 before stopping. |
+| `weight_decay`, `warmup_ratio`, `precision`, `min_instances` | 0.01, 0.1, `auto`, 20 | |
+
+The held-out score is `step_macro_f1`, macro-F1 over the three ratings on
+every rated step; most steps in most traces are correct, so accuracy would
+flatter a model that never says "wrong". The run also reports
+`step_accuracy` and `first_error_accuracy`, the share of traces where the
+model's first wrong step is the annotators' first wrong step.
+
+A prediction rates every step that fits in `max_length`, with the
+probability of each rating as its confidence and the least confident step as
+the trace's. With the scheme in `writeback.schemas` and `ai_prelabel: true`
+on the scheme, the "AI pre-label steps" button offers the trained ratings for
+the annotator to verify, ahead of the LLM judge, which is not called for an
+item that has them:
+
+```yaml
+annotation_schemes:
+  - annotation_type: process_reward
+    name: step_quality
+    description: Rate each step
+    steps_key: steps
+    ai_prelabel: true
+
+model_training:
+  enabled: true
+  writeback:
+    schemas: [step_quality]
+    include_unlabeled: true
+```
+
+### `label-studio-ml`
+
+`label-studio-ml` uses a Label Studio ML backend that is already running,
+instead of training a model here. It trains nothing: it checks the backend's
+`GET /health`, sends the held-out items (and with
+`writeback.include_unlabeled` the unlabelled ones) to `POST /predict` in
+batches, and turns the regions it returns into prelabels. The run then has
+what a trained model's run has: a held-out score against this project's
+annotators, write-back, the review queue, and its run id on each prelabel.
+
+```yaml
+model_training:
+  enabled: true
+  trainer_params:
+    label-studio-ml:
+      url: http://localhost:9090
+      # A backend started with BASIC_AUTH_USER and BASIC_AUTH_PASS: the
+      # names of variables holding them here, not the values.
+      basic_auth_user_env: LS_ML_USER
+      basic_auth_pass_env: LS_ML_PASS
+      # Images, with the backend on this machine and
+      # LOCAL_FILES_DOCUMENT_ROOT set to the task directory there:
+      media_url_prefix: /data/local-files/?d=
+```
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `url` | none | The backend's address. Required. |
+| `basic_auth_user_env`, `basic_auth_pass_env` | none | Environment variables holding the backend's `BASIC_AUTH_USER` and `BASIC_AUTH_PASS`. HTTP Basic is the only authentication a stock label-studio-ml backend has. |
+| `api_key_env` | none | An environment variable holding a token, sent as `Authorization: Token <value>`, for a backend behind a proxy that wants one. A stock backend answers it with a `500`. Use one of the two schemes, not both. |
+| `label_config` | generated | Labeling config XML to send. By default one is generated from the scheme: `Choices` for `radio`, `select` and `multiselect`, `Labels` for `span`, `RectangleLabels` for an `image_annotation` scheme, or `PolygonLabels` when its tools include `polygon` and not `bbox`. |
+| `batch_size` | 16 | Items per `/predict` request. |
+| `timeout_s` | 60 | Seconds per request. |
+| `media_url_prefix` | none | Send an image as the prefix followed by the file's path relative to the task directory (`cats/img1.png`), instead of the training machine's absolute path to it. A `/` goes between them unless the prefix ends in `/` or `=`. An image outside the task directory has no such path, so it is not sent: it gets no prediction, and the run log names how many. |
+
+Without `media_url_prefix`, an image is sent as an absolute path, which
+works only for a backend that opens the path itself. A backend built on the
+label-studio-ml SDK reads `data.image` as a URL (`get_local_path`) and fails
+on a bare path with `MissingSchema`. For one on the same machine, set
+`media_url_prefix: /data/local-files/?d=` and start the backend with
+`LOCAL_FILES_DOCUMENT_ROOT` set to the task directory. For one elsewhere, serve
+the task directory over HTTP and give that server's URL as the prefix.
+
+Text goes to the backend as `data.text` and images as `data.image`. The
+results are read with the converter the [Label Studio importer](../tools/import_cli.md)
+uses: Label Studio's UTF-16 span offsets become code points, and its percent
+coordinates become the image widget's. A prediction's `score` is its
+confidence. The backend's own training (its `/webhook` handler) is not
+triggered: Potato does not send it annotation events.
 
 ### `torchvision-detect`
 
@@ -743,10 +868,9 @@ It takes the parameters of `torchvision-detect`, with `model_name`
 `maskrcnn_resnet50_fpn` (default) or `maskrcnn_resnet50_fpn_v2`, and a
 `score_threshold` of 0.5: Mask R-CNN scores its second guesses for an object
 at 0.25–0.6, and each would be a shape for the annotator to delete. On a Mac it trains
-on the CPU, not on Metal (`mps`). With torch 2.8, one Mask R-CNN forward
-pass took 40 seconds there, and the backward pass had not finished a minute
-later. Use a GPU
-server for it.
+on the CPU, not on Metal (`mps`). With torch 2.8, one training step on a
+256-pixel image took 57 seconds on Metal and 2.3 seconds on the CPU. Use a
+GPU server for it.
 
 ### `ultralytics-segment`
 
@@ -997,7 +1121,9 @@ prediction. Set `writeback.include_unlabeled: true` to predict on those items
 too: the run's bundle then carries them as an `unlabeled` file that the model
 predicts on but is never trained or scored on, and their predictions pass the
 same checks. This is the setting for using prelabels to speed up annotation
-(with [model review](model_review.md) serving them least-confident first).
+(with [model review](model_review.md) serving them least-confident first, or
+[`assignment_strategy: llm_confidence`](../advanced/task_assignment.md) for a
+study where every item still needs a label).
 Prelabels anchor annotators, so turn it on once the held-out score supports
 it.
 
@@ -1009,6 +1135,50 @@ rejected pair or a prediction under the floor stays off after a restart too.
 
 To withdraw a run's prelabels, send `DELETE /admin/training/api/runs/<run_id>/predictions`.
 This removes the stored predictions and takes their prelabels off the items.
+
+### Corrections and pinned items always train
+
+Two kinds of item go to the `train` split of every later run, whatever their
+place in the stable split:
+
+- **Items a reviewer corrected.** A `correct` verdict in
+  [model review](model_review.md), for the run's scheme or for no scheme,
+  means a person fixed the model's answer. Corrections come from the items
+  the model was worst at, so in `val` or `test` they would score the model
+  on a sample of its own mistakes. `accept` and `reject` verdicts do not move an item.
+- **Pinned items.** "Train on these" beside a slice on the
+  [Catalog](../agent-evaluation/semantic_curation.md) page pins what the slice
+  matches, for instance the built-in `model-found-nothing` slice, the items
+  the model predicted nothing on. A pinned item trains once someone has
+  labelled it; until then the run counts it as waiting.
+
+A run whose bundle moved held-out items into `train` logs a warning saying
+how many, because its held-out score is then computed without them and is not
+directly comparable with an earlier run's. The counts are in the bundle's
+`manifest.json`, under `stats.forced_train`.
+
+### Save a run's split as a dataset version
+
+The run page's "Keep this split as a dataset" saves a run's `val`, `test` or
+`train` items, with their agreed human labels, as a new version of a
+[dataset](../agent-evaluation/datasets_and_experiments.md). A version does not change afterwards, so
+later models, and LLM prompts in the datasets' experiment runner, can be
+compared on exactly those items. It needs `datasets.enabled: true`.
+
+The version holds that split and nothing else. Saving into a dataset that
+already has versions starts a new version from scratch rather than adding to
+the last one. Run 2's `val` items saved over run 1's would otherwise include
+items run 2 trained on. Each example's `split` is the run's split name. Its
+`inputs` are the item's data without the prelabel field, so an evaluation
+cannot read the model's answer, and its `reference_outputs` cover only the
+run's schemes. Dataset names cannot contain `/` or `\`, or start with `.`.
+
+### Where a prelabel came from
+
+`GET /admin/model-review` includes `provenance`: for each item in the review
+queue whose prelabel a training run wrote, the run id, the trainer and the
+run's held-out score, per scheme. Prelabels supplied with the data have no
+entry.
 
 ---
 
@@ -1033,6 +1203,10 @@ same-origin.
 | `POST /admin/training/api/backends/<name>/check` | For an ssh backend, connect and report Python, GPUs and missing packages. For an agent backend, whether a token is issued and when the agent last connected. |
 | `POST /admin/training/api/runs/<run_id>/cancel` | Cancel the run in progress. `400` if no run is in progress, or `<run_id>` is not the one in progress. |
 | `DELETE /admin/training/api/runs/<run_id>/predictions` | Withdraw the run's stored predictions. |
+| `POST /admin/training/api/runs/<run_id>/pin-split` | Save a split as a dataset version. Body: `{"dataset": name, "split": "val"}`. `201` with the version; `400` with no dataset name, a split the run lacks, or datasets not enabled; `404` for an unknown run. |
+| `GET /admin/training/api/pinned` | Pinned items, by reason. |
+| `POST /admin/training/api/pinned` | Pin items to `train`: `{"slice": name}` or `{"instance_ids": [...]}`. Returns how many were new, already pinned, or not in the data, and `in_last_run_train`: how many the latest run already trained on. Train items get no prelabel, so `model-found-nothing` matches them too. |
+| `DELETE /admin/training/api/pinned` | Unpin `{"instance_ids": [...]}`, or every pinned item when `instance_ids` is left out. `400` when `instance_ids` is not a non-empty list of ids. |
 
 Starting a run:
 
@@ -1071,7 +1245,7 @@ agent.
 | `POST /api/training/backends/<name>/heartbeat` | An idle agent says it is alive. `403` for a token issued to another backend. |
 | `GET /api/training/jobs/next?wait=30` | Long poll: `200` with a job, or `204` when none arrives within `wait` seconds. |
 | `GET /api/training/jobs/<run_id>` | The job, its spec and whether it was cancelled. |
-| `GET /api/training/jobs/<run_id>/bundle` | The bundle as `tar.gz`, media included. `410` once the bundle is gone. |
+| `GET /api/training/jobs/<run_id>/bundle` | The bundle as `tar.gz`, media included. Answers `Range` requests: the agent resumes a dropped download from where it stopped, up to five attempts. `410` once the bundle is gone. |
 | `POST /api/training/jobs/<run_id>/progress` | Progress events; a cancel comes back in the response. |
 | `POST /api/training/jobs/<run_id>/predictions` | `predictions.jsonl`. `413` above `max_predictions_mb`. |
 | `POST /api/training/jobs/<run_id>/complete` | Exit code and final events. |

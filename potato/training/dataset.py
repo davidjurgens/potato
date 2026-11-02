@@ -72,6 +72,9 @@ class BundleStats:
         self.n_media_linked = 0
         self.n_media_missing = 0
         self.splits: Dict[str, int] = {}
+        #: Per reason, items put in train whatever their hash split said, and
+        #: how many of those the hash had held out.
+        self.forced_train: Dict[str, Dict[str, int]] = {}
         self.warnings: List[str] = []
 
     def to_dict(self) -> Dict[str, Any]:
@@ -79,7 +82,9 @@ class BundleStats:
                 "n_skipped_no_label": self.n_skipped_no_label,
                 "n_media_linked": self.n_media_linked,
                 "n_media_missing": self.n_media_missing,
-                "splits": dict(self.splits), "warnings": list(self.warnings)}
+                "splits": dict(self.splits),
+                "forced_train": {k: dict(v) for k, v in self.forced_train.items()},
+                "warnings": list(self.warnings)}
 
 
 _IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif")
@@ -327,6 +332,112 @@ def _target_for(spec: SchemaSpec, value_map: Any,
     return _label_of(value_map)
 
 
+#: Kinds whose inputs are an agent trace on the item, not its text field.
+TRACE_KINDS = ("trajectory", "trace")
+
+
+def _render_step(step: Any) -> str:
+    """One trace step as text. A dict step keeps its keys, in order, so a
+    model sees ``thought:`` and ``action:`` the way annotators did."""
+    if isinstance(step, dict):
+        lines = []
+        for key, value in step.items():
+            if value in (None, "", [], {}):
+                continue
+            if not isinstance(value, str):
+                value = json.dumps(value, ensure_ascii=False)
+            lines.append("%s: %s" % (key, value))
+        return "\n".join(lines)
+    return "" if step is None else str(step)
+
+
+def _render_steps(steps: Sequence[Any], final_answer: Any = None,
+                  final_answer_key: str = "final_answer") -> str:
+    parts = ["Step %d\n%s" % (n + 1, _render_step(step))
+             for n, step in enumerate(steps or [])]
+    if final_answer not in (None, ""):
+        parts.append("%s: %s" % (final_answer_key, final_answer))
+    return "\n\n".join(parts)
+
+
+def _trace_inputs(scheme: Dict[str, Any], item_data: Dict[str, Any]
+                  ) -> Dict[str, Any]:
+    """The task and the rendered steps of the trace an item carries."""
+    steps_key = scheme.get("steps_key", "steps")
+    final_key = scheme.get("final_answer_key", "final_answer")
+    steps = item_data.get(steps_key)
+    steps = steps if isinstance(steps, list) else []
+    task = _as_text(item_data.get("task_description", item_data.get(
+        "task", item_data.get("text", ""))))
+    return {"task": task, "steps": [_render_step(s) for s in steps],
+            "rendered": _render_steps(steps, item_data.get(final_key), final_key)}
+
+
+def _blob(value_map: Any) -> Optional[Dict[str, Any]]:
+    """The JSON object a blob scheme saved, from ``{label: json}``."""
+    values = value_map.values() if isinstance(value_map, dict) else [value_map]
+    for value in values:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str) and value.strip().startswith("{"):
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+    return None
+
+
+#: process_reward stores 1 (correct), 0 (neutral) and -1 (incorrect).
+STEP_REWARDS = (-1, 0, 1)
+
+
+def _agent_trace_target(kind: str, scheme: Dict[str, Any], value_map: Any,
+                        item_data: Dict[str, Any]) -> Any:
+    """The target for a ``trajectory_edit`` or ``process_reward`` answer.
+
+    ``trajectory``: ``{"chosen": corrected steps, "rejected": original
+    steps}``, rebuilt from the per-field edits the way the
+    trajectory_correction exporter does; an unedited trace has no target.
+    ``trace``: one reward per step of the item's trace, None where the step
+    was not rated.
+    """
+    blob = _blob(value_map)
+    if blob is None:
+        return None
+    if kind == "trajectory":
+        from potato.export.trajectory_correction_exporter import (
+            TrajectoryCorrectionExporter)
+        record = TrajectoryCorrectionExporter()._build_record(
+            "", "", scheme, item_data, blob)
+        if not record or not record.get("n_edits"):
+            return None
+        final_key = scheme.get("final_answer_key", "final_answer")
+        def render(trace):
+            return _render_steps(trace.get("steps") or [], trace.get(final_key),
+                                 final_key)
+        chosen = render(record["corrected_trace"])
+        rejected = render(record["original_trace"])
+        return None if chosen == rejected else {"chosen": chosen,
+                                                "rejected": rejected}
+
+    steps = item_data.get(scheme.get("steps_key", "steps"))
+    n_steps = len(steps) if isinstance(steps, list) else 0
+    rewards: List[Optional[int]] = [None] * n_steps
+    for n, step in enumerate(blob.get("steps") or []):
+        if not isinstance(step, dict):
+            continue
+        try:
+            index = int(step.get("index", n))
+            reward = int(step.get("reward"))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= index < n_steps and reward in STEP_REWARDS:
+            rewards[index] = reward
+    return rewards if any(r is not None for r in rewards) else None
+
+
 def _as_text(value: Any) -> str:
     if isinstance(value, dict):
         for key in ("text", "content", "response", "output", "answer"):
@@ -387,6 +498,16 @@ def _media_file(reference: str, task_dir: str, media_directory: str = "media") -
     return reference if os.path.isabs(reference) else os.path.join(task_dir, reference)
 
 
+def _source_path(source: str, task_dir: str) -> str:
+    """Where a media file lives: relative to the task directory (with ``/``)
+    when it is inside it, else absolute. The bundle's own copy sits under a
+    hashed folder, so it cannot stand in for the file's name in a URL."""
+    source, root = os.path.abspath(source), os.path.abspath(task_dir)
+    if source.startswith(root + os.sep):
+        return os.path.relpath(source, root).replace(os.sep, "/")
+    return source
+
+
 def _link_media(reference: str, task_dir: str, media_dir: str,
                 stats: BundleStats, media_directory: str = "media") -> Optional[str]:
     """Symlink one media file into the bundle, returning its bundle-relative path.
@@ -418,6 +539,54 @@ def _link_media(reference: str, task_dir: str, media_dir: str,
     return os.path.join(digest, os.path.basename(source))
 
 
+def _force_into_train(partitioned: Dict[str, List[Dict[str, Any]]],
+                      rows: Sequence[Dict[str, Any]],
+                      force_train: Dict[str, Iterable[str]],
+                      stats: BundleStats) -> None:
+    """Move forced rows into ``train``, counting what moved and why."""
+    partitioned.setdefault("train", [])
+    labelled = {r["instance_id"] for r in rows}
+    reason_of: Dict[str, str] = {}
+    for reason, ids in force_train.items():
+        ids = {str(i) for i in ids or ()}
+        # An item with two reasons (corrected and pinned) is counted under
+        # the first, the one it moves under.
+        mine = {i for i in ids & labelled if reason_of.setdefault(i, reason) == reason}
+        stats.forced_train[reason] = {
+            "n": len(mine), "moved": 0,
+            "waiting_for_label": len(ids - labelled)}
+
+    moved_total = 0
+    for split_name, split_rows in partitioned.items():
+        if split_name == "train":
+            continue
+        keep = []
+        for row in split_rows:
+            reason = reason_of.get(row["instance_id"])
+            if reason is None:
+                keep.append(row)
+                continue
+            partitioned["train"].append(row)
+            stats.forced_train[reason]["moved"] += 1
+            moved_total += 1
+        partitioned[split_name] = keep
+
+    if moved_total:
+        stats.warnings.append(
+            "%d held-out item(s) moved to train (%s). Held-out scores are "
+            "computed without them, so they are not directly comparable with "
+            "a run that had them."
+            % (moved_total, ", ".join(
+                "%s: %d" % (r, c["moved"])
+                for r, c in sorted(stats.forced_train.items()) if c["moved"])))
+    if reason_of and labelled and not any(
+            partitioned.get(s) for s in partitioned if s not in ("train", "unlabeled")):
+        stats.warnings.append(
+            "Every labelled item is a correction or pinned, so all of them "
+            "train and none is held out: this run has no held-out score. "
+            "Label more items, or unpin some.")
+
+
 def _digest_of(paths: Sequence[str]) -> str:
     """A content hash over the split files.
 
@@ -446,6 +615,7 @@ def build_bundle(
     text_key: Optional[str] = None,
     include_media: bool = True,
     include_unlabeled: bool = False,
+    force_train: Optional[Dict[str, Iterable[str]]] = None,
 ) -> Tuple[BundleRef, BundleStats, Dict[str, List[str]]]:
     """Write a training bundle from an ``ExportContext``.
 
@@ -462,6 +632,12 @@ def build_bundle(
             ``unlabeled`` split, for the worker to predict on (write-back's
             ``include_unlabeled``). Never trained or evaluated on, and not in
             *split_ids*.
+        force_train: reason to instance ids that go to ``train`` whatever
+            their hash split, such as items a reviewer corrected. A
+            correction is the most useful label there is and not a random
+            sample of the corpus: in val or test it would make the model look
+            worse at the items it was already worst at. Ids with no human
+            label are counted as waiting and otherwise ignored.
 
     Returns:
         ``(bundle, stats, split_ids)`` where *split_ids* maps a split name to
@@ -517,14 +693,33 @@ def build_bundle(
                                  media_directory)
             if linked:
                 row["media"] = linked
+                if not reference.startswith(("http://", "https://")):
+                    row["media_source"] = _source_path(
+                        _media_file(reference, task_dir, media_directory),
+                        task_dir)
             else:
                 row["media_missing"] = reference
+
+    primary = by_name.get(schema_names[0], {}) if schema_names else {}
+    trace_inputs = kinds.get(schema_names[0]) in TRACE_KINDS if schema_names else False
+
+    def attach_trace(row, item_data):
+        # Agent-trace schemes train on the trace, which is not the text field.
+        # The SFT text is the task and the original steps; DPO's prompt is the
+        # task alone and its two responses are steps.
+        if not trace_inputs:
+            return
+        inputs = _trace_inputs(primary, item_data)
+        row["trace"] = inputs
+        row["prompt"] = inputs["task"]
+        row["text"] = ("%s\n\n%s" % (inputs["task"], inputs["rendered"])).strip()
 
     def unlabeled(iid, item_data):
         if include_unlabeled:
             row = {"instance_id": iid,
                    "text": _item_text(item_data, text_key)}
             attach_media(row, item_data)
+            attach_trace(row, item_data)
             unlabeled_rows.append(row)
 
     for iid in instance_ids:
@@ -545,7 +740,11 @@ def build_bundle(
                                    annotation_type=by_name.get(name, {}).get(
                                        "annotation_type", ""),
                                    kind=spec_kind)
-            target = _target_for(fake_spec, resolved[name], by_name.get(name))
+            if spec_kind in TRACE_KINDS:
+                target = _agent_trace_target(spec_kind, by_name.get(name, {}),
+                                             resolved[name], item_data)
+            else:
+                target = _target_for(fake_spec, resolved[name], by_name.get(name))
             if target is None or target == [] or target == "":
                 continue
             targets[name] = target
@@ -578,7 +777,14 @@ def build_bundle(
         }
 
         attach_media(row, item_data)
-        candidates = _candidates(by_name.get(schema_names[0], {}), item_data)
+        attach_trace(row, item_data)
+        trajectory = targets.get(schema_names[0]) \
+            if kinds.get(schema_names[0]) == "trajectory" else None
+        # The corrected steps first, so a preference model's "A" means it
+        # prefers the correction.
+        candidates = ([trajectory["chosen"], trajectory["rejected"]]
+                      if isinstance(trajectory, dict)
+                      else _candidates(by_name.get(schema_names[0], {}), item_data))
         if candidates:
             row["candidates"] = candidates
             prompt = _pair_prompt(item_data)
@@ -595,6 +801,8 @@ def build_bundle(
     from potato.publish.preprocessing import _partition_splits
     spec = split_spec or DEFAULT_SPLITS
     partitioned = _partition_splits(rows, spec, split_seed)
+    if force_train:
+        _force_into_train(partitioned, rows, force_train, stats)
 
     split_files: Dict[str, Dict[str, Any]] = {}
     split_ids: Dict[str, List[str]] = {}

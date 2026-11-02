@@ -87,7 +87,12 @@ curl -H "X-API-Key: $KEY" \
 ```
 
 It appears in `/admin/catalog` alongside your own slices, and can become a
-review dataset through the normal slice-to-dataset path.
+review dataset through the normal slice-to-dataset path. With model training
+on, "Train on these" pins it to the next runs' training data (see
+[Semantic curation](../agent-evaluation/semantic_curation.md#train-on-a-slice)).
+
+`GET /admin/model-review` names, under `provenance`, the training run behind
+each prelabel in the queue: its id, trainer and held-out score.
 
 !!! note "An empty prediction list is an answer"
     `"predictions": {"boxes": []}` means the model looked and found nothing.
@@ -101,10 +106,14 @@ review dataset through the normal slice-to-dataset path.
 A reviewer's judgement of a prelabel is stored separately from an annotation:
 
 ```bash
-curl -X POST -H "Content-Type: application/json" \
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
      -d '{"instance_id": "r00", "verdict": "accept", "schema_name": "tone"}' \
      http://localhost:8000/api/model-review/verdict
 ```
+
+An annotator's session can record a verdict only on an item assigned to
+them; an admin with `X-API-Key` can record one on any item. Anything else
+gets `403`, as does a request from another site's page.
 
 | Verdict | Meaning |
 |---|---|
@@ -115,6 +124,10 @@ curl -X POST -H "Content-Type: application/json" \
 "The model was right" and "a human independently chose this label" are
 different facts. Storing the first as the second makes model precision
 unmeasurable, because every accepted prelabel then looks like human work.
+
+A `correct` verdict also moves the item into the `train` split of every
+later [training run](model_training.md#corrections-and-pinned-items-always-train),
+so a correction teaches the next model and is never used to score it.
 
 Re-reviewing replaces a verdict rather than appending, so an annotator who
 changes their mind is counted once. An unknown verdict is refused: a silently

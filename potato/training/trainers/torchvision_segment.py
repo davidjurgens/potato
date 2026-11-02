@@ -10,8 +10,9 @@ Potato's own tracer otherwise) and simplified to at most 64 vertices, so the
 prelabel is a polygon the annotator can edit point by point. Where a mask
 comes out in several pieces, the largest piece is kept.
 
-On a Mac it trains on the CPU: Mask R-CNN hangs on Apple's Metal (mps)
-with the torch this was built against. A GPU server is the place for it.
+On a Mac it trains on the CPU: on Apple's Metal (mps) a Mask R-CNN step
+is about 25 times slower than on the CPU with the torch this was built
+against. A GPU server is the place for it.
 
 Same licence position as ``torchvision-detect``: torchvision is BSD-3-Clause,
 and the COCO-pretrained weights carry COCO's image licences.
@@ -50,6 +51,9 @@ class TorchvisionSegmentTrainer(TorchvisionDetectTrainer):
     # Measured with torch 2.8 and torchvision 0.23: one Mask R-CNN forward
     # pass took 40 s on mps and the backward pass had not finished a minute
     # later (a full run sat in Metal's waitUntilCompleted for 20 minutes).
+    # Re-measured 2026-11-02, same versions, one 256-pixel image: 28.7 s
+    # forward and 28.8 s backward on mps, 0.8 s and 1.5 s on the CPU. It
+    # finishes now, and is still about 25 times slower than the CPU.
     # torchvision-detect is off mps too, for speed.
     mps_ok: ClassVar[bool] = False
 

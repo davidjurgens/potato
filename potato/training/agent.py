@@ -63,6 +63,18 @@ class ProtocolError(RuntimeError):
         self.status = status
 
 
+class _Restart(Exception):
+    """Discard the partial download and fetch the file whole."""
+
+
+class _Retry(Exception):
+    """A server error worth another attempt."""
+
+    def __init__(self, failure: ProtocolError):
+        super().__init__(str(failure))
+        self.failure = failure
+
+
 class _UnixHTTPConnection(http.client.HTTPConnection):
     """HTTP over a unix socket: the far end of an ``ssh -R`` socket forward."""
 
@@ -150,6 +162,101 @@ class Client:
                 else ""
             raise ProtocolError(status, message or "request failed")
         return status, data
+
+    def download(self, path: str, dest: str, timeout: Optional[float] = None,
+                 attempts: int = 5, backoff_s: float = 2.0,
+                 _sleep=time.sleep) -> int:
+        """Download *path* to *dest*, resuming where a dropped connection
+        left off. Returns the size in bytes.
+
+        A bundle with its media can be gigabytes over a slow link, and a
+        restart from zero after a dropped connection was the only recovery.
+        Each retry asks for the bytes it does not have (``Range``), tied to
+        the file it started on (``If-Range`` with its ETag): if the server's
+        file changed in between, the server sends it whole and the partial
+        copy is discarded. A 5xx is retried like a dropped connection; any
+        other 4xx is final. A 416 (the file shrank), or a partial answer for
+        other bytes or another ETag than asked, restarts from zero.
+        """
+        partial = dest + ".partial"
+        if os.path.exists(partial):
+            os.remove(partial)
+        etag, total, last_error = None, None, None
+        for attempt in range(attempts):
+            have = os.path.getsize(partial) if os.path.exists(partial) else 0
+            headers = {"Authorization": "Bearer %s" % self.token}
+            if have and etag:
+                headers["Range"] = "bytes=%d-" % have
+                headers["If-Range"] = etag
+            error = None
+            conn = self._connection(timeout or self.timeout)
+            try:
+                conn.request("GET", self._prefix + path, headers=headers)
+                response = conn.getresponse()
+                status = response.status
+                if status == 416 and "Range" in headers:
+                    response.read()
+                    raise _Restart("the server refused the range")
+                if status >= 400:
+                    raw = response.read()
+                    try:
+                        message = json.loads(raw.decode("utf-8")).get("error", "")
+                    except (ValueError, AttributeError):
+                        message = raw[:200].decode("utf-8", "replace")
+                    failure = ProtocolError(status, message or "download failed")
+                    if status < 500:
+                        raise failure
+                    raise _Retry(failure)
+                if status == 206:
+                    mode = "ab"
+                    content_range = response.getheader("Content-Range") or ""
+                    start = content_range.split(" ", 1)[-1].split("-", 1)[0]
+                    changed = response.getheader("ETag")
+                    if "Range" not in headers or start != str(have) or (
+                            changed and etag and changed != etag):
+                        raise _Restart("a partial answer for other bytes "
+                                       "(%s) than asked" % content_range)
+                    tail = content_range.rsplit("/", 1)[-1]
+                    if tail.isdigit():
+                        total = int(tail)
+                else:
+                    # A whole file: the first answer, or the server's file
+                    # changed and If-Range sent it again from the start.
+                    mode = "wb"
+                    etag = response.getheader("ETag")
+                    length = response.getheader("Content-Length") or ""
+                    total = int(length) if length.isdigit() else None
+                with open(partial, mode) as fh:
+                    shutil.copyfileobj(response, fh, 1 << 16)
+            except _Restart as exc:
+                error = exc
+                etag, total = None, None
+                if os.path.exists(partial):
+                    os.remove(partial)
+            except _Retry as exc:
+                error = exc.failure
+            except (OSError, http.client.HTTPException) as exc:
+                error = exc
+            except ProtocolError:
+                if os.path.exists(partial):
+                    os.remove(partial)
+                raise
+            finally:
+                conn.close()
+
+            size = os.path.getsize(partial) if os.path.exists(partial) else 0
+            if error is None and (total is None or size >= total):
+                os.replace(partial, dest)
+                return size
+            last_error = error or OSError("connection closed at %d of %s bytes"
+                                          % (size, total))
+            if attempt + 1 < attempts:
+                _sleep(backoff_s * (attempt + 1))
+        if os.path.exists(partial):
+            os.remove(partial)
+        raise ProtocolError(getattr(last_error, "status", 0),
+                            "Download of %s failed after %d attempts: %s"
+                            % (path, attempts, last_error))
 
 
 def agent_info() -> Dict[str, str]:
@@ -243,8 +350,8 @@ class JobRunner:
         os.makedirs(artifacts)
 
         archive = os.path.join(self.job_dir, "bundle.tar.gz")
-        self.client.request("GET", "%s/jobs/%s/bundle" % (API, self.run_id),
-                            stream_to=archive, timeout=600)
+        self.client.download("%s/jobs/%s/bundle" % (API, self.run_id),
+                             archive, timeout=600)
         _safe_extract(archive, bundle_dir)
         os.remove(archive)
 

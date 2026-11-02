@@ -28,6 +28,7 @@ from flask import (Blueprint, Response, jsonify, redirect, render_template,
 
 from potato.eval_datasets.manager import get_datasets_manager
 from potato.eval_datasets.models import Example
+from potato.eval_datasets.storage import InvalidDatasetName
 from potato.evaluators.registry import list_evaluators
 
 # Flagship agent-trajectory evaluators surface first in the picker; the rest
@@ -43,6 +44,11 @@ def _ordered_evaluators():
     return sorted(evs, key=lambda e: (rank.get(e["name"], len(rank)), e["name"]))
 
 datasets_bp = Blueprint("datasets", __name__, url_prefix="/datasets")
+
+
+@datasets_bp.errorhandler(InvalidDatasetName)
+def _invalid_name(exc):
+    return jsonify({"error": str(exc)}), 400
 
 
 def _enabled_required(f):

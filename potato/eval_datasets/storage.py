@@ -18,6 +18,21 @@ from typing import Any, Dict, List, Optional
 from potato.eval_datasets.models import Dataset, DatasetVersion, Example
 
 
+class InvalidDatasetName(ValueError):
+    """A dataset name that cannot be stored: empty, or one that would name a
+    path outside the datasets directory."""
+
+
+def check_dataset_name(name: str) -> str:
+    """*name*, or InvalidDatasetName. A name is one path component."""
+    if not isinstance(name, str) or not name.strip():
+        raise InvalidDatasetName("A dataset needs a name")
+    if any(c in name for c in ("/", "\\", "\x00")) or name.startswith("."):
+        raise InvalidDatasetName(
+            "Dataset name %r cannot contain '/' or '\\' or start with '.'" % name)
+    return name
+
+
 class DatasetStore(abc.ABC):
     """Abstract persistence for datasets, versions, and examples."""
 
@@ -37,6 +52,10 @@ class DatasetStore(abc.ABC):
     # ----- examples (mutations create a new version) -----
     @abc.abstractmethod
     def add_examples(self, name: str, examples: List[Example], note: str = "") -> DatasetVersion: ...
+
+    @abc.abstractmethod
+    def replace_examples(self, name: str, examples: List[Example], note: str = "") -> DatasetVersion:
+        """A new version holding exactly *examples*."""
 
     @abc.abstractmethod
     def update_example(self, name: str, example: Example, note: str = "") -> DatasetVersion: ...

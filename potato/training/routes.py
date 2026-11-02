@@ -13,6 +13,7 @@ prerequisite.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -88,7 +89,8 @@ def run_page(run_id):
     return render_template(
         "admin/training_run.html", run=run.to_dict(),
         status=manager.status(), events=_recent_events(manager, run_id),
-        splits=store.run_item_splits(_config(), run_id))
+        splits=store.run_item_splits(_config(), run_id),
+        datasets_enabled=_datasets_enabled())
 
 
 # ------------------------------------------------------------------ api
@@ -142,7 +144,9 @@ def api_run(run_id):
 @_enabled_required
 @_same_origin_required
 def api_start_run():
-    body = request.get_json(silent=True) or {}
+    body, refused = _json_object()
+    if refused:
+        return refused
     trainer = body.get("trainer")
     schemas = body.get("schemas") or []
 
@@ -248,7 +252,182 @@ def api_retract(run_id):
     return jsonify({"retracted": removed})
 
 
+@training_bp.route("/api/runs/<run_id>/pin-split", methods=["POST"])
+@admin_required
+@_enabled_required
+@_same_origin_required
+def api_pin_split(run_id):
+    """Save one of a run's splits as a dataset version.
+
+    Body: ``{"dataset": name, "split": "val"|"test"|"train"}`` (``split``
+    defaults to ``val``). The examples carry the items' agreed human labels
+    for the run's schemes and are marked with the split's name, so the
+    version is a fixed evaluation set for the datasets' experiment runner.
+    A dataset that already exists gains a new version holding this split
+    only: saving run 2's val split into run 1's dataset must not mix in
+    items run 2 trained on. The model's prelabels are left out of the
+    inputs.
+    """
+    from potato.model_review import prediction_field
+    from potato.training import store
+
+    body, refused = _json_object()
+    if refused:
+        return refused
+    dataset = str(body.get("dataset") or "").strip()
+    split = str(body.get("split") or "val")
+    if not dataset:
+        return jsonify({"error": "dataset is required"}), 400
+    run = store.load_run(_config(), run_id)
+    if run is None:
+        return jsonify({"error": "No such run: %s" % run_id}), 404
+
+    splits = store.run_item_splits(_config(), run_id)
+    ids = sorted(i for i, s in splits.items() if s == split)
+    if not ids:
+        return jsonify({"error": "Run %s has no %s items" % (run_id, split),
+                        "splits": sorted(set(splits.values()))}), 400
+
+    from potato.eval_datasets.manager import get_datasets_manager
+    dm = get_datasets_manager()
+    if dm is None:
+        return jsonify({"error": "Datasets are not enabled",
+                        "hint": "Set datasets.enabled: true in your "
+                                "config."}), 400
+    try:
+        version = dm.import_from_instances(
+            dataset, instance_ids=ids, include_annotations=True,
+            note="training run %s, %s split" % (run_id, split),
+            split=split, replace=True,
+            drop_inputs=[prediction_field(_config())],
+            schemes=list(run.schema_names) or None)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"dataset": dataset, "split": split,
+                    "imported": version.example_count,
+                    "version": version.to_dict()}), 201
+
+
+@training_bp.route("/api/pinned", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_pinned():
+    from potato.training import store
+    return jsonify({"pinned": store.pinned_items(_config())})
+
+
+@training_bp.route("/api/pinned", methods=["POST"])
+@admin_required
+@_enabled_required
+@_same_origin_required
+def api_pin():
+    """Pin items to the train split of every later run.
+
+    Body: ``{"slice": name}`` to pin what a catalog slice resolves to (such
+    as ``model-found-nothing``), or ``{"instance_ids": [...]}``. Pinned items
+    with no human label yet are counted as waiting by each run and train once
+    someone labels them.
+    """
+    from flask import session
+
+    from potato.training import store
+
+    body, refused = _json_object()
+    if refused:
+        return refused
+    slice_name = body.get("slice")
+    ids = body.get("instance_ids")
+    if slice_name:
+        try:
+            from potato.curation.manager import get_curation_manager
+            mgr = get_curation_manager()
+        except Exception:
+            mgr = None
+        if mgr is None:
+            return jsonify({"error": "The catalog is not enabled, so slices "
+                                     "cannot be resolved"}), 400
+        slc = mgr.slices.get(slice_name)
+        if slc is None:
+            return jsonify({"error": "No slice named %r" % slice_name}), 404
+        ids = list(mgr.resolve(slc))
+        if not ids:
+            return jsonify({"error": "Slice %r matches no items. A slice "
+                                     "resolves over the catalog index, so "
+                                     "build the index first if it is empty."
+                                     % slice_name}), 400
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "Name a slice, or give instance_ids"}), 400
+
+    from potato.item_state_management import get_item_state_manager
+    ism = get_item_state_manager()
+    known = [str(i) for i in ids if ism is None or ism.has_item(str(i))]
+    unknown = len(ids) - len(known)
+    added = store.pin_items(_config(), known, source=str(slice_name or ""),
+                            added_by=str(session.get("username", "")))
+    # Train items have no prelabel (write-back keeps it off them), so a
+    # slice such as model-found-nothing matches them too; say how many of
+    # these the last run already trained on.
+    last = store.latest_run(_config())
+    in_train = (len(set(known) & store.training_split_ids(_config(), last.run_id))
+                if last is not None else 0)
+    return jsonify({"pinned": added, "already_pinned": len(known) - added,
+                    "unknown": unknown, "in_last_run_train": in_train,
+                    "total": len(store.pinned_items(_config()).get(
+                        "hard_example", []))})
+
+
+@training_bp.route("/api/pinned", methods=["DELETE"])
+@admin_required
+@_enabled_required
+@_same_origin_required
+def api_unpin():
+    """Unpin ``instance_ids``, or every pinned item when the body has none
+    (no body, ``{}``, or ``"instance_ids": null``). Anything else is refused: a
+    bare string must not read as "all"."""
+    from potato.training import store
+
+    body, refused = _json_object()
+    if refused:
+        return refused
+    ids = body.get("instance_ids")
+    if ids is not None and not (isinstance(ids, list) and ids and all(
+            isinstance(i, (str, int)) and not isinstance(i, bool) for i in ids)):
+        return jsonify({"error": "instance_ids must be a non-empty list of "
+                                 "ids; leave it out to unpin everything"}), 400
+    removed = store.unpin_items(_config(), [str(i) for i in ids]
+                                if ids is not None else None)
+    return jsonify({"unpinned": removed})
+
+
 # -------------------------------------------------------------- helpers
+
+def _json_object():
+    """``(body, None)``, or ``(None, response)`` refusing the request.
+
+    No body is ``{}``. Anything else must parse as a JSON object: with
+    ``get_json(silent=True) or {}``, invalid JSON and falsy JSON (``[]``,
+    ``""``, ``0``, ``false``) became ``{}`` too, which for DELETE /pinned
+    means "unpin everything".
+    """
+    raw = request.get_data(cache=True)
+    if not raw.strip():
+        return {}, None
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return None, (jsonify({"error": "The body is not valid JSON"}), 400)
+    if not isinstance(body, dict):
+        return None, (jsonify({"error": "Send a JSON object"}), 400)
+    return body, None
+
+
+def _datasets_enabled() -> bool:
+    try:
+        from potato.eval_datasets.manager import get_datasets_manager
+        return get_datasets_manager() is not None
+    except Exception:
+        return False
+
 
 def _trainer_rows():
     """Trainers with their parameter names, for the start form's hint, and

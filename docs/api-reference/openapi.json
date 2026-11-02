@@ -7104,6 +7104,9 @@
           },
           "401": {
             "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Record a reviewer's verdict on one item's prelabels.",
@@ -7111,6 +7114,7 @@
           "core"
         ],
         "x-potato-auth": [
+          "inline:admin_api_key",
           "inline:session_username"
         ]
       }

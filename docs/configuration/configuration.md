@@ -731,7 +731,7 @@ in `potato/item_state_management.py`:
 | `batch` | Restricts assignment to configured annotator/item cohorts ([batch assignment](../advanced/task_assignment.md)) |
 | `priority` | Serves items by a triage signal, errors and low scores first ([triage queue](../agent-evaluation/triage_queue.md)) |
 | `psychometric` | Routes items by expected information gain under a live IRT model, so confident items stop consuming annotation budget ([psychometrics](../advanced/psychometrics.md)) |
-| `llm_confidence` | **Not implemented.** Accepted by the config validator, but the assignment code falls back to random selection |
+| `llm_confidence` | Least-confident prelabel first, then prelabels with no confidence, then items with no prelabel in configured order |
 | `model_review` | Serves prelabelled items least-confident first, for review of model output ([model review](../ai-intelligence/model_review.md)) |
 | `engine` | Serves the labeling engine's requests (calibration, verification, audit, adjudication) in its priority order ([labeling engine](../labeling-engine/overview.md)) |
 

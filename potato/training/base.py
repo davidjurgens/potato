@@ -394,6 +394,10 @@ class Trainer(ABC):
     #: server can reach, with a secret that must not be shipped to a host.
     local_only: ClassVar[bool] = False
 
+    #: ``fit`` only checks that a model somewhere else answers, so the
+    #: prediction pass is the run: when it fails, the run fails.
+    predict_only: ClassVar[bool] = False
+
     @classmethod
     def server_params(cls, config: Dict[str, Any], schema_names: Sequence[str],
                       params: Dict[str, Any]) -> Dict[str, Any]:

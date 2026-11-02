@@ -206,10 +206,19 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
             report.artifact(PREDICTIONS_FILE,
                             os.path.getsize(predictions_path))
     except Exception as exc:  # noqa: BLE001
+        if trainer.predict_only:
+            # Nothing was fitted here; the predictions were the run.
+            _keep_partial(report, predictions_path, n_predictions)
+            report.error("predict_failed", "Prediction pass failed after %d "
+                         "prediction(s): %s" % (n_predictions, exc))
+            return EXIT_UNEXPECTED
         # A failed prediction pass does not invalidate the model that was
-        # already fitted and written. Say so and finish.
-        report.log("warning", "Prediction pass failed: %s" % exc)
-        predictions_path = ""
+        # already fitted and written. Say so and finish, keeping what was
+        # predicted before the failure (the items it missed score as wrong).
+        report.log("warning", "Prediction pass failed after %d prediction(s): "
+                              "%s" % (n_predictions, exc))
+        if not _keep_partial(report, predictions_path, n_predictions):
+            predictions_path = ""
 
     metrics = dict(result.metrics)
     if predictions_path:
@@ -247,6 +256,14 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
                                     else ""),
                   n_predictions=n_predictions)
     return EXIT_OK
+
+
+def _keep_partial(report, path: str, n: int) -> bool:
+    """Report the predictions written before a failure; False if none."""
+    if not path or not n or not os.path.isfile(path):
+        return False
+    report.artifact(PREDICTIONS_FILE, os.path.getsize(path))
+    return True
 
 
 def _is_cuda_oom(exc: BaseException) -> bool:

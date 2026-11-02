@@ -14,7 +14,7 @@ All notable changes to the Potato annotation platform are documented in this fil
   jobs). `potato training check <backend> config.yaml` reports the remote
   Python, its GPUs and any GPU the installed torch has no kernels for;
   `gpus: auto` skips those.
-- **Fourteen new trainers**, beside `sklearn-text`. Text:
+- **Sixteen new trainers**, beside `sklearn-text`. Text:
   `hf-text-classification` (also an LLM with LoRA), `hf-token-classification`
   for spans, `setfit`. Images: `hf-image-classification`,
   `torchvision-detect` and `ultralytics-detect` for boxes,
@@ -24,8 +24,14 @@ All notable changes to the Potato annotation platform are documented in this fil
   preferences. Decision models: `decision-calibrate` fits a temperature
   (optionally with a per-option offset) to Jev, OpenJev, laya-serve or Laya,
   `laya-finetune` fine-tunes Laya, and `openjev-finetune` fine-tunes OpenJev
-  with `wev train`. The ultralytics trainers are AGPL-3.0 and need the licence
-  acknowledged before a run.
+  with `wev train`. Agent traces: `prm-reward`, a process reward model on
+  `process_reward` step ratings, whose predictions the scheme's AI pre-label
+  button offers ahead of the LLM judge; `llm-sft` and `llm-dpo` also train on
+  `trajectory_edit` corrections (write the corrected steps; prefer them to the
+  original). `label-studio-ml` trains nothing: it calls an existing Label
+  Studio ML backend's `/predict`, so that model's predictions are scored,
+  written back and reviewed like a trained one's. The ultralytics trainers
+  are AGPL-3.0 and need the licence acknowledged before a run.
 - **Every run is scored on held-out items**, with a metric that fits the
   answer: macro-F1 for labels, mAP50 for boxes and outlines, segment F1 for
   audio, token F1 for spans, accuracy for preferences, exact accuracy and
@@ -46,6 +52,23 @@ All notable changes to the Potato annotation platform are documented in this fil
   `auto_retrain` trainer that cannot train its schemes, and a calibration
   file that is not there. A run on a missing scheme or one the trainer does
   not handle is refused with `400` before its data is gathered.
+- **Corrections train, and are never held out.** An item a reviewer gave a
+  `correct` verdict goes to `train` in every later run, and so does an item
+  pinned with the Catalog's new "Train on these" (for instance the
+  `model-found-nothing` slice, once labelled). A run that moved held-out
+  items logs how many.
+- **A run's split can be kept as a dataset version**, with its human labels,
+  from the run page or `POST /admin/training/api/runs/<id>/pin-split`.
+- **The model-review report names the run behind each prelabel**
+  (`provenance`: run id, trainer, held-out score).
+- **Agents resume a dropped bundle download** with `Range` requests instead
+  of starting over.
+- `assignment_strategy: llm_confidence` now serves the least-confident
+  prelabel first, then items with no prelabel. It used to assign at random.
+- Fixed: with `model_training.writeback.field` set to something other than
+  `predictions` and no `pre_annotation` block, the model-review queue, the
+  Catalog's `model-found-nothing` slice and the assist-effect report read the
+  wrong field and found no prelabels.
 - New settings: `model_training.trainer_params` (per-trainer defaults) and
   `model_training.auto_retrain.accept_licence`.
 - New extras: `embeddings` (`sentence-transformers`), `train-text`,

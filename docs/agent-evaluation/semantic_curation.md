@@ -72,6 +72,25 @@ curl -X POST localhost:8000/admin/catalog/api/slices/tool-errors/to_dataset \
 The resolved instances become examples in the named [dataset](datasets_and_experiments.md),
 ready for annotation, experiments, or SFT/DPO export.
 
+### Train on a slice
+
+With [model training](../ai-intelligence/model_training.md) enabled, each
+slice also has a "Train on these" button. It pins what the slice matches to
+the `train` split of every later training run; an item trains once someone
+has labelled it. The built-in `model-found-nothing` slice is the usual
+choice: once labelled, the items the model predicted nothing on are examples
+of what it misses.
+
+```bash
+curl -X POST localhost:8000/admin/training/api/pinned \
+  -H "X-API-Key: <key>" -H "Content-Type: application/json" \
+  -d '{"slice": "model-found-nothing"}'
+# {"pinned": 23, "already_pinned": 0, "unknown": 0, "total": 23}
+```
+
+A slice resolves over the catalog index, so build the index first; an empty
+index gives an empty slice, and the request says so.
+
 ## Discover failure modes (bottom-up taxonomy)
 
 Where the [MAST taxonomy](failure_taxonomy.md) tags traces against a *fixed* known
