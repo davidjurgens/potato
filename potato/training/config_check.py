@@ -123,6 +123,13 @@ def training_config_problems(config: Dict[str, Any]) -> List[str]:
     where = "model_training"
     schemes = _schemes(config)
 
+    queue_max = training.get("queue_max")
+    if queue_max is not None and (isinstance(queue_max, bool)
+                                  or not isinstance(queue_max, int)
+                                  or queue_max < 1):
+        problems.append("%s.queue_max must be a whole number of at least 1 "
+                        "(got %r)" % (where, queue_max))
+
     splits = training.get("splits")
     if splits is not None:
         if not isinstance(splits, dict) or not splits:

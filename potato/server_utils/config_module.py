@@ -688,6 +688,7 @@ KNOWN_CONFIG_KEYS = {
         "enabled": None,
         "retain_runs": None,
         "grace_seconds": None,
+        "queue_max": None,
         "split_seed": None,
         "splits": None,
         "aggregation": None,

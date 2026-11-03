@@ -181,6 +181,9 @@ class TrainingManager:
         self.split_seed = int(training.get("split_seed", 0))
         self.split_spec = training.get("splits") or None
         self.aggregation = training.get("aggregation", "consensus")
+        #: Runs started while another is in flight wait, up to this many.
+        self.queue_max = _queue_max(training.get("queue_max", 10))
+        self._shutting_down = False
 
     # ------------------------------------------------------------- plumbing
 
@@ -216,21 +219,24 @@ class TrainingManager:
                   params: Optional[Dict[str, Any]] = None,
                   trigger: str = "manual",
                   limits: Optional[ResourceLimits] = None,
-                  backend: Optional[str] = None
+                  backend: Optional[str] = None,
+                  queue: bool = True
                   ) -> Dict[str, Any]:
-        """Build a bundle and launch a run.
+        """Build a bundle and launch a run, or queue it behind the one in
+        flight.
 
-        Returns ``{"started": bool, "run_id": ...}`` or
-        ``{"started": False, "error": ...}``. Refuses rather than queues when
-        a run is in flight: a queue is a real feature with real semantics
-        (priority, eviction, persistence across restart) and pretending to
-        have one by spawning a second child is worse than saying no.
+        Returns ``{"started": True, "run_id": ...}``,
+        ``{"started": False, "queued": True, "run_id": ..., "position": n}``,
+        or ``{"started": False, "error": ...}``.
+
+        The queue is first in, first out, one run at a time, and it is the
+        run ledger: a waiting run is a ``training_runs`` row with status
+        ``waiting``, so it survives a restart (:meth:`resume_queue`). Its
+        bundle is built when it starts, so it trains on the annotations as
+        they are then. Everything that would refuse the run is checked now,
+        not when its turn comes. ``queue=False`` refuses instead, as does a
+        full queue (``model_training.queue_max``).
         """
-        if self.is_running():
-            return {"started": False,
-                    "error": "A training run is already in progress",
-                    "run_id": self.status().get("run_id")}
-
         if not schema_names:
             return {"started": False, "error": "No schema selected"}
 
@@ -268,18 +274,47 @@ class TrainingManager:
                              "model service from this server, with its "
                              "credentials. Choose backend 'local'." % trainer}
 
-        run = store.TrainingRun(
-            run_id=store.new_run_id(), trainer=trainer, backend=backend,
-            schema_names=list(schema_names), status="building",
-            trigger=trigger, split_seed=self.split_seed,
-            params=dict(params or {}))
+        if not self.is_running() and self.waiting_runs():
+            # Nothing running, yet runs wait: a dequeue failed. Start them
+            # before deciding where this one goes.
+            self._start_next_waiting_safely()
+        with self._lock:
+            waiting = self.waiting_runs()
+            busy = self.is_running() or bool(waiting)
+            if busy and not queue:
+                return {"started": False,
+                        "error": "A training run is already in progress",
+                        "run_id": self.status().get("run_id")}
+            if busy and len(waiting) >= self.queue_max:
+                return {"started": False, "http_status": 429,
+                        "error": "%d runs are already waiting, the most "
+                                 "model_training.queue_max allows. Cancel one "
+                                 "or wait." % len(waiting)}
+            run = store.TrainingRun(
+                run_id=store.new_run_id(), trainer=trainer, backend=backend,
+                schema_names=list(schema_names),
+                status="waiting" if busy else "building",
+                trigger=trigger, split_seed=self.split_seed,
+                params=dict(params or {}))
+            try:
+                store.record_run(self.config, run)
+            except Exception as exc:
+                self.logger.exception("Could not open a run record")
+                return {"started": False, "error": str(exc)}
+            if busy:
+                return {"started": False, "queued": True,
+                        "run_id": run.run_id, "position": len(waiting) + 1}
+            return self._launch(run)
 
+    def _launch(self, run: store.TrainingRun) -> Dict[str, Any]:
+        """Start the supervisor for a recorded run. Holds ``_lock``."""
+        run.status = "building"
         try:
             store.record_run(self.config, run)
         except Exception as exc:
-            self.logger.exception("Could not open a run record")
+            self.logger.exception("Could not update run %s", run.run_id)
             return {"started": False, "error": str(exc)}
-
+        trainer = run.trainer
         self._current_run = run
         self._stop_event.clear()
         self._set(state="building", run_id=run.run_id, trainer=trainer,
@@ -360,6 +395,10 @@ class TrainingManager:
 
         if self.is_running():
             return self._skip("a run is already in progress")
+        if self.waiting_runs():
+            # Auto-retrain does not queue: the next save after the queue
+            # drains tries again, with more annotations.
+            return self._skip("runs are waiting in the queue")
 
         self._restore_retrain_baseline()
         min_interval = float(settings.get("min_interval_s", 600))
@@ -391,7 +430,8 @@ class TrainingManager:
         outcome = self.start_run(trainer, schemas,
                                  params=settings.get("params") or {},
                                  trigger="auto",
-                                 backend=settings.get("backend"))
+                                 backend=settings.get("backend"),
+                                 queue=False)
         if not outcome.get("started"):
             # Give the delta back so the next save can try again.
             with self._lock:
@@ -414,6 +454,124 @@ class TrainingManager:
     # ----------------------------------------------------------- supervision
 
     def _supervise(self, run: store.TrainingRun) -> None:
+        try:
+            self._supervise_one(run)
+        finally:
+            self._start_next_waiting_safely()
+
+    def _start_next_waiting_safely(self) -> Optional[str]:
+        """:meth:`_start_next_waiting`, logging rather than raising: an error
+        escaping here left every waiting run waiting until a restart."""
+        try:
+            return self._start_next_waiting()
+        except Exception:  # noqa: BLE001
+            self.logger.exception("Could not start the next waiting run")
+            return None
+
+    # ---------------------------------------------------------------- queue
+
+    def waiting_runs(self) -> List[store.TrainingRun]:
+        """Runs waiting their turn, oldest (next) first."""
+        runs = store.list_runs(self.config, limit=1000, status="waiting")
+        return sorted(runs, key=lambda r: (r.created_at, r.run_id))
+
+    def queue(self) -> List[Dict[str, Any]]:
+        """The waiting runs as the Training page lists them."""
+        return [{"run_id": r.run_id, "trainer": r.trainer,
+                 "schemas": list(r.schema_names), "backend": r.backend,
+                 "trigger": r.trigger, "created_at": r.created_at,
+                 "position": n + 1}
+                for n, r in enumerate(self.waiting_runs())]
+
+    def _start_next_waiting(self) -> Optional[str]:
+        """Start the oldest waiting run, if nothing is running. A run that can
+        no longer start (its trainer or scheme was removed from the config)
+        is marked as an error and the next one is tried."""
+        from potato.training.config_check import run_problems
+
+        while not self._shutting_down:
+            with self._lock:
+                if self.is_running():
+                    return None
+                waiting = self.waiting_runs()
+                if not waiting:
+                    return None
+                run = waiting[0]
+                try:
+                    problems = run_problems(self.config, run.trainer,
+                                            run.schema_names)
+                    if problems:
+                        self._fail_waiting(run, "invalid_when_dequeued",
+                                           "Could not start after waiting: %s"
+                                           % " ".join(problems))
+                        continue
+                    outcome = self._launch(run)
+                except Exception as exc:  # noqa: BLE001
+                    # This run cannot start; the ones behind it still can.
+                    self.logger.exception("Could not start waiting run %s",
+                                          run.run_id)
+                    self._fail_waiting(run, "dequeue_failed", str(exc))
+                    continue
+                if outcome.get("started"):
+                    return run.run_id
+                self._fail_waiting(run, "dequeue_failed",
+                                   outcome.get("error", "could not start"))
+        return None
+
+    def _fail_waiting(self, run: store.TrainingRun, code: str,
+                      message: str) -> None:
+        run.status = "error"
+        run.finished_at = time.time()
+        run.error, run.error_code = message, code
+        try:
+            store.record_run(self.config, run)
+        except Exception:  # noqa: BLE001
+            self.logger.exception("Could not record run %s", run.run_id)
+
+    def resume_queue(self) -> Optional[str]:
+        """After a restart: close the runs the last process was in the middle
+        of, then start the first waiting run. Called at boot."""
+        if not self.enabled:
+            return None
+        self._close_interrupted()
+        return self._start_next_waiting_safely()
+
+    def _close_interrupted(self) -> List[str]:
+        """Mark runs left building, running or queued by a process that is
+        gone as errors. Nothing in this process is running yet, so any such
+        row is stale; a remote agent still working on one finds its token
+        refused and stops."""
+        closed = []
+        for state in ("building", "running", "evaluating", "queued"):
+            for run in store.list_runs(self.config, limit=1000, status=state):
+                run.status = "error"
+                run.finished_at = time.time()
+                run.error = ("Interrupted: the server stopped while the run "
+                             "was %s" % state)
+                run.error_code = "interrupted"
+                try:
+                    store.record_run(self.config, run)
+                    closed.append(run.run_id)
+                except Exception:  # noqa: BLE001
+                    self.logger.exception("Could not close run %s", run.run_id)
+        if closed:
+            self.logger.warning("Marked %d interrupted training run(s) as "
+                                "errors: %s", len(closed), ", ".join(closed))
+        return closed
+
+    def _cancel_waiting(self, run_id: str) -> Dict[str, Any]:
+        with self._lock:
+            run = store.load_run(self.config, run_id)
+            if run is None or run.status != "waiting":
+                return {"cancelled": False,
+                        "error": "Run %s is not waiting" % run_id}
+            run.status = "cancelled"
+            run.finished_at = time.time()
+            run.error = "Cancelled before it started"
+            store.record_run(self.config, run)
+        return {"cancelled": True, "run_id": run_id}
+
+    def _supervise_one(self, run: store.TrainingRun) -> None:
         """Build the bundle, launch the child, drain its output, record."""
         try:
             bundle_dir = os.path.join(self.run_dir(run.run_id), "bundle")
@@ -791,7 +949,7 @@ class TrainingManager:
                           backend_type=backend.type, spec=spec.to_dict(),
                           run_dir=run_dir, sink=sink)
         token = ""
-        if backend.type == "ssh":
+        if backend.launched:
             # One token, one run. It reaches the agent on stdin, so it never
             # shows in `ps` on a shared machine, and it stops working when the
             # run ends.
@@ -802,7 +960,7 @@ class TrainingManager:
         run.status = "queued"
         # The record defaults to this machine's name, which is wrong for every
         # remote run; the launcher or the claiming agent fills in the real one.
-        run.host = (backend.host if backend.type == "ssh"
+        run.host = (backend.host if backend.launched
                     else "agent %s (not yet claimed)" % backend.name)
         store.record_run(self.config, run)
         with self._lock:
@@ -810,13 +968,13 @@ class TrainingManager:
             self._job_posted.notify_all()
         self._set(state="queued",
                   step=("connecting to %s" % backend.host
-                        if backend.type == "ssh"
+                        if backend.launched
                         else "waiting for agent %r to ask for work"
                         % backend.name))
 
         launcher = None
         try:
-            if backend.type == "ssh":
+            if backend.launched:
                 from potato.training.launchers import LaunchError, SSHLauncher
 
                 launcher = SSHLauncher(
@@ -871,7 +1029,7 @@ class TrainingManager:
         # An agent reports where it ran and where it left the model. The
         # run's host defaulted to this server's name, so `not run.host` never
         # let the agent's through, and the artifact_uri was dropped outright.
-        if completion.get("host") and backend.type != "ssh":
+        if completion.get("host") and not backend.launched:
             run.host = str(completion["host"])[:200]
         if completion.get("artifact_uri"):
             run.artifact_uri = str(completion["artifact_uri"])[:1000]
@@ -1038,8 +1196,15 @@ class TrainingManager:
             current = self._status.get("run_id")
             process = self._process
             job = self._job
+        if run_id and run_id != current:
+            waiting = self._cancel_waiting(run_id)
+            if waiting.get("cancelled"):
+                return waiting
 
         if process is None and job is None:
+            if run_id:
+                return {"cancelled": False,
+                        "error": "Run %s is not in progress or waiting" % run_id}
             return {"cancelled": False, "error": "No run is in progress"}
         if run_id and run_id != current:
             return {"cancelled": False,
@@ -1094,7 +1259,9 @@ class TrainingManager:
         timer.start()
 
     def shutdown(self) -> None:
-        """Stop any in-flight run. Called at interpreter exit."""
+        """Stop any in-flight run. Called at interpreter exit. Waiting runs
+        stay waiting, for :meth:`resume_queue` on the next start."""
+        self._shutting_down = True
         with self._lock:
             process = self._process
             job = self._job
@@ -1116,6 +1283,18 @@ class TrainingManager:
             self._supervisor.join(timeout=5.0)
 
 
+def _queue_max(value: Any) -> int:
+    """``model_training.queue_max`` as a positive whole number. A value the
+    config check reports (text, a list, zero) falls back to 10 here, so a
+    typo cannot stop the server from starting."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        if value is not None and value != 10:
+            logger.warning("model_training.queue_max must be a whole number of "
+                           "at least 1 (got %r); using 10", value)
+        return 10
+    return value
+
+
 def _log_event(level: str, msg: str) -> Dict[str, Any]:
     from potato.training.events import event
     return event("log", level=level, msg=msg)
@@ -1130,6 +1309,10 @@ def init_training_manager(config: Dict[str, Any]) -> TrainingManager:
 
     import atexit
     atexit.register(_TRAINING_MANAGER.shutdown)
+    try:
+        _TRAINING_MANAGER.resume_queue()
+    except Exception:  # noqa: BLE001 - a broken ledger must not stop boot
+        logger.warning("Could not resume the training queue", exc_info=True)
     return _TRAINING_MANAGER
 
 

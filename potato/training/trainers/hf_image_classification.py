@@ -97,6 +97,7 @@ class HFImageClassificationTrainer(Trainer):
         if len(bundle.labels(schema.name)) < 2:
             problems.append("Schema %r has fewer than two labels in the data."
                             % schema.name)
+        problems.extend(hf.quantize_unsupported(params))
         return problems
 
     def _image_rows(self, bundle: BundleRef, split: str, schema: str,

@@ -184,7 +184,11 @@
           <tr>
             <td><a class="tr-mono" href="{{ url_for('training.run_page', run_id=r.run_id) }}">{{ r.run_id }}</a></td>
             <td>
-              <span class="tr-pill {{ 'ok' if r.status == 'success' else 'err' if r.status == 'error' else 'cancel' if r.status == 'cancelled' else 'run' }}">{{ r.status }}</span>
+              <span class="tr-pill {{ 'ok' if r.status == 'success' else 'err' if r.status == 'error' else 'cancel' if r.status == 'cancelled' else 'run' }}">{{ r.status }}{% if r.status == 'waiting' and r.run_id in queue_positions %} #{{ queue_positions[r.run_id] }}{% endif %}</span>
+              {%- if r.status == 'waiting' %}
+              <button class="shadcn-button shadcn-button-outline tr-unqueue" type="button"
+                      data-run="{{ r.run_id }}">{{ ui_lang.training_cancel|default('Cancel run') }}</button>
+              {%- endif %}
             </td>
             <td>{{ r.trainer }}</td>
             <td{% if r.host %} title="{{ r.host }}"{% endif %}>{{ r.backend or 'local' }}</td>
@@ -265,6 +269,9 @@
   var progress   = document.getElementById("live-progress");
   var bar        = document.getElementById("live-bar");
 
+  // "queued": a remote run waiting for its agent, or a SLURM job waiting
+  // for a node. It is in flight: it can be cancelled and the page polls it.
+  var ACTIVE = ["queued", "building", "running", "evaluating"];
   var currentRun = null;
   var timer = null;
 
@@ -341,10 +348,11 @@
   }
 
   function render(status) {
-    var running = status.state && ["building", "running", "evaluating"].indexOf(status.state) >= 0;
+    var running = status.state && ACTIVE.indexOf(status.state) >= 0;
     live.hidden = !running;
     cancelBtn.hidden = !running;
-    startBtn.disabled = running;
+    // A run started while one is in flight waits in the queue.
+    if (running && status.run_id) { currentRun = status.run_id; }
 
     if (!running) {
       progress.hidden = true;
@@ -380,7 +388,7 @@
       .then(function (status) {
         render(status);
         var running = status.state &&
-          ["building", "running", "evaluating"].indexOf(status.state) >= 0;
+          ACTIVE.indexOf(status.state) >= 0;
         if (!running && timer) {
           clearInterval(timer);
           timer = null;
@@ -497,6 +505,14 @@
       post("{{ url_for('training.api_start_run') }}",
            {trainer: trainer, schemas: [schema], backend: backend, params: params})
         .then(function (res) {
+          if (res.data && res.data.queued) {
+            say("Run " + res.data.run_id + " is waiting for the run in progress: " +
+                "number " + res.data.position + " in the queue.", "ok");
+            startBtn.disabled = false;
+            // The Runs table lists it, with a Cancel button.
+            setTimeout(function () { window.location.reload(); }, 1500);
+            return;
+          }
           if (!res.ok || !res.data.started) {
             if (res.data && res.data.needs_licence_ack) {
               if (window.confirm(res.data.error + "\n\nProceed?")) {
@@ -544,10 +560,25 @@
     });
   }
 
+  Array.prototype.forEach.call(document.querySelectorAll(".tr-unqueue"), function (btn) {
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      post("{{ url_for('training.api_cancel', run_id='RUNID') }}".replace("RUNID", btn.dataset.run))
+        .then(function (res) {
+          if (res.data && res.data.cancelled) {
+            window.location.reload();
+          } else {
+            say((res.data && res.data.error) || "Could not cancel.", "err");
+            btn.disabled = false;
+          }
+        });
+    });
+  });
+
   // Pick the poll back up if a run was already in flight when the page loaded.
   var initial = {{ status|tojson }};
   render(initial);
-  if (initial.state && ["building", "running", "evaluating"].indexOf(initial.state) >= 0) {
+  if (initial.state && ACTIVE.indexOf(initial.state) >= 0) {
     currentRun = initial.run_id;
     watch();
   }

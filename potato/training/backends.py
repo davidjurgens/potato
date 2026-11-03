@@ -19,9 +19,14 @@ Three kinds of backend, all configured under ``model_training.backends``:
     workstation behind NAT. Someone starts ``potato training agent`` there,
     and it polls this server for work.
 
-The ``ssh`` and ``agent`` kinds speak the same protocol
-(:mod:`potato.training.protocol`); the only difference is who starts the
-agent.
+``slurm``
+    A cluster whose GPUs are behind SLURM. Potato reaches the login node over
+    ssh, as for ``ssh``, and starts the agent there; the agent submits the
+    worker with ``sbatch`` and relays its events (:mod:`potato.training.slurm`).
+    ``remote_dir`` must be on storage the compute nodes share.
+
+The remote kinds speak the same protocol (:mod:`potato.training.protocol`);
+they differ in who starts the agent and where the worker runs.
 """
 
 from __future__ import annotations
@@ -29,10 +34,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from potato.training.slurm import SLURM_KEYS, settings_of, validate_settings
+
 __all__ = ["BACKEND_TYPES", "BackendConfig", "load_backends",
            "default_backend_name", "validate_backends_config"]
 
-BACKEND_TYPES = ("local", "ssh", "agent")
+BACKEND_TYPES = ("local", "ssh", "agent", "slurm")
 
 #: Keys a backend entry may carry, by type. Anything else is reported by
 #: :func:`validate_backends_config`, because a misspelt ``pyhton`` silently
@@ -71,6 +78,8 @@ class BackendConfig:
     packages: List[str] = field(default_factory=list)
     connect_timeout_s: int = 15
     num_threads: Optional[int] = None
+    #: ``type: slurm``: the settings in :data:`potato.training.slurm.SLURM_KEYS`.
+    slurm: Dict[str, Any] = field(default_factory=dict)
     # supervision
     heartbeat_timeout_s: int = 120
     queue_timeout_s: Optional[int] = None
@@ -80,12 +89,19 @@ class BackendConfig:
 
     @property
     def is_remote(self) -> bool:
-        return self.type in ("ssh", "agent")
+        return self.type in ("ssh", "agent", "slurm")
+
+    @property
+    def launched(self) -> bool:
+        """Potato starts the agent itself, over ssh."""
+        return self.type in ("ssh", "slurm")
 
     @property
     def label(self) -> str:
         if self.type == "ssh":
             return "%s (ssh to %s)" % (self.name, self.host)
+        if self.type == "slurm":
+            return "%s (SLURM via %s)" % (self.name, self.host)
         if self.type == "agent":
             return "%s (agent)" % self.name
         return "%s (this machine)" % self.name
@@ -109,6 +125,12 @@ class BackendConfig:
         backend.ssh_options = [str(o) for o in (backend.ssh_options or [])]
         backend.env = {str(k): str(v) for k, v in (backend.env or {}).items()}
         backend.packages = [str(p) for p in (backend.packages or [])]
+        if backend.type == "slurm":
+            backend.slurm = settings_of(data)
+            if not backend.slurm.get("job_python"):
+                backend.slurm["job_python"] = backend.python
+            # The scheduler grants GPUs; the login node has none to pick.
+            backend.gpus = "none"
         return backend
 
 
@@ -152,14 +174,22 @@ def validate_backends_config(config: Dict[str, Any]) -> List[str]:
         if name == "local" and kind != "local":
             problems.append("%s: the name 'local' is reserved for this "
                             "machine" % where)
-        allowed = _COMMON_KEYS | (_SSH_KEYS if kind == "ssh" else set())
+        allowed = _COMMON_KEYS | (_SSH_KEYS if kind in ("ssh", "slurm")
+                                  else set())
+        if kind == "slurm":
+            allowed |= SLURM_KEYS
+            # gpus and packages get a specific message below.
+            allowed |= {"gpus", "packages"}
         allowed.add("_transport")
         for key in data:
             if key not in allowed:
                 problems.append("%s.%s is not a setting for a type: %s backend"
                                 % (where, key, kind))
-        if kind == "ssh" and not data.get("host"):
-            problems.append("%s.host is required for an ssh backend" % where)
+        if kind in ("ssh", "slurm") and not data.get("host"):
+            problems.append("%s.host is required for an %s backend"
+                            % (where, kind))
+        if kind == "slurm":
+            problems.extend(validate_settings(data, where)[0])
         gpus = str(data.get("gpus", "auto")).strip().lower()
         if kind == "ssh" and gpus not in ("auto", "none") and not all(
                 part.strip().isdigit() for part in gpus.split(",")):

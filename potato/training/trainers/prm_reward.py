@@ -125,6 +125,7 @@ class PRMRewardTrainer(Trainer):
                 "Only %d items in the train split; this trainer needs at "
                 "least %d. Annotate more, or lower min_instances."
                 % (bundle.split_size("train"), int(params["min_instances"])))
+        problems.extend(hf.quantize_unsupported(params))
         return problems
 
     # ------------------------------------------------------------- shared

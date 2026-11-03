@@ -158,6 +158,7 @@ class LLMDPOTrainer(Trainer):
                 "Only %d items in the train split; this trainer needs at "
                 "least %d. Annotate more, or lower min_instances."
                 % (bundle.split_size("train"), int(params["min_instances"])))
+        problems.extend(hf.quantize_problems(params, spec))
         return problems
 
     # ------------------------------------------------------------ shared
@@ -257,12 +258,13 @@ class LLMDPOTrainer(Trainer):
             reference = copy.deepcopy(model).to(device).eval()
             for p in reference.parameters():
                 p.requires_grad_(False)
+        model = hf.prepare_quantized(model, params, report)
         if params.get("gradient_checkpointing"):
             model.gradient_checkpointing_enable()
             if params["lora"]:
                 model.enable_input_require_grads()
         model = hf.apply_lora(model, params["lora"], "CAUSAL_LM", report)
-        model.to(device)
+        model = hf.place(model, device)
         pad = tokenizer.pad_token_id
         size = int(params["batch_size"])
 

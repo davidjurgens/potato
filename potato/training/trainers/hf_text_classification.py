@@ -92,6 +92,7 @@ class HFTextClassificationTrainer(Trainer):
         if len(bundle.labels(schema.name)) < 2:
             problems.append("Schema %r has fewer than two labels in the data."
                             % schema.name)
+        problems.extend(hf.quantize_problems(params, spec))
         return problems
 
     # ----------------------------------------------------------------- fit
@@ -124,10 +125,12 @@ class HFTextClassificationTrainer(Trainer):
         report.status("running", "loading %s" % params["model_name"])
         tokenizer = AutoTokenizer.from_pretrained(params["model_name"])
         model = AutoModelForSequenceClassification.from_pretrained(
-            params["model_name"], **self._head_kwargs(labels, multilabel))
+            params["model_name"], **self._head_kwargs(labels, multilabel),
+            **hf.quantization_kwargs(params["lora"]))
         hf.ensure_pad_token(tokenizer, model)
+        model = hf.prepare_quantized(model, params, report)
         model = hf.apply_lora(model, params["lora"], "SEQ_CLS", report)
-        model.to(device)
+        model = hf.place(model, device)
 
         def encode(rows):
             return tokenizer([r.get("text", "") for r in rows],

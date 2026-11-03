@@ -406,13 +406,16 @@ class TestManagerStatus:
         manager.status()["state"] = "tampered"
         assert manager.status()["state"] == "idle"
 
-    def test_a_second_run_is_refused_not_queued(self):
+    def test_a_second_run_asked_not_to_queue_is_refused(self, tmp_path):
+        # Queueing is the default (test_training_queue.py); queue=False keeps
+        # the old refusal.
         from potato.training.manager import TrainingManager
-        manager = TrainingManager({"task_dir": "."})
+        config, _ = _project(str(tmp_path))
+        manager = TrainingManager(config)
         manager._set(state="running", run_id="first")
 
-        outcome = manager.start_run("sklearn-text", ["sentiment"])
-        assert outcome["started"] is False
+        outcome = manager.start_run("sklearn-text", ["sentiment"], queue=False)
+        assert outcome["started"] is False and not outcome.get("queued")
         assert "already in progress" in outcome["error"]
 
     def test_starting_with_no_schema_is_refused(self):

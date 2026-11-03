@@ -296,7 +296,8 @@ class JobRunner:
 
     def __init__(self, client: Client, job: Dict[str, Any], root: str,
                  python: str = sys.executable, grace_s: float = 20.0,
-                 keep: bool = True, stop_event: Optional[threading.Event] = None):
+                 keep: bool = True, stop_event: Optional[threading.Event] = None,
+                 slurm: Optional[Dict[str, Any]] = None):
         self.client = client
         self.job = job
         self.run_id = job["job_id"]
@@ -310,8 +311,14 @@ class JobRunner:
         self._pending: List[Dict[str, Any]] = []
         self._lock = threading.Lock()
         self.result_seen = False
+        #: The worker reported its own error; a SLURM "job lost" must not
+        #: replace it (the server keeps the last error event).
+        self.error_seen = False
         self._cancel_sent_at: Optional[float] = None
         self._process: Optional[subprocess.Popen] = None
+        #: Submit the worker as a SLURM batch job instead of running it
+        #: here (see :mod:`potato.training.slurm`).
+        self.slurm = slurm
 
     # -- events --------------------------------------------------------
 
@@ -320,6 +327,8 @@ class JobRunner:
             self._pending.append(payload)
             if payload.get("event") == "result":
                 self.result_seen = True
+            elif payload.get("event") == "error":
+                self.error_seen = True
 
     def _log(self, level: str, msg: str) -> None:
         from potato.training.events import event
@@ -400,12 +409,12 @@ class JobRunner:
         stderr_path = os.path.join(self.job_dir, "stderr.log")
         stdout_path = os.path.join(self.job_dir, "stdout.log")
         with open(stderr_path, "w") as stderr_fh:
-            process = subprocess.Popen(
-                [self.python, "-m", "potato.training.worker",
-                 "--spec", spec_path],
-                cwd=self.job_dir, env=self._environment(),
-                stdout=subprocess.PIPE, stderr=stderr_fh, text=True,
-                bufsize=1, start_new_session=True)
+            try:
+                process = self._start_worker(spec_path, stderr_fh)
+            except Exception as exc:  # noqa: BLE001
+                self._queue(event("error", code="launch_failed",
+                                  message=str(exc), install_hint=""))
+                return self._complete(EXIT_UNEXPECTED)
             self._process = process
 
             def drain():
@@ -423,11 +432,44 @@ class JobRunner:
             returncode = process.wait()
 
         if returncode != 0 and not self.result_seen:
+            if getattr(process, "lost_reason", ""):
+                message = ("SLURM job %s ended before the worker finished: %s"
+                           % (process.job_id, process.lost_reason))
+                if self.error_seen:
+                    self._log("warning", message)
+                else:
+                    self._queue(event("error", code="job_lost",
+                                      install_hint="", message=message))
             tail = _tail(stderr_path)
             if tail:
                 self._log("error", "Worker stderr:\n%s" % tail)
         self._upload_predictions()
         return self._complete(returncode)
+
+    def _start_worker(self, spec_path: str, stderr_fh):
+        """The worker process, or a stand-in with the same interface."""
+        if self.slurm is not None:
+            from potato.training.slurm import SlurmJob
+            # The job writes its own stderr.log next to the spec; the
+            # agent's copy stays empty.
+            from potato.training.events import event
+
+            def on_state(state, text):
+                # Until the worker's own status events arrive, the run page
+                # shows where the job is in the queue.
+                if state != "RUNNING":
+                    self._queue(event("status", state="queued", step=text))
+                else:
+                    self._queue(event("status", state="running", step=text))
+            return SlurmJob(self.slurm, self.job_dir, spec_path, self.python,
+                            self.run_id, env=self._environment(),
+                            log=self._log, on_state=on_state).submit()
+        return subprocess.Popen(
+            [self.python, "-m", "potato.training.worker",
+             "--spec", spec_path],
+            cwd=self.job_dir, env=self._environment(),
+            stdout=subprocess.PIPE, stderr=stderr_fh, text=True,
+            bufsize=1, start_new_session=True)
 
     def _supervise(self, process: subprocess.Popen) -> None:
         last_post = 0.0
@@ -517,6 +559,10 @@ class JobRunner:
 def _killpg(process: subprocess.Popen, sig: int) -> None:
     if process.poll() is not None:
         return
+    if getattr(process, "pid", None) is None:
+        # A SLURM job: its own send_signal maps to scancel.
+        process.send_signal(sig)
+        return
     try:
         os.killpg(os.getpgid(process.pid), sig)
     except (ProcessLookupError, PermissionError, OSError):
@@ -591,6 +637,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Exit after one job")
     parser.add_argument("--keep", action="store_true",
                         help="Keep each job's bundle after it finishes")
+    parser.add_argument("--slurm-config",
+                        help="A JSON file of SLURM settings (gres, time, "
+                             "nice, partition, ...): submit each job's "
+                             "worker with sbatch instead of running it here. "
+                             "--workdir must then be on storage the compute "
+                             "nodes share")
+    parser.add_argument("--slurm-json", help=argparse.SUPPRESS)
     return parser
 
 
@@ -614,6 +667,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         except (ValueError, OSError):
             pass
 
+    slurm = None
+    if args.slurm_json or args.slurm_config:
+        try:
+            if args.slurm_json:
+                slurm = json.loads(args.slurm_json)
+            else:
+                with open(os.path.expanduser(args.slurm_config)) as fh:
+                    slurm = json.load(fh)
+        except (OSError, ValueError) as exc:
+            _say("could not read the SLURM settings: %s" % exc)
+            return 2
+        if not isinstance(slurm, dict):
+            _say("the SLURM settings must be a JSON object")
+            return 2
+
     client = Client(token, server=args.server or "",
                     socket_path=args.socket or "",
                     tls_over_socket=args.tls_over_socket)
@@ -625,7 +693,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             _say("could not fetch job %s: %s" % (args.job, exc))
             return 1
         runner = JobRunner(client, job, args.workdir, python=args.python,
-                           keep=args.keep, stop_event=stop)
+                           keep=args.keep, stop_event=stop, slurm=slurm)
         return runner.run()
 
     if not args.backend:
@@ -655,7 +723,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             continue
         _say("running job %s" % job.get("job_id"))
         last = JobRunner(client, job, args.workdir, python=args.python,
-                         keep=args.keep, stop_event=stop).run()
+                         keep=args.keep, stop_event=stop, slurm=slurm).run()
         _say("job %s finished with code %d" % (job.get("job_id"), last))
         if args.once:
             return last

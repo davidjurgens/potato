@@ -32,7 +32,12 @@ MODEL_DIR = "model"
 #: LoRA defaults. r=16 with alpha=32 is the configuration most fine-tuning
 #: recipes start from; dropout keeps a few hundred examples from being
 #: memorized outright.
-LORA_DEFAULTS = {"r": 16, "alpha": 32, "dropout": 0.05, "target_modules": None}
+LORA_DEFAULTS = {"r": 16, "alpha": 32, "dropout": 0.05, "target_modules": None,
+                 "quantize": None}
+
+#: ``lora.quantize`` values: QLoRA's 4-bit NF4 base weights, or 8-bit.
+QUANTIZE = ("4bit", "8bit")
+BNB_HINT = "pip install bitsandbytes (CUDA only)"
 
 
 def missing(modules: Sequence[str]) -> List[str]:
@@ -106,6 +111,123 @@ def autocast_dtype(device: str, precision: str):
     return None
 
 
+def quantize_problems(params: Dict[str, Any], spec: TrainingSpec) -> List[str]:
+    """Why ``lora.quantize`` cannot be used here; empty when it can.
+
+    Checked in ``validate``, in the worker on the machine that trains, so a
+    run on a Mac or a CPU-only host fails before it loads anything.
+    """
+    lora = params.get("lora") or {}
+    quantize = lora.get("quantize") if isinstance(lora, dict) else None
+    if not quantize:
+        return []
+    if quantize not in QUANTIZE:
+        return ["lora.quantize must be one of %s (got %r)"
+                % (", ".join(QUANTIZE), quantize)]
+    device = str(getattr(spec.limits, "device", "auto") or "auto")
+    if device != "auto" and not device.startswith("cuda"):
+        return ["lora.quantize needs a CUDA GPU; this run's device is %s"
+                % device]
+    if missing(["bitsandbytes"]):
+        return ["lora.quantize needs bitsandbytes, which is not installed "
+                "here: %s" % BNB_HINT]
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return ["lora.quantize needs a CUDA GPU, and this machine has "
+                    "none: bitsandbytes quantizes on the GPU"]
+    except ImportError:
+        return []
+    return _bitsandbytes_runs(torch)
+
+
+def _bitsandbytes_runs(torch) -> List[str]:
+    """Quantize 64 zeros on the GPU. A bitsandbytes wheel without a binary
+    for this torch's CUDA imports fine and fails only here; without the
+    probe the run loaded the whole base model first and then failed in
+    weight conversion with no word about why."""
+    version = "?"
+    try:
+        import bitsandbytes
+        version = getattr(bitsandbytes, "__version__", "?")
+        import bitsandbytes.functional as functional
+        functional.quantize_4bit(torch.zeros(64, device="cuda",
+                                             dtype=torch.float16))
+    except Exception as exc:  # noqa: BLE001
+        lines = [line for line in str(exc).splitlines() if line.strip()]
+        return ["bitsandbytes %s cannot quantize with this torch (%s, CUDA "
+                "%s): %s. Install a bitsandbytes build for CUDA %s."
+                % (version, torch.__version__, torch.version.cuda,
+                   lines[-1] if lines else type(exc).__name__,
+                   torch.version.cuda)]
+    return []
+
+
+def quantize_unsupported(params: Dict[str, Any]) -> List[str]:
+    """For trainers that do not load quantized weights: a problem when
+    ``lora.quantize`` is set, so the run stops before the model loads."""
+    lora = params.get("lora")
+    if isinstance(lora, dict) and lora.get("quantize"):
+        return ["lora.quantize is supported by llm-sft, llm-dpo and "
+                "hf-text-classification, not this trainer"]
+    return []
+
+
+def quantization_kwargs(lora: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """``from_pretrained`` arguments for a quantized base model, or ``{}``.
+
+    4-bit is QLoRA's setup (Dettmers et al., 2023): NF4 weights, double
+    quantization, bf16 compute where the GPU has it. The model is placed by
+    ``device_map`` on the run's GPU, since a quantized model cannot be moved
+    with ``.to()``.
+    """
+    quantize = (lora or {}).get("quantize") if isinstance(lora, dict) else None
+    if not quantize:
+        return {}
+    import torch
+    from transformers import BitsAndBytesConfig
+
+    if quantize == "8bit":
+        config = BitsAndBytesConfig(load_in_8bit=True)
+    else:
+        compute = (torch.bfloat16 if torch.cuda.is_available()
+                   and torch.cuda.is_bf16_supported() else torch.float16)
+        config = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=compute)
+    index = torch.cuda.current_device() if torch.cuda.is_available() else 0
+    return {"quantization_config": config, "device_map": {"": index}}
+
+
+def is_quantized(model) -> bool:
+    for candidate in (model, getattr(model, "base_model", None),
+                      getattr(getattr(model, "base_model", None), "model", None)):
+        if candidate is not None and (
+                getattr(candidate, "is_loaded_in_4bit", False)
+                or getattr(candidate, "is_loaded_in_8bit", False)):
+            return True
+    return False
+
+
+def place(model, device: str):
+    """``model.to(device)``, except for a quantized model, which ``device_map``
+    already placed and which refuses ``.to()``."""
+    return model if is_quantized(model) else model.to(device)
+
+
+def prepare_quantized(model, params: Dict[str, Any], report: ProgressReporter):
+    """peft's preparation of a quantized model for adapter training: norms in
+    fp32, input gradients for checkpointing. A no-op without quantization."""
+    if not is_quantized(model):
+        return model
+    require(["peft"], "pip install peft")
+    from peft import prepare_model_for_kbit_training
+    report.log("info", "Base weights quantized to %s (QLoRA)"
+               % params["lora"]["quantize"])
+    return prepare_model_for_kbit_training(
+        model, use_gradient_checkpointing=bool(params.get("gradient_checkpointing")))
+
+
 def apply_lora(model, lora: Optional[Dict[str, Any]], task_type: Optional[str],
                report: ProgressReporter,
                modules_to_save: Optional[List[str]] = None):
@@ -121,6 +243,10 @@ def apply_lora(model, lora: Optional[Dict[str, Any]], task_type: Optional[str],
     require(["peft"], "pip install peft")
     from peft import LoraConfig, get_peft_model
 
+    if lora.get("quantize") and not is_quantized(model):
+        # The trainers that load quantized weights never get here.
+        raise TrainerError("lora.quantize is supported by llm-sft, llm-dpo "
+                           "and hf-text-classification, not this trainer")
     kwargs = dict(r=int(lora["r"]), lora_alpha=int(lora["alpha"]),
                   lora_dropout=float(lora["dropout"]))
     if task_type:
@@ -267,6 +393,10 @@ def train_loop(model, train_rows: Sequence[Any], params: Dict[str, Any],
                                            "epoch(s); stopping" % since_best)
                         break
     model.eval()
+    if device.startswith("cuda") and torch.cuda.is_available():
+        # What the run needed, for sizing the next one (or choosing QLoRA).
+        report.log("info", "Peak GPU memory: %.2f GB"
+                   % (torch.cuda.max_memory_allocated() / 1e9))
     return {"best_score": best, "best_epoch": best_epoch + 1 if best_epoch >= 0
             else None, "epochs_run": len(losses),
             "final_loss": losses[-1] if losses else None,
@@ -313,11 +443,13 @@ def load_pretrained(loader, artifact_dir: str, card: Dict[str, Any],
     if card.get("lora"):
         require(["peft"], "pip install peft")
         from peft import PeftModel
+        # An adapter trained on quantized base weights predicts on the same.
+        kwargs = dict(kwargs, **quantization_kwargs(card["lora"]))
         base = loader.from_pretrained(card["base_model"], **kwargs)
         model = PeftModel.from_pretrained(base, path)
     else:
         model = loader.from_pretrained(path, **kwargs)
-    return model.to(device).eval()
+    return place(model, device).eval()
 
 
 def ensure_pad_token(tokenizer, model=None) -> None:
@@ -387,6 +519,8 @@ COMMON_PARAMS = {
         "type": ["boolean", "object", "null"], "default": None,
         "description": "Train a LoRA adapter instead of every weight. true "
                        "for r=16, alpha=32, dropout=0.05, or an object "
-                       "with r, alpha, dropout and target_modules."},
+                       "with r, alpha, dropout, target_modules and "
+                       "quantize (4bit for QLoRA, or 8bit; CUDA and "
+                       "bitsandbytes only)."},
     "min_instances": {"type": "integer", "minimum": 2, "default": 20},
 }

@@ -66,10 +66,12 @@ __all__ = [
 ]
 
 
-#: Run lifecycle. ``building`` covers bundle construction, which happens in the
-#: parent and can take a while on a large corpus, so it is worth showing.
+#: Run lifecycle. ``waiting`` is a run behind another in the manager's queue;
+#: ``queued`` is a remote run waiting for its agent or scheduler. ``building``
+#: covers bundle construction, which happens in the parent and can take a
+#: while on a large corpus, so it is worth showing.
 RUN_STATES = (
-    "queued", "building", "running", "evaluating",
+    "waiting", "queued", "building", "running", "evaluating",
     "success", "error", "cancelled",
 )
 
@@ -152,6 +154,7 @@ _MIGRATION = None
 _BACKENDS_MIGRATION = None
 _ARTIFACT_URI_MIGRATION = None
 _PINNED_MIGRATION = None
+_HUB_MIGRATION = None
 
 
 def _artifact_uri_migration():
@@ -181,6 +184,27 @@ def _pinned_migration():
     )
 
 
+def _hub_migration():
+    from potato.persistence import Migration
+    return Migration(
+        name="0005_training_hub_pushes",
+        sql="""
+        CREATE TABLE IF NOT EXISTS training_hub_pushes (
+            project    TEXT NOT NULL,
+            run_id     TEXT NOT NULL,
+            repo_id    TEXT NOT NULL,
+            revision   TEXT NOT NULL DEFAULT '',
+            url        TEXT NOT NULL DEFAULT '',
+            private    INTEGER NOT NULL DEFAULT 1,
+            pushed_by  TEXT NOT NULL DEFAULT '',
+            pushed_at  REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_training_hub_pushes_run
+            ON training_hub_pushes (project, run_id);
+        """,
+    )
+
+
 def _backends_migration():
     from potato.persistence import Migration
     return Migration(
@@ -205,7 +229,9 @@ def _db(task_dir: str):
     global _MIGRATION, _BACKENDS_MIGRATION
     if _BACKENDS_MIGRATION is None:
         _BACKENDS_MIGRATION = _backends_migration()
-    global _ARTIFACT_URI_MIGRATION, _PINNED_MIGRATION
+    global _ARTIFACT_URI_MIGRATION, _PINNED_MIGRATION, _HUB_MIGRATION
+    if _HUB_MIGRATION is None:
+        _HUB_MIGRATION = _hub_migration()
     if _ARTIFACT_URI_MIGRATION is None:
         _ARTIFACT_URI_MIGRATION = _artifact_uri_migration()
     if _PINNED_MIGRATION is None:
@@ -272,6 +298,7 @@ def _db(task_dir: str):
     register_migration(_BACKENDS_MIGRATION)
     register_migration(_ARTIFACT_URI_MIGRATION)
     register_migration(_PINNED_MIGRATION)
+    register_migration(_HUB_MIGRATION)
     return get_db(task_dir)
 
 
@@ -684,6 +711,35 @@ def delete_predictions_for_run(config: Dict[str, Any], run_id: str) -> int:
         (_project(config), run_id))
     conn.commit()
     return cur.rowcount or 0
+
+
+# ------------------------------------------------------------ hub pushes
+
+def record_hub_push(config: Dict[str, Any], run_id: str, repo_id: str,
+                    revision: str, url: str, private: bool,
+                    pushed_by: str) -> None:
+    conn = _db(_task_dir(config))
+    conn.execute(
+        """INSERT INTO training_hub_pushes
+               (project, run_id, repo_id, revision, url, private, pushed_by,
+                pushed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (_project(config), run_id, repo_id, revision, url, int(bool(private)),
+         pushed_by, time.time()))
+    conn.commit()
+
+
+def hub_pushes(config: Dict[str, Any], run_id: str) -> List[Dict[str, Any]]:
+    """Every push of a run's model, oldest first."""
+    try:
+        rows = _db(_task_dir(config)).execute(
+            "SELECT repo_id, revision, url, private, pushed_by, pushed_at "
+            "FROM training_hub_pushes WHERE project = ? AND run_id = ? "
+            "ORDER BY pushed_at", (_project(config), run_id)).fetchall()
+    except Exception:
+        logger.debug("Could not read hub pushes", exc_info=True)
+        return []
+    return [dict(r, private=bool(r["private"])) for r in rows]
 
 
 # ---------------------------------------------------------- pinned items

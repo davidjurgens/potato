@@ -185,6 +185,7 @@ class LLMSFTTrainer(Trainer):
                 "Only %d items in the train split; this trainer needs at "
                 "least %d. Annotate more, or lower min_instances."
                 % (bundle.split_size("train"), int(params["min_instances"])))
+        problems.extend(hf.quantize_problems(params, spec))
         return problems
 
     # ------------------------------------------------------------- shared
@@ -209,6 +210,7 @@ class LLMSFTTrainer(Trainer):
         hf.ensure_pad_token(tokenizer)
         kwargs = {_dtype_keyword(): dtype}
         if card is None:
+            kwargs.update(hf.quantization_kwargs(params.get("lora")))
             model = AutoModelForCausalLM.from_pretrained(model_path, **kwargs)
         else:
             model = hf.load_pretrained(AutoModelForCausalLM, artifact_dir,
@@ -245,12 +247,13 @@ class LLMSFTTrainer(Trainer):
         report.status("running", "loading %s" % params["model_name"])
         device, dtype, tokenizer, model, chat = self._setup(
             params, spec, report, params["model_name"])
+        model = hf.prepare_quantized(model, params, report)
         if params.get("gradient_checkpointing"):
             model.gradient_checkpointing_enable()
             if params["lora"]:
                 model.enable_input_require_grads()
         model = hf.apply_lora(model, params["lora"], "CAUSAL_LM", report)
-        model.to(device)
+        model = hf.place(model, device)
 
         instruction = self._instruction(params, schema)
         system = str(params.get("system_prompt") or "")
@@ -360,7 +363,7 @@ class LLMSFTTrainer(Trainer):
         device, _, tokenizer, model, chat = self._setup(
             params, spec, report, os.path.join(artifact_dir, hf.MODEL_DIR),
             artifact_dir=artifact_dir, card=card)
-        model.to(device).eval()
+        hf.place(model, device).eval()
         eos = _eos_ids(model, tokenizer)
 
         items = list(items)

@@ -163,6 +163,7 @@ class HFTokenClassificationTrainer(Trainer):
         if not bundle.labels(schema.name):
             problems.append("Schema %r has no span labels in the data."
                             % schema.name)
+        problems.extend(hf.quantize_unsupported(params))
         return problems
 
     # ----------------------------------------------------------------- fit

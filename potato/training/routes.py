@@ -67,6 +67,7 @@ def training_page():
         "admin/training.html",
         status=manager.status(),
         runs=manager.history(limit=25),
+        queue_positions={q["run_id"]: q["position"] for q in manager.queue()},
         trainers=_trainer_rows(),
         schemas=_schema_rows(),
         backends=_backend_rows(),
@@ -86,11 +87,20 @@ def run_page(run_id):
         return jsonify({"error": "No such run: %s" % run_id}), 404
 
     manager = _manager()
+    from potato.training.hub import NOT_A_MODEL, model_files
+    from potato.training.registry import trainer_info
+    hub_files = [f for f in model_files(os.path.join(manager.run_dir(run_id),
+                                                     "artifacts"))
+                 if f not in NOT_A_MODEL]
     return render_template(
         "admin/training_run.html", run=run.to_dict(),
         status=manager.status(), events=_recent_events(manager, run_id),
         splits=store.run_item_splits(_config(), run_id),
-        datasets_enabled=_datasets_enabled())
+        datasets_enabled=_datasets_enabled(),
+        hub_pushable=run.status == "success" and bool(hub_files),
+        hub_pushes=store.hub_pushes(_config(), run_id),
+        run_licence_ack=bool(getattr(trainer_info(run.trainer), "licence_ack", False)),
+        run_licence=getattr(trainer_info(run.trainer), "licence", ""))
 
 
 # ------------------------------------------------------------------ api
@@ -113,7 +123,8 @@ def api_schemas():
 @admin_required
 @_enabled_required
 def api_status():
-    return jsonify(_manager().status())
+    manager = _manager()
+    return jsonify(dict(manager.status(), queue=manager.queue()))
 
 
 @training_bp.route("/api/runs", methods=["GET"])
@@ -165,8 +176,14 @@ def api_start_run():
     outcome = _manager().start_run(trainer, schemas,
                                    params=body.get("params") or {},
                                    trigger="api",
-                                   backend=body.get("backend") or None)
-    status = 200 if outcome.get("started") else outcome.pop("http_status", 409)
+                                   backend=body.get("backend") or None,
+                                   queue=body.get("queue", True) is not False)
+    if outcome.get("started"):
+        status = 200
+    elif outcome.get("queued"):
+        status = 202
+    else:
+        status = outcome.pop("http_status", 409)
     return jsonify(outcome), status
 
 
@@ -306,6 +323,57 @@ def api_pin_split(run_id):
     return jsonify({"dataset": dataset, "split": split,
                     "imported": version.example_count,
                     "version": version.to_dict()}), 201
+
+
+@training_bp.route("/api/runs/<run_id>/push-to-hub", methods=["POST"])
+@admin_required
+@_enabled_required
+@_same_origin_required
+def api_push_to_hub(run_id):
+    """Publish a run's model to the Hugging Face Hub.
+
+    Body: ``{"repo_id", "confirm_repo_id", "private": true, "token_env":
+    "HF_TOKEN", "licence": "", "accept_licence": false}``. The repository is
+    named twice because a push publishes; a mismatch is refused. A trainer
+    whose licence needs confirming on use needs ``accept_licence`` here too,
+    since its weights carry that licence.
+    """
+    from flask import session
+
+    from potato.training import store
+    from potato.training.hub import HubPushError, push
+    from potato.training.registry import trainer_info
+
+    body, refused = _json_object()
+    if refused:
+        return refused
+    run = store.load_run(_config(), run_id)
+    if run is None:
+        return jsonify({"error": "No such run: %s" % run_id}), 404
+    repo_id = str(body.get("repo_id") or "").strip()
+    if repo_id != str(body.get("confirm_repo_id") or "").strip():
+        return jsonify({"error": "Type the repository name twice, the same "
+                                 "both times: a push publishes the model"}), 400
+    info = trainer_info(run.trainer)
+    if info is not None and info.licence_ack and body.get("accept_licence") is not True:
+        return jsonify({"error": "%s models are licensed %s, which applies to "
+                                 "the pushed weights. Confirm with "
+                                 "accept_licence." % (run.trainer, info.licence),
+                        "needs_licence_ack": True}), 400
+    try:
+        outcome = push(_config(), run,
+                       os.path.join(_manager().run_dir(run_id), "artifacts"),
+                       repo_id, private=body.get("private", True) is not False,
+                       token_env=str(body.get("token_env") or "HF_TOKEN"),
+                       licence=str(body.get("licence") or "").strip(),
+                       pushed_by=str(session.get("username", "") or "admin"),
+                       trainer_licence=info.licence if info else "")
+    except HubPushError as exc:
+        return jsonify({"error": str(exc)}), exc.status
+    except Exception as exc:  # noqa: BLE001 - the Hub's own errors
+        logger.warning("Hub push of %s failed", run_id, exc_info=True)
+        return jsonify({"error": "The Hub refused the push: %s" % exc}), 502
+    return jsonify(outcome), 201
 
 
 @training_bp.route("/api/pinned", methods=["GET"])

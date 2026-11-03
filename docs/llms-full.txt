@@ -7313,7 +7313,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
 | `labeling_engine` |  | object |  | Machines label the corpus and human labels calibrate and certify them. Each source's predictions are kept per version, every human request records how its item was sampled, and contracts state the quality guarantee the accepted labels must meet | `budgets`, `cascade`, `contracts`, `crowd`, `distill`, `enabled`, `features`, `humans`, `redaction`, `runtime`, `schemas`, `sources` |
-| `model_training` |  | object |  | Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels | `aggregation`, `auto_retrain`, `backend`, `backends`, `device`, `enabled`, `grace_seconds`, `max_predictions_mb`, `max_ram_mb`, `max_wall_seconds`, `num_threads`, `retain_runs`, `split_seed`, `splits`, `trainer_params`, `writeback` |
+| `model_training` |  | object |  | Train models on the study's annotations from the admin Training page, and optionally publish their predictions back as prelabels | `aggregation`, `auto_retrain`, `backend`, `backends`, `device`, `enabled`, `grace_seconds`, `max_predictions_mb`, `max_ram_mb`, `max_wall_seconds`, `num_threads`, `queue_max`, `retain_runs`, `split_seed`, `splits`, `trainer_params`, `writeback` |
 
 ## Qualitative Coding (QDA)
 
@@ -46943,6 +46943,7 @@ All keys sit under `model_training`:
 | `enabled` | `false` | Registers the `/admin/training` routes and the training manager. Without it the routes do not exist. |
 | `retain_runs` | `5` | Finished runs kept in the run ledger. Older runs are dropped from it unless their predictions are still stored. The run directories stay on disk. |
 | `grace_seconds` | `20` | After a cancel, seconds the run gets to exit before it is killed. |
+| `queue_max` | `10` | Runs that may wait behind the one in progress. See [The run queue](#the-run-queue). |
 | `split_seed` | `0` | Seeds the split assignment. Keep it fixed: changing it moves held-out items into training. |
 | `splits` | `{train: 0.7, val: 0.15, test: 0.15}` | Split fractions, normalized to sum to 1. Use the names `train`, `val` and `test`: predictions are made for `val` and `test` (and for unlabelled items with `writeback.include_unlabeled`). |
 | `aggregation` | `consensus` | How several annotators' labels become one. `consensus` is Dawid-Skene when there is more than one annotator (falling back to majority vote if it fails); `majority` is majority vote. |
@@ -46953,7 +46954,7 @@ All keys sit under `model_training`:
 | `auto_retrain` | off | Retrain as annotations arrive. See below. |
 | `writeback` | none | Publish predictions as prelabels. See below. |
 | `backend` | `local` | Where runs execute unless the Training page or the API names another. See [Where runs execute](#where-runs-execute). |
-| `backends` | none | Named ssh and agent backends. |
+| `backends` | none | Named ssh, slurm and agent backends. |
 | `max_predictions_mb` | `512` | Largest `predictions.jsonl` a remote agent may upload. |
 | `trainer_params` | none | Parameter defaults per trainer. See [Parameters](#parameters). |
 
@@ -46971,8 +46972,34 @@ All keys sit under `model_training`:
 | `accept_licence` | `false` | Confirms the licence of a trainer that asks for it (`ultralytics-detect`, `ultralytics-segment`). Without it, automatic runs of that trainer are skipped and `skip_reason` says why. |
 
 When a check decides not to start a run, the reason ("waiting for 3 more
-annotation(s)", "a run is already in progress") is in the `skip_reason` field
-of `GET /admin/training/api/status`.
+annotation(s)", "a run is already in progress", "runs are waiting in the
+queue") is in the `skip_reason` field of `GET /admin/training/api/status`.
+Automatic runs do not join [the queue](#the-run-queue): the next annotation
+saved after the queue empties checks again, with more annotations to train on.
+
+### The run queue
+
+One run executes at a time. A run started from the Training page or the API
+while another is in progress waits its turn instead of being refused: the
+start returns `202` with `queued: true` and its `position`, and the Runs
+table lists it as `waiting #N` with a **Cancel run** button. When the run in
+progress ends, the oldest waiting run starts.
+
+- A waiting run is a run-ledger record with status `waiting`, so the queue
+  survives a restart: the first waiting run starts when the server comes
+  back up. A run the previous server was in the middle of is marked as an
+  error, `interrupted`, at the same time.
+- Its bundle is built when it starts, not when it is queued, so it trains on
+  the annotations as they are then.
+- A start that would be refused (an unknown scheme, a parameter the trainer
+  does not take) is refused at once, not when its turn comes. A run that
+  can no longer start when its turn comes, because its scheme or trainer was
+  removed from the config, fails with `invalid_when_dequeued`, and the next
+  one starts.
+- `"queue": false` in the request body refuses with `409` instead of
+  queueing, as before. With `queue_max` runs waiting, a new start is refused
+  with `429`.
+- `GET /admin/training/api/status` lists the waiting runs in `queue`.
 
 The counts are kept in memory. After a restart, a project that has run before
 counts new annotations from the restart, and `min_interval_s` runs from the
@@ -47052,13 +47079,14 @@ A run started from the page or the API is checked again when it starts; see
 
 ## Where runs execute
 
-A run executes on a *backend*. There are three kinds:
+A run executes on a *backend*. There are four kinds:
 
 | Type | Where the trainer runs | Who starts it |
 |---|---|---|
 | `local` | This machine, in a subprocess. Always available, and the default. | Potato |
 | `ssh` | Another machine Potato can reach over ssh, such as a GPU server. | Potato, over ssh |
 | `agent` | A machine Potato cannot reach, such as a workstation behind NAT. | Someone, with `potato training agent` |
+| `slurm` | A cluster's compute node, as a batch job. | Potato: ssh to the login node, then `sbatch` |
 
 The Training page has a **Runs on** menu listing them. `model_training.backend`
 sets the default, and an API run or `auto_retrain` can name one with
@@ -47156,6 +47184,89 @@ requests, so anyone who can use that account on the remote host has admin
 access while a run is in progress. The run's token reaches the agent on stdin
 and is never in a command line, because command lines are visible to every
 account on a shared server. The token is valid for that run only.
+
+### A SLURM cluster (`type: slurm`)
+
+On a cluster, the machine Potato can reach over ssh is usually a login node
+with no GPUs, and the GPUs are on compute nodes that only the scheduler
+starts work on. A `slurm` backend connects to the login node the way an `ssh`
+backend connects to a GPU server. The agent runs there, and the training
+worker goes to a compute node as a batch job:
+
+```yaml
+model_training:
+  enabled: true
+  backends:
+    cluster:
+      type: slurm
+      host: login.cluster.example.edu
+      python: /opt/conda/bin/python3        # on the login node, for the agent
+      job_python: /opt/conda/bin/python3    # on the compute nodes, for the worker
+      remote_dir: /shared/projects/me/potato-training   # storage the compute nodes share
+      gres: gpu:1
+      time: "04:00:00"
+      nice: 0
+```
+
+For each run, Potato connects to the login node and copies its code there, as
+for `ssh`. The agent then:
+
+1. Downloads the bundle into `remote_dir/jobs/<run>/`.
+2. Writes `job.sh` and submits it with `sbatch`. The job runs the worker on
+   a compute node. The worker's events go to `events.jsonl`, its errors to
+   `stderr.log` and its exit code to `exit_code`, all in the job
+   directory. SLURM's own output goes to `slurm.out`.
+3. Reads `events.jsonl` as it grows and sends the progress back to this
+   server, as an `ssh` backend's agent does. The run log records each change
+   in the job's queue state, such as `SLURM job 4242: PENDING (Priority)` or
+   `RUNNING on node07`. It runs `squeue` once per `poll_interval_s`.
+4. When the job ends, uploads its predictions and reports the result. The
+   artifacts come back and the job directory is removed, as for `ssh`.
+
+Cancelling a run sends `scancel --full --signal=TERM`, then `scancel` if the
+worker has not stopped after `grace_seconds`. If the ssh session to the login
+node drops, the agent cancels its job, so a lost connection does not leave a
+GPU allocated.
+
+When the scheduler ends a job (its time limit, a node failure, preemption,
+running out of memory, or an `scancel` from outside Potato), the run fails
+with that reason, taken from `scontrol show job`. SLURM keeps a finished job
+there for a few minutes (`MinJobAge`) even without an accounting database.
+A job that finished normally can take a while to show its `exit_code` on the
+login node, because NFS caches directory contents: 48 seconds was measured on
+one cluster. The agent waits up to `exit_grace_s` for it before it gives up.
+
+Only `sbatch`, `squeue`, `scancel` and, where present, `scontrol` are used,
+so a cluster with `srun` disabled and no accounting database (`sacct`) works. GPUs come from `gres`;
+the scheduler sets `CUDA_VISIBLE_DEVICES`, and `gpus` is not a setting here.
+**Check** on the Training page confirms the login node has the three
+commands and that `remote_dir` is not under `/tmp`. It cannot see which
+packages the compute nodes have, so a missing package shows up as a failed
+run.
+
+Every `ssh` key applies except `gpus` and `packages`. A virtual environment
+made on the login node may not run on the compute nodes, so point
+`job_python` at an interpreter or environment the compute nodes have.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `remote_dir` | required | On storage the compute nodes share: the job reads the bundle and writes the model there. `/tmp` is refused. |
+| `job_python` | `python` | The worker's interpreter on the compute nodes. |
+| `gres` | none | `sbatch --gres`, such as `gpu:1` or `gpu:A6000:1`. With none, the job gets no GPU. |
+| `time` | `04:00:00` | `sbatch --time`. The job is killed when it runs out, and the run fails with that reason. Above 6 hours the run log warns. |
+| `nice` | `0` | `sbatch --nice`, 0 to 2000. |
+| `partition` | the cluster's default | `sbatch --partition`. |
+| `cpus_per_task`, `mem` | the cluster's defaults | `sbatch --cpus-per-task` and `--mem`. |
+| `sbatch_options` | `[]` | More flags, such as `["--requeue", "--constraint=a100"]`. `--output`, `--chdir`, `--job-name` and `--parsable` are Potato's. |
+| `prelude` | `[]` | Shell lines run in the job before the worker, such as `module load cuda/12.4` or `source ~/envs/train/bin/activate`. |
+| `poll_interval_s` | `30` | Seconds between `squeue` calls, at least 10. |
+| `exit_grace_s` | `180` | After a job leaves the queue, seconds to wait for its `exit_code` to appear on the login node before the run fails. At least 20. |
+| `job_name` | `potato-train` | Prefix of the job name; the run id's first 8 characters follow it. |
+
+An agent started by hand can submit to SLURM too, when the login node can
+reach this server: `potato training agent --server ... --backend <name>
+--workdir <shared dir> --slurm-config slurm.json`. `slurm.json` holds the
+settings above as a JSON object.
 
 ### A machine Potato cannot reach (`type: agent`)
 
@@ -47286,7 +47397,7 @@ in their sections:
 | `warmup_ratio` | 0.1 | Share of steps spent warming the learning rate up, before a linear decay. |
 | `patience` | 2 (token and audio 3) | Stop after this many epochs without a better val score; `null` trains every epoch. |
 | `precision` | `auto` | `auto` or `bf16` trains in bf16 on a GPU that supports it and in fp32 elsewhere; `fp32` forces full precision. |
-| `lora` | off | `true` trains a LoRA adapter (r 16, alpha 32, dropout 0.05) instead of every weight; or an object with `r`, `alpha`, `dropout` and `target_modules`. |
+| `lora` | off | `true` trains a LoRA adapter (r 16, alpha 32, dropout 0.05) instead of every weight; or an object with `r`, `alpha`, `dropout`, `target_modules` and `quantize` (see [QLoRA](#qlora-4-bit-base-weights)). |
 | `min_instances` | 20 (audio 10) | Refuse to fit with fewer items in the train split. |
 
 With a val split, these trainers keep the checkpoint from the epoch that scored
@@ -47475,7 +47586,7 @@ Default model: `Qwen/Qwen2.5-0.5B-Instruct`.
 | Parameter | Default | Meaning |
 |---|---|---|
 | `model_name` | `Qwen/Qwen2.5-0.5B-Instruct` | A causal language model. |
-| `lora` | `true` | `false` trains every weight, which needs several times the memory. |
+| `lora` | `true` | `false` trains every weight, which needs several times the memory. `{quantize: 4bit}` loads the base model in 4 bits ([QLoRA](#qlora-4-bit-base-weights)). |
 | `epochs` | 3 | |
 | `batch_size` | 4 | |
 | `gradient_accumulation` | 4 | |
@@ -48083,15 +48194,16 @@ same-origin.
 | `GET /admin/training/runs/<run_id>` | One run: status, metrics, events, the split of each item. |
 | `GET /admin/training/api/trainers` | Every trainer, its kinds, modalities, licence and whether it is installed. |
 | `GET /admin/training/api/schemas` | The study's schemes, their kind and the trainers that fit each. |
-| `GET /admin/training/api/status` | The current or last run: state, step, progress, metrics, warnings, `skip_reason`, `writeback`. |
+| `GET /admin/training/api/status` | The current or last run: state, step, progress, metrics, warnings, `skip_reason`, `writeback`, and `queue`, the waiting runs in order. |
 | `GET /admin/training/api/runs` | Run history (`?limit=`, default 50, at most 500). |
 | `GET /admin/training/api/runs/<run_id>` | One run's record, plus `review`: precision from review verdicts on its predictions. |
 | `GET /admin/training/api/runs/<run_id>/events` | The run's event log (`?limit=`, default 200). |
-| `POST /admin/training/api/runs` | Start a run. |
+| `POST /admin/training/api/runs` | Start a run: `200` when it starts, `202` with `queued: true` and `position` when it waits behind the run in progress. |
 | `GET /admin/training/api/backends` | The configured backends. |
-| `POST /admin/training/api/backends/<name>/check` | For an ssh backend, connect and report Python, GPUs and missing packages. For an agent backend, whether a token is issued and when the agent last connected. |
-| `POST /admin/training/api/runs/<run_id>/cancel` | Cancel the run in progress. `400` if no run is in progress, or `<run_id>` is not the one in progress. |
+| `POST /admin/training/api/backends/<name>/check` | For an ssh backend, connect and report Python, GPUs and missing packages. For a slurm backend, connect to the login node and check for `sbatch`, `squeue` and `scancel` and a shared `remote_dir`. For an agent backend, whether a token is issued and when the agent last connected. |
+| `POST /admin/training/api/runs/<run_id>/cancel` | Cancel the run in progress, or a waiting run. `400` if `<run_id>` is neither. |
 | `DELETE /admin/training/api/runs/<run_id>/predictions` | Withdraw the run's stored predictions. |
+| `POST /admin/training/api/runs/<run_id>/push-to-hub` | Push the run's model to the Hugging Face Hub. Body: `repo_id`, `confirm_repo_id` (the same), `private` (default `true`), `token_env` (default `HF_TOKEN`), `licence`, `accept_licence`. `201` with the commit; `400` for a mismatch, a missing token variable, no model files or an unconfirmed licence; `409` for a public repository when `private` is set; `502` when the Hub refuses. |
 | `POST /admin/training/api/runs/<run_id>/pin-split` | Save a split as a dataset version. Body: `{"dataset": name, "split": "val"}`. `201` with the version; `400` with no dataset name, a split the run lacks, or datasets not enabled; `404` for an unknown run. |
 | `GET /admin/training/api/pinned` | Pinned items, by reason. |
 | `POST /admin/training/api/pinned` | Pin items to `train`: `{"slice": name}` or `{"instance_ids": [...]}`. Returns how many were new, already pinned, or not in the data, and `in_last_run_train`: how many the latest run already trained on. Train items get no prelabel, so `model-found-nothing` matches them too. |
@@ -48108,13 +48220,15 @@ curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
 ```
 
 The body takes `trainer`, `schemas` (a list, or one name as a string),
-`params`, `backend` (default `model_training.backend`), and `accept_licence`.
-A refused start gives the reason in `error`:
+`params`, `backend` (default `model_training.backend`), `accept_licence`, and
+`queue` (default `true`; see [The run queue](#the-run-queue)). A refused
+start gives the reason in `error`:
 
 | Status | When |
 |---|---|
 | `400` | No trainer or no scheme in the body; an unknown trainer or scheme; a scheme the trainer cannot learn; a trainer this project cannot run (such as `decision-calibrate` with no decision model); a trainer whose licence needs acknowledging, with `needs_licence_ack: true`, until the request sets `accept_licence: true` |
-| `409` | A parameter the trainer does not take, or of the wrong type or range; an unknown backend; `decision-calibrate` on a backend other than `local`; a run already in progress (one run at a time) |
+| `409` | A parameter the trainer does not take, or of the wrong type or range; an unknown backend; `decision-calibrate` on a backend other than `local`; a run already in progress, with `"queue": false` |
+| `429` | `queue_max` runs are already waiting |
 
 The Runs table's score column is the run's [held-out score](#held-out-scores).
 The `review` figures on `/api/runs/<run_id>` are measured on predictions a
@@ -48143,6 +48257,30 @@ A missing or invalid token is `401`.
 
 ---
 
+### QLoRA: 4-bit base weights
+
+`llm-sft`, `llm-dpo` and `hf-text-classification` take
+`lora: {quantize: 4bit}`. The base model is loaded with its weights in 4 bits
+(NF4 with double quantization, the QLoRA setup), and a LoRA adapter is trained
+on top of it in bf16 where the GPU supports bf16. A model needs about a
+quarter of the GPU memory it needs in bf16, so an 8B model fits on a 24 GB card.
+`quantize: 8bit` is the halfway option. Predictions load the base model the
+same way.
+
+```yaml
+model_training:
+  trainer_params:
+    llm-sft:
+      model_name: Qwen/Qwen2.5-7B-Instruct
+      lora: {quantize: 4bit}
+```
+
+It needs a CUDA GPU and a `bitsandbytes` build for that machine's CUDA. The
+run checks both before it loads anything, by quantizing a few numbers on the
+GPU. Without them the run stops at validation, and when the two versions do
+not match the error names both. Every transformer run logs its "Peak GPU
+memory" at the end, which shows what quantization saved.
+
 ## Where runs are stored
 
 Each run has a directory under
@@ -48157,10 +48295,11 @@ Each run has a directory under
 | `agent.log` | ssh backends: the remote agent's own output. |
 | `bundle.tar.gz` | Remote backends: the bundle as the agent downloaded it, media included. |
 
-The ledger (runs, each item's split per run, stored predictions, and agent
-tokens) is in the project database, `<task_dir>/project.sqlite`, in the
-tables `training_runs`, `training_run_items`, `training_predictions` and
-`training_backends`.
+The ledger (runs, each item's split per run, stored predictions, agent
+tokens, and pushes to the Hub) is in the project database,
+`<task_dir>/project.sqlite`, in the tables `training_runs`,
+`training_run_items`, `training_predictions`, `training_backends` and
+`training_hub_pushes`.
 
 Set `POTATO_MODEL_CACHE` to a directory to have the training process use it
 for `HF_HOME`, `TRANSFORMERS_CACHE` and `SENTENCE_TRANSFORMERS_HOME`, unless
@@ -48173,6 +48312,51 @@ saves the whole model. On an ssh backend that model is copied back to the
 server, and over a slow link a 330 MB model takes minutes; the run's step line
 shows how much has arrived. `fetch_artifacts: false` leaves models on the
 remote host.
+
+### Publish a model to the Hugging Face Hub
+
+A successful run whose model is on this server has **Publish to the Hugging
+Face Hub** on its run page. It uploads the model and a `README.md` model card
+written from the run: the trainer, base model and adapter, the schemes and
+labels, the split sizes, the held-out score and what it was measured on, and
+the run and bundle ids.
+
+What is uploaded is a fixed list, not everything in `artifacts/`:
+
+- weights (`.safetensors`, `.bin`, `.pt`, `.pth`, `.pkl`, `.joblib`, `.onnx`,
+  `.gguf`);
+- the configs and tokenizer files in the saved `model/` directory;
+- `model_card.json`, with local paths replaced by file names, and
+  `calibration.json`.
+
+`artifacts/` also holds the model's answers on this project's items
+(`predictions.jsonl`, and `raw_answers.jsonl` for the decision models), some
+trainers' copies of the training data (`yolo_data/`, `wev_data/`,
+`laya_data/`), checkpoints and optimizer state. None of these goes up, and
+neither does a symlink that points outside `artifacts/`.
+
+- The repository name is typed twice, and the push goes ahead only when the
+  two match.
+- **Private** is ticked by default. While it is, an existing repository that
+  is public is not pushed to; untick it to publish there.
+- The form names an environment variable on the server (`HF_TOKEN` by
+  default) that holds a Hugging Face write token. The token itself is not
+  typed into the page. The variable's name must contain `TOKEN` or start with
+  `HF_`, and its value must start with `hf_`, so no other variable's value is
+  sent to the Hub.
+- When the Hub cannot say whether the repository exists (an error other than
+  "not found", or no connection), nothing is pushed. A repository the push
+  created is deleted again if the upload then fails.
+- The model card's licence is the Hub licence id you give, such as
+  `apache-2.0`. With none, the card says the base model's licence applies. A
+  trainer whose licence needs confirming before use, such as
+  `ultralytics-detect` (AGPL-3.0), needs the same confirmation to push, since
+  its weights carry that licence.
+- A model left on a remote host (`fetch_artifacts: false`) cannot be pushed
+  from here, and the page says where it is.
+
+Each push is one commit. The run page lists every push with its repository,
+visibility and commit, and the ledger records who made it.
 
 ---
 
@@ -48227,6 +48411,12 @@ an ssh or agent backend "The run exceeded model_training.max_wall_seconds".**
 The run reached the time limit and was stopped. Raise `max_wall_seconds`, or
 train on less.
 
+**"SLURM job N ended before the worker finished: it reached its time
+limit".** The job ran out of its `time`. Raise `time` in the backend, or
+train on less. "Its node failed" and "it was cancelled" come from SLURM's own
+`slurm.out` in the job directory; set `keep_remote: true` to keep it for
+reading.
+
 **An image run trained on file names.** No item field named the image (see
 [Image items](#image-items)), so the bundle was not marked as
 an image corpus, or the run's `params` named a text vectorizer.
@@ -48243,8 +48433,8 @@ Install a torch build for them, or use another GPU.
 
 **A transformer run fails with "The GPU ran out of memory".** Lower
 `batch_size` and raise `gradient_accumulation` to keep the effective batch,
-set `lora: true`, or for `llm-sft` set `gradient_checkpointing: true` or choose
-a smaller model.
+set `lora: true` or `lora: {quantize: 4bit}`, or for `llm-sft` set
+`gradient_checkpointing: true` or choose a smaller model.
 
 **"... has no fast tokenizer, and span training needs one".** Choose another
 model for `hf-token-classification`; most encoder models on the Hugging Face

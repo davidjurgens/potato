@@ -14,6 +14,30 @@ All notable changes to the Potato annotation platform are documented in this fil
   jobs). `potato training check <backend> config.yaml` reports the remote
   Python, its GPUs and any GPU the installed torch has no kernels for;
   `gpus: auto` skips those.
+- **Runs on a SLURM cluster.** A `type: slurm` backend reaches the login node
+  over ssh, as `ssh` does, and submits the worker to a compute node with
+  `sbatch` (`gres`, `time`, `nice`, `partition`, `prelude` and more). Progress
+  comes back through a file on shared storage, so the compute nodes never
+  need to reach Potato. Only `sbatch`, `squeue` and `scancel` are used, so
+  clusters without `srun` or `sacct` work. Cancelling a run, or losing the
+  ssh session, cancels the job. A job that hits its time limit or loses its
+  node fails the run with that reason.
+- **A run started while another is in progress waits its turn** instead of
+  being refused: the API answers `202` with its place, and the Runs table
+  lists it with a Cancel button. The queue is first in, first out, survives
+  a restart, and holds `model_training.queue_max` runs (default 10).
+  `"queue": false` keeps the old refusal. Automatic runs do not queue.
+- **QLoRA.** `lora: {quantize: 4bit}` (or `8bit`) loads the base model of
+  `llm-sft`, `llm-dpo` or `hf-text-classification` in 4 bits and trains a
+  LoRA adapter on it, about a quarter of the GPU memory. The run checks for
+  a CUDA GPU and a working bitsandbytes first. Transformer runs now log
+  their peak GPU memory.
+- **Publish a model to the Hugging Face Hub** from its run page. The run's
+  model files go up with a model card (trainer, base model, schemes, split
+  sizes, held-out score), and the predictions and training data stay. The
+  repository is typed twice, private is the default, and the token is read
+  from an environment variable on the server. Every push is recorded with
+  its commit.
 - **Sixteen new trainers**, beside `sklearn-text`. Text:
   `hf-text-classification` (also an LLM with LoRA), `hf-token-classification`
   for spans, `setfit`. Images: `hf-image-classification`,
@@ -96,6 +120,10 @@ All notable changes to the Potato annotation platform are documented in this fil
 - On the Training page the "running" badge stayed after a run finished, and
   **Cancel run** and **Check** showed with no run in progress and on the
   local backend.
+- A remote run waiting for its agent showed on the Training page as not
+  running, with no Cancel button, and the page stopped polling it.
+- If the Potato server died without running its exit handler, its ssh
+  connection to a remote backend stayed open, and so did the remote agent.
 
 ### Changed
 

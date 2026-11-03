@@ -53,6 +53,10 @@
   .tr-form input { width: 16rem; max-width: 100%; }
   .tr-result { font-size: 0.85rem; margin-top: 0.5rem; }
   .tr-result.err { color: hsl(0 55% 38%); }
+  .tr-form label.tr-check { flex-direction: row; align-items: center; gap: 0.35rem;
+                            min-height: 2.75rem; }
+  .tr-form label.tr-check input { width: auto; }
+  .tr-pushes { margin: 0 0 0.75rem; padding-left: 1.1rem; font-size: 0.875rem; }
 </style>
 </head>
 <body>
@@ -164,6 +168,52 @@
   </section>
   {% endif %}
 
+  {% if hub_pushable or hub_pushes %}
+  <section class="dashboard-card tr-card" aria-labelledby="hub-h">
+    <h2 id="hub-h">{{ ui_lang.training_hub_heading|default('Publish to the Hugging Face Hub') }}</h2>
+    {% if hub_pushes %}
+    <ul class="tr-pushes" id="hub-pushes">
+      {% for p in hub_pushes %}
+      <li><a href="{{ p.url }}" rel="noopener" target="_blank">{{ p.repo_id }}</a>
+        ({{ 'private' if p.private else 'public' }}{% if p.revision %}, commit <span class="tr-mono">{{ p.revision[:10] }}</span>{% endif %}{% if p.pushed_by %}, by {{ p.pushed_by }}{% endif %})</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if hub_pushable %}
+    <form class="tr-form" id="hub-form">
+      <label>{{ ui_lang.training_hub_repo|default('Repository') }}
+        <input id="hub-repo" type="text" required autocomplete="off"
+               placeholder="my-lab/{{ run.schema_names|join('-') }}-{{ run.trainer }}"
+               spellcheck="false">
+      </label>
+      <label>{{ ui_lang.training_hub_confirm|default('Repository again, to confirm') }}
+        <input id="hub-confirm" type="text" required autocomplete="off" spellcheck="false">
+      </label>
+      <label>{{ ui_lang.training_hub_token|default('Token variable') }}
+        <input id="hub-token-env" type="text" value="HF_TOKEN" autocomplete="off" spellcheck="false">
+      </label>
+      <label>{{ ui_lang.training_hub_licence|default('Licence (Hub id, optional)') }}
+        <input id="hub-licence" type="text" autocomplete="off" spellcheck="false"
+               placeholder="apache-2.0">
+      </label>
+      <label class="tr-check"><input id="hub-private" type="checkbox" checked>
+        {{ ui_lang.training_hub_private|default('Private') }}</label>
+      {% if run_licence_ack %}
+      <label class="tr-check"><input id="hub-accept" type="checkbox">
+        {{ ui_lang.training_hub_accept|default('The weights are licensed') }} {{ run_licence }}</label>
+      {% endif %}
+      <button class="shadcn-button" type="submit" id="hub-btn">{{ ui_lang.training_hub_button|default('Push the model') }}</button>
+    </form>
+    <p class="tr-result" id="hub-result" role="status" aria-live="polite"></p>
+    <p class="tr-note">
+      {{ ui_lang.training_hub_note|default('Uploads the model files with a model card written from this run: trainer, base model,
+      schemes, split sizes and held-out score. The predictions and the training data stay here. The token is read
+      from the named environment variable on the server; it is never typed into this page.') }}
+    </p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="dashboard-card tr-card" aria-labelledby="log-h">
     <h2 id="log-h">{{ ui_lang.training_log_heading|default('Log') }}</h2>
     {% set log_events = events|selectattr('event', 'equalto', 'log')|list %}
@@ -178,6 +228,59 @@
     {% endif %}
   </section>
 </main>
+{% if hub_pushable %}
+<script>
+(function () {
+  var form = document.getElementById("hub-form");
+  var result = document.getElementById("hub-result");
+  var button = document.getElementById("hub-btn");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var repo = document.getElementById("hub-repo").value.trim();
+    var confirmRepo = document.getElementById("hub-confirm").value.trim();
+    result.className = "tr-result";
+    if (repo !== confirmRepo) {
+      result.className = "tr-result err";
+      result.textContent = "The two repository names differ.";
+      document.getElementById("hub-confirm").focus();
+      return;
+    }
+    var accept = document.getElementById("hub-accept");
+    button.disabled = true;
+    result.textContent = "Pushing to " + repo + "…";
+    fetch({{ url_for('training.api_push_to_hub', run_id=run.run_id)|tojson }}, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "same-origin",
+      body: JSON.stringify({
+        repo_id: repo, confirm_repo_id: confirmRepo,
+        private: document.getElementById("hub-private").checked,
+        token_env: document.getElementById("hub-token-env").value.trim(),
+        licence: document.getElementById("hub-licence").value.trim(),
+        accept_licence: accept ? accept.checked : false})
+    }).then(function (r) { return r.json().then(function (d) { return {ok: r.ok, d: d}; }); })
+      .then(function (res) {
+        if (res.ok) {
+          result.textContent = "Pushed " + res.d.files.length + " files to " +
+            res.d.repo_id + ".";
+          var link = document.createElement("a");
+          link.href = res.d.url; link.textContent = " Open it on the Hub.";
+          link.rel = "noopener"; link.target = "_blank";
+          result.appendChild(link);
+        } else {
+          result.className = "tr-result err";
+          result.textContent = res.d.error || "The push failed.";
+        }
+      })
+      .catch(function () {
+        result.className = "tr-result err";
+        result.textContent = "Could not reach the server.";
+      })
+      .then(function () { button.disabled = false; });
+  });
+})();
+</script>
+{% endif %}
 {% if datasets_enabled and split_counts %}
 <script>
 (function () {

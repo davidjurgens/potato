@@ -36,8 +36,17 @@ def build_tokenizer(texts: Iterable[str]):
         cls_token="[CLS]", sep_token="[SEP]", mask_token="[MASK]")
 
 
+def _seed() -> None:
+    """Random weights from a fixed seed. Unseeded, each run of a test drew
+    different starting weights, and a model trained on 80 items scored
+    0.73 to 1.0 on the same data."""
+    import torch
+    torch.manual_seed(0)
+
+
 def tiny_encoder(directory: str, texts: Iterable[str]) -> str:
     """A two-layer BERT with a word-level tokenizer, saved to *directory*."""
+    _seed()
     from transformers import BertConfig, BertModel
 
     tokenizer = build_tokenizer(texts)
@@ -52,6 +61,7 @@ def tiny_encoder(directory: str, texts: Iterable[str]) -> str:
 
 def tiny_causal_lm(directory: str, texts: Iterable[str]) -> str:
     """A two-layer GPT-2 with a word-level tokenizer, saved to *directory*."""
+    _seed()
     from transformers import GPT2Config, GPT2LMHeadModel
 
     tokenizer = build_tokenizer(texts)
@@ -70,6 +80,7 @@ def tiny_causal_lm(directory: str, texts: Iterable[str]) -> str:
 
 def tiny_vit(directory: str, image_size: int = 32) -> str:
     """A two-layer ViT over 32-pixel images, with its image processor."""
+    _seed()
     from transformers import ViTConfig, ViTImageProcessor, ViTModel
 
     config = ViTConfig(image_size=image_size, patch_size=8, hidden_size=32,
@@ -103,6 +114,7 @@ def colour_images(directory: str, n: int, seed: int = 0):
 
 def tiny_wav2vec2(directory: str) -> str:
     """A one-layer wav2vec 2.0 with an 80-sample frame hop, at 16 kHz."""
+    _seed()
     from transformers import (Wav2Vec2Config, Wav2Vec2FeatureExtractor,
                               Wav2Vec2Model)
 

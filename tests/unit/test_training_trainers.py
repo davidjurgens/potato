@@ -444,7 +444,8 @@ class TestLLMSFT:
         bundle, _, _ = build_bundle(context, str(tmp_path / "bundle"),
                                     ["first"], split_seed=1)
         spec = _spec(tmp_path, config, bundle, "llm-sft", "first", dict(
-            TRAIN, epochs=30, lora=False, gradient_accumulation=1,
+            # 30 epochs passed on 2 of 8 initial weights; 60 on all 8.
+            TRAIN, epochs=60, lora=False, gradient_accumulation=1,
             max_new_tokens=4,
             model_name=tiny_causal_lm(str(tmp_path / "m"), texts)))
         code, result, _ = _run(spec)

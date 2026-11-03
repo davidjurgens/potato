@@ -304,7 +304,13 @@ class SSHTransport(_Transport):
         return argv
 
     def open(self, target, run_id):
-        argv = self._base() + ["-M", "-S", self._control, "-N",
+        # The master's own session is `cat` reading a pipe from this
+        # process, not `-N`. If this process dies without closing it
+        # (SIGKILL, or SIGTERM, which skips atexit), the pipe closes, cat
+        # ends, and with ControlPersist=no the master exits once the agent's
+        # session has. With -N it outlived the server and kept the agent,
+        # and on a slurm backend its job, alive.
+        argv = self._base() + ["-M", "-S", self._control,
                                "-o", "ControlPersist=no"]
         scheme = "http"
         if target is not None:
@@ -315,10 +321,10 @@ class SSHTransport(_Transport):
                      "-o", "StreamLocalBindUnlink=yes",
                      "-o", "StreamLocalBindMask=0177",
                      "-R", "%s:%s:%d" % (self.remote_socket, host, port)]
-        argv.append(self.backend.host)
+        argv += [self.backend.host, "cat >/dev/null"]
         with open(self._master_err, "wb") as err:
             self._master = subprocess.Popen(
-                argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                argv, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                 stderr=err, start_new_session=True)
 
         deadline = time.time() + float(self.backend.connect_timeout_s) + 15
@@ -588,9 +594,14 @@ class SSHLauncher:
                                          _text(err)))
             self._python = os.path.join(info["venv"], "bin", "python")
 
-        visible, gpu_text = choose_gpus(b.gpus, info.get("gpus") or [],
-                                        int(b.min_free_gpu_mb),
-                                        info.get("torch_arch"))
+        if b.type == "slurm":
+            self._check_slurm(info)
+            from potato.training.slurm import describe
+            visible, gpu_text = "", "SLURM: %s" % describe(b.slurm)
+        else:
+            visible, gpu_text = choose_gpus(b.gpus, info.get("gpus") or [],
+                                            int(b.min_free_gpu_mb),
+                                            info.get("torch_arch"))
         self.host_description = "%s (%s)" % (b.host, gpu_text)
         missing = [m for m, ok in (info.get("modules") or {}).items()
                    if not ok]
@@ -600,8 +611,10 @@ class SSHLauncher:
             if missing else ""))
 
         env = {"PYTHONPATH": os.path.join(info["root"], "code", code),
-               "PYTHONUNBUFFERED": "1",
-               "CUDA_VISIBLE_DEVICES": visible}
+               "PYTHONUNBUFFERED": "1"}
+        if b.type != "slurm":
+            # Under SLURM the scheduler sets it for the GPUs it grants.
+            env["CUDA_VISIBLE_DEVICES"] = visible
         if b.num_threads:
             for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS",
                         "OPENBLAS_NUM_THREADS"):
@@ -613,9 +626,15 @@ class SSHLauncher:
                 + extra["PYTHONPATH"]
         env.update(extra)
 
+        worker_python = self._python
+        if b.type == "slurm":
+            worker_python = b.slurm.get("job_python") or self._python
         argv = [self._python, "-m", "potato.training.agent"] + connection + [
             "--job", run_id, "--workdir", info["root"], "--python",
-            self._python, "--token-stdin", "--exit-on-stdin-eof"]
+            worker_python, "--token-stdin", "--exit-on-stdin-eof"]
+        if b.type == "slurm":
+            from potato.training.slurm import dumps
+            argv += ["--slurm-json", dumps(b.slurm)]
         if b.keep_remote:
             argv.append("--keep")
 
@@ -636,6 +655,10 @@ class SSHLauncher:
             raise LaunchError("The agent on %s exited at once: %s %s"
                               % (b.host, exc, self.agent_stderr_tail()))
         self._step("waiting for the agent on %s" % b.host)
+
+    def _check_slurm(self, info: Dict[str, Any]) -> None:
+        for warning in check_slurm(self.transport, self.backend, info):
+            self._log("warning", warning)
 
     # -- watching ------------------------------------------------------
 
@@ -775,6 +798,33 @@ def _text(raw: bytes, limit: int = 1500) -> str:
     return raw.decode("utf-8", "replace").strip()[-limit:]
 
 
+def check_slurm(transport: _Transport, backend, info: Dict[str, Any]
+                ) -> List[str]:
+    """Raise LaunchError unless the login node has the SLURM commands and
+    the work directory is one the compute nodes can read. Returns warnings."""
+    # The agent runs with the backend's env, so PATH there is what sbatch is
+    # found on. Only PATH: env may also hold tokens.
+    prefix = (["env", "PATH=%s" % backend.env["PATH"]]
+              if (backend.env or {}).get("PATH") else [])
+    rc, out, _ = transport.run(
+        prefix + ["sh", "-c", "for c in sbatch squeue scancel; do command -v "
+                              "$c >/dev/null || echo MISSING:$c; done"],
+        timeout=60)
+    missing = [line.split(":", 1)[1] for line in _text(out).splitlines()
+               if line.startswith("MISSING:")]
+    if rc != 0 or missing:
+        raise LaunchError("%s has no %s on PATH, so it cannot submit jobs. "
+                          "Is it the cluster's login node?"
+                          % (backend.host, ", ".join(missing) or "sbatch"))
+    root = str(info.get("root") or "")
+    if root.startswith(("/tmp", "/var/tmp")):
+        raise LaunchError("remote_dir resolves to %s on %s, which the "
+                          "compute nodes do not share" % (root, backend.host))
+    from potato.training.slurm import validate_settings
+    return validate_settings(dict(backend.slurm, remote_dir=backend.remote_dir),
+                             backend.name)[1]
+
+
 def check_backend(backend, transport: Optional[_Transport] = None
                   ) -> Dict[str, Any]:
     """Connect to an ssh backend and report what a run would get there.
@@ -799,6 +849,19 @@ def check_backend(backend, transport: Optional[_Transport] = None
                               (info.get("modules") or {}).items() if not ok),
             "code_cached": info["code_present"],
         })
+        if backend.type == "slurm":
+            from potato.training.slurm import describe
+            warnings = check_slurm(transport, backend, info)
+            report.update({
+                "ok": True, "chosen": "SLURM: %s" % describe(backend.slurm),
+                "warnings": warnings,
+                "message": "%s can submit jobs (Python %s on the login node; "
+                           "the job runs %s on a compute node, and the "
+                           "packages it has are not checked here)%s" % (
+                               backend.host, info["python"],
+                               backend.slurm.get("job_python"),
+                               "; " + "; ".join(warnings) if warnings else "")})
+            return report
         try:
             for gpu in report["gpus"]:
                 gpu["supported"] = gpu_supported(gpu.get("compute_cap"),

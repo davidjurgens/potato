@@ -3127,6 +3127,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "model_training.enabled": _D(
         "Turn model training on", type="boolean", default=False, category=AI,
     ),
+    "model_training.queue_max": _D(
+        "Runs that may wait behind the one in progress. A start from the "
+        "Training page or the API while a run is in progress joins the queue; "
+        "beyond this many it is refused",
+        type="integer", default=10, category=AI,
+    ),
     "model_training.retain_runs": _D(
         "Finished runs kept in the run ledger. Older runs are dropped from it "
         "unless their predictions are still stored; run directories stay on "
@@ -3183,8 +3189,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "`identity_file`, `python`, `gpus`, `min_free_gpu_mb`, `remote_dir`, "
         "`fetch_artifacts`, `max_artifact_mb`, `keep_remote`, `ssh_options`, "
         "`env`, `packages`, `num_threads`, `connect_timeout_s`) or "
-        "`type: agent` (a `potato training agent` started by hand). Both "
-        "take `heartbeat_timeout_s` and `queue_timeout_s`",
+        "`type: agent` (a `potato training agent` started by hand), or "
+        "`type: slurm` (the agent runs on a cluster's login node and submits "
+        "the worker with sbatch; the ssh keys except `gpus` and `packages`, "
+        "plus `job_python`, `gres`, `time`, `nice`, `partition`, "
+        "`cpus_per_task`, `mem`, `sbatch_options`, `prelude`, "
+        "`poll_interval_s`, `exit_grace_s`, `job_name`; `remote_dir` is required and must "
+        "be shared with the compute nodes). All take `heartbeat_timeout_s` "
+        "and `queue_timeout_s`",
         type="object", category=AI,
     ),
     "model_training.trainer_params": _D(

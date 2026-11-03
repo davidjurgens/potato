@@ -140,6 +140,7 @@ class SetFitTrainer(Trainer):
         if len(bundle.labels(schema.name)) < 2:
             problems.append("Schema %r has fewer than two labels in the data."
                             % schema.name)
+        problems.extend(hf.quantize_unsupported(params))
         return problems
 
     def fit(self, spec: TrainingSpec, bundle: BundleRef,
