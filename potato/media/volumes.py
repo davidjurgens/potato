@@ -156,11 +156,17 @@ def _require():
 
 
 def read_volume(path: str) -> Volume:
-    """Read a NIfTI file or a directory holding one DICOM series."""
-    _require()
+    """Read a NIfTI file or a directory holding one DICOM series. A NIfTI
+    file needs only nibabel: a training host with no pydicom (burger has
+    none) reads NIfTI volumes all the same."""
     if os.path.isdir(path):
+        _require()
         return _read_dicom_series(path)
     if str(path).lower().endswith(NIFTI_SUFFIXES):
+        try:
+            import nibabel  # noqa: F401
+        except ImportError as exc:
+            raise VolumeError(INSTALL_HINT) from exc
         return _read_nifti(path)
     raise VolumeError(f"{Path(path).name} is not a NIfTI file (.nii, .nii.gz) or a "
                       "directory of DICOM files")

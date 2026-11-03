@@ -152,6 +152,14 @@ Events are stored with the following structure:
 }
 ```
 
+## Agreement
+
+`/admin/iaa` scores event schemes over the spans in `span_schema`, matched by
+offsets. It reports `trigger_f1` (trigger offsets and event type) and
+`argument_f1` (trigger, event type, argument offsets and role) for each pair of
+annotators, pooled over the items both saved, and averages over pairs. The
+figures are not chance-corrected.
+
 ## Complete Example
 
 See the `simple-event-annotation` example in the project hub:

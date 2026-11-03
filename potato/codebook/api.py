@@ -260,11 +260,24 @@ def provenance(ctx):
         ctx["task_dir"], ctx["project"], instance_id, ctx["username"])
     added = ([] if ann is None or ann >= cur
              else codes_added_since(ctx["task_dir"], ctx["project"], ann))
+    if added:
+        # A code this coder already has here (one a merge or split moved
+        # them onto) is no news to review.
+        from potato.codebook import store
+        from potato.codebook.codebook import Codebook
+        names = {v: k for k, v in Codebook.load(
+            ctx["task_dir"], ctx["project"]).label_to_id().items()}
+        mine = {names.get(cid) for cid in store.live_code_ids(
+            ctx["task_dir"], store.annotation_key(instance_id, ctx["username"]))}
+        added = [name for name in added if name not in mine]
     return jsonify({
         "instance_id": instance_id,
         "annotated_revision": ann,
         "current_revision": cur,
-        "stale": bool(added),
+        # Any change since the stamp, not only an addition: a rename or
+        # recolor adds no code, and keying on `added` meant the banner's
+        # "renamed / recolored" message could never show.
+        "stale": ann is not None and ann < cur,
         "codes_added_since": added,
     })
 
@@ -274,12 +287,37 @@ def provenance(ctx):
 def stale(ctx):
     """The current annotator's review worklist: their instances labeled
     under an older revision, each with the codes added since."""
-    items = stale_instances(
-        ctx["task_dir"], ctx["project"], ctx["username"])
+    from potato.codebook.revision import content_stale_instances
+    items = _with_content_stale(
+        stale_instances(ctx["task_dir"], ctx["project"], ctx["username"]),
+        content_stale_instances(
+            ctx["task_dir"], ctx["project"], ctx["username"]),
+        key=lambda it: it["instance_id"])
     idx = _instance_index_map()
     for it in items:
         it["index"] = idx.get(str(it["instance_id"]))
     return jsonify({"stale": items, "count": len(items)})
+
+
+def _with_content_stale(structural, content, key):
+    """Fold the semantic worklist into the structural one. A definition
+    edit bumps only the semantic revision, and nothing listed those
+    instances, so a code whose meaning changed sent nobody back to
+    review. An instance on both lists appears once, marked
+    `content_stale`."""
+    out = list(structural)
+    by_key = {key(it): it for it in out}
+    for it in content:
+        existing = by_key.get(key(it))
+        if existing is not None:
+            existing["content_stale"] = True
+            existing["annotated_sem_revision"] = it["annotated_sem_revision"]
+            existing["current_sem_revision"] = it["current_sem_revision"]
+            continue
+        row = dict(it, content_stale=True, codes_added_since=[])
+        out.append(row)
+        by_key[key(it)] = row
+    return out
 
 
 def _admin_or_adjudicator() -> bool:
@@ -311,10 +349,14 @@ def admin_stale():
     if not _admin_or_adjudicator():
         return jsonify({
             "error": "Admin or adjudicator access required"}), 403
-    from potato.codebook.revision import all_stale_instances
+    from potato.codebook.revision import (
+        all_content_stale_instances, all_stale_instances)
     task_dir = _cfg.get("task_dir", ".")
     project = _cfg.get("annotation_task_name") or "default"
-    items = all_stale_instances(task_dir, project)
+    items = _with_content_stale(
+        all_stale_instances(task_dir, project),
+        all_content_stale_instances(task_dir, project),
+        key=lambda it: (it["instance_id"], it["username"]))
     return jsonify({"stale": items, "count": len(items)})
 
 
@@ -713,16 +755,19 @@ def edit_code(ctx, code_id):
         if "name" in data:
             result = rename_code(
                 ctx["task_dir"], code_id,
-                new_name=data["name"], project=ctx["project"])
+                new_name=data["name"], project=ctx["project"],
+                actor=ctx["username"], actor_kind="human")
         if "color" in data:
             result = recolor_code(
                 ctx["task_dir"], code_id,
-                color=data["color"], project=ctx["project"])
+                color=data["color"], project=ctx["project"],
+                actor=ctx["username"], actor_kind="human")
         if "parent_id" in data:
             result = move_under(
                 ctx["task_dir"], code_id,
                 new_parent_id=data["parent_id"] or ROOT,
-                project=ctx["project"])
+                project=ctx["project"],
+                actor=ctx["username"], actor_kind="human")
         if result is None:
             return jsonify({"error": "nothing to update"}), 400
         return jsonify({"code": result})
@@ -738,4 +783,5 @@ def remove_code(ctx, code_id):
             "error": f"Deleting codes requires codebook_mode=open "
                      f"(current: {ctx['mode']})."}), 403
     return _handle(lambda: jsonify({"deleted": delete_code(
-        ctx["task_dir"], code_id, project=ctx["project"])}))
+        ctx["task_dir"], code_id, project=ctx["project"],
+        actor=ctx["username"], actor_kind="human")}))

@@ -15,7 +15,8 @@ on. Written from ``<output_annotation_dir>/scheduling/schedule.sqlite``:
                                 kind, wave / day / prompt / round, window in UTC
                                 and the participant's local time, status
                                 (answered | expired | missed | open | started |
-                                upcoming), prompt_at (when the opening message
+                                upcoming; ``enrolled`` on the enrolment row),
+                                prompt_at (when the opening message
                                 went out, else the window start), opened,
                                 first answer, submitted, latency_seconds
                                 (prompt_at to first answer), response_seconds

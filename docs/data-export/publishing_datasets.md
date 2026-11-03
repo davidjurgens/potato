@@ -43,10 +43,13 @@ A local archive additionally contains a `README.md` (the dataset card), a `LICEN
 a `.zenodo.json` metadata file, and a `paper_report/` folder with a cut-paste
 `paper.tex` dataset report, its `paper.bib`, and per-table CSVs.
 
-Each publish first freezes a [project snapshot](../tools/snapshots.md), or
-reuses the latest one if nothing has changed, and the dataset card's citation
-section names its id and content hash. `potato snapshot verify` then lets
-anyone holding the project folder confirm their copy is the published one.
+A publish from the admin **Publish Dataset** page or its API first freezes a
+[project snapshot](../tools/snapshots.md), or reuses the latest one if nothing
+has changed, and the dataset card's citation section names its id and content
+hash. `potato snapshot verify` then lets anyone holding the project folder
+confirm their copy is the published one. `python -m potato.publish` does not
+freeze a snapshot, and its card names none; run `potato snapshot create
+config.yaml` first to keep a frozen copy.
 
 ## Preprocessing options
 

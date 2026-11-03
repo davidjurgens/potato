@@ -300,9 +300,13 @@ python -m potato.export -c config.yaml -f textgrid -o ./textgrid_output/
 ```
 
 The TextGrid export:
-- Creates interval tiers for each annotation tier
+- Creates an interval tier for each tier, or a point tier (TextTier) for a
+  `point: true` tier
 - Fills gaps with empty intervals
 - Supports both long and short TextGrid formats
+- Writes one file per item and schema, `<id>_<schema>.TextGrid`. When several
+  annotators answered the item, each gets their own file,
+  `<id>_<user>_<schema>.TextGrid`
 
 **Note:** TextGrid doesn't support hierarchical relationships, so the export flattens the structure while preserving all annotations.
 
@@ -402,7 +406,10 @@ For EAF export, ensure:
 - Parent-child relationships are consistent
 
 For TextGrid export:
-- Overlapping annotations on the same tier will be merged or may cause issues
+- Overlapping intervals on one tier are written as they are, and the export
+  adds a warning naming the item, annotator and tier. Praat refuses to open an
+  interval tier whose intervals overlap, so move one of them or put it on its
+  own tier
 - Very small gaps between annotations may be filled
 
 ## Related Documentation

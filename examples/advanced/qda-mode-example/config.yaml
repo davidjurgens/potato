@@ -63,7 +63,8 @@ cases:
 
 # Universal FTS5 search. annotator_claim is allowed here because QDA Mode is
 # single-coder (no overlap/sampling invariant to protect); it lets the coder
-# jump to any matching excerpt from the Find panel.
+# claim a matching excerpt from the Find panel, which adds it to the end of
+# their queue (page forward with Next to reach it).
 search:
   enabled: true
   backend: fts5

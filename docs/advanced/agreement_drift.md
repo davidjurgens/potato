@@ -4,13 +4,12 @@ A single agreement number for a whole project averages early work and late work
 together, so a team whose recent annotations have become unusable can still
 show an acceptable figure.
 
-Guidelines drift as new edge cases arrive. The practice credited with large
-agreement gains is the calibration session, where annotators work through
-pre-annotated items and argue about the disagreements, and the gain holds only
-if the sessions repeat.
+Guidelines drift as new edge cases arrive, so a team that passed training at
+the start of a study may not label the same way later.
 
 Potato had fourteen agreement metrics and no time dimension. This adds one, and
-the re-calibration round that acts on it.
+a calibration round that acts on it by sending annotators back through the
+graded training items.
 
 ---
 
@@ -101,9 +100,11 @@ least stable.
 
 ## Codebook markers
 
-If the project uses a [codebook](qda.md), each revision is marked on the
-timeline, so a guideline edit that moved agreement shows up as an edit rather
-than an unexplained step.
+If the project uses a [codebook](qda.md), `/admin/iaa` lists its revisions by
+number under the agreement tables. The list has no dates and does not place a
+revision in a window. To line a revision up with a window, compare each
+entry's `created_at` in `markers` with the windows' `start` and `end` in the
+JSON from `/admin/iaa/drift`.
 
 Revisions recorded since this feature shipped are exact. Older ones are
 inferred from the earliest annotation stamped with each revision, which is a
@@ -131,9 +132,25 @@ Omitting `usernames` recalls everyone eligible, which is usually right, since
 drift is a property of the guidelines and affects the whole team.
 
 A round resets each annotator's training state and returns them to the training
-phase. Their assignments and existing annotations are untouched, so they rejoin
-annotation where they left off. A round asks them to re-do the exercise rather
-than the study.
+phase. They answer the same training items, by id, as on their first pass, and
+each answer is graded against the known correct one. Study items are not
+labelled again, and there is no discussion step. Disagreements are reviewed in
+[Adjudication](../administration/adjudication.md).
+
+Assignments and existing annotations are untouched, so an annotator who passes
+rejoins annotation where they left off. One who fails is handled like any
+training failure:
+
+- With the default `failure_action: move_to_done`, failing ends their task.
+  Set `training.failure_action: repeat_training` to let them retry instead.
+- The attempt count is not reset, so attempts used on the first pass count
+  against `passing_criteria.max_attempts`.
+
+Training items added to the training file after an annotator's first pass never
+reach that annotator, since the round reuses their original list.
+
+Each round's `closed_at` is set the first time `GET /admin/calibration` finds
+none of its annotators still in progress, or when the next round starts.
 
 Annotators who have not passed the training gate yet are reported as skipped
 rather than silently dropped. An admin recalling twelve people needs to know

@@ -63,9 +63,10 @@ class Codebook:
         return out
 
     def label_to_id(self) -> Dict[str, str]:
-        """Map code name -> code id (first occurrence in tree order).
-        Lets the annotation pipeline store a parallel `code_id` while
-        keeping the legacy `label` string."""
+        """Map code name -> code id (the first code of that name in load
+        order, ``self._codes``).
+        The save path (saved_labels.sync_saved_annotation) uses it to link
+        each saved label string to its code id."""
         mapping: Dict[str, str] = {}
         for name in self.labels():
             if name not in mapping:

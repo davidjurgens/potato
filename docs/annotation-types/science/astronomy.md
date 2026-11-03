@@ -7,7 +7,7 @@ The display only shows the data. The question is asked with an ordinary scheme, 
 ## Overview
 
 - **Reading:** astropy (BSD-3-Clause) on the server. Install it with `pip install 'potato-annotation[astro]'`. A config that uses `fits_cutout` without astropy installed fails at startup with that command in the message. astropy is imported when the first FITS file is read, not at boot.
-- **Formats:** `.fits`, `.fit`, `.fts`, and the same names gzipped (`.fits.gz`). The first HDU holding a 2-D (or larger) image is used, or the one named with `hdu`. Of a cube, the first plane is shown.
+- **Formats:** `.fits`, `.fit`, `.fts`, and the same names gzipped (`.fits.gz`, `.fit.gz`, `.fts.gz`). The first HDU holding a 2-D (or larger) image is used, or the one named with `hdu`. Of a cube, the first plane is shown.
 - **Cutouts:** around a position in FITS pixels (`x`, `y`) or in sky coordinates (`ra`, `dec`, degrees or sexagesimal), with a size in pixels or as an angle (`"40 arcsec"`). Only the rows of the cutout are read from an uncompressed file.
 - **Scaling:** an interval (`minmax`, `zscale`, `percentile`) and a stretch (`linear`, `sqrt`, `log`, `asinh`), set for the display, for one panel, for one item, or for one image of one item.
 - **Caching:** each converted cutout is written to `<task_dir>/.potato_cache/fits/` as a PNG and a JSON file, keyed by the file's path, size, modification time and the scaling options. An unchanged file is converted once; an edited file or a new stretch makes a new entry. The cache keeps the 4,000 most recently used entries.
@@ -90,7 +90,7 @@ A field holding just a path shows one image (for morphology classification):
 | `max_file_mb` | `100` | Largest FITS file read, compressed or not. |
 | `max_image_pixels` | `25000000` | Largest image shown whole (no position given). Larger images need a position and size. A whole image over 1,024 pixels on a side is block-averaged down. |
 | `light_curve` | `true` | Draw the item's light curve when it has one. |
-| `light_curve_columns` | detected | Column names by role: `time`, `mag`, `err`, `band`, `limit`. Without it the columns are found by common names (`mjd`/`time`/`jd`, `mag`/`flux`, `magerr`/`err`, `band`/`filter`, `limit`/`diffmaglim`). |
+| `light_curve_columns` | detected | Column names by role: `time`, `mag`, `err`, `band`, `limit`. Without it the columns are found by common names (`mjd`/`time`/`jd`, `mag`/`magpsf`/`flux`, `magerr`/`sigmapsf`/`err`, `band`/`filter`/`fid`, `limit`/`diffmaglim`). |
 | `light_curve_units` | `mag` | `mag` (brighter is up) or `flux`. |
 | `light_curve_height` | `260` | Plot height in pixels. |
 | `time_label` | `MJD` | Time axis title. |
@@ -122,6 +122,8 @@ mjd,band,mag,magerr,limit
 60603.0,g,19.37,0.05,
 60570.0,r,,,21.3
 ```
+
+ZTF alert columns (`jd`, `fid`, `magpsf`, `sigmapsf`, `diffmaglim`) are read without `light_curve_columns`. When a file has both `mag` and `magpsf`, `mag` is used.
 
 A row with a value is a detection. A row with no value and a `limit` is an upper limit. Rows with no usable time are skipped and counted. Files over 2 MB, or past 20,000 rows, are refused or cut.
 
@@ -200,7 +202,7 @@ Quote `"Yes"` and `"No"`: unquoted, YAML reads them as booleans. The example pro
 
 ## Export
 
-The display stores nothing. Answers are those of the schemes on the page (the radio's label, the tree's answers) and export as usual. Hidden tree questions that were answered and then hidden are kept and marked stale, as described in the display logic page.
+The display stores nothing. Answers are those of the schemes on the page (the radio's label, the tree's answers) and export as usual. A tree question that was answered and then hidden keeps its answer, which is exported unchanged. Hiding it records an `annotation_stale` interaction event; see [Conditional logic](../../configuration/conditional_logic.md#stale-annotations).
 
 ## Example
 

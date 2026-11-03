@@ -1011,7 +1011,8 @@
     },
     {
       "annotation_types": [
-        "radio"
+        "radio",
+        "span"
       ],
       "category": "advanced",
       "config_keys": [],

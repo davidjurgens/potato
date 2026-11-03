@@ -1,11 +1,9 @@
 """
 Calibration rounds: pushing annotators back through training mid-study.
 
-The methodological finding this exists for is that calibration sessions --
-annotators working through pre-annotated items and arguing about the
-disagreements -- produce large gains in inter-annotator agreement, and that the
-gain only holds if the calibration is **repeated**, because guidelines drift as
-soon as new edge cases turn up.
+Guidelines drift as new edge cases turn up, so a team that passed training at
+the start of a study may not label the same way later. A round re-checks that
+by having annotators answer the graded training items again.
 
 Potato had the machinery and could only fire it once. ``TRAINING`` was a
 one-shot gate between ``INSTRUCTIONS`` and ``ANNOTATION``: a user who passed it
@@ -15,9 +13,12 @@ What a round does
 -----------------
 Resets each named annotator's :class:`~potato.user_state_management.TrainingState`
 and returns them to ``UserPhase.TRAINING``. They work through the configured
-training items again, graded against the same correct answers, and rejoin
-annotation where they left off -- their assignments and their existing
-annotations are untouched.
+training items again (the same ids as their first pass), graded against the
+same correct answers. Their assignments and existing annotations are untouched,
+so one who passes rejoins annotation where they left off. One who fails is
+handled by ``training.failure_action`` like a first-time failure: with the
+default ``move_to_done`` their task ends. ``rounds_started`` is not reset, so
+earlier attempts count against ``passing_criteria.max_attempts``.
 
 Why it re-runs the *training* set rather than the disagreements
 --------------------------------------------------------------
@@ -136,6 +137,11 @@ def start_round(config: Dict[str, Any], user_state_manager,
             continue
         recalled.append(username)
 
+    # A new round supersedes any still open: its users have been recalled
+    # again, so the old round's progress can no longer be read off them.
+    for previous_id in _open_round_ids(config):
+        close_round(config, previous_id)
+
     round_id = _record(config, started_by, reason, recalled)
     logger.info("Calibration round %s recalled %d annotator(s): %s",
                 round_id, len(recalled), ", ".join(recalled) or "none")
@@ -193,6 +199,62 @@ def _record(config: Dict[str, Any], started_by: str, reason: str,
         # after the annotators have already been moved.
         logger.exception("Calibration round could not be recorded")
         return None
+
+
+def close_round(config: Dict[str, Any], round_id: Optional[int]) -> Optional[float]:
+    """
+    Stamp ``closed_at`` on a round that is still open.
+
+    Returns the time written, or None when the round was already closed, does
+    not exist, or the DB is unavailable. A closed round keeps its first
+    ``closed_at``.
+    """
+    if round_id is None:
+        return None
+    closed_at = time.time()
+    try:
+        conn = _db(config.get("task_dir", "."))
+        cursor = conn.execute(
+            """UPDATE calibration_rounds SET closed_at = ?
+               WHERE id = ? AND closed_at IS NULL""",
+            (closed_at, int(round_id)),
+        )
+        conn.commit()
+    except Exception:
+        logger.exception("Calibration round %s could not be closed", round_id)
+        return None
+    return closed_at if cursor.rowcount else None
+
+
+def _open_round_ids(config: Dict[str, Any]) -> List[int]:
+    """Ids of this project's rounds with no ``closed_at``."""
+    try:
+        rows = _db(config.get("task_dir", ".")).execute(
+            """SELECT id FROM calibration_rounds
+               WHERE project = ? AND closed_at IS NULL""",
+            (config.get("annotation_task_name", "default"),),
+        ).fetchall()
+    except Exception:
+        logger.debug("Could not read open calibration rounds", exc_info=True)
+        return []
+    return [int(row["id"]) for row in rows]
+
+
+def close_if_finished(config: Dict[str, Any], latest: Optional[dict],
+                      progress: List[dict]) -> None:
+    """
+    Close ``latest`` once none of its annotators is still ``in_progress``.
+
+    ``latest`` is a :func:`round_history` entry; its ``closed_at`` is updated
+    in place so the caller's copy matches the table.
+    """
+    if not latest or latest.get("closed_at") is not None:
+        return
+    if any(p.get("state") == "in_progress" for p in progress):
+        return
+    closed_at = close_round(config, latest.get("id"))
+    if closed_at is not None:
+        latest["closed_at"] = closed_at
 
 
 def round_history(config: Dict[str, Any], limit: int = 20) -> List[dict]:

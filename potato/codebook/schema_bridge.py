@@ -16,11 +16,13 @@ starts populated); thereafter the database is the source of truth.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+import uuid
+from typing import Any, Dict, List, Optional
 
-from potato.codebook import create_code
+from potato.codebook import create_code, store
 from potato.codebook.codebook import Codebook
 from potato.codebook.service import DuplicateCodeError
+from potato.codebook.store import ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -80,22 +82,53 @@ def _project_of(config: Dict[str, Any]) -> str:
     return config.get("annotation_task_name") or "default"
 
 
+# Stable namespace so ids are reproducible across machines/runs.
+_NS = uuid.UUID("6b9b1f6e-1c2d-5a4b-9e3f-c0deb00c0de5")
+
+
+def deterministic_code_id(project: str, parent_id: str, name: str) -> str:
+    """``uuid5`` over project | parent | name: the same config yields the
+    same code ids on every machine, whether the server or
+    ``potato codebook`` seeded them."""
+    return uuid.uuid5(_NS, f"{project}\x1f{parent_id}\x1f{name}").hex
+
+
+def seed_label(task_dir: str, project: str, entry: Any, *,
+               created_by: str) -> Optional[Dict[str, Any]]:
+    """Create the code for one YAML label: its deterministic id, colour
+    and definition. The one seeding path for the server and the CLI --
+    the CLI used to create bare names, and the server then skipped
+    seeding because the codebook was no longer empty, so a project
+    initialised from the CLI never got its configured colours or
+    descriptions.
+
+    Returns the new code, or None when the entry has no name or the code
+    already exists (seeding is idempotent)."""
+    name = _label_name(entry)
+    if not name:
+        return None
+    code_id = deterministic_code_id(project, ROOT, name)
+    # A code that was seeded and since renamed still holds this id; it is
+    # the researcher's now, and inserting again would collide on it.
+    if store.get_code(task_dir, code_id) is not None:
+        return None
+    try:
+        code = create_code(
+            task_dir, project=project, name=name, created_by=created_by,
+            color=_label_color(entry), code_id=code_id)
+    except DuplicateCodeError:
+        return None
+    gloss = _label_gloss(entry)
+    if gloss:
+        _seed_gloss(task_dir, project, code["id"], gloss)
+    return code
+
+
 def _seed_from_yaml(
     task_dir: str, project: str, yaml_labels: List[Any]
 ) -> None:
     for entry in yaml_labels or []:
-        name = _label_name(entry)
-        if not name:
-            continue
-        try:
-            code = create_code(
-                task_dir, project=project, name=name,
-                created_by="config", color=_label_color(entry))
-        except DuplicateCodeError:
-            continue  # idempotent: re-seeding an existing code is fine
-        gloss = _label_gloss(entry)
-        if gloss:
-            _seed_gloss(task_dir, project, code["id"], gloss)
+        seed_label(task_dir, project, entry, created_by="config")
 
 
 def apply_codebook_to_schemes(config: Dict[str, Any],

@@ -160,7 +160,7 @@ class TestParsing:
 
 class TestCutout:
     def test_registered_for_every_fits_extension(self):
-        for ext in (".fits", ".fit", ".fts", ".fits.gz"):
+        for ext in (".fits", ".fit", ".fts", ".fits.gz", ".fit.gz", ".fts.gz"):
             assert ext in known_extensions()
             assert converter_for("a/b/c" + ext.upper()) is fits_cutout
         assert converter_for("x.fits.fz") is None
@@ -365,8 +365,11 @@ class TestCutout:
         assert decode_png(r["png"])[1, 1, 0] == 255
         assert any("first plane" in n for n in r["meta"]["notes"])
 
-    def test_gzipped(self, tmp):
-        p = write(os.path.join(tmp, "z.fits.gz"), image(spot=(20, 20)), tan_wcs())
+    @pytest.mark.parametrize("name", ["z.fits.gz", "z.fit.gz", "z.fts.gz"])
+    def test_gzipped(self, tmp, name):
+        p = write(os.path.join(tmp, name), image(spot=(20, 20)), tan_wcs())
+        with open(p, "rb") as f:
+            assert f.read(2) == b"\x1f\x8b"      # really gzipped
         r = converter_for(p)(p, center={"x": 20, "y": 20}, size=5, interval="minmax")
         assert decode_png(r["png"])[2, 2, 0] == 255
 
@@ -471,6 +474,25 @@ class TestLightCurve:
         assert r["limit_t"] == [60002.0] and r["limit_y"] == [21.0]
         assert lc["points"] == 4 and lc["skipped"] == 1
 
+    def test_ztf_alert_columns_are_detections(self):
+        # ZTF names: magpsf / sigmapsf. Without them in the defaults every
+        # detection had no magnitude and was drawn as its diffmaglim limit.
+        rows = [{"jd": 2460000.5, "fid": "1", "magpsf": 19.1, "sigmapsf": 0.05,
+                 "diffmaglim": 20.5},
+                {"jd": 2460001.5, "fid": "1", "magpsf": 19.3, "sigmapsf": 0.07,
+                 "diffmaglim": 20.4},
+                {"jd": 2460002.5, "fid": "1", "magpsf": "", "sigmapsf": "",
+                 "diffmaglim": 20.6}]
+        band = astro.light_curve_from_rows(rows)["bands"][0]
+        assert band["t"] == [2460000.5, 2460001.5]
+        assert band["y"] == [19.1, 19.3] and band["err"] == [0.05, 0.07]
+        assert band["limit_t"] == [2460002.5] and band["limit_y"] == [20.6]
+
+    def test_generic_mag_wins_over_magpsf(self):
+        rows = [{"mjd": 1.0, "mag": 18.0, "magerr": 0.1, "magpsf": 19.0, "sigmapsf": 0.2}]
+        band = astro.light_curve_from_rows(rows)["bands"][0]
+        assert band["y"] == [18.0] and band["err"] == [0.1]
+
     def test_configured_columns_and_json(self, tmp):
         p = os.path.join(tmp, "lc.json")
         with open(p, "w") as f:
@@ -569,6 +591,9 @@ class TestDisplay:
         assert "src" not in cfg["panels"][0] and cfg["panels"][0]["error"]
         cfg = _cfg(_render({"science": "https://example.org/a.fits"}))
         assert "remote" in cfg["panels"][0]["error"]
+        # The display refuses allow_remote, so the error must not suggest it.
+        assert "allow_remote" not in cfg["panels"][0]["error"]
+        assert "media directory" in cfg["panels"][0]["error"]
 
     def test_unaligned_panels_are_flagged(self, media):
         cfg = _cfg(_render({"science": "sci.fits", "reference": "other.fits",

@@ -396,12 +396,18 @@ def validate_selection(kind: str, value: Any, labels: Optional[List[str]] = None
 
 
 def resolve_source(value: Any, allow_remote: bool, what: str,
-                   config: Optional[Dict[str, Any]] = None) -> Tuple[str, Optional[str]]:
+                   config: Optional[Dict[str, Any]] = None,
+                   remote_message: Optional[str] = None) -> Tuple[str, Optional[str]]:
     """``(url, local_path)`` for a file named in item data.
 
     A bare or ``media/`` path resolves inside ``media_directory`` and is
     served from ``/media/``. An http(s) URL is passed to the browser only
     when ``allow_remote`` is on; Potato itself never fetches it.
+
+    ``remote_message`` replaces the error for a URL when remote files are
+    off. A display that reads its files on the server, and so refuses
+    ``allow_remote`` at validation, passes one: the default tells the user
+    to set the option it refuses.
     """
     from potato.media.paths import media_href, resolve_media_url
     ref = str(value or "").strip()
@@ -409,10 +415,10 @@ def resolve_source(value: Any, allow_remote: bool, what: str,
         raise ViewerDataError(f"This item has no {what}.")
     if ref.startswith(("http://", "https://", "//")):
         if not allow_remote:
-            raise ViewerDataError(
+            raise ViewerDataError(remote_message or (
                 f"The {what} for this item is a remote URL, and remote files are "
                 f"turned off. Download it into the media directory, or set "
-                f"allow_remote: true on this display to let the browser fetch it.")
+                f"allow_remote: true on this display to let the browser fetch it."))
         return ref, None
     if config is None:
         try:

@@ -86,6 +86,19 @@ const MaskBuffer = (function () {
 
 class ImageAnnotationManager {
     /**
+     * Scale (at most 1) at which the mask composite of a `w` x `h` image is
+     * built, so that it stays within COMPOSITE_MAX_SIDE on its longest side
+     * and COMPOSITE_MAX_AREA pixels in all. Those are below the canvas limits
+     * of current browsers (Safari's 16.7 Mpx area is the tightest).
+     */
+    static compositeScale(w, h) {
+        if (!(w > 0) || !(h > 0)) return 1;
+        const side = ImageAnnotationManager.COMPOSITE_MAX_SIDE / Math.max(w, h);
+        const area = Math.sqrt(ImageAnnotationManager.COMPOSITE_MAX_AREA / (w * h));
+        return Math.min(1, side, area);
+    }
+
+    /**
      * Create an ImageAnnotationManager.
      * @param {string} canvasId - ID of the canvas element
      * @param {string} inputId - ID of the hidden input for storing annotation data
@@ -2099,6 +2112,14 @@ class ImageAnnotationManager {
      * Composite every visible mask into one offscreen canvas at natural image
      * resolution, repainting only the 64x64 tiles that changed.
      *
+     * **Capped for very large images.** A deep-zoom slide is tens of thousands
+     * of pixels on a side, and a canvas that size is past every browser's
+     * limit: creation fails or yields a canvas that draws nothing, so every
+     * mask vanished without an error. Past COMPOSITE_MAX_SIDE on a side or
+     * COMPOSITE_MAX_AREA in all, the composite is built at a reduced scale and
+     * each tile is drawn into it scaled down. The mask buffers, and so the
+     * saved masks, stay at full resolution; only the overlay is coarser.
+     *
      * **One shared canvas, not one per mask.** A canvas costs four bytes per
      * pixel of backing store — 48 MB on a 12 MP image — so a canvas per class
      * would hand straight back the memory the sparse buffers save, and ten
@@ -2117,15 +2138,41 @@ class ImageAnnotationManager {
         const h = this.maskImgHeight;
         if (!w || !h || typeof document === 'undefined') return null;
 
-        if (!this._maskComposite || this._maskComposite.width !== w ||
-            this._maskComposite.height !== h) {
+        const scale = ImageAnnotationManager.compositeScale(w, h);
+        // Floored, so the area stays under the cap (ceil overshot it).
+        const cw = scale < 1 ? Math.max(1, Math.floor(w * scale)) : w;
+        const ch = scale < 1 ? Math.max(1, Math.floor(h * scale)) : h;
+        // A source edge in composite pixels. p * c is an exact integer, so the
+        // image's own edge lands on c; w * (c / w) can come out a hair under
+        // it and floor to a pixel short, leaving the last column unpainted.
+        const edge = (p, n, c) => (p >= n ? c : Math.floor(p * c / n));
+
+        if (!this._maskComposite || this._maskComposite.width !== cw ||
+            this._maskComposite.height !== ch) {
             this._maskComposite = document.createElement('canvas');
-            this._maskComposite.width = w;
-            this._maskComposite.height = h;
+            this._maskComposite.width = cw;
+            this._maskComposite.height = ch;
             this._compositeCtx = this._maskComposite.getContext('2d');
             this._compositeSignature = null;
         }
         if (!this._compositeCtx) return null;
+
+        // Scaled down, a tile is painted at full resolution into a one-tile
+        // scratch canvas and drawn from there: putImageData does not scale.
+        let scratch = null;
+        let scratchCtx = null;
+        if (scale < 1) {
+            const ts = MaskBuffer.DEFAULT_TILE_SIZE;
+            if (!this._compositeScratch) {
+                this._compositeScratch = document.createElement('canvas');
+                this._compositeScratch.width = ts;
+                this._compositeScratch.height = ts;
+                this._compositeScratchCtx = this._compositeScratch.getContext('2d');
+            }
+            scratch = this._compositeScratch;
+            scratchCtx = this._compositeScratchCtx;
+            if (!scratchCtx) return null;
+        }
 
         // Tiles are only comparable across buffers that agree on geometry.
         // _restoreMaskFromEntry rescales mismatched masks, so this normally
@@ -2151,7 +2198,7 @@ class ImageAnnotationManager {
         if (full) {
             // Clear first: a deleted mask's tiles are no longer in any buffer,
             // so nothing would repaint over them.
-            this._compositeCtx.clearRect(0, 0, w, h);
+            this._compositeCtx.clearRect(0, 0, cw, ch);
             tiles.clear();
             for (const { mask } of usable) {
                 for (const ti of mask.buffer.tiles.keys()) tiles.add(ti);
@@ -2173,7 +2220,21 @@ class ImageAnnotationManager {
             for (const { buffer, rgb } of layers) {
                 buffer.paintTileInto(img, ti, tw, th, rgb);
             }
-            this._compositeCtx.putImageData(img, x0, y0);
+            if (scale >= 1) {
+                this._compositeCtx.putImageData(img, x0, y0);
+                continue;
+            }
+            // Whole-pixel destination edges, so neighbouring tiles neither
+            // overlap nor leave a gap; at least one pixel, so no tile is lost.
+            const dx = edge(x0, w, cw);
+            const dy = edge(y0, h, ch);
+            const dw = Math.max(1, edge(x0 + tw, w, cw) - dx);
+            const dh = Math.max(1, edge(y0 + th, h, ch) - dy);
+            scratchCtx.putImageData(img, 0, 0);
+            // An erase must clear what the tile drew before; drawImage alone
+            // only paints over it.
+            if (!full) this._compositeCtx.clearRect(dx, dy, dw, dh);
+            this._compositeCtx.drawImage(scratch, 0, 0, tw, th, dx, dy, dw, dh);
         }
 
         for (const { mask } of visible) mask.buffer.clearDirty();
@@ -5135,6 +5196,10 @@ class ImageAnnotationManager {
         if (this.onSegmentationStatus) this.onSegmentationStatus(message, kind);
     }
 }
+
+/** Largest mask composite: pixels on the longest side, and pixels in all. */
+ImageAnnotationManager.COMPOSITE_MAX_SIDE = 4096;
+ImageAnnotationManager.COMPOSITE_MAX_AREA = 16000000;
 
 // Export for use in modules if needed
 if (typeof module !== 'undefined' && module.exports) {

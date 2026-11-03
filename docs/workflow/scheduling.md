@@ -137,7 +137,7 @@ notifications:
   contact:
     consent:
       question: contact_consent    # a question on a phase page
-      value: "Yes"                 # the answer that allows contact
+      value: "Yes"                 # the answer (or a list of answers) that allows contact
     delete_after_study: true
 ```
 
@@ -148,10 +148,18 @@ notifications:
 | `twilio` | The mobile number given at enrolment, by SMS | a Twilio account |
 | `prolific` | The participant's Prolific inbox, by Prolific participant id | a Prolific API token; participants who arrived from Prolific |
 
+Each channel except `log` takes `timeout`, a positive number of seconds to
+wait for the server. The defaults are 20 for `smtp` and `twilio` and 30 for
+`prolific`.
+
 **Credentials come from environment variables only.** Each `*_env` key names
-a variable; the value is read when a message is sent. Writing `password:`,
-`token:`, `auth_token:`, `account_sid:`, `username:` or `api_key:` in the YAML
-stops the server at startup. A missing variable is logged at startup and
+a variable; the value is read when a message is sent. The `*_env` keys are
+optional and default to `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` for
+`twilio` (`account_sid_env`, `auth_token_env`) and `PROLIFIC_API_TOKEN` for
+`prolific` (`token_env`). `smtp` takes `username_env` and `password_env`
+together or not at all. A channel key whose name ends in `password`, `passwd`,
+`secret`, `token`, `auth`, `api_key`, `apikey`, `sid`, `username` or `user`
+(other than a `*_env` key) stops the server at startup. A missing variable is logged at startup and
 each message on that channel fails with the variable's name.
 
 `dry_run: true` renders and addresses every message on every channel and
@@ -166,8 +174,9 @@ Delivery: every message is planned once per session, rule and channel, and
 claimed in the database before it is sent, so a restart or a second server
 process does not send it twice. A message interrupted mid-send (the server
 stopped) is marked failed and not resent. Transient errors (SMTP connection
-errors, Twilio or Prolific 429 and 5xx) are retried up to three times while
-the session is still open; other errors fail at once.
+errors, Twilio or Prolific 429 and 5xx) get up to three attempts in all: a
+retry 5 minutes after the first failure and 10 minutes after the second, each
+only if it still falls before the session closes. Other errors fail at once.
 
 ### Message text
 
@@ -206,7 +215,7 @@ participant before.
 Email addresses and phone numbers are participant PII.
 
 - **Consent.** `notifications.contact.consent` must name a question on a
-  phase page and the answer that allows contact. Potato refuses to start
+  phase page and the answer, or a list of answers, that allows contact. Potato refuses to start
   without it when channels are configured, and checks that the question and
   answer exist. Only participants who gave that answer are asked for an
   address; an address posted without consent is discarded. Nobody without
@@ -271,7 +280,7 @@ python -m potato.export --config config.yaml --format schedule --output out/
 
 Statuses: `answered`; `expired` (opened but not submitted before it closed);
 `missed` (never opened while open); `open`, `started`, `upcoming` for
-sessions not yet closed.
+sessions not yet closed; `enrolled` on the enrolment row.
 
 ## Example
 

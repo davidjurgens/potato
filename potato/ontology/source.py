@@ -331,10 +331,15 @@ class Ols4Source:
 
     service = "ols4"
     _search_cache: "OrderedDict[tuple, Tuple[float, Dict[str, Any]]]" = OrderedDict()
+    #: key -> (expires at, version, known)
     _version_cache: Dict[tuple, Tuple[float, str]] = {}
     _lock = threading.Lock()
     CACHE_SIZE = 512
     CACHE_TTL_S = 6 * 3600
+    #: How long a failed version lookup is remembered before OLS4 is asked
+    #: again. Long enough not to send one request per keystroke while OLS4 is
+    #: down; short enough that its recovery is seen within a minute.
+    VERSION_RETRY_S = 60
     MAX_REPLY_BYTES = 4 * 1024 * 1024
 
     def __init__(self, scheme: Dict[str, Any], task_dir: str, ledger_dir: Optional[str] = None):
@@ -372,23 +377,42 @@ class Ols4Source:
 
     @property
     def version(self) -> str:
+        return self._version_lookup()[0]
+
+    def _version_lookup(self) -> Tuple[str, bool]:
+        """``(version, known)``. *known* is False when OLS4 could not be asked
+        and no earlier answer is at hand, so the empty version is a gap rather
+        than the ontology's answer.
+
+        A failure used to be cached for the full six hours as version "", so
+        one OLS4 hiccup stamped every term picked that afternoon with no
+        version. It is now remembered for VERSION_RETRY_S only.
+        """
         key = (self.base_url, self.ontology_id)
         now = time.time()
         with self._lock:
             hit = self._version_cache.get(key)
-        if hit and now - hit[0] < self.CACHE_TTL_S:
-            return hit[1]
-        version = ""
+        if hit and now < hit[0]:
+            return hit[1], hit[2]
         try:
             data = self._get(f"{self.base_url}/ontologies/{self.ontology_id}", {})
-            version = _ols_version(data)
         except OntologyServiceError as e:
             logger.warning("Could not read the OLS4 version of %s: %s", self.ontology_id, e)
-            if hit:
-                return hit[1]
+            # An earlier answer stays usable for stamping, but it is not this
+            # lookup's: not known, so no search result stamped with it is
+            # cached for hours. Asked again soon either way.
+            version = hit[1] if hit else ""
+            with self._lock:
+                self._version_cache[key] = (now + self.VERSION_RETRY_S, version, False)
+            return version, False
+        version = _ols_version(data)
+        # An ontology that reports no version is a gap too, not an answer to
+        # stamp on six hours of picks.
+        known = bool(version)
         with self._lock:
-            self._version_cache[key] = (now, version)
-        return version
+            self._version_cache[key] = (
+                now + (self.CACHE_TTL_S if known else self.VERSION_RETRY_S), version, known)
+        return version, known
 
     def search(self, query: str) -> Dict[str, Any]:
         q = " ".join((query or "").split())
@@ -411,7 +435,7 @@ class Ols4Source:
         data = self._get(f"{self.base_url}/search", params)
         response = (data or {}).get("response") or {}
         docs = response.get("docs") or []
-        version = self.version
+        version, version_known = self._version_lookup()
         results = []
         for doc in docs[: self.max_results]:
             row = _ols_doc_record(doc, version)
@@ -428,10 +452,13 @@ class Ols4Source:
         except (TypeError, ValueError):
             total = len(results)
         payload = {"results": results, "total": max(total, len(results)), "version": version}
-        with self._lock:
-            self._search_cache[key] = (now, payload)
-            while len(self._search_cache) > self.CACHE_SIZE:
-                self._search_cache.popitem(last=False)
+        # Results stamped while the version could not be read are served once
+        # and not cached, so the next search after OLS4 recovers is stamped.
+        if version_known:
+            with self._lock:
+                self._search_cache[key] = (now, payload)
+                while len(self._search_cache) > self.CACHE_SIZE:
+                    self._search_cache.popitem(last=False)
         if self.ledger is not None:
             self.ledger.add([{k: r[k] for k in TERM_KEYS} for r in results])
         return payload

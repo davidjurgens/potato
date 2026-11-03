@@ -1573,14 +1573,18 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Master switch for QDA mode", type="boolean", default=False, category=QDA,
     ),
     "qda_mode.memos": _D(
-        "QDA memo defaults: `enabled` and `show_sidebar_by_default`, both true. "
-        "Memo storage itself is universal; this block only sets the QDA defaults",
+        "Whether the Notes sidebar starts open under QDA mode: it does when "
+        "`enabled` and `show_sidebar_by_default` (both default true) are both "
+        "true. It does not switch memos on or off; annotation_ui.memos does",
         type="object", category=QDA, see_also=("annotation_ui.memos",),
     ),
     "qda_mode.codebook": _D(
-        "QDA codebook defaults: `enabled` (true) and `mode` (open). Sub-keys of "
-        "qda_mode are not recursed into, so an unrecognized block is carried "
-        "through for forward compatibility -- and a typo passes silently",
+        "QDA codebook settings. `mode` (default open) sets the codebook mode "
+        "under QDA mode; codebook_mode and codebook.mode take precedence over "
+        "it. `enabled` is informational, reported by /qda/status and read by "
+        "nothing else. Sub-keys of qda_mode are not recursed into, so an "
+        "unrecognized block is carried through for forward compatibility -- "
+        "and a typo passes silently",
         type="object", category=QDA, see_also=("codebook",),
     ),
     "codebook": _D(
@@ -1650,7 +1654,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", category=QDA, example="participant_id",
     ),
     "cases.auto_detect": _D(
-        "Scan loaded items for cases at startup. Set false to assign cases by hand",
+        "Scan loaded items for cases at startup. Set false to skip detection; "
+        "no cases are then created, since no page or HTTP endpoint assigns "
+        "them (only the Python function potato.cases.assign_instance does)",
         type="boolean", default=True, category=QDA,
     ),
     "cases.attributes": _D(
@@ -1676,10 +1682,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="integer", default=100000, category=QDA,
     ),
     "search.annotator_claim": _D(
-        "Let annotators search the corpus and claim their own next item. "
+        "Let annotators search the corpus and add matching items to the end "
+        "of their queue. Claims count toward max_annotations_per_user. "
         "Refused at startup when combined with a sampling-dependent assignment "
-        "strategy or an overlap cap, since self-selection breaks both. Allowed "
-        "unconditionally under qda_mode/solo_mode",
+        "strategy, overlap (more than one annotator per item), attention "
+        "checks or gold standards, ICL labeling, adjudication, or a "
+        "crowdsourcing backend, since self-selection breaks each of them. "
+        "Allowed under qda_mode/solo_mode; qda_mode with overlap logs a "
+        "warning",
         type="boolean", default=False, category=QDA,
         see_also=("assignment_strategy", "num_annotators_per_item"),
     ),

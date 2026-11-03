@@ -72,12 +72,27 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ instance_id: id }),
         }).then(function (r) {
+            if (r.status === 409) {
+                return r.json().then(function (d) { refuseClaim(btn, d); },
+                                     function () { refuseClaim(btn, null); });
+            }
             if (!r.ok) { failClaim(btn, prev); return; }
             var span = document.createElement("span");
             span.className = "search-claimed";
             span.textContent = "✓ In your queue";
             btn.replaceWith(span);
         }).catch(function () { failClaim(btn, prev); });
+    }
+
+    // 409: the queue is at max_annotations_per_user. A retry cannot succeed,
+    // so say why instead of offering one.
+    function refuseClaim(btn, data) {
+        var note = document.createElement("span");
+        note.className = "search-claim-error search-claim-refused";
+        var cap = data && typeof data.max_assignments === "number" ? data.max_assignments : null;
+        note.textContent = cap === null ? "Queue full" : "Queue full (limit " + cap + ")";
+        if (data && data.error) note.title = data.error;
+        btn.replaceWith(note);
     }
 
     function failClaim(btn, label) {

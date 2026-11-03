@@ -207,7 +207,7 @@ def arguments():
         "--dry-run",
         action="store_true",
         dest="dry_run",
-        help="[migrate mode] Show what changes would be made without applying them",
+        help="[migrate/codebook mode] Show what changes would be made without applying them",
         default=False,
     )
 

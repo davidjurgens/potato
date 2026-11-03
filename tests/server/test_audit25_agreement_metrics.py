@@ -89,6 +89,18 @@ def agreement_server():
             "name": "igt",
             "description": "Gloss each word.",
         },
+        # Audit 105 B7: refused by the route itself, not only by its helper.
+        {
+            "annotation_type": "volume_annotation",
+            "name": "vol",
+            "description": "Paint the lesion.",
+            "labels": ["lesion"],
+        },
+        {
+            "annotation_type": "pure_display",
+            "name": "note",
+            "description": "Read this first.",
+        },
     ]
     with TestConfigManager(
         "audit25_agreement",
@@ -343,3 +355,18 @@ class TestStructuredSchemasAreLeftToTheAgreementReport:
         assert metrics["gloss"]["n_units"] == 16
         assert metrics["gloss"]["percent_agreement"] == 0.75
         assert metrics["morpheme_gloss"]["percent_agreement"] == pytest.approx(44 / 48)
+
+
+class TestAgreementRouteRefusesWhatItCannotMeasure:
+    """Audit 105 B7, through the served route: a volume scheme was reduced
+    to label names, and a display-only scheme was scored as if it had
+    answers."""
+
+    def test_a_volume_scheme_points_to_admin_iaa(self, agreement_server):
+        entry = _agreement(agreement_server)["by_schema"]["vol"]
+        assert entry.get("see") == "/admin/iaa"
+        assert "krippendorff_alpha" not in entry
+
+    def test_a_display_only_scheme_says_it_has_no_measure(self, agreement_server):
+        entry = _agreement(agreement_server)["by_schema"]["note"]
+        assert entry == {"error": "This annotation type has no agreement measure."}

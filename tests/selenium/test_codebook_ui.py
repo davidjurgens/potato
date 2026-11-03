@@ -230,6 +230,24 @@ class TestCodebookOnTheFlyNavBack(unittest.TestCase):
             return _check
         w.until(_selected("seed-a"))
         w.until(_selected("runtime-x"))
+        # Saved under the code's own name and linked to it (audit 105 A1):
+        # named after the element id, it was neither, so a merge, split or
+        # rename of the code could not reach this coding.
+        saved = d.execute_async_script(
+            "var done = arguments[arguments.length - 1];"
+            "fetch('/get_annotations?instance_id=' + arguments[0])"
+            ".then(r => r.json()).then(j => done(j.label_annotations.themes || []));",
+            "n1")
+        self.assertIn("runtime-x", saved)
+        self.assertFalse(any("__cb__" in str(n) for n in saved), saved)
+        from potato.codebook import store
+        from potato.codebook.codebook import Codebook
+        import yaml
+        cfg = yaml.safe_load(open(self.config_file))
+        task_dir = cfg.get("task_dir") or os.path.dirname(self.config_file)
+        project = cfg.get("annotation_task_name") or "default"
+        code_id = Codebook.load(task_dir, project).label_to_id()["runtime-x"]
+        self.assertTrue(store.affected_annotation_ids(task_dir, project, code_id))
 
 
 _CB_SPAN = [{

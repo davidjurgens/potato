@@ -69,6 +69,7 @@ annotation_schemes:
         color: "#ff00ff"
         visible: false
     min_cells: 1
+    label_requirement: {required: true}   # min_cells only counts when required
 ```
 
 ### Options

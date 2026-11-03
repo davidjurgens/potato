@@ -271,8 +271,33 @@ def refusals(check: Dict[str, Any], annotator_ids_public: bool) -> List[str]:
             reason += (f", {len(check['email_like_annotators'])} of them email addresses "
                        f"({', '.join(check['email_like_annotators'][:3])})")
         reasons.append(reason + ". Pass --annotator-ids-public if that is intended; "
-                       "otherwise publish the anonymized dataset with `potato publish` instead")
+                       "otherwise publish the anonymized dataset with `python -m potato.publish` instead")
     return reasons
+
+
+def frozen_config(folder: str, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    """The config as it was frozen in the snapshot's bundle.
+
+    The deposit's title, authors, license and description come from here,
+    not from the live config, which may have been edited since the snapshot
+    was taken.
+
+    Raises:
+        FileNotFoundError: the bundle has no copy of the config.
+    """
+    import yaml
+
+    name = "project/" + (manifest.get("config_file") or "")
+    with tarfile.open(os.path.join(folder, "bundle.tar.gz"), "r:gz") as archive:
+        try:
+            handle = archive.extractfile(name)
+        except KeyError:
+            handle = None
+        if handle is None:
+            raise FileNotFoundError(
+                f"{manifest['id']}'s bundle has no {name}; the snapshot is incomplete")
+        config = yaml.safe_load(handle.read().decode("utf-8")) or {}
+    return config if isinstance(config, dict) else {}
 
 
 def _description(manifest: Dict[str, Any], dataset_description: str) -> str:
@@ -346,6 +371,9 @@ def deposit_snapshot(config_path: str, ref: str = "latest", token: Optional[str]
                      annotator_ids_public: bool = False) -> Dict[str, Any]:
     """Upload a snapshot's files to a new Zenodo deposition.
 
+    The record's metadata (``dataset_metadata``, the task name and
+    description) is read from the config frozen in the snapshot's bundle.
+
     Raises:
         DepositRefused: a literal credential in the bundle, or annotator ids
             without ``annotator_ids_public``. Nothing has been sent.
@@ -358,7 +386,9 @@ def deposit_snapshot(config_path: str, ref: str = "latest", token: Optional[str]
     if reasons:
         raise DepositRefused(reasons)
     manifest = check["snapshot"]
-    metadata = PublishConfig.from_config(project_paths(config_path)["config"]).metadata
+    # The snapshot's own config, so the record describes the files deposited.
+    metadata = PublishConfig.from_config(
+        frozen_config(check["folder"], manifest)).metadata
     zenodo = zenodo_metadata_for(metadata)
     meta = zenodo["metadata"]
     meta["title"] = f"{meta['title']} (Potato snapshot {manifest['id']})"

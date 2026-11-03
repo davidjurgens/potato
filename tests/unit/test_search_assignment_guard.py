@@ -43,6 +43,35 @@ class TestAllowed:
         guard(_cfg(max_annotations_per_item=1))
 
 
+class TestQdaModeOverlapWarning:
+    """QDA mode stays exempt, but overlap it cannot honour is said out loud."""
+
+    WARNING = "overlap is not guaranteed"
+
+    @pytest.mark.parametrize("knob", [
+        {"num_annotators_per_item": 2},
+        {"num_annotators_per_item": {"default": 1,
+                                     "overlap_sample": {"count": 2}}},
+        {"max_annotations_per_item": 3},
+        {"min_annotators_per_instance": 2},
+    ])
+    def test_overlap_under_qda_mode_warns(self, caplog, knob):
+        with caplog.at_level("WARNING"):
+            guard(_cfg(qda_mode={"enabled": True}, **knob))   # no raise
+        (record,) = [r for r in caplog.records if self.WARNING in r.getMessage()]
+        assert next(iter(knob)) in record.getMessage()
+
+    def test_qda_mode_without_overlap_is_quiet(self, caplog):
+        with caplog.at_level("WARNING"):
+            guard(_cfg(qda_mode={"enabled": True}, num_annotators_per_item=1))
+        assert not [r for r in caplog.records if self.WARNING in r.getMessage()]
+
+    def test_solo_mode_with_overlap_is_quiet(self, caplog):
+        with caplog.at_level("WARNING"):
+            guard(_cfg(solo_mode={"enabled": True}, num_annotators_per_item=2))
+        assert not [r for r in caplog.records if self.WARNING in r.getMessage()]
+
+
 class TestBlocked:
     def _assert_blocks(self, cfg, needle):
         with pytest.raises(ConfigValidationError) as e:

@@ -69,3 +69,20 @@ def test_no_pair_of_annotators_gives_valid_json(items):
     result = dashboard._multilabel_agreement(rows)
     json.dumps(result, allow_nan=False)           # raises on NaN
     assert result["error"] == "No items with 2+ annotators"
+
+
+@pytest.mark.parametrize("scheme, expected", [
+    ({"annotation_type": "volume_annotation", "name": "v", "labels": ["L"]}, "/admin/iaa"),
+    ({"annotation_type": "multi_document_event", "name": "m"}, "no agreement measure"),
+    ({"annotation_type": "coreference", "name": "c", "span_schema": "s"}, "/admin/iaa"),
+    ({"annotation_type": "radio", "name": "r", "labels": ["a", "b"]}, None),
+])
+def test_answers_that_are_not_label_names_are_not_compared_as_names(scheme, expected):
+    """Audit 105 B7: a volume's or a multi-document event's _data blob read
+    as the label name `_data` for everyone, perfect agreement."""
+    from potato.admin import _not_a_label_answer
+    refused = _not_a_label_answer(scheme, set())
+    if expected is None:
+        assert refused is None
+    else:
+        assert expected in str(refused)

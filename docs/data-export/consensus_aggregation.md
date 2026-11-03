@@ -133,9 +133,11 @@ cluster; compare `size` with `n_annotators` to spot it.
 ### Image size
 
 Potato stores marks as fractions of the image, so `eps_unit: fraction` works
-for every item. Pixel output and `eps_unit: pixels` need the image size, taken
-in this order from the item's `image_width` / `image_height` (or `width` /
-`height`) fields, then from the image file when the export can open it.
+for every item. Pixel output and `eps_unit: pixels` need the image size. The
+width is read from the first of the item fields `image_width`, `width`,
+`img_width` and `w` that is present, and the height from the first of
+`image_height`, `height`, `img_height` and `h`. When either is missing, the
+size comes from the image file if the export can open it.
 Remote images are not downloaded. With `eps_unit: pixels`, an item of unknown
 size gets a row saying it was skipped, and the export warns.
 
@@ -154,7 +156,8 @@ box per annotator, with every pair of boxes in a group overlapping by at least
 
 The consensus box is the median of the members' left, top, right and bottom
 edges. Each group reports `support` (annotators in it), `n_classifiers`
-(annotators who drew anything on the item for this scheme), `support_fraction`,
+(annotators who saved this scheme on the item, including those who drew
+nothing), `support_fraction`,
 and `mean_iou` and `min_iou` of the members against the consensus box.
 
 IoU does not change when the image is stretched, so grouping needs no image
@@ -204,8 +207,8 @@ the number of annotators. With `eps_unit: fraction`, `0.02` is 20 pixels on a
 **"The image size of N item(s) ... is unknown".** Add `image_width` and
 `image_height` to the data file, keep the images where the export can read
 them (a path under the task's media directory), or use `eps_unit: fraction`.
-Projects imported from Zooniverse get both fields when a classification
-recorded the image size.
+Projects imported from Zooniverse get both fields for workflows with a drawing
+task, when a classification recorded the image size.
 
 **A question never appears.** Its type is not one of those listed above, or
 `schemes` leaves it out.

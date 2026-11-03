@@ -944,7 +944,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=58"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=60"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -1131,7 +1131,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=16"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=17"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->
@@ -1345,16 +1345,18 @@
             </div>
             <div class="memo-composer-row">
                 <label>Visibility
-                    <select id="memo-new-visibility">
-                        <option value="private">Private</option>
-                        <option value="shared">Shared</option>
+                    {# annotation_ui.visibility; memos.js returns the composer to it after every save. #}
+                    {% set memo_vis = 'shared' if (memo_default_visibility | default('private')) == 'shared' else 'private' %}
+                    <select id="memo-new-visibility" data-default-visibility="{{ memo_vis }}">
+                        <option value="private"{% if memo_vis == 'private' %} selected{% endif %}>Private</option>
+                        <option value="shared"{% if memo_vis == 'shared' %} selected{% endif %}>Shared</option>
                     </select>
                 </label>
                 <button type="button" id="memo-add-btn" class="memo-primary">Add note</button>
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='memos.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=7"></script>
     {% endif %}
 
     <!-- Annotator search-and-claim sidebar. Rendered only when
@@ -1379,7 +1381,7 @@
                 one to add it to your queue.</div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='search.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='search.js') }}?v=5"></script>
     {% endif %}
 
     <!-- Universal Codebook tray, rendered only when a codebook is configured.
@@ -1476,7 +1478,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=18"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=19"></script>
     {% endif %}
     {% endif %}
 </body>

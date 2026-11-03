@@ -8,7 +8,7 @@ Two pieces cover small molecules:
 ## Overview
 
 - **Editor:** OpenChemLib JS 9.25.0 (BSD-3-Clause), committed with Potato under `potato/static/vendor/openchemlib-9.25.0/`. It draws and edits on a canvas with a toolbar (bonds, rings, elements, charges, stereo wedges, erase, undo). A text box under it takes a pasted or typed SMILES string or molfile, which is also the keyboard route into the editor.
-- **RDKit.js (optional):** RDKit's MinimalLib 2026.03.6 (BSD-3-Clause) is a 7 MB WebAssembly build, so it is not committed. Install it with `potato vendor fetch rdkit`. With it, the browser also computes the RDKit canonical SMILES, the InChI and the InChIKey, flags structures RDKit cannot sanitize, and the `molecule` display can draw with RDKit (`engine: rdkit`). Without it everything else works with OpenChemLib, and `potato validate` names the fetch command.
+- **RDKit.js (optional):** RDKit's MinimalLib 2026.03.6 (BSD-3-Clause) is a 7 MB WebAssembly build, so it is not committed. Install it with `potato vendor fetch rdkit`. The npm package is version 2026.3.6, which is RDKit release 2026.03.6. With it, the browser also computes the RDKit canonical SMILES, the InChI and the InChIKey, flags structures RDKit cannot sanitize, and the `molecule` display can draw with RDKit (`engine: rdkit`). Without it everything else works with OpenChemLib, and `potato validate` names the fetch command.
 - **Answer keys (optional):** gold items, training answers and a scheme's `answer_field` are graded on the server with the `rdkit` Python package (`pip install "potato-annotation[chemistry]"`). Answer keys never go to the browser. The same package fills InChI and InChIKey into the export when the browser did not compute them.
 - **No WebGL needed.** Both toolkits draw in 2D.
 
@@ -96,7 +96,7 @@ Options can be written under `display_options` or directly on the field.
 | `highlight_color` | `#f59f00` | Colour of those highlights |
 | `max_atoms` | `500` | Larger molecules are not drawn; the display says so |
 
-The item field holds the structure inline (a SMILES string or molfile text) or the name of a `.mol`, `.sdf` (first record) or `.smi` file in the media directory. The server reads the file (up to 1 MB) and sends its text to the page.
+The item field holds the structure inline (a SMILES string or molfile text) or the name of a `.mol`, `.sdf` (first record) or `.smi` file in the media directory. The server reads the file (up to 1 MB) and sends its text to the page. URLs are not read, and `allow_remote: true` on a molecule display is refused at validation.
 
 ## Using the editor
 
@@ -156,6 +156,8 @@ The `chemical_structure` answer is one JSON object:
  "problems": [],
  "toolkits": {"openchemlib": "9.25.0", "rdkit": "2026.03.6"}}
 ```
+
+`toolkits.rdkit` is RDKit's own version string (`2026.03.6`), not the npm package version (`2026.3.6`).
 
 `smiles` is OpenChemLib's canonical isomeric SMILES and `idcode` its canonical ID code; `rdkit_smiles`, `inchi` and `inchikey` are present only when RDKit.js ran. Canonical SMILES differ between toolkits, so compare structures across annotators by InChIKey or ID code, not by `smiles` against `rdkit_smiles`.
 

@@ -165,6 +165,11 @@ instances are surfaced (an instance is listed only if its stamped
 revision precedes the change) — each with a **Go** button to jump
 straight there. Nothing is force-reopened; reviewing is optional.
 
+A change to a code's meaning (its short definition, definition,
+use-when or avoid-when text, saved without **minor**) also puts your
+instances on the worklist, marked "codebook changed", because the codes
+you chose between now mean something different.
+
 Admins/adjudicators can see the project-wide stale set via
 `GET /api/codebook/admin/stale`.
 
@@ -184,13 +189,28 @@ adjudicators get a **Curate** section in the tray to fix this
 - **Split by annotator** moves just one annotator's links from a code
   to a new or existing code — the concrete fix when two coders meant
   different things by the same name. The source stays live for the
-  other annotators.
+  other annotators, and is archived only when no other coder still
+  uses it.
 
 Both are **append-only**: historical links are marked superseded, not
 removed, so the change is fully auditable and the codebook can never
 silently lose data. Affected instances are softly re-flagged so they
 resurface in each annotator's **Review** worklist (dismissible, never a
 hard re-label gate — same policy as ordinary revision changes).
+
+Merge, split and rename also rewrite the label saved in each affected
+annotator's state, so their form shows the code the annotation now
+belongs to and their next save keeps it there. A tab opened before the
+change still has the old name ticked, and its next save posts that name.
+The server moves that name to the code it was renamed or merged into.
+A split moves the name to the split's target only when the split
+archived the source, because no other annotator still used it. When
+other annotators still use the source, it is a live code, so the stale
+tab's next save writes the source back for the split annotator and drops
+their coding on the target. Running the split again with the same target
+(`target_id`) moves it back. Annotations saved before links were recorded
+are linked from the saved labels the first time a merge, split or rename
+touches their code.
 
 Authorship/provenance lives in a **separate change log**, never on the
 code records (those feed the ICL prompt verbatim). The collapsed
@@ -220,7 +240,15 @@ potato codebook path/to/config.yaml --dry-run
 
 Code ids are **deterministic** (`uuid5` over project + parent + name),
 so re-running is a no-op and the same config yields the same ids across
-machines — important because annotations carry a parallel `code_id`.
+machines. The server seeds a fresh codebook the same way, with the same
+ids, and both carry each label's `color` and its `description` (or
+`tooltip`) as the code's short definition. Running the CLI before the
+first server start gives the same codebook the server would have seeded.
+
+Each saved annotation on a `codebook: true` scheme is linked to its
+code by id, one link per coder per instance. The label string stays in
+the annotator's saved state, and merge, split and the review worklist
+follow the link.
 
 ## API
 

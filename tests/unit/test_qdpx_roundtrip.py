@@ -451,6 +451,36 @@ class TestLeftOutIsNamed:
         _, result = export(tmp_path, context)
         assert any("memos and cases" in w for w in result.warnings)
 
+    def test_qda_mode_alone_names_memos_and_cases(self, tmp_path):
+        """qda_mode turns both on with neither key written."""
+        context = make_context()
+        context.config.update({"qda_mode": {"enabled": True}})
+        _, result = export(tmp_path, context)
+        assert any("memos and cases" in w for w in result.warnings)
+
+    def test_qda_mode_with_cases_off_names_memos_only(self, tmp_path):
+        context = make_context()
+        context.config.update({"qda_mode": {"enabled": True},
+                               "cases": {"enabled": False}})
+        _, result = export(tmp_path, context)
+        (warning,) = [w for w in result.warnings if "does not include" in w]
+        assert "has memos," in warning and "cases" not in warning
+
+    def test_solo_mode_names_memos(self, tmp_path):
+        context = make_context()
+        context.config.update({"solo_mode": {"enabled": True}})
+        _, result = export(tmp_path, context)
+        (warning,) = [w for w in result.warnings if "does not include" in w]
+        assert "has memos," in warning and "cases" not in warning
+
+    def test_memos_switched_off_under_qda_mode_are_not_named(self, tmp_path):
+        context = make_context()
+        context.config.update({"qda_mode": {"enabled": True},
+                               "annotation_ui": {"memos": False}})
+        _, result = export(tmp_path, context)
+        (warning,) = [w for w in result.warnings if "does not include" in w]
+        assert "has cases," in warning and "memos" not in warning
+
     def test_a_plain_project_has_no_such_warning(self, tmp_path):
         _, result = export(tmp_path, make_context())
         assert not any("does not include" in w for w in result.warnings)

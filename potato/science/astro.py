@@ -39,10 +39,13 @@ _KEY = re.compile(r"^[0-9a-f]{32}$")
 MAX_LIGHT_CURVE_BYTES = 2 * 1024 * 1024
 MAX_LIGHT_CURVE_POINTS = 20000
 #: Column names for each role, tried in order when the config does not say.
+#: ``magpsf`` / ``sigmapsf`` are the ZTF alert names; a generic ``mag`` /
+#: ``magerr`` in the same file is taken first.
 LIGHT_CURVE_COLUMNS = {
     "time": ("mjd", "time", "jd", "hjd", "bjd", "t"),
-    "mag": ("mag", "magnitude", "flux", "value", "y"),
-    "err": ("magerr", "mag_err", "err", "error", "sigma", "fluxerr", "flux_err", "dy"),
+    "mag": ("mag", "magpsf", "magnitude", "flux", "value", "y"),
+    "err": ("magerr", "mag_err", "sigmapsf", "err", "error", "sigma", "fluxerr",
+            "flux_err", "dy"),
     "band": ("band", "filter", "fid", "passband"),
     "limit": ("limit", "upper_limit", "diffmaglim", "maglim", "lim"),
 }

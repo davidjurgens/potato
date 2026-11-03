@@ -75,7 +75,20 @@ class TestTheGateAgreesWithTheBlueprints:
             "memos_enabled": False,
             "codebook_ui_enabled": False,
             "search_claim_enabled": False,
+            "memo_default_visibility": "private",
         }
+
+    @pytest.mark.parametrize("value,expected", [
+        ("shared", "shared"), ("private", "private"),
+        ("Shared!", "private"), (None, "private"),
+    ])
+    def test_memo_default_visibility_follows_annotation_ui(self, value, expected):
+        """The composer must start where post_memo would default an API call."""
+        from potato.memos.api import _default_visibility
+
+        config = {"annotation_ui": {"memos": True, "visibility": value}}
+        assert _flags(config)["memo_default_visibility"] == expected
+        assert _default_visibility(config) == expected
 
     def test_qda_mode_brings_memos_and_the_codebook(self):
         flags = _flags({"qda_mode": {"enabled": True}})

@@ -129,10 +129,16 @@ class QDPXExporter(BaseExporter):
 
         # Not written yet; say so rather than hand over a project that looks
         # complete in NVivo or ATLAS.ti and is missing them.
+        # Asked through the same resolvers the server uses: qda_mode turns
+        # both on without either key being written, and that is exactly the
+        # project most likely to be exported to NVivo or ATLAS.ti.
+        from potato.cases.service import cases_enabled
+        from potato.memos.api import memos_enabled
+
         left_out = []
-        if (context.config.get("annotation_ui") or {}).get("memos"):
+        if memos_enabled(context.config):
             left_out.append("memos")
-        if (context.config.get("cases") or {}).get("enabled"):
+        if cases_enabled(context.config):
             left_out.append("cases")
         if left_out:
             warnings.append(
@@ -162,23 +168,29 @@ class QDPXExporter(BaseExporter):
         """
         Build ``<CodeBook><Codes>`` and a ``code name -> guid`` index.
 
-        The tree is walked through ``CodebookExporter._iter_codes``, which
-        already knows how each schema type nests, so the two exporters cannot
-        disagree about what the codebook contains.
+        The tree is walked through ``CodebookExporter._codebook_rows``, which
+        already knows how each schema type nests and reads a ``codebook: true``
+        scheme from the project codebook, so the two exporters cannot disagree
+        about what the codebook contains.
         """
         codebook = ET.Element(f"{{{QDA_NS}}}CodeBook")
         codes_element = ET.SubElement(codebook, f"{{{QDA_NS}}}Codes")
+
+        # A definition written at /codebook lives in the codebook, not the
+        # config; the CSV export already fell back to it and this one did not.
+        definitions = CodebookExporter._codebook_definitions(context)
 
         # name -> (parent name, description, colour), in declaration order.
         entries: Dict[str, Tuple[str, str, str]] = {}
         for scheme in context.schemas:
             if scheme.get("annotation_type") not in CODEABLE:
                 continue
-            for row in CodebookExporter._iter_codes(scheme):
+            for row in CodebookExporter._codebook_rows(context, scheme):
                 name = row.get("code") or ""
                 if name and name not in entries:
                     entries[name] = (row.get("parent") or "",
-                                     row.get("description") or "",
+                                     row.get("description")
+                                     or definitions.get(name, ""),
                                      row.get("color") or "")
 
         guid_by_name: Dict[str, str] = {}

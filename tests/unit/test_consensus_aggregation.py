@@ -361,6 +361,29 @@ def test_exporter_refuses_with_a_reason():
     assert export_registry.get("consensus").can_export(ctx) == (False, "No annotations to export")
 
 
+def test_exporter_refuses_an_undeclared_scheme_option():
+    # T0 exists; TX is a typo. The export used to drop TX and succeed on T0.
+    t0 = dict(RADIO, name="T0")
+    out_dir = create_test_directory("consensus_unknown_scheme")
+    ctx = ExportContext(config={}, annotations=[_record("a", "1", {"T0": {"A": "A"}})],
+                        items={}, schemas=[t0], output_dir=out_dir)
+    result = export_registry.export("consensus", ctx, str(Path(out_dir) / "x"),
+                                    {"schemes": "T0,TX"})
+    assert result.success is False
+    assert any("TX" in e for e in result.errors)
+    assert not any("T0" in e for e in result.errors)
+    ok = export_registry.export("consensus", ctx, str(Path(out_dir) / "y"),
+                                {"schemes": "T0"})
+    assert ok.success, ok.errors
+    # Declared but not something consensus aggregates (audit 105 P3).
+    note = {"annotation_type": "text", "name": "note", "description": "n"}
+    ctx2 = ExportContext(config={}, annotations=ctx.annotations, items={},
+                         schemas=[t0, note], output_dir=out_dir)
+    refused = export_registry.export("consensus", ctx2, str(Path(out_dir) / "z"),
+                                     {"schemes": "T0,note"})
+    assert refused.success is False and any("note" in e for e in refused.errors)
+
+
 def test_pixel_eps_without_image_size_warns_and_keeps_going():
     recs = [_record(u, "1", image={"img": [
         {"type": "landmark", "label": "P", "coordinates": {"x": 0.5, "y": 0.5}}]})

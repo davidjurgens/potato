@@ -109,6 +109,13 @@ HEADLINE = {
     # Boxes on the rendered spectrogram; time and frequency map linearly to
     # its pixels, so IoU there is IoU in seconds by hertz.
     "acoustic": "map_50",
+    # Dice per label over each volume, averaged over the labels painted.
+    "volume": "mean_dice",
+    # Volumetric IoU of oriented cuboids, matched per label.
+    "spatial": "map_3d_50",
+    # Identity over the video, not per-frame boxes: a model that swaps two
+    # people's ids where they cross loses IDF1 though every frame matches.
+    "track": "idf1",
 }
 
 #: Kind to the ``structured_metrics`` function that scores it.
@@ -506,6 +513,48 @@ def _score_traces(gold: List[Any], predicted: List[Any]) -> Dict[str, float]:
             / len(step_pred)}
 
 
+def _score_volumes(gold: List[Any], predicted: List[Any]) -> Dict[str, float]:
+    """Dice per label per volume against the annotated masks, over every
+    label either side painted: a label the model left out of a volume that
+    has it scores 0, and so does one it painted where nobody did (scored on
+    the annotated labels alone, painting extra labels cost nothing).
+    ``mean_dice`` averages every (volume, label) pair; ``dice_<label>``
+    each label's. Slices that do not decode are left out of the guess."""
+    from potato.media.volume_masks import dice, label_volume
+    per_label: Dict[str, List[float]] = {}
+    for target, payload in zip(gold, predicted):
+        shape = target.get("shape")
+        guess = payload if isinstance(payload, dict) else {}
+        masks = guess.get("masks") if isinstance(guess.get("masks"), dict) else {}
+        clean = {"masks": {}}
+        for label, slices in masks.items():
+            if not isinstance(slices, dict):
+                continue
+            kept = {}
+            for k, counts in slices.items():
+                try:
+                    if 0 <= int(k) < int(shape[2]):
+                        kept[str(int(k))] = counts
+                except (TypeError, ValueError):
+                    continue
+            clean["masks"][str(label)] = kept
+        for label in set(target.get("masks") or {}) | set(clean["masks"]):
+            try:
+                score = dice(label_volume(target, shape, label),
+                             label_volume(clean, shape, label))
+            except ValueError:   # runs that do not fit the slice
+                score = 0.0
+            if score is not None:
+                per_label.setdefault(label, []).append(score)
+    pairs = [s for scores in per_label.values() for s in scores]
+    if not pairs:
+        return {}
+    out = {"mean_dice": sum(pairs) / len(pairs)}
+    for label, scores in per_label.items():
+        out["dice_%s" % label] = sum(scores) / len(scores)
+    return out
+
+
 def score_split(rows: Iterable[Dict[str, Any]],
                 predictions: Dict[Tuple[str, str], Any],
                 schema_name: str, kind: str,
@@ -557,6 +606,20 @@ def score_split(rows: Iterable[Dict[str, Any]],
         metrics = _score_numbers(gold_raw, pred_raw)
     elif kind in ("geometry", "geo", "acoustic"):
         metrics = _score_geometry(ids, gold_raw, pred_raw)
+    elif kind == "track":
+        from potato.training.tracking import score_tracks
+        metrics = score_tracks(gold_raw, pred_raw)
+        if not metrics:
+            return {}, n
+    elif kind == "spatial":
+        from potato.training.spatial import score_cuboids
+        metrics = score_cuboids(gold_raw, pred_raw)
+        if not metrics:
+            return {}, n
+    elif kind == "volume":
+        metrics = _score_volumes(gold_raw, pred_raw)
+        if not metrics:
+            return {}, n
     elif kind in ("transcript", "segments"):
         from potato.training import audio_metrics
         metrics = (audio_metrics.score_transcripts(gold_raw, pred_raw) if kind == "transcript"

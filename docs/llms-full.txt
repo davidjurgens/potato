@@ -5682,7 +5682,7 @@ pip install 'potato-annotation[astro]'
 
 ## Preparing the files
 
-Put the FITS files under the project's `media/` folder. Plain and gzipped files (`.fits`, `.fit`, `.fts`, `.fits.gz`) both work.
+Put the FITS files under the project's `media/` folder. Plain and gzipped files (`.fits`, `.fit`, `.fts`, `.fits.gz`, `.fit.gz`, `.fts.gz`) both work.
 
 - **Cutouts or full frames.** Either give Potato small stamps that are already centred on the candidate, or full images plus a position per item; the server cuts out the region. Only the rows of the cutout are read from an uncompressed file, so full frames up to `max_file_mb` (100 MB by default) are fine.
 - **Triplets on one grid.** Survey pipelines warp the reference onto the science image before subtracting, so the three images share a pixel grid. Keep them that way and the crosshair marks the same pixel in each. When they are not aligned, the display says so and places the crosshair by sky position.
@@ -10497,7 +10497,15 @@ When a schema becomes hidden because its conditions are no longer met, the annot
 
 ### Stale Annotations
 
-In the output, annotations for hidden schemas are tracked separately as "stale" to indicate they may no longer be relevant to the current selections.
+On annotation pages, answers to hidden schemas are kept and exported unchanged,
+with no mark in the export. Hiding a schema that has a value records an
+`annotation_stale` interaction event in the behavioral data, with the schema,
+its value and the reason it was hidden.
+
+On survey and other phase pages, answers to questions the page hides are
+dropped when the participant leaves the page, and are left out of the phase
+data the server exports unless `exclude_hidden_survey_answers: false` (see
+[Server-side enforcement](#server-side-enforcement)).
 
 ### Smooth Animations
 
@@ -15508,6 +15516,14 @@ Each chain contains:
 - `span_ids`: Array of span IDs that belong to this chain
 - `entity_type`: (Optional) The entity type classification
 
+## Agreement
+
+`/admin/iaa` scores coreference schemes by comparing chains over the mentions
+in `span_schema`, matched by offsets. It reports `conll_f1` (the mean of
+`muc_f1`, `b3_f1` and `ceafe_f1`) for each pair of annotators, pooled over the
+items both saved, and averages over pairs. A mention in no chain counts as a
+singleton. The figures are not chance-corrected.
+
 ## Workflow
 
 ### Recommended Annotation Process
@@ -16630,6 +16646,13 @@ Annotations are saved with both span annotations and link annotations:
 }
 ```
 
+## Agreement
+
+`/admin/iaa` scores span-link schemes by comparing links over the spans in
+`span_schema`, matched by offsets and link type. It reports `link_f1` and
+`mention_f1` for each pair of annotators, pooled over the items both saved,
+and averages over pairs. The figures are not chance-corrected.
+
 ## Constraints and Validation
 
 ### Label Constraints
@@ -17619,6 +17642,14 @@ Events are stored with the following structure:
   ]
 }
 ```
+
+## Agreement
+
+`/admin/iaa` scores event schemes over the spans in `span_schema`, matched by
+offsets. It reports `trigger_f1` (trigger offsets and event type) and
+`argument_f1` (trigger, event type, argument offsets and role) for each pair of
+annotators, pooled over the items both saved, and averages over pairs. The
+figures are not chance-corrected.
 
 ## Complete Example
 
@@ -21261,9 +21292,13 @@ python -m potato.export -c config.yaml -f textgrid -o ./textgrid_output/
 ```
 
 The TextGrid export:
-- Creates interval tiers for each annotation tier
+- Creates an interval tier for each tier, or a point tier (TextTier) for a
+  `point: true` tier
 - Fills gaps with empty intervals
 - Supports both long and short TextGrid formats
+- Writes one file per item and schema, `<id>_<schema>.TextGrid`. When several
+  annotators answered the item, each gets their own file,
+  `<id>_<user>_<schema>.TextGrid`
 
 **Note:** TextGrid doesn't support hierarchical relationships, so the export flattens the structure while preserving all annotations.
 
@@ -21363,7 +21398,10 @@ For EAF export, ensure:
 - Parent-child relationships are consistent
 
 For TextGrid export:
-- Overlapping annotations on the same tier will be merged or may cause issues
+- Overlapping intervals on one tier are written as they are, and the export
+  adds a warning naming the item, annotator and tier. Praat refuses to open an
+  interval tier whose intervals overlap, so move one of them or put it on its
+  own tier
 - Very small gaps between annotations may be filled
 
 ## Related Documentation
@@ -21957,8 +21995,8 @@ implementation for the tiled case.
 **Masks work, and they do not depend on the GPU.** The mask buffer indexes
 *image pixels*, at the source's full resolution rather than at whatever size the
 image happened to be displayed at, so a mask painted zoomed in is directly
-comparable with one painted zoomed out — and nothing about it is bounded by a
-texture limit.
+comparable with one painted zoomed out. No texture limit applies to the stored
+mask. The overlay that draws it on screen has a size cap (see [Limits](#limits)).
 
 That last part is the practical difference from a WebGL-backed painter. V7, for
 example, tiles automatically above 10,000 px and lets you annotate a tiled file
@@ -22033,6 +22071,13 @@ slide pixels: see [Clinical and Pathology Formats](../science/clinical_formats.m
   single source image in the page to read.
 - **Pillow is required.** Without it the viewer reports what is missing and
   suggests `viewer: fabric`; it does not fail silently.
+- **The mask overlay is drawn at reduced resolution on large images.** The
+  masks are stored and exported at the source's full resolution, but the page
+  draws them through one overlay image of at most 4,096 pixels on its longest
+  side and 16 million pixels in all. On a 40,000 × 30,000 slide that is about
+  one overlay pixel per ten image pixels, so a fine brush stroke looks coarser
+  on screen than it is in the saved mask. Images under that size are drawn at
+  full resolution.
 
 ---
 
@@ -23931,7 +23976,7 @@ Two pieces cover small molecules:
 ## Overview
 
 - **Editor:** OpenChemLib JS 9.25.0 (BSD-3-Clause), committed with Potato under `potato/static/vendor/openchemlib-9.25.0/`. It draws and edits on a canvas with a toolbar (bonds, rings, elements, charges, stereo wedges, erase, undo). A text box under it takes a pasted or typed SMILES string or molfile, which is also the keyboard route into the editor.
-- **RDKit.js (optional):** RDKit's MinimalLib 2026.03.6 (BSD-3-Clause) is a 7 MB WebAssembly build, so it is not committed. Install it with `potato vendor fetch rdkit`. With it, the browser also computes the RDKit canonical SMILES, the InChI and the InChIKey, flags structures RDKit cannot sanitize, and the `molecule` display can draw with RDKit (`engine: rdkit`). Without it everything else works with OpenChemLib, and `potato validate` names the fetch command.
+- **RDKit.js (optional):** RDKit's MinimalLib 2026.03.6 (BSD-3-Clause) is a 7 MB WebAssembly build, so it is not committed. Install it with `potato vendor fetch rdkit`. The npm package is version 2026.3.6, which is RDKit release 2026.03.6. With it, the browser also computes the RDKit canonical SMILES, the InChI and the InChIKey, flags structures RDKit cannot sanitize, and the `molecule` display can draw with RDKit (`engine: rdkit`). Without it everything else works with OpenChemLib, and `potato validate` names the fetch command.
 - **Answer keys (optional):** gold items, training answers and a scheme's `answer_field` are graded on the server with the `rdkit` Python package (`pip install "potato-annotation[chemistry]"`). Answer keys never go to the browser. The same package fills InChI and InChIKey into the export when the browser did not compute them.
 - **No WebGL needed.** Both toolkits draw in 2D.
 
@@ -24019,7 +24064,7 @@ Options can be written under `display_options` or directly on the field.
 | `highlight_color` | `#f59f00` | Colour of those highlights |
 | `max_atoms` | `500` | Larger molecules are not drawn; the display says so |
 
-The item field holds the structure inline (a SMILES string or molfile text) or the name of a `.mol`, `.sdf` (first record) or `.smi` file in the media directory. The server reads the file (up to 1 MB) and sends its text to the page.
+The item field holds the structure inline (a SMILES string or molfile text) or the name of a `.mol`, `.sdf` (first record) or `.smi` file in the media directory. The server reads the file (up to 1 MB) and sends its text to the page. URLs are not read, and `allow_remote: true` on a molecule display is refused at validation.
 
 ## Using the editor
 
@@ -24080,6 +24125,8 @@ The `chemical_structure` answer is one JSON object:
  "toolkits": {"openchemlib": "9.25.0", "rdkit": "2026.03.6"}}
 ```
 
+`toolkits.rdkit` is RDKit's own version string (`2026.03.6`), not the npm package version (`2026.3.6`).
+
 `smiles` is OpenChemLib's canonical isomeric SMILES and `idcode` its canonical ID code; `rdkit_smiles`, `inchi` and `inchikey` are present only when RDKit.js ran. Canonical SMILES differ between toolkits, so compare structures across annotators by InChIKey or ID code, not by `smiles` against `rdkit_smiles`.
 
 A `viewer_selection` on a molecule display stores:
@@ -24133,7 +24180,7 @@ The `spectrum` display draws one NMR, IR, Raman, UV-Vis or mass spectrum per ite
 ## Overview
 
 - **Engine:** Plotly 2.27.0 (MIT), committed with Potato at `potato/static/vendor/plotly-2.27.0.min.js`. It is loaded only on pages with a spectrum. It draws SVG, so it does not need WebGL.
-- **Files are parsed on the server.** The browser receives at most `max_points` points (4,000 by default). Each bucket of the original keeps its lowest and highest point, so narrow lines keep their full height. When the annotator zooms in, the page fetches every point in the visible range from `/api/spectrum/range`.
+- **Files are parsed on the server.** The browser receives at most `max_points` points (4,000 by default). Each bucket of the original keeps its lowest and highest point, so narrow lines keep their full height. When the annotator zooms in, the page fetches the visible range at full resolution from `/api/spectrum/range`. If the range still holds more than `max_points` points, it is reduced to `max_points` the same way.
 - **Formats:** JCAMP-DX (`.jdx`, `.dx`, `.jcamp`, read by Potato itself), mzML (`.mzML`, through pyteomics, an optional extra), and two-column text (`.csv`, `.tsv`, `.txt`, `.xy`). A spectrum can also be written inline in the item.
 - **Axis conventions:** NMR chemical shift and IR wavenumber axes run high to low, left to right. NMR spectra stored in Hz are converted to ppm using the file's `.OBSERVE FREQUENCY`.
 - **Offline:** nothing is fetched from outside the Potato server. A spectrum named by URL is refused.
@@ -24339,7 +24386,7 @@ The example has two synthetic 1H NMR spectra as DIFDUP-compressed JCAMP-DX and o
 - **"is a URL"**: Potato does not download spectra. Copy the file into the media directory.
 - **"Reading mzML needs pyteomics and psims"**: install the `spectra` extra.
 - **"Y-check failed"**: the JCAMP-DX compressed data is corrupt or was cut short.
-- **Only every few points are drawn**: this is expected for large spectra. Zoom in and the page fetches every point in the visible range.
+- **Only every few points are drawn**: this is expected for large spectra. Zoom in and the page fetches the visible range at full resolution, reduced to `max_points` again if the range holds more.
 - **No suggestions**: `prepick` is off unless set. With it on, lower `prominence`.
 
 ## Related
@@ -24502,13 +24549,14 @@ duration 0 or `n/a` makes a point event; a `channel` column names the channel.
 
 | Option | Default | Meaning |
 |---|---|---|
+| `engine` | `uplot` | the plotting library; `uplot` (uPlot 1.6.32) is the only one |
 | `window` | `30` | seconds shown at first, and the step of the next/previous buttons |
 | `channels` | all | channels to show, in order: names, or `{name, label, range: [low, high], color}` |
 | `layout` | `stacked` | `stacked`: one lane per channel; `overlay`: all channels on one y axis with a legend |
 | `draw` | `line` | `line` or `points` (for sparse, irregular series) |
 | `amplitude` | `recording` | lane scaling: `recording` uses each channel's range over the whole file (0.5th to 99.5th percentile of block extremes), so amplitudes compare across windows; `window` rescales to what is on screen. A channel's `range` overrides both |
 | `lane_height` | `56` | pixels per lane in the stacked layout |
-| `height` | from the lanes | plot height in pixels (80 to 4000) |
+| `height` | from the lanes | plot height in pixels (80 to 4000). Without it, `max(160, min(1400, lanes × lane_height + 48))`, where `lanes` is the number of channels shown in the `stacked` layout and 1 in `overlay` |
 | `time_format` | `auto` | `elapsed` (h:mm:ss), `clock` (wall time from `start_time`), `number`; `auto` is `elapsed` for seconds, else `number` |
 | `time_unit` | `s` | the time column's unit, for CSV/Parquet data in days or MJD |
 | `invert_y` | `false` | flip the y axis in the overlay layout (astronomical magnitudes) |
@@ -24518,6 +24566,8 @@ duration 0 or `n/a` makes a point event; a `channel` column names the channel.
 | `overview` | `true` | the strip under the plot: the whole recording (first channel's envelope), the labelled stretches, and the current window; click or drag it to move |
 
 Options may be written under `display_options` or directly on the field.
+`allow_remote` is refused at validation: the server reads signal files from
+the media directory and never from a URL.
 
 ### Controls
 
@@ -24771,6 +24821,7 @@ annotation_schemes:
         color: "#ff00ff"
         visible: false
     min_cells: 1
+    label_requirement: {required: true}   # min_cells only counts when required
 ```
 
 ### Options
@@ -25165,7 +25216,7 @@ The display only shows the data. The question is asked with an ordinary scheme, 
 ## Overview
 
 - **Reading:** astropy (BSD-3-Clause) on the server. Install it with `pip install 'potato-annotation[astro]'`. A config that uses `fits_cutout` without astropy installed fails at startup with that command in the message. astropy is imported when the first FITS file is read, not at boot.
-- **Formats:** `.fits`, `.fit`, `.fts`, and the same names gzipped (`.fits.gz`). The first HDU holding a 2-D (or larger) image is used, or the one named with `hdu`. Of a cube, the first plane is shown.
+- **Formats:** `.fits`, `.fit`, `.fts`, and the same names gzipped (`.fits.gz`, `.fit.gz`, `.fts.gz`). The first HDU holding a 2-D (or larger) image is used, or the one named with `hdu`. Of a cube, the first plane is shown.
 - **Cutouts:** around a position in FITS pixels (`x`, `y`) or in sky coordinates (`ra`, `dec`, degrees or sexagesimal), with a size in pixels or as an angle (`"40 arcsec"`). Only the rows of the cutout are read from an uncompressed file.
 - **Scaling:** an interval (`minmax`, `zscale`, `percentile`) and a stretch (`linear`, `sqrt`, `log`, `asinh`), set for the display, for one panel, for one item, or for one image of one item.
 - **Caching:** each converted cutout is written to `<task_dir>/.potato_cache/fits/` as a PNG and a JSON file, keyed by the file's path, size, modification time and the scaling options. An unchanged file is converted once; an edited file or a new stretch makes a new entry. The cache keeps the 4,000 most recently used entries.
@@ -25248,7 +25299,7 @@ A field holding just a path shows one image (for morphology classification):
 | `max_file_mb` | `100` | Largest FITS file read, compressed or not. |
 | `max_image_pixels` | `25000000` | Largest image shown whole (no position given). Larger images need a position and size. A whole image over 1,024 pixels on a side is block-averaged down. |
 | `light_curve` | `true` | Draw the item's light curve when it has one. |
-| `light_curve_columns` | detected | Column names by role: `time`, `mag`, `err`, `band`, `limit`. Without it the columns are found by common names (`mjd`/`time`/`jd`, `mag`/`flux`, `magerr`/`err`, `band`/`filter`, `limit`/`diffmaglim`). |
+| `light_curve_columns` | detected | Column names by role: `time`, `mag`, `err`, `band`, `limit`. Without it the columns are found by common names (`mjd`/`time`/`jd`, `mag`/`magpsf`/`flux`, `magerr`/`sigmapsf`/`err`, `band`/`filter`/`fid`, `limit`/`diffmaglim`). |
 | `light_curve_units` | `mag` | `mag` (brighter is up) or `flux`. |
 | `light_curve_height` | `260` | Plot height in pixels. |
 | `time_label` | `MJD` | Time axis title. |
@@ -25280,6 +25331,8 @@ mjd,band,mag,magerr,limit
 60603.0,g,19.37,0.05,
 60570.0,r,,,21.3
 ```
+
+ZTF alert columns (`jd`, `fid`, `magpsf`, `sigmapsf`, `diffmaglim`) are read without `light_curve_columns`. When a file has both `mag` and `magpsf`, `mag` is used.
 
 A row with a value is a detection. A row with no value and a `limit` is an upper limit. Rows with no usable time are skipped and counted. Files over 2 MB, or past 20,000 rows, are refused or cut.
 
@@ -25358,7 +25411,7 @@ Quote `"Yes"` and `"No"`: unquoted, YAML reads them as booleans. The example pro
 
 ## Export
 
-The display stores nothing. Answers are those of the schemes on the page (the radio's label, the tree's answers) and export as usual. Hidden tree questions that were answered and then hidden are kept and marked stale, as described in the display logic page.
+The display stores nothing. Answers are those of the schemes on the page (the radio's label, the tree's answers) and export as usual. A tree question that was answered and then hidden keeps its answer, which is exported unchanged. Hiding it records an `annotation_stale` interaction event; see [Conditional logic](../../configuration/conditional_logic.md#stale-annotations).
 
 ## Example
 
@@ -25619,7 +25672,9 @@ count as different labels; there is no partial credit along the hierarchy.
   prefix case (`CL:`, not `cl:`).
 - **OLS4 searches fail with "did not answer within 5 s"**: raise `timeout_s`, or
   use a local file. Results are cached in memory for six hours, so repeated
-  searches do not call OLS4 again.
+  searches do not call OLS4 again. When the ontology's version cannot be read,
+  the results are shown with an empty `ontology_version` and not cached, and
+  the version is asked for again after a minute.
 - **The search box does not appear**: the scheme has no `label_source`, or the
   type is not one of the four supported ones (`potato validate` says which).
 - **A span chip shows an id instead of a name after a restart**: in OLS4 mode
@@ -30674,7 +30729,7 @@ notifications:
   contact:
     consent:
       question: contact_consent    # a question on a phase page
-      value: "Yes"                 # the answer that allows contact
+      value: "Yes"                 # the answer (or a list of answers) that allows contact
     delete_after_study: true
 ```
 
@@ -30685,10 +30740,18 @@ notifications:
 | `twilio` | The mobile number given at enrolment, by SMS | a Twilio account |
 | `prolific` | The participant's Prolific inbox, by Prolific participant id | a Prolific API token; participants who arrived from Prolific |
 
+Each channel except `log` takes `timeout`, a positive number of seconds to
+wait for the server. The defaults are 20 for `smtp` and `twilio` and 30 for
+`prolific`.
+
 **Credentials come from environment variables only.** Each `*_env` key names
-a variable; the value is read when a message is sent. Writing `password:`,
-`token:`, `auth_token:`, `account_sid:`, `username:` or `api_key:` in the YAML
-stops the server at startup. A missing variable is logged at startup and
+a variable; the value is read when a message is sent. The `*_env` keys are
+optional and default to `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` for
+`twilio` (`account_sid_env`, `auth_token_env`) and `PROLIFIC_API_TOKEN` for
+`prolific` (`token_env`). `smtp` takes `username_env` and `password_env`
+together or not at all. A channel key whose name ends in `password`, `passwd`,
+`secret`, `token`, `auth`, `api_key`, `apikey`, `sid`, `username` or `user`
+(other than a `*_env` key) stops the server at startup. A missing variable is logged at startup and
 each message on that channel fails with the variable's name.
 
 `dry_run: true` renders and addresses every message on every channel and
@@ -30703,8 +30766,9 @@ Delivery: every message is planned once per session, rule and channel, and
 claimed in the database before it is sent, so a restart or a second server
 process does not send it twice. A message interrupted mid-send (the server
 stopped) is marked failed and not resent. Transient errors (SMTP connection
-errors, Twilio or Prolific 429 and 5xx) are retried up to three times while
-the session is still open; other errors fail at once.
+errors, Twilio or Prolific 429 and 5xx) get up to three attempts in all: a
+retry 5 minutes after the first failure and 10 minutes after the second, each
+only if it still falls before the session closes. Other errors fail at once.
 
 ### Message text
 
@@ -30743,7 +30807,7 @@ participant before.
 Email addresses and phone numbers are participant PII.
 
 - **Consent.** `notifications.contact.consent` must name a question on a
-  phase page and the answer that allows contact. Potato refuses to start
+  phase page and the answer, or a list of answers, that allows contact. Potato refuses to start
   without it when channels are configured, and checks that the question and
   answer exist. Only participants who gave that answer are asked for an
   address; an address posted without consent is discarded. Nobody without
@@ -30808,7 +30872,7 @@ python -m potato.export --config config.yaml --format schedule --output out/
 
 Statuses: `answered`; `expired` (opened but not submitted before it closed);
 `missed` (never opened while open); `open`, `started`, `upcoming` for
-sessions not yet closed.
+sessions not yet closed; `enrolled` on the enrolment row.
 
 ## Example
 
@@ -32263,7 +32327,7 @@ Returns:
       "fleiss_kappa": {"kappa": 0.78, "n_items_evaluated": 100, "n_raters": 3, "n_categories": 3, "interpretation": "Substantial"}
     },
     "regions": {
-      "error": "Structured answers (steps, segments, regions or glosses) are scored in the agreement report at /admin/iaa, not here.",
+      "error": "Structured answers (steps, segments, regions, glosses, links, chains or events) are scored in the agreement report at /admin/iaa, not here.",
       "see": "/admin/iaa"
     }
   },
@@ -32292,8 +32356,8 @@ Returns:
   `"krippendorff_alpha": null`, `"percent_agreement": 1.0` and
   `"interpretation": "Undefined"`. That is perfect agreement, not a failed
   computation.
-- Structured schemes (steps, segments, regions, glosses and other non-label answers)
-  are skipped with an `error` pointing to `/admin/iaa`, which scores them.
+- Structured schemes (steps, segments, regions, glosses, span links,
+  coreference chains, events and other non-label answers) are skipped with an `error` pointing to `/admin/iaa`, which scores them.
 
 ---
 
@@ -47359,6 +47423,9 @@ other key.
 | `hf-audio-tagger` | `audio_annotation` | audio | `potato-annotation[train-audio]` |
 | `whisper-asr` | `speech_transcript` (corrected turns) | audio | `potato-annotation[train-audio]` |
 | `diarization` | `tiered_annotation` (a speaker tier), `audio_annotation` (labels are speakers) | audio | `potato-annotation[train-audio]` |
+| `volume-unet` | `volume_annotation` (painted masks) | NIfTI volumes, DICOM series | `potato-annotation[train-vision,volumes]`; a GPU in practice |
+| `external-3d` | `spatial_annotation` (cuboids) | point clouds | your own detector (OpenPCDet, MMDetection3D) on the training host |
+| `video-track` | `video_annotation` in `tracking` or `combined` mode | video | `potato-annotation[train-vision]` and `opencv-python` |
 | `decision-calibrate` | `radio`, `select`, `likert`, `slider` | text | nothing; a configured decision model |
 | `laya-finetune` | `radio`, `select`, `likert`, `slider` | text | `potato-annotation[decision]` |
 | `openjev-finetune` | `radio`, `select`, `likert`, `slider` | text | `pip install wev-ai`; a GPU with about 16 GB free |
@@ -48518,6 +48585,105 @@ rate, which ignores whether a turn is called `Interviewer` or `SPEAKER_01` and
 counts whether the speaker changes at the right times. `hf-audio-tagger` on
 the same scheme is scored by segment F1.
 
+### `volume-unet`
+
+`volume-unet` segments CT and MR volumes from the masks annotators painted in
+a `volume_annotation` scheme. Each volume is read in the canonical voxel order
+the widget paints in, its masks become one label per voxel (where two labels
+overlap, the later one in the bundle's label order wins, as the NIfTI export
+does), and a 3D U-Net in plain torch learns them: three levels, instance norm,
+cross-entropy plus soft Dice, on random cubic patches, half of them centred on
+a painted voxel so small structures are seen. Intensities are clipped to each
+volume's 0.5 and 99.5 percentiles and standardized. Prediction slides the patch
+over the whole volume with half-patch overlap and averages the probabilities.
+The masks come back in the widget's shape, per label and axial slice, marked
+`prefilled_from: model`, and show on the slice views. A box-only answer has no
+mask and is not trained on.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `patch` | 64 | Side of the cubic patch in voxels; a multiple of 2 to the power `levels` − 1. |
+| `levels` | 3 | Depth of the U-Net (2 to 5). |
+| `base_channels` | 16 | Channels at the first level, doubling at each level down. |
+| `patches_per_epoch` | 100 | Random patches drawn per epoch. |
+| `foreground_share` | 0.5 | Share of patches centred on a painted voxel. |
+| `epochs` | 50 | |
+| `batch_size` | 2 | Patches per step. |
+| `learning_rate` | 3e-4 | |
+| `patience` | 10 | Epochs without a better val mean Dice before stopping. |
+| `min_instances` | 3 | Annotated volumes needed in the train split. |
+
+It needs torch and nibabel, and pydicom for DICOM series; a NIfTI volume now
+loads without pydicom. A volume whose painted shape differs from the file's is
+left out with a warning. It uses no MONAI. A full-size CT is a few hundred
+patches to predict, so in practice it needs a GPU.
+
+### `external-3d`
+
+`external-3d` detects 3D cuboids in point clouds with a detector you install,
+because the ones that work here (OpenPCDet, MMDetection3D) need CUDA operators
+compiled on the GPU host. It writes the annotated scans as OpenPCDet's custom
+dataset, in the scan's own frame (no camera calibration needed):
+
+- `points/<id>.npy`: float32 `(N, 4)`, x, y, z and intensity (0 when the file has none);
+- `labels/<id>.txt`: one line per cuboid, `x y z dx dy dz heading label`, the
+  heading being the rotation about +z (pitch and roll are not kept);
+- `ImageSets/train.txt`, `val.txt` and `predict.txt`: the ids.
+
+Then it runs `train_command` once and `predict_command` on the held-out and
+unlabelled scans, without a shell, with `{dataset}`, `{workdir}` and
+`{predictions}` replaced by their paths; other braces in a command are left
+as they are. `predict_command` writes `<predictions>/<id>.txt`,
+one line per box: `x y z dx dy dz heading label score`. The boxes come back as
+`cuboid_3d` objects marked `source: model`. Lines that do not parse or hold
+a non-finite number (`nan`, `inf`), labels the scheme does not have, and boxes
+with no size are left out and counted. A
+georeferenced scan is written relative to its origin and its boxes are shifted
+back. Only cuboids are targets, and only single scans, not sequences.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `train_command` | empty | Run in the run's folder. Empty: nothing is trained, and `predict_command` uses a model of your own. |
+| `predict_command` | required | Writes `{predictions}/<id>.txt` for the ids in `{dataset}/ImageSets/predict.txt`. |
+| `timeout_s` | 86400 | Seconds each command may run. |
+| `min_instances` | 1 | Annotated scans needed when `train_command` is set. |
+
+A command that exits non-zero fails the run with the last lines of its output.
+Point-cloud prelabels are now checked before the viewer sees them: an object
+whose geometry does not parse, a cuboid with no size, and a label the scheme
+does not have are left out.
+
+### `video-track`
+
+`video-track` tracks objects in video, for `video_annotation` schemes in
+`tracking` or `combined` mode (other modes train as segments). The annotated
+tracks are sampled at `frame_fps`: each sampled frame is read with OpenCV, and
+each track's box there is interpolated between its keyframes as the widget
+draws it, using the box as a fraction of the picture (the canvas-pixel box
+depends on the annotator's screen). A torchvision Faster R-CNN, with
+`torchvision-detect`'s parameters, is fine-tuned on those frames.
+
+Prediction samples each video at `predict_fps`, detects on each sampled frame,
+and links detections into tracks: each frame's detections are matched to the
+live tracks of the same label by box overlap with the track's last box (best
+one-to-one match, at least `match_iou`); an unmatched detection of at least
+`new_track_score` starts a track; a track missed for more than `max_age`
+sampled frames ends. Each detection is a keyframe, so the widget interpolates
+between them. The tracks prefill the widget, which puts the boxes in its own
+canvas pixels when it draws them.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `frame_fps` | 2 | Frames per second sampled from each annotated video to train on. |
+| `predict_fps` | `frame_fps` | Frames per second detected on to predict. |
+| `match_iou` | 0.3 | Box overlap at which a detection continues a track. |
+| `max_age` | 2 | Sampled frames a track may go undetected before it ends. |
+| `new_track_score` | 0.5 | Lowest score at which an unmatched detection starts a track. |
+| `min_instances` | 2 | Annotated videos needed in the train split. |
+
+The other parameters are `torchvision-detect`'s. OpenCV reads the videos
+(`pip install opencv-python`); a codec it cannot read leaves the item out.
+
 ### Decision models
 
 A decision model (hosted Jev, OpenJev, `laya-serve`, or Laya in this process)
@@ -48675,6 +48841,9 @@ scheme's kind:
 | `speech_transcript` | word and character error rate over the corrected turns (`wer`, `cer`), and the original transcript's WER on the same turns (`wer_asr`). A turn the model left alone is scored as the transcript's text. | `word_accuracy`, 1 − WER (0 at worst) |
 | `tiered_annotation` speaker turns, and `audio_annotation` with `diarization` | diarization error rate (`der`): missed speech, false alarm and speaker confusion (each also reported) over the annotated speech, on a 10 ms grid, under the best one-to-one mapping of predicted to annotated speakers. No collar. | `diarization_accuracy`, 1 − DER (0 at worst) |
 | `spectrogram_annotation` | as `image_annotation`, on the rendered spectrogram | `map_50` |
+| `volume_annotation` | Dice per label per volume (`dice_<label>`) and their mean over every volume and label pair; a label the model left out of a volume that has it scores 0 | `mean_dice` |
+| `spatial_annotation` | 3D average precision per label at volumetric IoU 0.5 (`ap_3d_50_<label>`), mean over labels at 0.25 and 0.5, and precision, recall and F1 at 0.5, matching oriented cuboids exactly | `map_3d_50` |
+| `video_annotation` (tracking) | MOTA, IDF1, ID switches, misses and false positives at IoU 0.5, on frames sampled at 2 per second across each annotated video | `idf1` |
 
 A classifier trained with `soft_targets` also reports `soft_jsd`,
 `soft_cross_entropy` and `ece`; see
@@ -51881,13 +52050,12 @@ A single agreement number for a whole project averages early work and late work
 together, so a team whose recent annotations have become unusable can still
 show an acceptable figure.
 
-Guidelines drift as new edge cases arrive. The practice credited with large
-agreement gains is the calibration session, where annotators work through
-pre-annotated items and argue about the disagreements, and the gain holds only
-if the sessions repeat.
+Guidelines drift as new edge cases arrive, so a team that passed training at
+the start of a study may not label the same way later.
 
 Potato had fourteen agreement metrics and no time dimension. This adds one, and
-the re-calibration round that acts on it.
+a calibration round that acts on it by sending annotators back through the
+graded training items.
 
 ---
 
@@ -51978,9 +52146,11 @@ least stable.
 
 ## Codebook markers
 
-If the project uses a [codebook](qda.md), each revision is marked on the
-timeline, so a guideline edit that moved agreement shows up as an edit rather
-than an unexplained step.
+If the project uses a [codebook](qda.md), `/admin/iaa` lists its revisions by
+number under the agreement tables. The list has no dates and does not place a
+revision in a window. To line a revision up with a window, compare each
+entry's `created_at` in `markers` with the windows' `start` and `end` in the
+JSON from `/admin/iaa/drift`.
 
 Revisions recorded since this feature shipped are exact. Older ones are
 inferred from the earliest annotation stamped with each revision, which is a
@@ -52008,9 +52178,25 @@ Omitting `usernames` recalls everyone eligible, which is usually right, since
 drift is a property of the guidelines and affects the whole team.
 
 A round resets each annotator's training state and returns them to the training
-phase. Their assignments and existing annotations are untouched, so they rejoin
-annotation where they left off. A round asks them to re-do the exercise rather
-than the study.
+phase. They answer the same training items, by id, as on their first pass, and
+each answer is graded against the known correct one. Study items are not
+labelled again, and there is no discussion step. Disagreements are reviewed in
+[Adjudication](../administration/adjudication.md).
+
+Assignments and existing annotations are untouched, so an annotator who passes
+rejoins annotation where they left off. One who fails is handled like any
+training failure:
+
+- With the default `failure_action: move_to_done`, failing ends their task.
+  Set `training.failure_action: repeat_training` to let them retry instead.
+- The attempt count is not reset, so attempts used on the first pass count
+  against `passing_criteria.max_attempts`.
+
+Training items added to the training file after an annotator's first pass never
+reach that annotator, since the round reuses their original list.
+
+Each round's `closed_at` is set the first time `GET /admin/calibration` finds
+none of its annotators still in progress, or when the next round starts.
 
 Annotators who have not passed the training gate yet are reported as skipped
 rather than silently dropped. An admin recalling twelve people needs to know
@@ -54723,7 +54909,7 @@ cases:                     # group excerpts into units of analysis
   key: participant_id
   attributes: [condition]
 
-search:                    # let the coder jump to any matching excerpt
+search:                    # let the coder add matching excerpts to their queue
   enabled: true
   annotator_claim: true
 
@@ -54753,20 +54939,20 @@ python potato/flask_server.py start \
 qda_mode:
   enabled: true
   memos:
-    enabled: true                 # QDA-Mode memo defaults
+    enabled: true                 # with the next key: start the Notes sidebar open
     show_sidebar_by_default: true
   codebook:
-    enabled: true
+    enabled: true                 # informational; see the table
     mode: open                    # open | extensible | fixed
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `qda_mode.enabled` | `false` | Master switch. Initialises QDA Mode and applies the qualitative defaults above. |
-| `qda_mode.memos.enabled` | `true` | QDA-Mode memo default. (Memo storage is universal — see [Memos](memos.md).) |
-| `qda_mode.memos.show_sidebar_by_default` | `true` | Whether the Notes sidebar starts open. |
-| `qda_mode.codebook.enabled` | `true` | Whether the codebook is active. |
-| `qda_mode.codebook.mode` | `open` | Annotator edit rights — `open` / `extensible` / `fixed` (see [Codebook modes](codebook.md#modes)). Equivalent to top-level `codebook_mode`. |
+| `qda_mode.memos.enabled` | `true` | Together with `show_sidebar_by_default`, decides whether the Notes sidebar starts open; set it to `false` and the sidebar starts closed. It does not turn memos off: use `annotation_ui.memos: false` for that. (Memo storage is universal — see [Memos](memos.md).) |
+| `qda_mode.memos.show_sidebar_by_default` | `true` | Whether the Notes sidebar starts open (only while `qda_mode.memos.enabled` is true). |
+| `qda_mode.codebook.enabled` | `true` | Informational: reported by `/qda/status`, read by nothing else. The codebook is on under QDA Mode either way; set top-level `codebook.enabled: false` to turn it off. |
+| `qda_mode.codebook.mode` | `open` | Annotator edit rights — `open` / `extensible` / `fixed` (see [Codebook modes](codebook.md#modes)). Equivalent to top-level `codebook_mode`; when both are set, `codebook_mode` (or `codebook.mode`) wins. A crowdsourcing backend still force-locks `fixed`. |
 
 Unknown `qda_mode.*` keys are preserved (not rejected) so you can write
 forward-compatible YAML for features that land in later phases.
@@ -54799,8 +54985,9 @@ universal namespaces — see the linked feature docs.
   document) and lift case-level attributes (e.g. `condition`) so the
   admin **code crosstab** can tabulate codes by participant-level
   variables.
-- **Search** (FTS5) lets you find any excerpt by text; with
-  `annotator_claim: true` you can pull a match into your queue.
+- **Search** (FTS5) finds excerpts by text. With
+  `annotator_claim: true`, Claim adds a match to the end of your queue;
+  it does not open it, and you reach it by paging forward with Next.
 
 ## Exporting your coding
 
@@ -55487,6 +55674,11 @@ instances are surfaced (an instance is listed only if its stamped
 revision precedes the change) — each with a **Go** button to jump
 straight there. Nothing is force-reopened; reviewing is optional.
 
+A change to a code's meaning (its short definition, definition,
+use-when or avoid-when text, saved without **minor**) also puts your
+instances on the worklist, marked "codebook changed", because the codes
+you chose between now mean something different.
+
 Admins/adjudicators can see the project-wide stale set via
 `GET /api/codebook/admin/stale`.
 
@@ -55506,13 +55698,28 @@ adjudicators get a **Curate** section in the tray to fix this
 - **Split by annotator** moves just one annotator's links from a code
   to a new or existing code — the concrete fix when two coders meant
   different things by the same name. The source stays live for the
-  other annotators.
+  other annotators, and is archived only when no other coder still
+  uses it.
 
 Both are **append-only**: historical links are marked superseded, not
 removed, so the change is fully auditable and the codebook can never
 silently lose data. Affected instances are softly re-flagged so they
 resurface in each annotator's **Review** worklist (dismissible, never a
 hard re-label gate — same policy as ordinary revision changes).
+
+Merge, split and rename also rewrite the label saved in each affected
+annotator's state, so their form shows the code the annotation now
+belongs to and their next save keeps it there. A tab opened before the
+change still has the old name ticked, and its next save posts that name.
+The server moves that name to the code it was renamed or merged into.
+A split moves the name to the split's target only when the split
+archived the source, because no other annotator still used it. When
+other annotators still use the source, it is a live code, so the stale
+tab's next save writes the source back for the split annotator and drops
+their coding on the target. Running the split again with the same target
+(`target_id`) moves it back. Annotations saved before links were recorded
+are linked from the saved labels the first time a merge, split or rename
+touches their code.
 
 Authorship/provenance lives in a **separate change log**, never on the
 code records (those feed the ICL prompt verbatim). The collapsed
@@ -55542,7 +55749,15 @@ potato codebook path/to/config.yaml --dry-run
 
 Code ids are **deterministic** (`uuid5` over project + parent + name),
 so re-running is a no-op and the same config yields the same ids across
-machines — important because annotations carry a parallel `code_id`.
+machines. The server seeds a fresh codebook the same way, with the same
+ids, and both carry each label's `color` and its `description` (or
+`tooltip`) as the code's short definition. Running the CLI before the
+first server start gives the same codebook the server would have seeded.
+
+Each saved annotation on a `codebook: true` scheme is linked to its
+code by id, one link per coder per instance. The label string stays in
+the annotator's saved state, and merge, split and the review worklist
+follow the link.
 
 ## API
 
@@ -55689,22 +55904,29 @@ annotation_ui:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `annotation_ui.memos` | off in standard mode; **on** when `qda_mode.enabled` or `solo_mode.enabled` | Shows the Notes sidebar and enables `/api/memos`. |
-| `annotation_ui.visibility` | `private` | Default visibility selected in the composer. |
+| `annotation_ui.visibility` | `private` | Visibility the composer starts on, and returns to after each note is added or edited. Also the default for an API `POST` that leaves `visibility` out. |
 
 When disabled the `/api/memos` endpoints return `503` and no sidebar
 toggle is shown — the standard annotation page is unchanged.
 
 ## Visibility model
 
-| Visibility | Author | Admin / adjudicator | Other annotators |
-|------------|:------:|:-------------------:|:----------------:|
+| Visibility | Author | Adjudicator | Other annotators |
+|------------|:------:|:-----------:|:----------------:|
 | `private`  | ✅ | ✅ (always) | ❌ |
 | `shared`   | ✅ | ✅ (always) | ✅ |
 
-- Admins/adjudicators can **always** read every memo regardless of
-  visibility (oversight/QC).
-- Only the **author** may edit a memo's body or visibility.
-- The **author or an admin/adjudicator** may delete a memo (moderation).
+"Adjudicator" here means a user listed in `adjudication.adjudicator_users`
+while `adjudication.enabled` is true. Nobody else gets the extra rights:
+RBAC admins and requests carrying the admin API key cannot read, edit or
+delete other people's memos. The admin key can list issues, private ones
+included, through `GET /admin/api/memo_issues`, but it cannot list memos.
+
+- Adjudicators can **always** read every memo regardless of visibility
+  (oversight/QC).
+- Only the **author** may edit a memo's body or visibility. Adjudicators
+  cannot edit other people's memos either.
+- The **author or an adjudicator** may delete a memo (moderation).
   Deleting a thread's first note deletes its replies.
 - A reply takes its thread's visibility, and follows it if the first note's
   visibility changes: anyone who can read the first note can read and reply
@@ -55935,8 +56157,12 @@ search:
   and is capped at `500`.
 - `GET /api/search?q=<query>&limit=<n>` — annotator search (only when
   `annotator_claim: true`). `limit` defaults to `50`, capped at `200`.
-- `POST /api/search/claim {instance_id}` — pull a matching instance into
-  the annotator's queue (only when `annotator_claim: true`).
+- `POST /api/search/claim {instance_id}` — add a matching instance to the
+  end of the annotator's queue (only when `annotator_claim: true`). It
+  does not open the item: you reach it by paging forward with Next.
+  Claiming an item already in your queue changes nothing
+  (`already_assigned: true`). A claim that would take your queue past
+  `max_annotations_per_user` is refused with `409`.
 
 Each result carries a `snippet` with the matched term wrapped for
 highlighting and the `instance_id`.
@@ -55967,21 +56193,33 @@ if any of these are also configured:
 
 | Conflicting feature | Why |
 |---------------------|-----|
-| `assignment_strategy`: random / diversity_clustering / max_diversity / active_learning / llm_confidence / least_annotated / category_based | Self-selection breaks sampling/ordering |
-| `max_annotations_per_item` / `num_annotators_per_item` > 1 | IAA overlap can't be guaranteed |
+| `assignment_strategy`: random / diversity_clustering / max_diversity / active_learning / llm_confidence / least_annotated / category_based / batch / psychometric / model_review / engine | Self-selection breaks sampling/ordering |
+| `max_annotations_per_item`, `num_annotators_per_item` (its `default` or `overlap_sample.count`), or `min_annotators_per_instance` > 1 | IAA overlap can't be guaranteed |
 | `attention_checks.enabled` / `gold_standards.enabled` | QC items could be located/avoided |
 | `icl_labeling.enabled` | Blind LLM-verification tasks must not be findable |
 | `adjudication.enabled` | The adjudication queue is curated |
-| MTurk / Prolific backend | HIT = the assigned unit; breaks payment/coverage |
+| Any crowdsourcing backend: `login.type` `mturk` or `prolific`, a top-level `mturk:` or `prolific:` block, or any `crowdsourcing.provider` except `expert` (an empty or unrecognised provider is refused too) | HIT = the assigned unit; breaks payment/coverage |
 
 Annotator claim is supported with **solo_mode/qda_mode** (single coder
-over the whole corpus), or **`fixed_order`** assignment without overlap,
-QC injection, ICL verification, adjudication, or a crowd backend. For
+over the whole corpus), or with `assignment_strategy` set to
+**`fixed_order`** or **`priority`** (or not set at all) and no overlap,
+QC injection, ICL verification, adjudication, or crowd backend. For
 every other design, use read-only admin search instead.
 
-> Note: under `fixed_order` the whole corpus is typically pre-assigned to
-> a user, so claim is most useful when per-user assignment is capped
-> (`max_annotations_per_user`) or instances are assigned incrementally.
+QDA mode skips these checks. If a QDA config also sets one of the overlap
+keys above, the server starts and logs a warning: annotators who choose
+their own items decide which items get a second coder, so the overlap is
+not guaranteed.
+
+> Note: claims count toward `max_annotations_per_user`. Once your queue
+> holds that many items, further claims are refused (`409`) and the
+> search panel shows "Queue full". `fixed_order` fills the queue up to
+> the cap when you log in, and with no `max_annotations_per_user` set the
+> cap is the size of the corpus, so every item is already in your queue.
+> Claim adds something only when the queue has room: set
+> `max_annotations_per_user: -1` (unlimited, so `fixed_order` hands out
+> one item at a time), or use `priority`, which tops the queue up a few
+> items at a time.
 
 ## Example
 
@@ -56330,7 +56568,10 @@ registry is for, but it means the registry cannot answer "which event does
 
 That answer is stored per annotator, alongside every other annotation, as the
 scheme's own value: a JSON list of the event ids this annotator has this
-document in. It is what the export and `/admin/iaa` read. Because the registry
+document in. That list is exported with the other annotations, but `/admin/iaa`
+does not score `multi_document_event` schemes. No export includes the registry
+itself (`event_registry.json`, with the titles, slots and evidence); copy it
+from `output_annotation_dir`. Because the registry
 seeds memberships, opening a document that a seeded event already claims does
 **not** count as an answer; only a membership the annotator changes does.
 
@@ -63006,7 +63247,7 @@ project [codebook](../advanced/codebook.md), including the hierarchy and
 how often each code was used.
 
 ```bash
-python -m potato.export --config config.yaml --format codebook -o codebook.csv
+python -m potato.export --config config.yaml --format codebook -o ./export/
 ```
 
 | Column | Meaning |
@@ -63026,11 +63267,11 @@ A qualitative-coding deliverable: one CSV row per **coded span** (a
 offsets, the source instance, and the coder.
 
 ```bash
-python -m potato.export --config config.yaml --format quotation_report -o quotations.csv
+python -m potato.export --config config.yaml --format quotation_report -o ./export/
 
 # Also append one row per memo (analytic notes alongside the quotes):
 python -m potato.export --config config.yaml --format quotation_report \
-  --option include_memos=true -o quotations.csv
+  --option include_memos=true -o ./export/
 ```
 
 | Column | Meaning |
@@ -63932,9 +64173,11 @@ cluster; compare `size` with `n_annotators` to spot it.
 ### Image size
 
 Potato stores marks as fractions of the image, so `eps_unit: fraction` works
-for every item. Pixel output and `eps_unit: pixels` need the image size, taken
-in this order from the item's `image_width` / `image_height` (or `width` /
-`height`) fields, then from the image file when the export can open it.
+for every item. Pixel output and `eps_unit: pixels` need the image size. The
+width is read from the first of the item fields `image_width`, `width`,
+`img_width` and `w` that is present, and the height from the first of
+`image_height`, `height`, `img_height` and `h`. When either is missing, the
+size comes from the image file if the export can open it.
 Remote images are not downloaded. With `eps_unit: pixels`, an item of unknown
 size gets a row saying it was skipped, and the export warns.
 
@@ -63953,7 +64196,8 @@ box per annotator, with every pair of boxes in a group overlapping by at least
 
 The consensus box is the median of the members' left, top, right and bottom
 edges. Each group reports `support` (annotators in it), `n_classifiers`
-(annotators who drew anything on the item for this scheme), `support_fraction`,
+(annotators who saved this scheme on the item, including those who drew
+nothing), `support_fraction`,
 and `mean_iou` and `min_iou` of the members against the consensus box.
 
 IoU does not change when the image is stretched, so grouping needs no image
@@ -64003,8 +64247,8 @@ the number of annotators. With `eps_unit: fraction`, `0.02` is 20 pixels on a
 **"The image size of N item(s) ... is unknown".** Add `image_width` and
 `image_height` to the data file, keep the images where the export can read
 them (a path under the task's media directory), or use `eps_unit: fraction`.
-Projects imported from Zooniverse get both fields when a classification
-recorded the image size.
+Projects imported from Zooniverse get both fields for workflows with a drawing
+task, when a classification recorded the image size.
 
 **A question never appears.** Its type is not one of those listed above, or
 `schemes` leaves it out.
@@ -64736,10 +64980,13 @@ A local archive additionally contains a `README.md` (the dataset card), a `LICEN
 a `.zenodo.json` metadata file, and a `paper_report/` folder with a cut-paste
 `paper.tex` dataset report, its `paper.bib`, and per-table CSVs.
 
-Each publish first freezes a [project snapshot](../tools/snapshots.md), or
-reuses the latest one if nothing has changed, and the dataset card's citation
-section names its id and content hash. `potato snapshot verify` then lets
-anyone holding the project folder confirm their copy is the published one.
+A publish from the admin **Publish Dataset** page or its API first freezes a
+[project snapshot](../tools/snapshots.md), or reuses the latest one if nothing
+has changed, and the dataset card's citation section names its id and content
+hash. `potato snapshot verify` then lets anyone holding the project folder
+confirm their copy is the published one. `python -m potato.publish` does not
+freeze a snapshot, and its card names none; run `potato snapshot create
+config.yaml` first to keep a frozen copy.
 
 ## Preprocessing options
 
@@ -66380,8 +66627,9 @@ potato snapshot verify --dir ./downloaded-snapshot
 | `verify [ref]` | Re-hash the snapshot's files and contents against its manifest. `--dir <folder>` checks a folder holding a snapshot's files instead, such as a copy downloaded from a deposit, and needs no config |
 | `deposit [ref]` | Upload the snapshot's files to Zenodo (see [Depositing a snapshot](#depositing-a-snapshot)) |
 
-A `ref` is a snapshot id, the start of one (`20261019-1205`), a tag, or
-`latest`. `list`, `show` and `diff` take `--json`.
+A `ref` is a snapshot id, the start of one (`20261019-1205`), the start of its
+content hash, a tag, or `latest`. Tags cannot be named `latest`. `list`,
+`show` and `diff` take `--json`.
 
 ## Snapshot contents
 
@@ -66435,6 +66683,10 @@ ids and the annotation rows. Editing a survey question is a change. The SQLite d
 hash, because the server rewrites them as it runs, and a hash that changed with
 every rewrite could not tell a reader whether the annotations had changed.
 
+Memos, the codebook and cases live in those databases, so editing only them
+leaves the hash as it was, and `create` reports no change and writes nothing.
+Use `create --force` to freeze them.
+
 `verify` checks three things. The bundle and `annotations.jsonl` must match the
 hashes in the manifest. The config and data inside the bundle, together with
 the annotation rows, must hash to `content_hash`. Someone holding only the
@@ -66453,15 +66705,21 @@ curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
      http://localhost:8000/admin/api/snapshots
 ```
 
-`POST` returns 201 with the new manifest. If nothing has changed it returns
-200 with `"unchanged": true` and the existing snapshot. A tag that is not
-1-64 letters, digits, `.`, `_` or `-` gets a 400, and nothing is written.
+The `POST` body takes `note`, `tag` and `force` (a boolean, like `create
+--force`). It needs the admin API key, or a logged-in user whose role has the
+`export_data` permission.
+
+`POST` returns 201 with `{"unchanged": false, "snapshot": {...}}`, the new
+manifest. If nothing has changed it returns 200 with `"unchanged": true` and
+the existing snapshot. A tag that is not 1-64 letters, digits, `.`, `_` or `-`,
+or is `latest`, gets a 400, and nothing is written. A snapshot id that already
+exists, or a create of the same content already running, gets a 409.
 
 ## Publishing
 
-Every publish (archive, Hugging Face or Zenodo) freezes a snapshot first, or
-reuses the latest one if nothing has changed. The dataset card's citation
-section names it:
+A publish started from the admin **Publish Dataset** page or its API (archive,
+Hugging Face or Zenodo) freezes a snapshot first, or reuses the latest one if
+nothing has changed. The dataset card's citation section names it:
 
 > This release is Potato snapshot `20261019-044005-335ae51e` (content hash
 > `335ae51e…`). Anyone holding the project folder can check that their copy is
@@ -66469,6 +66727,10 @@ section names it:
 
 If freezing fails, the release still goes out and the failure is reported as
 a warning.
+
+`python -m potato.publish` does not freeze a snapshot, and its dataset card
+names none. To keep a frozen copy of what you publish from the command line,
+run `potato snapshot create config.yaml` first.
 
 ## Depositing a snapshot
 
@@ -66479,7 +66741,9 @@ with `potato snapshot verify --dir <folder>`. That re-hashes the files,
 recomputes the content hash and prints it. A passing check only shows that the
 files agree with the manifest beside them, so compare the printed hash with
 the one the paper or dataset card cites. The title, authors, licence and
-keywords come from `dataset_metadata`; the record's version is the snapshot id.
+keywords come from `dataset_metadata` in the config frozen in the snapshot's
+bundle, so later edits to the live config do not change the record. The
+record's version is the snapshot id.
 
 ```bash
 export ZENODO_TOKEN=...
@@ -66488,6 +66752,10 @@ potato snapshot deposit config.yaml paper-v1 --annotator-ids-public     # sandbo
 potato snapshot deposit config.yaml paper-v1 --annotator-ids-public --production --publish
 ```
 
+`--check` runs the checks below too. If any of them fails, it prints each
+reason on a line starting `refused:` and exits 1. For a project with
+annotators, `--check` without `--annotator-ids-public` therefore always exits 1.
+
 The default is the Zenodo sandbox and an unpublished draft; `--production`
 and `--publish` (which mints the DOI) are both needed for a public record.
 Each deposit is recorded in `snapshots/deposits.json`, and `show` lists it.
@@ -66495,7 +66763,7 @@ Once a snapshot has a published DOI on zenodo.org, the dataset card of a
 release frozen as that snapshot links to it.
 
 The files go out exactly as frozen, because the hash check depends on it.
-`potato publish` works differently: a published dataset maps annotator
+`python -m potato.publish` works differently: a published dataset maps annotator
 ids to `A1`..`An` and leaves internal fields out, and a deposited snapshot
 does neither. Two checks run before anything is sent:
 
@@ -66516,7 +66784,7 @@ does neither. Two checks run before anything is sent:
   each state goes out in the bundle with its consent and survey answers, even
   for an annotator who labelled nothing. If the ids must not be public,
   publish the anonymized dataset with
-  [`potato publish`](../data-export/publishing_datasets.md) instead.
+  [`python -m potato.publish`](../data-export/publishing_datasets.md) instead.
 
 ## Troubleshooting
 
@@ -73475,6 +73743,10 @@ directory.
 | `molstar` | 5.12.0 | MIT | `protein_structure` with the Mol* engine |
 | `rdkit` (RDKit.js MinimalLib) | 2026.3.6 | BSD-3-Clause | InChI and InChIKey in `chemical_structure`; `molecule` display with `engine: rdkit` |
 
+Versions are the npm package's. The `rdkit` package 2026.3.6 is RDKit release
+2026.03.6, the string stored in a `chemical_structure` answer's
+`toolkits.rdkit`.
+
 ## Optional Python packages for science features
 
 Each group is an install extra, imported only when a feature that needs it
@@ -74478,7 +74750,7 @@ the machine-machine and pooled figures.
       "note": "every annotator gave the same label on every item, so chance agreement is 1 and kappa and alpha are undefined. ..."
     },
     "regions": {
-      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "error": "Structured answers (steps, segments, regions, glosses, links, chains or events) are scored in the agreement report at /admin/iaa, not here.",
       "see": "/admin/iaa"
     }
   },
@@ -74505,8 +74777,9 @@ the machine-machine and pooled figures.
   out of the `overall` averages.
 - `overall.average_cohen_kappa` and `overall.average_fleiss_kappa` average the
   schemas that have a kappa value, and appear only when at least one does.
-- Structured schemes (segments, regions, steps, spatial, grounding, episode and
-  caption answers) are not scored here. Their entry has an `error` and
+- Structured schemes (segments, regions, steps, spatial, grounding, episode,
+  caption and gloss answers, span links, coreference chains and events) are not
+  scored here. Their entry has an `error` and
   `"see": "/admin/iaa"`.
 - A schema with no item reaching `agreement_metrics.min_overlap` annotators
   (default 2) has an `error` and `items_count` instead.

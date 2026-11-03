@@ -165,10 +165,10 @@ def get_trainer(name: str):
 
 
 #: Types whose training target is not what agreement compares. Agreement
-#: classifies a link, chain, event or conversation-tree scheme as ``span``,
-#: which offered the span tagger for them, and that tagger found no spans:
-#: the scheme's answer is links between another scheme's spans, or labels on
-#: tree nodes. A BWS or soft-label answer is a ``matrix`` of per-row values
+#: classifies a conversation-tree scheme as ``span`` (and classified links,
+#: chains and events that way too), which offered the span tagger for them,
+#: and that tagger found no spans: the scheme's answer is links between
+#: another scheme's spans, or labels on tree nodes. A BWS or soft-label answer is a ``matrix`` of per-row values
 #: there, and a training target of its own here.
 TRAINING_KINDS = {
     "span_link": "relation",
@@ -208,6 +208,11 @@ def kind_of_schema(scheme: Dict[str, Any]) -> str:
     # annotators' corrections are not compared field by field.
     if (scheme.get("annotation_type") or "") == "trajectory_edit":
         return "trajectory"
+    # Tracks are boxes over frames, which no segment model learns; a video
+    # scheme in another mode keeps its segments (temporal).
+    if ((scheme.get("annotation_type") or "") == "video_annotation"
+            and str(scheme.get("mode") or "").lower() in ("tracking", "combined")):
+        return "track"
     kind = TRAINING_KINDS.get(scheme.get("annotation_type") or "")
     if kind:
         return kind
@@ -506,6 +511,29 @@ def _register_builtins() -> None:
         description="Tags labelled time segments in audio with a fine-tuned "
                     "speech encoder (wav2vec 2.0, WavLM).",
         licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "video-track", "potato.training.trainers.video_track", "VideoTrackTrainer",
+        hint="pip install 'potato-annotation[train-vision]' opencv-python",
+        kinds=("track",), modalities=("video",), annotation_types=("video_annotation",),
+        description="Object tracking in video: fine-tunes a Faster R-CNN on "
+                    "frames sampled from the annotated tracks, then links "
+                    "detections across frames into tracks.",
+        licence="BSD-3-Clause", commercial_use=True)
+    register_lazy(
+        "external-3d", "potato.training.trainers.external_3d", "External3DTrainer",
+        hint="", kinds=("spatial",), modalities=("point_cloud",),
+        annotation_types=("spatial_annotation",),
+        description="3D cuboid detection in point clouds with your own detector "
+                    "(OpenPCDet, MMDetection3D): runs your train and predict "
+                    "commands on the scans and reads the boxes back.",
+        licence="depends on the detector", commercial_use=None)
+    register_lazy(
+        "volume-unet", "potato.training.trainers.volume_unet", "VolumeUNetTrainer",
+        hint="pip install 'potato-annotation[train-vision,volumes]'",
+        kinds=("volume",), modalities=("volume",),
+        description="3D segmentation of CT and MR volumes: trains a U-Net on "
+                    "the painted label masks and paints masks on the rest.",
+        licence="BSD-3-Clause", commercial_use=True)
     register_lazy(
         "whisper-asr", "potato.training.trainers.whisper_asr",
         "WhisperASRTrainer",

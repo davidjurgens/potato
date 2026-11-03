@@ -172,6 +172,17 @@ All notable changes to the Potato annotation platform are documented in this fil
   them, its boxes trained as image boxes (long recordings tiled), and the
   predictions turned back into `start_s`, `end_s`, `low_hz` and `high_hz`
   for the widget's prefill.
+- **3D volume segmentation** (`volume-unet`): a 3D U-Net in plain torch on the
+  masks painted in a `volume_annotation` scheme, scored by Dice per label, its
+  masks prefilled on the slice views. A NIfTI volume now loads without
+  pydicom.
+- **Point-cloud detection through your own detector** (`external-3d`):
+  writes the annotated scans as OpenPCDet's custom dataset, runs your train
+  and predict commands, and reads the cuboids back, scored by 3D AP at IoU
+  0.5. Point-cloud prelabels are now checked before the viewer sees them.
+- **Video object tracking** (`video-track`): a Faster R-CNN on frames sampled
+  from the annotated tracks, its detections linked into tracks, scored by
+  MOTA and IDF1, and prefilled as tracks the widget draws in its own pixels.
 - New settings: `model_training.trainer_params` (per-trainer defaults) and
   `model_training.auto_retrain.accept_licence`.
 - New extras: `embeddings` (`sentence-transformers`), `train-text`,
@@ -210,6 +221,32 @@ All notable changes to the Potato annotation platform are documented in this fil
   They were always `_`.
 
 ### Fixed
+
+- Codebook merge and split re-pointed no codings: nothing linked saved
+  annotations to code ids. Saves now link them per coder, merge, split and
+  rename rewrite the saved labels, a split archives the source only when no
+  coder still uses it, definition edits reach the Review worklist, and the
+  "codebook changed" banner can show. `potato codebook --dry-run` wrote
+  anyway; the CLI seeds colours and descriptions, and the server gives seeded
+  codes the CLI's ids. Audit entries for rename, recolor, move and delete
+  name the person. `codebook.csv` and `.qdpx` keep parents and colours.
+- Snapshot manifests froze null agreement figures; they carry annotator and
+  answer counts, kappa and percent agreement. A deposit reads its metadata
+  from the frozen config, and a refused deposit points to `python -m potato.publish`.
+  Calibration rounds record when they close.
+- `annotation_ui.visibility` now sets the memo composer's default. QDPX
+  exports warn when QDA or solo mode drops memos or cases. Search Claim stops
+  at the per-user cap with a 409, and `qda_mode.codebook.mode` is read.
+- `/admin/iaa` scores coreference, span links and events (mean pairwise F1);
+  they were listed as spans with no score.
+- A consensus export with an undeclared `schemes=` name is refused. The
+  molecule display refuses `allow_remote`, `.fit.gz` and `.fts.gz` are read,
+  ZTF light-curve columns are detections, brush masks on very large deep-zoom
+  images composite at a capped resolution instead of vanishing, and a failed
+  OLS4 version lookup is retried after a minute instead of stamping an empty
+  version for six hours.
+- The Langfuse converter reads token counts from `usage.total`, and a
+  `/media/` codebook URL is checked in the media folder.
 
 - A training run on a deep-zoom study found none of its slides: items name
   a file inside `media_directory`, and the bundle looked for it beside the

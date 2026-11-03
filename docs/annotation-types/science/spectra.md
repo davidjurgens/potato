@@ -5,7 +5,7 @@ The `spectrum` display draws one NMR, IR, Raman, UV-Vis or mass spectrum per ite
 ## Overview
 
 - **Engine:** Plotly 2.27.0 (MIT), committed with Potato at `potato/static/vendor/plotly-2.27.0.min.js`. It is loaded only on pages with a spectrum. It draws SVG, so it does not need WebGL.
-- **Files are parsed on the server.** The browser receives at most `max_points` points (4,000 by default). Each bucket of the original keeps its lowest and highest point, so narrow lines keep their full height. When the annotator zooms in, the page fetches every point in the visible range from `/api/spectrum/range`.
+- **Files are parsed on the server.** The browser receives at most `max_points` points (4,000 by default). Each bucket of the original keeps its lowest and highest point, so narrow lines keep their full height. When the annotator zooms in, the page fetches the visible range at full resolution from `/api/spectrum/range`. If the range still holds more than `max_points` points, it is reduced to `max_points` the same way.
 - **Formats:** JCAMP-DX (`.jdx`, `.dx`, `.jcamp`, read by Potato itself), mzML (`.mzML`, through pyteomics, an optional extra), and two-column text (`.csv`, `.tsv`, `.txt`, `.xy`). A spectrum can also be written inline in the item.
 - **Axis conventions:** NMR chemical shift and IR wavenumber axes run high to low, left to right. NMR spectra stored in Hz are converted to ppm using the file's `.OBSERVE FREQUENCY`.
 - **Offline:** nothing is fetched from outside the Potato server. A spectrum named by URL is refused.
@@ -211,7 +211,7 @@ The example has two synthetic 1H NMR spectra as DIFDUP-compressed JCAMP-DX and o
 - **"is a URL"**: Potato does not download spectra. Copy the file into the media directory.
 - **"Reading mzML needs pyteomics and psims"**: install the `spectra` extra.
 - **"Y-check failed"**: the JCAMP-DX compressed data is corrupt or was cut short.
-- **Only every few points are drawn**: this is expected for large spectra. Zoom in and the page fetches every point in the visible range.
+- **Only every few points are drawn**: this is expected for large spectra. Zoom in and the page fetches the visible range at full resolution, reduced to `max_points` again if the range holds more.
 - **No suggestions**: `prepick` is off unless set. With it on, lower `prominence`.
 
 ## Related

@@ -160,6 +160,13 @@ Annotations are saved with both span annotations and link annotations:
 }
 ```
 
+## Agreement
+
+`/admin/iaa` scores span-link schemes by comparing links over the spans in
+`span_schema`, matched by offsets and link type. It reports `link_f1` and
+`mention_f1` for each pair of annotators, pooled over the items both saved,
+and averages over pairs. The figures are not chance-corrected.
+
 ## Constraints and Validation
 
 ### Label Constraints

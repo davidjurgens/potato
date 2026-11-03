@@ -216,3 +216,68 @@ class TestProgress:
 
     def test_an_unknown_user_does_not_raise(self, usm):
         assert calibration.round_progress(usm, ["ghost"])[0]["state"] == "unknown"
+
+
+class TestClosingARound:
+    """`closed_at` had a column and no writer, so every round read as open."""
+
+    def _in_progress(self, usm, *names):
+        for name in names:
+            training = usm.get_user_state(name).get_training_state()
+            training.passed = training.failed = False
+
+    def test_a_round_closes_once_nobody_is_in_progress(self, config, usm):
+        calibration.start_round(config, usm, ["alice", "bob"], "admin")
+        latest = calibration.round_history(config)[0]
+        self._in_progress(usm, "alice", "bob")
+        progress = calibration.round_progress(usm, latest["usernames"])
+        calibration.close_if_finished(config, latest, progress)
+        assert latest["closed_at"] is None
+        assert calibration.round_history(config)[0]["closed_at"] is None
+
+        usm.get_user_state("alice").get_training_state().passed = True
+        usm.get_user_state("bob").get_training_state().failed = True
+        progress = calibration.round_progress(usm, latest["usernames"])
+        calibration.close_if_finished(config, latest, progress)
+        stored = calibration.round_history(config)[0]["closed_at"]
+        assert stored is not None and stored >= latest["started_at"]
+        assert latest["closed_at"] == stored
+
+    def test_close_round_keeps_the_first_close(self, config, usm):
+        round_id = calibration.start_round(config, usm, ["alice"], "admin")["round_id"]
+        first = calibration.close_round(config, round_id)
+        assert first is not None
+        assert calibration.close_round(config, round_id) is None
+        assert calibration.round_history(config)[0]["closed_at"] == first
+
+    def test_starting_a_round_closes_the_open_one(self, config, usm):
+        """A second recall resets the same users, so the first round's
+        progress can no longer be read off them."""
+        first = calibration.start_round(config, usm, ["alice"], "admin")["round_id"]
+        second = calibration.start_round(config, usm, ["bob"], "admin")["round_id"]
+        by_id = {r["id"]: r for r in calibration.round_history(config)}
+        assert by_id[first]["closed_at"] is not None
+        assert by_id[second]["closed_at"] is None
+
+    def test_the_admin_route_closes_a_finished_round(self, config, usm, monkeypatch):
+        """GET /admin/calibration is where an admin watches a round, so it is
+        where a finished round gets its closed_at."""
+        from potato import routes
+
+        monkeypatch.setattr(routes, "config", config)
+        monkeypatch.setattr(routes, "validate_admin_api_key", lambda _key: True)
+        monkeypatch.setattr(routes, "get_user_state_manager", lambda: usm)
+
+        calibration.start_round(config, usm, ["alice", "bob"], "admin")
+        self._in_progress(usm, "alice", "bob")
+        with routes.app.test_request_context("/admin/calibration"):
+            body = routes.admin_calibration().get_json()
+        assert body["rounds"][0]["closed_at"] is None
+
+        usm.get_user_state("alice").get_training_state().passed = True
+        usm.get_user_state("bob").get_training_state().passed = True
+        with routes.app.test_request_context("/admin/calibration"):
+            body = routes.admin_calibration().get_json()
+        assert body["rounds"][0]["closed_at"] is not None
+        assert calibration.round_history(config)[0]["closed_at"] \
+            == body["rounds"][0]["closed_at"]

@@ -20,6 +20,9 @@ class TestMemoThreadsUI(memos_ui.TestMemosUI):
     # Inherit the server, browser and helpers; run only this class's test.
     test_memo_survives_navigate_away_and_back = None
     test_memo_not_shown_on_other_instance = None
+    # Leaves a SHARED memo on the first item, which every later user on this
+    # server would then see ahead of their own thread.
+    test_editing_a_shared_memo_does_not_leave_the_composer_shared = None
 
     def _click(self, css):
         button = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, css)))

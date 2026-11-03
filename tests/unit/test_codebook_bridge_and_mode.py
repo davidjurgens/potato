@@ -154,6 +154,35 @@ class TestCodebookModeResolution:
         assert get_codebook_mode(
             {"codebook": {"mode": "open"}}) == "open"
 
+    def test_qda_mode_codebook_mode_is_read(self):
+        """docs/advanced/qda.md calls it equivalent to codebook_mode; it was
+        read by nothing but /qda/status, so QDA got `open` regardless."""
+        for m in ("fixed", "extensible"):
+            assert get_codebook_mode({"qda_mode": {
+                "enabled": True, "codebook": {"mode": m}}}) == m
+
+    def test_top_level_mode_beats_the_qda_block(self):
+        cfg = {"qda_mode": {"enabled": True, "codebook": {"mode": "fixed"}}}
+        assert get_codebook_mode({**cfg, "codebook_mode": "extensible"}) \
+            == "extensible"
+        assert get_codebook_mode({**cfg, "codebook": {"mode": "open"}}) \
+            == "open"
+
+    def test_qda_block_is_inert_while_qda_mode_is_off(self):
+        assert get_codebook_mode({"qda_mode": {
+            "enabled": False, "codebook": {"mode": "open"}}}) == "fixed"
+
+    def test_crowd_still_locks_a_qda_block_mode(self):
+        assert get_codebook_mode({
+            "qda_mode": {"enabled": True, "codebook": {"mode": "open"}},
+            "prolific": {}}) == "fixed"
+
+    def test_invalid_qda_block_mode_is_rejected_by_its_own_name(self):
+        with pytest.raises(ConfigValidationError,
+                           match="qda_mode.codebook.mode must be one of"):
+            validate_codebook_config({"qda_mode": {
+                "enabled": True, "codebook": {"mode": "bogus"}}})
+
     def test_crowd_force_locks_fixed(self):
         assert get_codebook_mode(
             {"codebook_mode": "open", "prolific": {}}) == "fixed"

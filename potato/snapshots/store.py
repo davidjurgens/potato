@@ -1,9 +1,10 @@
 """
 Reading snapshots: listing, resolving a reference, tags, integrity checks.
 
-Snapshot folders never change after they are written. Tags are the one mutable
-part, kept in ``snapshots/tags.json`` beside them, like a git tag pointing at a
-commit.
+Snapshot folders never change after they are written. Two files beside them
+do: ``snapshots/tags.json``, whose tags point at snapshots like a git tag at a
+commit and can be moved, and ``snapshots/deposits.json``, which each Zenodo
+deposit appends to (:mod:`potato.snapshots.deposit`).
 """
 
 from __future__ import annotations

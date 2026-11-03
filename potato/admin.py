@@ -1753,17 +1753,9 @@ class AdminDashboard:
                 # itself and agreed perfectly while /admin/iaa, which matches
                 # the structures, measured 0.56. Point there instead.
                 kind = dispatcher.classify_schema(scheme)
-                if annotation_type in structured or kind in (
-                        dispatcher.SchemaKind.GEOMETRY, dispatcher.SchemaKind.TEMPORAL,
-                        dispatcher.SchemaKind.SPATIAL, dispatcher.SchemaKind.GROUNDING,
-                        dispatcher.SchemaKind.EPISODE, dispatcher.SchemaKind.ROLLOUT,
-                        dispatcher.SchemaKind.CAPTION, dispatcher.SchemaKind.GLOSS):
-                    metrics["by_schema"][schema_name] = {
-                        "error": "Structured answers (steps, segments, regions or glosses) "
-                                 "are scored in the agreement report at /admin/iaa, "
-                                 "not here.",
-                        "see": "/admin/iaa",
-                    }
+                refused = _not_a_label_answer(scheme, structured)
+                if refused is not None:
+                    metrics["by_schema"][schema_name] = refused
                     continue
 
                 # Collect annotations per item for this schema
@@ -3556,3 +3548,31 @@ class AdminDashboard:
 
 # Global instance
 admin_dashboard = AdminDashboard()
+
+
+def _not_a_label_answer(scheme: dict, structured_types) -> "dict | None":
+    """What /admin/api/agreement says for a scheme whose answers are not
+    label names, or None when it compares them as names.
+
+    Steps, segments, regions, volumes and 3D objects reduced to names gave
+    every annotator the scheme itself, so they agreed perfectly while
+    /admin/iaa, which matches the structures, measured 0.56. Those point
+    there; a type with no measure at all says so.
+    """
+    from potato.server_utils.iaa import dispatcher
+    kind = dispatcher.classify_schema(scheme)
+    if kind == dispatcher.SchemaKind.UNSUPPORTED:
+        return {"error": "This annotation type has no agreement measure."}
+    if scheme.get("annotation_type") in structured_types or kind in (
+            dispatcher.SchemaKind.GEOMETRY, dispatcher.SchemaKind.TEMPORAL,
+            dispatcher.SchemaKind.SPATIAL, dispatcher.SchemaKind.GROUNDING,
+            dispatcher.SchemaKind.EPISODE, dispatcher.SchemaKind.ROLLOUT,
+            dispatcher.SchemaKind.CAPTION, dispatcher.SchemaKind.GLOSS,
+            dispatcher.SchemaKind.RELATION, dispatcher.SchemaKind.COREFERENCE,
+            dispatcher.SchemaKind.EVENT, dispatcher.SchemaKind.VOLUME,
+            dispatcher.SchemaKind.SEGMENTS, dispatcher.SchemaKind.TRACE):
+        return {"error": "Structured answers (steps, segments, regions, glosses, "
+                         "links, chains, events or volumes) are scored in the "
+                         "agreement report at /admin/iaa, not here.",
+                "see": "/admin/iaa"}
+    return None

@@ -139,6 +139,15 @@ def _pairwise_kappas(records: List[LabelRecord], scheme_name: str
     return results
 
 
+def _percent_agreement(multi: Dict[Any, List[str]]) -> Optional[float]:
+    """Observed agreement over units with two or more values: per unit, the
+    share of value pairs that match, averaged over units (Fleiss' P-bar, the
+    number ``/admin/iaa`` reports as ``percent_agreement``)."""
+    from potato.server_utils.iaa.nominal import mean_pairwise_agreement
+    value = mean_pairwise_agreement([dict(enumerate(v)) for v in multi.values()])
+    return None if value != value else float(value)
+
+
 def interpret_alpha(alpha: Optional[float]) -> str:
     """Krippendorff's own guidance (2004)."""
     if alpha is None:
@@ -245,6 +254,7 @@ def compute_metrics(project: ProjectData) -> Dict[str, Any]:
             "alpha_interpretation": interpret_alpha(alpha),
             "multi_annotated_units": len(multi),
             "total_units": len(units),
+            "percent_agreement": _percent_agreement(multi),
             "pairwise_kappa": {
                 "n_pairs": len(kappa_values),
                 "mean": statistics.mean(kappa_values) if kappa_values else None,

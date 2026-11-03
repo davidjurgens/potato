@@ -341,6 +341,23 @@ class TestMoleculeDisplay:
         errors = " | ".join(validate_viewer_field(field, "f", check_bundles=False))
         assert "format must be one of" in errors and "hex colour" in errors and "max_atoms" in errors
 
+    def test_allow_remote_is_refused(self):
+        # The display reads structure files on the server and never passes a
+        # URL to the browser, so the option did nothing.
+        from potato.server_utils.displays.viewer_display import validate_viewer_field
+        field = {"key": "m", "type": "molecule", "display_options": {"allow_remote": True}}
+        errors = validate_viewer_field(field, "f", check_bundles=False)
+        assert any("allow_remote" in e and "media directory" in e for e in errors)
+        ok = {"key": "m", "type": "molecule", "display_options": {"allow_remote": False}}
+        assert validate_viewer_field(ok, "f", check_bundles=False) == []
+
+    def test_remote_structure_url_does_not_suggest_allow_remote(self):
+        html = self._display().render({"key": "m", "type": "molecule"},
+                                      "https://example.org/aspirin.mol")
+        assert "pv-failed" in html
+        assert "media directory" in html
+        assert "allow_remote" not in html
+
     def test_rdkit_engine_needs_the_bundle(self, monkeypatch, tmp_path):
         from potato.server_utils.displays.viewer_display import validate_viewer_field
         monkeypatch.setenv("POTATO_VENDOR_DIR", str(tmp_path))

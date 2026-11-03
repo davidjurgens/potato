@@ -39,8 +39,12 @@ search:
   and is capped at `500`.
 - `GET /api/search?q=<query>&limit=<n>` — annotator search (only when
   `annotator_claim: true`). `limit` defaults to `50`, capped at `200`.
-- `POST /api/search/claim {instance_id}` — pull a matching instance into
-  the annotator's queue (only when `annotator_claim: true`).
+- `POST /api/search/claim {instance_id}` — add a matching instance to the
+  end of the annotator's queue (only when `annotator_claim: true`). It
+  does not open the item: you reach it by paging forward with Next.
+  Claiming an item already in your queue changes nothing
+  (`already_assigned: true`). A claim that would take your queue past
+  `max_annotations_per_user` is refused with `409`.
 
 Each result carries a `snippet` with the matched term wrapped for
 highlighting and the `instance_id`.
@@ -71,21 +75,33 @@ if any of these are also configured:
 
 | Conflicting feature | Why |
 |---------------------|-----|
-| `assignment_strategy`: random / diversity_clustering / max_diversity / active_learning / llm_confidence / least_annotated / category_based | Self-selection breaks sampling/ordering |
-| `max_annotations_per_item` / `num_annotators_per_item` > 1 | IAA overlap can't be guaranteed |
+| `assignment_strategy`: random / diversity_clustering / max_diversity / active_learning / llm_confidence / least_annotated / category_based / batch / psychometric / model_review / engine | Self-selection breaks sampling/ordering |
+| `max_annotations_per_item`, `num_annotators_per_item` (its `default` or `overlap_sample.count`), or `min_annotators_per_instance` > 1 | IAA overlap can't be guaranteed |
 | `attention_checks.enabled` / `gold_standards.enabled` | QC items could be located/avoided |
 | `icl_labeling.enabled` | Blind LLM-verification tasks must not be findable |
 | `adjudication.enabled` | The adjudication queue is curated |
-| MTurk / Prolific backend | HIT = the assigned unit; breaks payment/coverage |
+| Any crowdsourcing backend: `login.type` `mturk` or `prolific`, a top-level `mturk:` or `prolific:` block, or any `crowdsourcing.provider` except `expert` (an empty or unrecognised provider is refused too) | HIT = the assigned unit; breaks payment/coverage |
 
 Annotator claim is supported with **solo_mode/qda_mode** (single coder
-over the whole corpus), or **`fixed_order`** assignment without overlap,
-QC injection, ICL verification, adjudication, or a crowd backend. For
+over the whole corpus), or with `assignment_strategy` set to
+**`fixed_order`** or **`priority`** (or not set at all) and no overlap,
+QC injection, ICL verification, adjudication, or crowd backend. For
 every other design, use read-only admin search instead.
 
-> Note: under `fixed_order` the whole corpus is typically pre-assigned to
-> a user, so claim is most useful when per-user assignment is capped
-> (`max_annotations_per_user`) or instances are assigned incrementally.
+QDA mode skips these checks. If a QDA config also sets one of the overlap
+keys above, the server starts and logs a warning: annotators who choose
+their own items decide which items get a second coder, so the overlap is
+not guaranteed.
+
+> Note: claims count toward `max_annotations_per_user`. Once your queue
+> holds that many items, further claims are refused (`409`) and the
+> search panel shows "Queue full". `fixed_order` fills the queue up to
+> the cap when you log in, and with no `max_annotations_per_user` set the
+> cap is the size of the corpus, so every item is already in your queue.
+> Claim adds something only when the queue has room: set
+> `max_annotations_per_user: -1` (unlimited, so `fixed_order` hands out
+> one item at a time), or use `priority`, which tops the queue up a few
+> items at a time.
 
 ## Example
 

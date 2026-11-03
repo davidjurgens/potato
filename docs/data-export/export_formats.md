@@ -1046,7 +1046,7 @@ project [codebook](../advanced/codebook.md), including the hierarchy and
 how often each code was used.
 
 ```bash
-python -m potato.export --config config.yaml --format codebook -o codebook.csv
+python -m potato.export --config config.yaml --format codebook -o ./export/
 ```
 
 | Column | Meaning |
@@ -1066,11 +1066,11 @@ A qualitative-coding deliverable: one CSV row per **coded span** (a
 offsets, the source instance, and the coder.
 
 ```bash
-python -m potato.export --config config.yaml --format quotation_report -o quotations.csv
+python -m potato.export --config config.yaml --format quotation_report -o ./export/
 
 # Also append one row per memo (analytic notes alongside the quotes):
 python -m potato.export --config config.yaml --format quotation_report \
-  --option include_memos=true -o quotations.csv
+  --option include_memos=true -o ./export/
 ```
 
 | Column | Meaning |

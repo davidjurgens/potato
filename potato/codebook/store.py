@@ -210,6 +210,40 @@ def delete_codes(task_dir: str, code_ids: List[str]) -> int:
 
 # ---- annotation_codes ----------------------------------------------------
 
+# An annotation is one coder's coding of one instance, so its link key
+# names both. Keying on the instance alone made two coders on the same
+# instance share a row under PK(annotation_id, code_id): the second save
+# overwrote the first's `created_by`, and a split by annotator moved
+# both. Rows written before this key existed are a bare id and read back
+# as (id, None) -- "some coder of this instance".
+_KEY_SEP = "\x1f"
+
+
+def annotation_key(instance_id: str, username: str) -> str:
+    return f"{instance_id}{_KEY_SEP}{username}"
+
+
+def split_annotation_key(annotation_id: str):
+    """(instance_id, username) for a link key; username is None for a
+    legacy bare-instance key."""
+    if _KEY_SEP in annotation_id:
+        iid, user = annotation_id.split(_KEY_SEP, 1)
+        return iid, user
+    return annotation_id, None
+
+
+def live_code_ids(task_dir: str, annotation_id: str) -> List[str]:
+    """code_ids this annotation has a LIVE link to, archived codes
+    included (unlike codes_for_annotation, which is the display read)."""
+    _ensure_temporal_schema()
+    rows = _db(task_dir).execute(
+        """SELECT code_id FROM annotation_codes
+           WHERE annotation_id = ? AND invalidated_at IS NULL""",
+        (annotation_id,),
+    ).fetchall()
+    return [r["code_id"] for r in rows]
+
+
 def link_annotation(
     task_dir: str,
     *,

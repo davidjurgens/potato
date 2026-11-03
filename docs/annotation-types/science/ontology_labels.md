@@ -219,7 +219,9 @@ count as different labels; there is no partial credit along the hierarchy.
   prefix case (`CL:`, not `cl:`).
 - **OLS4 searches fail with "did not answer within 5 s"**: raise `timeout_s`, or
   use a local file. Results are cached in memory for six hours, so repeated
-  searches do not call OLS4 again.
+  searches do not call OLS4 again. When the ontology's version cannot be read,
+  the results are shown with an empty `ontology_version` and not cached, and
+  the version is asked for again after a minute.
 - **The search box does not appear**: the scheme has no `label_source`, or the
   type is not one of the four supported ones (`potato validate` says which).
 - **A span chip shows an id instead of a name after a restart**: in OLS4 mode

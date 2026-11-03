@@ -384,10 +384,21 @@
         });
     }
 
+    // The project's default (annotation_ui.visibility), rendered by the server
+    // on the select. startEdit copies a memo's own visibility into the select,
+    // so without going back to this, editing a shared memo left every later
+    // note shared too.
+    function resetVisibility() {
+        var sel = el("memo-new-visibility");
+        if (!sel) return;
+        sel.value = sel.getAttribute("data-default-visibility") === "shared" ? "shared" : "private";
+    }
+
     function resetComposer() {
         state.editingId = null;
         var body = el("memo-new-body");
         if (body) body.value = "";
+        resetVisibility();
         ["memo-anchor-wrap", "memo-shape-wrap"].forEach(function (id) {
             var wrap = el(id);
             if (wrap) wrap.hidden = true;
@@ -522,6 +533,9 @@
     function init() {
         if (!window.config || !window.config.is_annotation_page) return;
         if (!el("memo-panel")) return;
+        // A browser restoring form state on reload could otherwise bring back
+        // the last item's choice instead of the project's default.
+        resetVisibility();
         wire();
         load().then(function () { if (state.enabled) loadAssigned(); });
     }

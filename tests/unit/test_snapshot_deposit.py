@@ -64,6 +64,16 @@ class TestRefusals:
         assert "2 annotator id(s)" in str(caught.value) and "a, b" in str(caught.value)
         assert zen.calls == []
 
+    def test_the_refusal_names_a_command_that_runs(self, project):
+        """It said `potato publish`, which is not a `potato` subcommand."""
+        import importlib.util
+        import re
+        build.create_snapshot(project, now=T0)
+        [reason] = deposit.refusals(deposit.check_snapshot(project), False)
+        [module] = re.findall(r"`python -m ([\w.]+)`", reason)
+        assert importlib.util.find_spec(module + ".__main__") is not None
+        assert "`potato publish`" not in reason
+
     def test_email_addresses_are_named(self, project, monkeypatch):
         answer(os.path.dirname(project), "pat@uni.edu", {"i0": "x"})
         build.create_snapshot(project, now=T0)
@@ -219,6 +229,37 @@ class TestDeposit:
         assert (result["doi"], result["published"], result["sandbox"]) == ("10.5072/zenodo.42", False, True)
         [listed] = store.list_snapshots(project)
         assert listed["deposits"][0]["deposition_id"] == 42
+
+    def test_the_metadata_is_the_frozen_configs_not_the_live_one(self, project, monkeypatch):
+        """The record describes the files deposited, so an edit to
+        dataset_metadata after the snapshot must not reach it."""
+        edit_config(project, dataset_metadata={"pretty_name": "Frozen title",
+                                               "description": "as frozen",
+                                               "license": "cc-by-4.0"})
+        manifest = build.create_snapshot(project, now=T0)
+        edit_config(project, dataset_metadata={"pretty_name": "Edited later",
+                                               "description": "edited later",
+                                               "license": "mit"})
+        zen = FakeZenodo(monkeypatch)
+        deposit.deposit_snapshot(project, token="t", annotator_ids_public=True)
+        meta = zen.metadata["metadata"]
+        assert meta["title"] == f"Frozen title (Potato snapshot {manifest['id']})"
+        assert "as frozen" in meta["description"]
+        assert "edited later" not in meta["description"]
+        assert "Edited later" not in json.dumps(meta)
+
+    def test_a_bundle_without_its_config_sends_nothing(self, project, monkeypatch):
+        import tarfile
+        manifest = build.create_snapshot(project, now=T0)
+        folder = store.snapshot_folder(project, manifest["id"])
+        path = os.path.join(folder, "bundle.tar.gz")
+        os.chmod(path, 0o644)
+        with tarfile.open(path, "w:gz"):
+            pass
+        zen = FakeZenodo(monkeypatch)
+        with pytest.raises(FileNotFoundError, match="project/config.yaml"):
+            deposit.deposit_snapshot(project, token="t", annotator_ids_public=True)
+        assert zen.calls == []
 
     def test_a_downloaded_copy_verifies_and_tampering_shows(self, project, monkeypatch, tmp_path):
         build.create_snapshot(project, now=T0)

@@ -10,7 +10,7 @@ pip install 'potato-annotation[astro]'
 
 ## Preparing the files
 
-Put the FITS files under the project's `media/` folder. Plain and gzipped files (`.fits`, `.fit`, `.fts`, `.fits.gz`) both work.
+Put the FITS files under the project's `media/` folder. Plain and gzipped files (`.fits`, `.fit`, `.fts`, `.fits.gz`, `.fit.gz`, `.fts.gz`) both work.
 
 - **Cutouts or full frames.** Either give Potato small stamps that are already centred on the candidate, or full images plus a position per item; the server cuts out the region. Only the rows of the cutout are read from an uncompressed file, so full frames up to `max_file_mb` (100 MB by default) are fine.
 - **Triplets on one grid.** Survey pipelines warp the reference onto the science image before subtracting, so the three images share a pixel grid. Keep them that way and the crosshair marks the same pixel in each. When they are not aligned, the display says so and places the crosshair by sky position.

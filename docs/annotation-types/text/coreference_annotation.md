@@ -204,6 +204,14 @@ Each chain contains:
 - `span_ids`: Array of span IDs that belong to this chain
 - `entity_type`: (Optional) The entity type classification
 
+## Agreement
+
+`/admin/iaa` scores coreference schemes by comparing chains over the mentions
+in `span_schema`, matched by offsets. It reports `conll_f1` (the mean of
+`muc_f1`, `b3_f1` and `ceafe_f1`) for each pair of annotators, pooled over the
+items both saved, and averages over pairs. A mention in no chain counts as a
+singleton. The figures are not chance-corrected.
+
 ## Workflow
 
 ### Recommended Annotation Process

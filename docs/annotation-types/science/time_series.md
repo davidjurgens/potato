@@ -146,13 +146,14 @@ duration 0 or `n/a` makes a point event; a `channel` column names the channel.
 
 | Option | Default | Meaning |
 |---|---|---|
+| `engine` | `uplot` | the plotting library; `uplot` (uPlot 1.6.32) is the only one |
 | `window` | `30` | seconds shown at first, and the step of the next/previous buttons |
 | `channels` | all | channels to show, in order: names, or `{name, label, range: [low, high], color}` |
 | `layout` | `stacked` | `stacked`: one lane per channel; `overlay`: all channels on one y axis with a legend |
 | `draw` | `line` | `line` or `points` (for sparse, irregular series) |
 | `amplitude` | `recording` | lane scaling: `recording` uses each channel's range over the whole file (0.5th to 99.5th percentile of block extremes), so amplitudes compare across windows; `window` rescales to what is on screen. A channel's `range` overrides both |
 | `lane_height` | `56` | pixels per lane in the stacked layout |
-| `height` | from the lanes | plot height in pixels (80 to 4000) |
+| `height` | from the lanes | plot height in pixels (80 to 4000). Without it, `max(160, min(1400, lanes × lane_height + 48))`, where `lanes` is the number of channels shown in the `stacked` layout and 1 in `overlay` |
 | `time_format` | `auto` | `elapsed` (h:mm:ss), `clock` (wall time from `start_time`), `number`; `auto` is `elapsed` for seconds, else `number` |
 | `time_unit` | `s` | the time column's unit, for CSV/Parquet data in days or MJD |
 | `invert_y` | `false` | flip the y axis in the overlay layout (astronomical magnitudes) |
@@ -162,6 +163,8 @@ duration 0 or `n/a` makes a point event; a `channel` column names the channel.
 | `overview` | `true` | the strip under the plot: the whole recording (first channel's envelope), the labelled stretches, and the current window; click or drag it to move |
 
 Options may be written under `display_options` or directly on the field.
+`allow_remote` is refused at validation: the server reads signal files from
+the media directory and never from a URL.
 
 ### Controls
 

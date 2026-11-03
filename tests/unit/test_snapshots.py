@@ -77,6 +77,30 @@ class TestCreate:
         for name in os.listdir(folder):
             assert not os.stat(os.path.join(folder, name)).st_mode & stat.S_IWUSR
 
+    def test_the_agreement_block_is_filled_in(self, project):
+        """The block read keys compute_metrics never returns, so the manifest
+        froze nulls for everything but alpha. Worked by hand: a = x x y y,
+        b = x y y y. Both annotators label all 4 items (8 answers). 3 of 4
+        items match, so percent agreement is 0.75. Kappa: p_o 0.75,
+        p_e 0.5 * 0.25 + 0.5 * 0.75 = 0.5, so (0.75 - 0.5) / 0.5 = 0.5."""
+        agreement = build.create_snapshot(project, now=T0)["agreement"]
+        assert agreement["num_annotators"] == 2
+        assert agreement["num_annotations"] == 8
+        [scheme] = agreement["schemes"]
+        assert scheme["name"] == "s" and scheme["annotation_type"] == "radio"
+        assert scheme["n_units"] == 4
+        assert scheme["n_multi_annotated"] == 4
+        assert scheme["mean_kappa"] == pytest.approx(0.5)
+        assert scheme["percent_agreement"] == pytest.approx(0.75)
+        assert scheme["alpha_interpretation"] == "low agreement"
+
+    def test_percent_agreement_averages_pairs_within_each_unit(self):
+        """Three values on one unit give three pairs; one of them matches."""
+        from potato.paper.metrics import _percent_agreement
+        assert _percent_agreement({"u1": ["x", "x", "y"], "u2": ["x", "x"]}) \
+            == pytest.approx((1 / 3 + 1) / 2)
+        assert _percent_agreement({}) is None
+
     def test_the_bundle_holds_the_project_but_not_the_api_key(self, project):
         db = sqlite3.connect(os.path.join(os.path.dirname(project), "project.sqlite"))
         db.execute("create table memos (body text)")

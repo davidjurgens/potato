@@ -218,6 +218,18 @@ def collect_project(config_path: str) -> ProjectData:
         config = yaml.safe_load(f) or {}
     base_dir = os.path.dirname(config_path)
 
+    # A `codebook: true` scheme's labels are the project codebook's, not the
+    # YAML's (the server and the exporters apply this): read from the file,
+    # codes merged away still counted, every annotator agreeing on "not", and
+    # codes added mid-study were missing.
+    try:
+        from potato.codebook.schema_bridge import apply_codebook_to_schemes
+        task_dir = os.path.normpath(os.path.join(base_dir, config.get("task_dir", ".")))
+        apply_codebook_to_schemes(config, task_dir=task_dir, seed=False)
+    except Exception:
+        logger.debug("Could not apply the project codebook; using the config's labels",
+                     exc_info=True)
+
     all_schemes = config.get("annotation_schemes", []) or []
     schemes = [s for s in all_schemes if _scheme_type(s) in CATEGORICAL_TYPES]
     skipped = [s for s in all_schemes if _scheme_type(s) not in CATEGORICAL_TYPES]

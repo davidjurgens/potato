@@ -73,7 +73,10 @@ _RAW = {"percent_agreement", "mean_jaccard", "mean_agreement",
         "agreement",
         # Tracking identity between two annotators (iaa/identity.py). MOTA
         # can go below 0 when the errors outnumber the objects.
-        "mota", "idf1"}
+        "mota", "idf1",
+        # Links, chains and events (iaa/links.py): mean pairwise F1.
+        "link_f1", "mention_f1", "conll_f1", "muc_f1", "b3_f1", "ceafe_f1",
+        "trigger_f1", "argument_f1"}
 _COVERAGE = {"reward_coverage", "answered_fraction"}
 _SPAN = {"span_f1_exact", "span_f1_partial", "token_level_kappa"}
 _LOWER = {"mae", "rmse", "spearman_footrule", "mean_offset", "median_offset",

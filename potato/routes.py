@@ -4298,12 +4298,15 @@ def admin_calibration():
     usm = get_user_state_manager()
     history = calibration.round_history(config)
     latest = history[0] if history else None
+    progress = (calibration.round_progress(usm, latest["usernames"])
+                if latest else [])
+    # The round is over once nobody recalled is still working through it.
+    calibration.close_if_finished(config, latest, progress)
     return jsonify({
         "training_enabled": bool((config.get("training") or {}).get("enabled")),
         "eligible": calibration.eligible_users(usm),
         "rounds": history,
-        "progress": (calibration.round_progress(usm, latest["usernames"])
-                     if latest else []),
+        "progress": progress,
     })
 
 
@@ -8035,6 +8038,16 @@ def update_instance():
                         instance_id, username)
         except Exception as e:
             logger.warning(f"Codebook provenance stamp skipped: {e}")
+
+        # Link the saved codes to their code ids. Merge, split and the
+        # review restamp all read these links; with nothing writing them, a
+        # merge re-pointed no codings. Never allowed to break the save.
+        try:
+            if not is_phase_page_update:
+                from potato.codebook.saved_labels import sync_saved_annotation
+                sync_saved_annotation(config, user_state, instance_id, username)
+        except Exception as e:
+            logger.warning(f"Codebook link sync skipped: {e}")
 
         # Get performance metrics for response
         performance_metrics = user_state.get_performance_metrics()

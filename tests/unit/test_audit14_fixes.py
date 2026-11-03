@@ -394,6 +394,35 @@ class TestValidateChecksPaths:
             os.getcwd())
         assert any("keyword_highlights_file" in m for m in messages)
 
+    def test_a_codebook_url_under_media_is_looked_for_in_the_media_folder(self, tmp_path):
+        """/media/codebook.html is the URL the page serves from
+        media_directory, not a path at the root of the disk; read as one, the
+        long-guidelines example failed `validate --strict`."""
+        from potato.server_utils.config_module import (
+            warn_about_unreadable_optional_files)
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "codebook.html").write_text("<p>codes</p>")
+        config = {"task_dir": str(tmp_path), "media_directory": "files",
+                  "annotation_codebook_url": "/media/codebook.html"}
+        assert warn_about_unreadable_optional_files(config, str(tmp_path)) == []
+        missing = dict(config, annotation_codebook_url="/media/gone.html")
+        assert any("does not exist" in m
+                   for m in warn_about_unreadable_optional_files(missing, str(tmp_path)))
+        # Another site path cannot be checked, and is not reported.
+        route = dict(config, annotation_codebook_url="/codebook")
+        assert warn_about_unreadable_optional_files(route, str(tmp_path)) == []
+        # Audit 105 B6: a URL's escapes, query and fragment are not the file
+        # name, and an absolute media_directory is served as it is.
+        (tmp_path / "files" / "my guide.pdf").write_text("pdf")
+        for url in ("/media/my%20guide.pdf", "/media/my%20guide.pdf#page=2",
+                    "/media/codebook.html?v=2"):
+            assert warn_about_unreadable_optional_files(
+                dict(config, annotation_codebook_url=url), str(tmp_path)) == [], url
+        absolute = dict(config, media_directory=str(tmp_path / "files"))
+        assert warn_about_unreadable_optional_files(absolute, str(tmp_path)) == []
+        assert warn_about_unreadable_optional_files(
+            dict(absolute, annotation_codebook_url="/media/gone.html"), str(tmp_path))
+
 
 # --------------------------------------------------------- findings 14/15 --
 class TestOptionOrderingAndFiltering:

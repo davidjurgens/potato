@@ -32,22 +32,29 @@ annotation_ui:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `annotation_ui.memos` | off in standard mode; **on** when `qda_mode.enabled` or `solo_mode.enabled` | Shows the Notes sidebar and enables `/api/memos`. |
-| `annotation_ui.visibility` | `private` | Default visibility selected in the composer. |
+| `annotation_ui.visibility` | `private` | Visibility the composer starts on, and returns to after each note is added or edited. Also the default for an API `POST` that leaves `visibility` out. |
 
 When disabled the `/api/memos` endpoints return `503` and no sidebar
 toggle is shown — the standard annotation page is unchanged.
 
 ## Visibility model
 
-| Visibility | Author | Admin / adjudicator | Other annotators |
-|------------|:------:|:-------------------:|:----------------:|
+| Visibility | Author | Adjudicator | Other annotators |
+|------------|:------:|:-----------:|:----------------:|
 | `private`  | ✅ | ✅ (always) | ❌ |
 | `shared`   | ✅ | ✅ (always) | ✅ |
 
-- Admins/adjudicators can **always** read every memo regardless of
-  visibility (oversight/QC).
-- Only the **author** may edit a memo's body or visibility.
-- The **author or an admin/adjudicator** may delete a memo (moderation).
+"Adjudicator" here means a user listed in `adjudication.adjudicator_users`
+while `adjudication.enabled` is true. Nobody else gets the extra rights:
+RBAC admins and requests carrying the admin API key cannot read, edit or
+delete other people's memos. The admin key can list issues, private ones
+included, through `GET /admin/api/memo_issues`, but it cannot list memos.
+
+- Adjudicators can **always** read every memo regardless of visibility
+  (oversight/QC).
+- Only the **author** may edit a memo's body or visibility. Adjudicators
+  cannot edit other people's memos either.
+- The **author or an adjudicator** may delete a memo (moderation).
   Deleting a thread's first note deletes its replies.
 - A reply takes its thread's visibility, and follows it if the first note's
   visibility changes: anyone who can read the first note can read and reply

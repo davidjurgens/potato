@@ -39,6 +39,11 @@ class SchemaKind(str, Enum):
     SEGMENTS = "segments"    # time segments under non-audio/video types
     TRACE = "trace"          # one label per step of an agent trace
     GLOSS = "gloss"          # interlinear glossed text: one unit per word
+    # Answers made of the spans of the scheme named by `span_schema`, read
+    # from the link and event stores and scored in iaa/links.py.
+    RELATION = "relation"        # span_link: links between spans
+    COREFERENCE = "coreference"  # coreference: chains of mentions
+    EVENT = "event"              # event_annotation: trigger + role arguments
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -90,11 +95,14 @@ _KIND_BY_TYPE = {
     # Span
     "span": SchemaKind.SPAN,
     "error_span": SchemaKind.SPAN,
-    "event_annotation": SchemaKind.SPAN,
-    "coreference": SchemaKind.SPAN,
     "extractive_qa": SchemaKind.SPAN,
-    "span_link": SchemaKind.SPAN,
     "tree_annotation": SchemaKind.SPAN,
+    # Links, chains and events over the spans of `span_schema`. As SPAN they
+    # were looked for among spans saved under their own name, where there are
+    # none, and never scored.
+    "span_link": SchemaKind.RELATION,
+    "coreference": SchemaKind.COREFERENCE,
+    "event_annotation": SchemaKind.EVENT,
     # Text
     # `text` is the type name the schema registry uses for a free-text box;
     # `textbox` alone left every real one UNSUPPORTED.
@@ -125,6 +133,9 @@ _KIND_BY_TYPE = {
     "interlinear_gloss": SchemaKind.GLOSS,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
+    # Events across a document cluster, in a shared registry file outside
+    # the per-annotator answers; nothing here compares them.
+    "multi_document_event": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
 }
 
@@ -212,6 +223,10 @@ def metrics_for_schema(scheme: Dict[str, Any],
             "token_level_kappa", "span_f1_exact", "span_f1_partial",
             "positional_alpha", "gamma_mathet",
         ],
+        # Mean pairwise F1, the training metrics (training/structured_metrics.py).
+        SchemaKind.RELATION: ["link_f1", "mention_f1"],
+        SchemaKind.COREFERENCE: ["conll_f1", "muc_f1", "b3_f1", "ceafe_f1"],
+        SchemaKind.EVENT: ["trigger_f1", "argument_f1"],
         SchemaKind.GEOMETRY: [
             "mean_agreement", "mean_matched_iou", "detection_f1",
             "mean_object_count_diff",
@@ -1487,6 +1502,12 @@ def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
         if kind == SchemaKind.SPAN:
             rows = _gather_spans(overlap_items, user_states, name)
             metrics = _aggregate_span(rows, item_state_manager.find_item)
+        elif kind in (SchemaKind.RELATION, SchemaKind.COREFERENCE,
+                      SchemaKind.EVENT):
+            from potato.server_utils.iaa import links as link_iaa
+            rows = link_iaa.gather_links(overlap_items, user_states, scheme,
+                                         kind.value)
+            metrics = link_iaa.link_report(rows, kind.value)
         elif kind == SchemaKind.EPISODE:
             from potato.server_utils.iaa import episodes as episode_iaa
             # The raw stored blob, not a pre-parsed one: the episode report

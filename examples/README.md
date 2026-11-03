@@ -267,7 +267,7 @@ The `Types` column lists the annotation types each one uses.
 | [`mace-demo/`](advanced/mace-demo/) | MACE Competence Estimation Demo | `radio` |
 | [`machine-annotators/`](advanced/machine-annotators/) | Gene Function Curation (machine annotators demo) | `radio` |
 | [`maze-task/`](advanced/maze-task/) | Maze task | `pure_display` |
-| [`memos-example/`](advanced/memos-example/) | Memos Example | `radio` |
+| [`memos-example/`](advanced/memos-example/) | Memos Example | `radio`, `span` |
 | [`mturk-example/`](advanced/mturk-example/) | MTurk Annotation Task | `radio` |
 | [`multi-document-events/`](advanced/multi-document-events/) | Cross-Document Disaster Events | `multi_document_event` |
 | [`multi-modal/`](advanced/multi-modal/) | Video + Transcript Analysis | `radio`, `span` |

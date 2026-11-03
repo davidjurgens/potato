@@ -281,14 +281,19 @@ def all_stale_instances(
 
 
 def touch_instances(
-    task_dir: str, project: str, instance_ids: List[str]
+    task_dir: str, project: str, instance_ids: List[str],
+    username: Optional[str] = None,
 ) -> int:
     """Re-flag specific instances as stale after a retroactive codebook
     edit (merge/split/rename) that affected exactly them. Sets their
     stamped revision to current-1 so `stale_instances` resurfaces them —
     soft and dismissible, never a hard re-label gate (Phase 2 (B)
     policy). Only lowers a revision (never un-stales an already-older
-    row), and never raises one above current."""
+    row), and never raises one above current.
+
+    `username` limits the flag to that coder's row. A split moves one
+    annotator's codings; without it every coder of the instance was sent
+    back to review work nobody had changed."""
     if not instance_ids:
         return 0
     cur = current_revision(task_dir, project)
@@ -296,13 +301,18 @@ def touch_instances(
         return 0
     target = cur - 1
     qs = ",".join("?" * len(instance_ids))
+    params = [target, time.time(), project, *instance_ids, target]
+    user_clause = ""
+    if username is not None:
+        user_clause = " AND username = ?"
+        params.append(username)
     conn = _db(task_dir)
     cur_ = conn.execute(
         f"""UPDATE annotation_provenance
             SET revision = ?, updated_at = ?
             WHERE project = ? AND instance_id IN ({qs})
-              AND revision > ?""",
-        [target, time.time(), project, *instance_ids, target],
+              AND revision > ?{user_clause}""",
+        params,
     )
     conn.commit()
     return cur_.rowcount
@@ -337,6 +347,29 @@ def content_stale_instances(
     ).fetchall()
     return [{
         "instance_id": r["instance_id"],
+        "annotated_sem_revision": int(r["sem_revision"]),
+        "current_sem_revision": cur,
+    } for r in rows]
+
+
+def all_content_stale_instances(
+    task_dir: str, project: str
+) -> List[Dict[str, object]]:
+    """Every (instance, user) stamped under an older semantic revision —
+    the project-wide counterpart of `content_stale_instances`."""
+    cur = current_sem_revision(task_dir, project)
+    if cur <= 0:
+        return []
+    rows = _db(task_dir).execute(
+        """SELECT instance_id, username, sem_revision
+           FROM annotation_provenance
+           WHERE project = ? AND sem_revision < ?
+           ORDER BY sem_revision ASC, instance_id ASC, username ASC""",
+        (project, cur),
+    ).fetchall()
+    return [{
+        "instance_id": r["instance_id"],
+        "username": r["username"],
         "annotated_sem_revision": int(r["sem_revision"]),
         "current_sem_revision": cur,
     } for r in rows]

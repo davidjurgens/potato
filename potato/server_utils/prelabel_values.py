@@ -18,15 +18,17 @@ from __future__ import annotations
 import json
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["PRELABEL_TYPES", "prelabel_values", "valid_shape", "client_shapes"]
+__all__ = ["PRELABEL_TYPES", "prelabel_values", "valid_shape", "client_shapes",
+           "client_spatial"]
 
 PRELABEL_TYPES = ("ranking", "bws", "soft_label", "interlinear_gloss",
                   "tree_annotation", "microscopy", "gui_trajectory",
-                  "grounding_eval", "region_caption", "speech_transcript")
+                  "grounding_eval", "region_caption", "speech_transcript",
+                  "volume_annotation", "video_annotation")
 
 
 def _label_names(scheme: Dict[str, Any]) -> List[str]:
@@ -163,6 +165,31 @@ def _planes(scheme: Dict[str, Any], item: Optional[Dict[str, Any]],
         return image.size_z, image.size_t
     except Exception:  # noqa: BLE001 - the widget reports an unreadable image itself
         return None
+
+
+def client_spatial(objects: List[Any], labels: Optional[List[str]] = None
+                   ) -> Tuple[List[Dict[str, Any]], int]:
+    """``(objects the point-cloud viewer can show, number left out)``. An
+    object whose geometry does not parse, or whose label the scheme does not
+    have, was dropped by the viewer at load and the next save stored the
+    scan without it."""
+    from potato.export.spatial_utils import normalize_spatial_object
+    kept, dropped = [], 0
+    for obj in objects:
+        canonical = normalize_spatial_object(obj) if isinstance(obj, dict) else None
+        if not canonical or (labels and str(canonical.get("label")) not in labels):
+            dropped += 1
+            continue
+        raw_size = ((obj.get("coordinates") or {}).get("size")
+                    if isinstance(obj.get("coordinates"), dict) else None)
+        sizes = list(canonical.get("size") or []) + list(raw_size or [])
+        if canonical["type"] == "cuboid_3d" and not (
+                canonical.get("size") and all(math.isfinite(float(v)) and float(v) > 0
+                                              for v in sizes)):
+            dropped += 1
+            continue
+        kept.append(obj)
+    return kept, dropped
 
 
 def prelabel_values(scheme: Dict[str, Any], payload: Any,
@@ -319,6 +346,93 @@ def prelabel_values(scheme: Dict[str, Any], payload: Any,
                            "(no such turn, a repeated turn, or no correction)",
                            name, len(offered) - len(entries), len(offered))
         return {name: json.dumps(entries, ensure_ascii=False)} if entries else None
+    if atype == "video_annotation":
+        # Tracks, for a tracking or combined scheme: a box per keyframe as
+        # fractions of the picture. A box off the picture, or a label the
+        # scheme does not have, would be drawn and then saved as it is.
+        if str(scheme.get("mode") or "").lower() not in ("tracking", "combined"):
+            return None
+        tracks = payload.get("tracks") if isinstance(payload, dict) else None
+        if not isinstance(tracks, dict):
+            return None
+        labels = set(_label_names(scheme))
+        kept, dropped = {}, 0
+        for track_id, track in tracks.items():
+            if not isinstance(track, dict) or (labels and str(track.get("label")) not in labels):
+                dropped += 1
+                continue
+            keyframes = {}
+            for key, kf in (track.get("keyframes") or {}).items():
+                box = kf.get("bboxNorm") if isinstance(kf, dict) else None
+                try:
+                    x, y, w, h = (float(box[k]) for k in ("x", "y", "width", "height"))
+                    frame = int(kf.get("frame", key))
+                except (TypeError, ValueError, KeyError):
+                    dropped += 1
+                    continue
+                if (not all(math.isfinite(v) for v in (x, y, w, h))
+                        or w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > 1.0001
+                        or y + h > 1.0001):
+                    dropped += 1
+                    continue
+                # No canvas box: the page computes it in its own pixels.
+                keyframes[str(frame)] = dict({k: v for k, v in kf.items() if k != "bbox"},
+                                             frame=frame, type="bbox")
+            if keyframes:
+                frames = [int(f) for f in keyframes]
+                kept[str(track_id)] = dict(track, keyframes=keyframes,
+                                           startFrame=min(frames), endFrame=max(frames))
+        if dropped:
+            logger.warning("Track prediction for %r: %d track(s) or keyframe(s) left out",
+                           name, dropped)
+        if not kept:
+            return None
+        meta = payload.get("video_metadata") if isinstance(payload.get("video_metadata"), dict) \
+            else {}
+        return {"_data": json.dumps({"video_metadata": meta, "segments": [],
+                                     "frame_annotations": {}, "keyframes": [], "tracking": {},
+                                     "tracks": kept}, ensure_ascii=False)}
+    if atype == "volume_annotation":
+        # Painted masks, per label and axial slice. A slice whose runs do not
+        # add up to the volume's slice, or past its last slice, would be
+        # decoded across the wrong voxels by the widget, then saved.
+        if not isinstance(payload, dict) or not isinstance(payload.get("masks"), dict):
+            return None
+        try:
+            ni, nj, nk = (int(n) for n in payload.get("shape") or ())
+        except (TypeError, ValueError):
+            return None
+        if min(ni, nj, nk) <= 0:
+            return None
+        labels = set(_label_names(scheme))
+        masks, dropped = {}, 0
+        for label, slices in payload["masks"].items():
+            if str(label) not in labels or not isinstance(slices, dict):
+                dropped += 1
+                continue
+            kept = {}
+            for k, counts in slices.items():
+                try:
+                    index = int(k)
+                    total = sum(int(c) for c in counts)
+                except (TypeError, ValueError, OverflowError):
+                    dropped += 1
+                    continue
+                if 0 <= index < nk and total == ni * nj and all(int(c) >= 0 for c in counts):
+                    kept[str(index)] = [int(c) for c in counts]
+                else:
+                    dropped += 1
+            if kept:
+                masks[str(label)] = kept
+        if dropped:
+            logger.warning("Volume prediction for %r: %d label(s) or slice(s) left out that "
+                           "do not fit the scheme or the volume", name, dropped)
+        if not masks:
+            return None
+        return {"_data": json.dumps({
+            "volume": str(payload.get("volume") or ""), "shape": [ni, nj, nk],
+            "labels": [l for l in _label_names(scheme)], "masks": masks, "shapes": [],
+            "prefilled_from": "model"})}
     if atype == "region_caption":
         captions = payload.get("captions") if isinstance(payload, dict) else None
         captions = [c for c in captions if isinstance(c, dict) and valid_shape(c.get("region"))

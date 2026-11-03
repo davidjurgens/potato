@@ -767,7 +767,7 @@ the machine-machine and pooled figures.
       "note": "every annotator gave the same label on every item, so chance agreement is 1 and kappa and alpha are undefined. ..."
     },
     "regions": {
-      "error": "Structured answers (steps, segments or regions) are scored in the agreement report at /admin/iaa, not here.",
+      "error": "Structured answers (steps, segments, regions, glosses, links, chains or events) are scored in the agreement report at /admin/iaa, not here.",
       "see": "/admin/iaa"
     }
   },
@@ -794,8 +794,9 @@ the machine-machine and pooled figures.
   out of the `overall` averages.
 - `overall.average_cohen_kappa` and `overall.average_fleiss_kappa` average the
   schemas that have a kappa value, and appear only when at least one does.
-- Structured schemes (segments, regions, steps, spatial, grounding, episode and
-  caption answers) are not scored here. Their entry has an `error` and
+- Structured schemes (segments, regions, steps, spatial, grounding, episode,
+  caption and gloss answers, span links, coreference chains and events) are not
+  scored here. Their entry has an `error` and
   `"see": "/admin/iaa"`.
 - A schema with no item reaching `agreement_metrics.min_overlap` annotators
   (default 2) has an `error` and `items_count` instead.

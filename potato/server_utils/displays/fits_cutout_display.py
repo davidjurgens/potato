@@ -52,6 +52,10 @@ PANEL_KEYS = {"key", "label"} | set(SCALING_KEYS)
 LIGHT_CURVE_ROLES = ("time", "mag", "err", "band", "limit")
 PLOTLY_SRC = "/static/vendor/plotly-2.27.0.min.js"
 MAX_PANELS = 6
+#: fits_cutout refuses allow_remote, so a URL's error must not suggest it.
+_REMOTE_FITS = ("This item names a remote URL. fits_cutout reads its files on the "
+                "server from the media directory and does not download them: copy "
+                "the file into the media directory and name it relative to that.")
 
 
 class FitsCutoutDisplay(ViewerDisplay):
@@ -251,7 +255,8 @@ class FitsCutoutDisplay(ViewerDisplay):
         params["max_file_bytes"] = int(float(options.get("max_file_mb") or 100) * 1024 * 1024)
         params["max_image_pixels"] = int(options.get("max_image_pixels") or 25_000_000)
         try:
-            _url, path = resolve_source(value, False, f"{label.lower() or key} FITS file")
+            _url, path = resolve_source(value, False, f"{label.lower() or key} FITS file",
+                                        remote_message=_REMOTE_FITS)
         except ViewerDataError as e:
             out["error"] = str(e)
             return out
@@ -278,7 +283,8 @@ class FitsCutoutDisplay(ViewerDisplay):
                     raise ValueError("an inline light curve is a list of objects, one per point")
                 return light_curve_from_rows(value, columns, "this item's light curve")
             if isinstance(value, str) and value.strip():
-                _url, path = resolve_source(value, False, "light curve")
+                _url, path = resolve_source(value, False, "light curve",
+                                            remote_message=_REMOTE_FITS)
                 if path is None or not os.path.isfile(path):
                     raise ValueError(f"{value} is not in the media directory")
                 return read_light_curve(path, columns)

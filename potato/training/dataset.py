@@ -68,6 +68,7 @@ _MODALITY_BY_TYPE = {
     "speech_transcript": "audio",
     # Trained as boxes on the recording's rendered spectrogram.
     "spectrogram_annotation": "image",
+    "volume_annotation": "volume",
     "spatial_annotation": "point_cloud",
     "episode_annotation": "video",
 }
@@ -380,6 +381,22 @@ def _target_for(spec: SchemaSpec, value_map: Any,
         return _labels_of(value_map)
     if spec.kind == "span":
         return (value_map or {}).get("_spans", []) if isinstance(value_map, dict) else []
+    if spec.kind == "volume":
+        # The scheme's labels only: a mask under a renamed or removed label
+        # is no class the model can learn, and scored, it was a sure 0.
+        declared = [str(l.get("name") if isinstance(l, dict) else l)
+                    for l in (scheme or {}).get("labels") or []]
+        return _volume_target(value_map, declared or None)
+    if spec.kind == "spatial":
+        from potato.training.spatial import spatial_target
+        return spatial_target(value_map)
+    if spec.kind == "track":
+        from potato.training.tracking import track_target
+        try:
+            fps = float((scheme or {}).get("video_fps") or 30)
+        except (TypeError, ValueError):
+            fps = 30.0
+        return track_target(value_map, default_fps=fps)
     if spec.kind == "geometry" and spec.annotation_type == "microscopy":
         from potato.training.vision import microscopy_target
         return microscopy_target(value_map)
@@ -405,6 +422,26 @@ def _target_for(spec: SchemaSpec, value_map: Any,
         except (TypeError, ValueError):
             return _label_of(value_map)
     return _label_of(value_map)
+
+
+def _volume_target(value_map: Any, labels: Optional[List[str]] = None
+                   ) -> Optional[Dict[str, Any]]:
+    """A volume answer's painted masks, ``{shape, labels, masks}``, or None
+    when nothing is painted (a box-only answer is not a segmentation).
+    With *labels*, masks under any other label are left out."""
+    from potato.training.vision import blob
+    answer = blob(value_map)
+    if not isinstance(answer, dict) or not isinstance(answer.get("masks"), dict):
+        return None
+    masks = {label: slices for label, slices in answer["masks"].items()
+             if (labels is None or str(label) in labels)
+             and isinstance(slices, dict) and any(
+                 isinstance(c, list) and any(c[1::2]) for c in slices.values())}
+    if not masks or not isinstance(answer.get("shape"), list):
+        return None
+    return {"shape": [int(n) for n in answer["shape"]],
+            "labels": [str(l) for l in answer.get("labels") or masks],
+            "masks": masks}
 
 
 #: Kinds whose inputs are an agent trace on the item, not its text field.
@@ -672,6 +709,10 @@ def _media_field(config: Dict[str, Any], scheme: Dict[str, Any]) -> Optional[str
         return scheme.get("image_key") or "image"
     if scheme.get("annotation_type") == "speech_transcript":
         return scheme.get("audio_key") or "audio"
+    if scheme.get("annotation_type") == "volume_annotation":
+        return "volume"
+    if scheme.get("annotation_type") == "spatial_annotation":
+        return "point_cloud"
     if scheme.get("annotation_type") in ("region_caption", "grounding_eval"):
         for other in config.get("annotation_schemes") or []:
             if isinstance(other, dict) and other.get("annotation_type") == "image_annotation":
@@ -1209,6 +1250,12 @@ def build_bundle(
                 seen_labels[name].update(str(s["verdict"]) for s in target)
             elif spec_kind == "segments":
                 seen_labels[name].update(str(t["speaker"]) for t in target)
+            elif spec_kind == "volume":
+                seen_labels[name].update(str(l) for l in target["masks"])
+            elif spec_kind == "spatial":
+                seen_labels[name].update(str(c["label"]) for c in target)
+            elif spec_kind == "track":
+                seen_labels[name].update(str(t["label"]) for t in target["tracks"])
             elif spec_kind == "acoustic":
                 seen_labels[name].update(str(b["label"]) for b in target)
             elif spec_kind in ("relation", "event", "coreference"):

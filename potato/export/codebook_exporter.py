@@ -67,7 +67,7 @@ class CodebookExporter(BaseExporter):
             if atype not in CODEBOOK_SCHEMA_TYPES:
                 continue
             schema_name = scheme.get("name", "")
-            for code_row in self._iter_codes(scheme):
+            for code_row in self._codebook_rows(context, scheme):
                 code_row["schema"] = schema_name
                 code_row["annotation_type"] = atype
                 code_row["n_uses"] = use_counts.get(
@@ -133,6 +133,48 @@ class CodebookExporter(BaseExporter):
         except Exception as e:
             logger.warning(f"Could not read codebook definitions: {e}")
         return out
+
+    @staticmethod
+    def _codebook_rows(context, scheme):
+        """Yield {code, parent, description, color} for a scheme, read from
+        the project codebook when the scheme is ``codebook: true``.
+
+        The server (and the export CLI) replace such a scheme's labels with
+        the codebook's bare names, so `_iter_codes` saw a flat list with no
+        parent and no colour: codebook.csv lost the tree and every colour,
+        and the .qdpx handed to NVivo or ATLAS.ti was flat. The codebook
+        itself has both. Falls back to `_iter_codes` when the scheme is not
+        codebook-backed or the project has no codebook database.
+        """
+        task_dir = context.config.get("task_dir", ".")
+        if (not scheme.get("codebook")
+                or not os.path.exists(os.path.join(task_dir, "project.sqlite"))):
+            yield from CodebookExporter._iter_codes(scheme)
+            return
+        project = context.config.get("annotation_task_name") or "default"
+        try:
+            from potato.codebook.codebook import Codebook
+            cb = Codebook.load(task_dir, project)
+        except Exception as e:
+            logger.warning(f"Could not read the project codebook: {e}")
+            cb = None
+        if cb is None or cb.is_empty():
+            yield from CodebookExporter._iter_codes(scheme)
+            return
+
+        definitions = CodebookExporter._codebook_definitions(context)
+
+        def walk(parent_id, parent_name):
+            for code in cb.children(parent_id):
+                yield {
+                    "code": code["name"],
+                    "parent": parent_name,
+                    "description": definitions.get(code["name"], ""),
+                    "color": code.get("color") or "",
+                }
+                yield from walk(code["id"], code["name"])
+
+        yield from walk("", "")
 
     @staticmethod
     def _iter_codes(scheme):

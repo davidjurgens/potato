@@ -452,6 +452,9 @@ other key.
 | `hf-audio-tagger` | `audio_annotation` | audio | `potato-annotation[train-audio]` |
 | `whisper-asr` | `speech_transcript` (corrected turns) | audio | `potato-annotation[train-audio]` |
 | `diarization` | `tiered_annotation` (a speaker tier), `audio_annotation` (labels are speakers) | audio | `potato-annotation[train-audio]` |
+| `volume-unet` | `volume_annotation` (painted masks) | NIfTI volumes, DICOM series | `potato-annotation[train-vision,volumes]`; a GPU in practice |
+| `external-3d` | `spatial_annotation` (cuboids) | point clouds | your own detector (OpenPCDet, MMDetection3D) on the training host |
+| `video-track` | `video_annotation` in `tracking` or `combined` mode | video | `potato-annotation[train-vision]` and `opencv-python` |
 | `decision-calibrate` | `radio`, `select`, `likert`, `slider` | text | nothing; a configured decision model |
 | `laya-finetune` | `radio`, `select`, `likert`, `slider` | text | `potato-annotation[decision]` |
 | `openjev-finetune` | `radio`, `select`, `likert`, `slider` | text | `pip install wev-ai`; a GPU with about 16 GB free |
@@ -1611,6 +1614,105 @@ rate, which ignores whether a turn is called `Interviewer` or `SPEAKER_01` and
 counts whether the speaker changes at the right times. `hf-audio-tagger` on
 the same scheme is scored by segment F1.
 
+### `volume-unet`
+
+`volume-unet` segments CT and MR volumes from the masks annotators painted in
+a `volume_annotation` scheme. Each volume is read in the canonical voxel order
+the widget paints in, its masks become one label per voxel (where two labels
+overlap, the later one in the bundle's label order wins, as the NIfTI export
+does), and a 3D U-Net in plain torch learns them: three levels, instance norm,
+cross-entropy plus soft Dice, on random cubic patches, half of them centred on
+a painted voxel so small structures are seen. Intensities are clipped to each
+volume's 0.5 and 99.5 percentiles and standardized. Prediction slides the patch
+over the whole volume with half-patch overlap and averages the probabilities.
+The masks come back in the widget's shape, per label and axial slice, marked
+`prefilled_from: model`, and show on the slice views. A box-only answer has no
+mask and is not trained on.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `patch` | 64 | Side of the cubic patch in voxels; a multiple of 2 to the power `levels` − 1. |
+| `levels` | 3 | Depth of the U-Net (2 to 5). |
+| `base_channels` | 16 | Channels at the first level, doubling at each level down. |
+| `patches_per_epoch` | 100 | Random patches drawn per epoch. |
+| `foreground_share` | 0.5 | Share of patches centred on a painted voxel. |
+| `epochs` | 50 | |
+| `batch_size` | 2 | Patches per step. |
+| `learning_rate` | 3e-4 | |
+| `patience` | 10 | Epochs without a better val mean Dice before stopping. |
+| `min_instances` | 3 | Annotated volumes needed in the train split. |
+
+It needs torch and nibabel, and pydicom for DICOM series; a NIfTI volume now
+loads without pydicom. A volume whose painted shape differs from the file's is
+left out with a warning. It uses no MONAI. A full-size CT is a few hundred
+patches to predict, so in practice it needs a GPU.
+
+### `external-3d`
+
+`external-3d` detects 3D cuboids in point clouds with a detector you install,
+because the ones that work here (OpenPCDet, MMDetection3D) need CUDA operators
+compiled on the GPU host. It writes the annotated scans as OpenPCDet's custom
+dataset, in the scan's own frame (no camera calibration needed):
+
+- `points/<id>.npy`: float32 `(N, 4)`, x, y, z and intensity (0 when the file has none);
+- `labels/<id>.txt`: one line per cuboid, `x y z dx dy dz heading label`, the
+  heading being the rotation about +z (pitch and roll are not kept);
+- `ImageSets/train.txt`, `val.txt` and `predict.txt`: the ids.
+
+Then it runs `train_command` once and `predict_command` on the held-out and
+unlabelled scans, without a shell, with `{dataset}`, `{workdir}` and
+`{predictions}` replaced by their paths; other braces in a command are left
+as they are. `predict_command` writes `<predictions>/<id>.txt`,
+one line per box: `x y z dx dy dz heading label score`. The boxes come back as
+`cuboid_3d` objects marked `source: model`. Lines that do not parse or hold
+a non-finite number (`nan`, `inf`), labels the scheme does not have, and boxes
+with no size are left out and counted. A
+georeferenced scan is written relative to its origin and its boxes are shifted
+back. Only cuboids are targets, and only single scans, not sequences.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `train_command` | empty | Run in the run's folder. Empty: nothing is trained, and `predict_command` uses a model of your own. |
+| `predict_command` | required | Writes `{predictions}/<id>.txt` for the ids in `{dataset}/ImageSets/predict.txt`. |
+| `timeout_s` | 86400 | Seconds each command may run. |
+| `min_instances` | 1 | Annotated scans needed when `train_command` is set. |
+
+A command that exits non-zero fails the run with the last lines of its output.
+Point-cloud prelabels are now checked before the viewer sees them: an object
+whose geometry does not parse, a cuboid with no size, and a label the scheme
+does not have are left out.
+
+### `video-track`
+
+`video-track` tracks objects in video, for `video_annotation` schemes in
+`tracking` or `combined` mode (other modes train as segments). The annotated
+tracks are sampled at `frame_fps`: each sampled frame is read with OpenCV, and
+each track's box there is interpolated between its keyframes as the widget
+draws it, using the box as a fraction of the picture (the canvas-pixel box
+depends on the annotator's screen). A torchvision Faster R-CNN, with
+`torchvision-detect`'s parameters, is fine-tuned on those frames.
+
+Prediction samples each video at `predict_fps`, detects on each sampled frame,
+and links detections into tracks: each frame's detections are matched to the
+live tracks of the same label by box overlap with the track's last box (best
+one-to-one match, at least `match_iou`); an unmatched detection of at least
+`new_track_score` starts a track; a track missed for more than `max_age`
+sampled frames ends. Each detection is a keyframe, so the widget interpolates
+between them. The tracks prefill the widget, which puts the boxes in its own
+canvas pixels when it draws them.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `frame_fps` | 2 | Frames per second sampled from each annotated video to train on. |
+| `predict_fps` | `frame_fps` | Frames per second detected on to predict. |
+| `match_iou` | 0.3 | Box overlap at which a detection continues a track. |
+| `max_age` | 2 | Sampled frames a track may go undetected before it ends. |
+| `new_track_score` | 0.5 | Lowest score at which an unmatched detection starts a track. |
+| `min_instances` | 2 | Annotated videos needed in the train split. |
+
+The other parameters are `torchvision-detect`'s. OpenCV reads the videos
+(`pip install opencv-python`); a codec it cannot read leaves the item out.
+
 ### Decision models
 
 A decision model (hosted Jev, OpenJev, `laya-serve`, or Laya in this process)
@@ -1768,6 +1870,9 @@ scheme's kind:
 | `speech_transcript` | word and character error rate over the corrected turns (`wer`, `cer`), and the original transcript's WER on the same turns (`wer_asr`). A turn the model left alone is scored as the transcript's text. | `word_accuracy`, 1 − WER (0 at worst) |
 | `tiered_annotation` speaker turns, and `audio_annotation` with `diarization` | diarization error rate (`der`): missed speech, false alarm and speaker confusion (each also reported) over the annotated speech, on a 10 ms grid, under the best one-to-one mapping of predicted to annotated speakers. No collar. | `diarization_accuracy`, 1 − DER (0 at worst) |
 | `spectrogram_annotation` | as `image_annotation`, on the rendered spectrogram | `map_50` |
+| `volume_annotation` | Dice per label per volume (`dice_<label>`) and their mean over every volume and label pair; a label the model left out of a volume that has it scores 0 | `mean_dice` |
+| `spatial_annotation` | 3D average precision per label at volumetric IoU 0.5 (`ap_3d_50_<label>`), mean over labels at 0.25 and 0.5, and precision, recall and F1 at 0.5, matching oriented cuboids exactly | `map_3d_50` |
+| `video_annotation` (tracking) | MOTA, IDF1, ID switches, misses and false positives at IoU 0.5, on frames sampled at 2 per second across each annotated video | `idf1` |
 
 A classifier trained with `soft_targets` also reports `soft_jsd`,
 `soft_cross_entropy` and `ece`; see

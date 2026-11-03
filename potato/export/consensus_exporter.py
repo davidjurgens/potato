@@ -95,7 +95,28 @@ class ConsensusExporter(BaseExporter):
         except ConsensusConfigError as exc:
             return ExportResult(success=False, format_name=self.format_name,
                                 errors=[str(exc)])
+        if settings.schemes is not None:
+            # A misspelt name in `--option schemes=` was dropped by the filter
+            # in aggregatable_schemes, and the export succeeded without it.
+            declared = {s.get("name") for s in context.schemas or []
+                        if isinstance(s, dict)}
+            unknown = [n for n in settings.schemes if n not in declared]
+            if unknown:
+                return ExportResult(
+                    success=False, format_name=self.format_name,
+                    errors=["schemes names scheme(s) the project does not declare: "
+                            + ", ".join(unknown)])
         schemes = aggregatable_schemes(context.schemas, settings)
+        if settings.schemes is not None:
+            # Named, declared, but of a type consensus cannot aggregate (a
+            # text box): dropped by the same filter, just as silently.
+            chosen = {s["name"] for s in schemes}
+            skipped = [n for n in settings.schemes if n not in chosen]
+            if skipped:
+                return ExportResult(
+                    success=False, format_name=self.format_name,
+                    errors=["schemes names scheme(s) consensus cannot aggregate "
+                            "(choice, rating and image schemes only): " + ", ".join(skipped)])
         if not schemes:
             return ExportResult(success=False, format_name=self.format_name,
                                 errors=[self.can_export(context)[1] or

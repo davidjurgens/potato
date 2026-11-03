@@ -3443,36 +3443,14 @@ _CLAIM_INCOMPATIBLE_STRATEGIES = {
 }
 
 
-def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
-    """Hard-fail when ``search.annotator_claim`` is combined with a
-    feature whose integrity depends on the platform — not the annotator —
-    choosing the next item. Read-only admin search is unaffected.
-
-    Solo/QDA mode (single coder over the whole corpus) is always allowed.
-    """
-    search = config_data.get("search")
-    if not isinstance(search, dict) or not search.get("annotator_claim"):
-        return
-
-    # Single-coder modes have no sampling/overlap invariant to protect.
-    if (config_data.get("qda_mode") or {}).get("enabled") or \
-       (config_data.get("solo_mode") or {}).get("enabled"):
-        return
-
-    conflicts = []
-
-    strat = config_data.get("assignment_strategy")
-    if isinstance(strat, dict):
-        strat = strat.get("name")
-    if strat and str(strat).lower() in _CLAIM_INCOMPATIBLE_STRATEGIES:
-        conflicts.append(
-            f"assignment_strategy: {strat} (self-selection breaks "
-            f"sampling/ordering)")
-
+def _overlap_knobs(config_data: Dict[str, Any]) -> List[str]:
+    """``"key: value"`` for each setting that asks for more than one
+    annotator per item. ``num_annotators_per_item`` may be a dict, read
+    through its ``default`` and ``overlap_sample.count``."""
+    knobs = []
     for k in ("max_annotations_per_item", "num_annotators_per_item",
               "min_annotators_per_instance"):
         raw = config_data.get(k, -1)
-        # num_annotators_per_item may now be a dict — extract default + overlap_sample.count
         candidates = []
         if isinstance(raw, dict):
             if raw.get("default") is not None:
@@ -3485,12 +3463,57 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
         for cand in candidates:
             try:
                 if int(cand) > 1:
-                    conflicts.append(
-                        f"{k}: {config_data[k]} (inter-annotator overlap "
-                        f"cannot be guaranteed under self-selection)")
+                    knobs.append(f"{k}: {config_data[k]}")
                     break
             except (TypeError, ValueError):
                 continue
+    return knobs
+
+
+def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
+    """Hard-fail when ``search.annotator_claim`` is combined with a
+    feature whose integrity depends on the platform — not the annotator —
+    choosing the next item. Read-only admin search is unaffected.
+
+    Solo/QDA mode is always allowed; QDA mode logs a warning when the
+    config also asks for overlap, since self-selection cannot guarantee it.
+    """
+    search = config_data.get("search")
+    if not isinstance(search, dict) or not search.get("annotator_claim"):
+        return
+
+    # Solo mode is one coder over the whole corpus: no sampling or overlap
+    # invariant to protect.
+    if (config_data.get("solo_mode") or {}).get("enabled"):
+        return
+
+    # QDA mode is exempt too, but a QDA project can still have a team of
+    # coders. Someone who also asked for overlap is told it will not hold,
+    # rather than finding out at the IAA step.
+    if (config_data.get("qda_mode") or {}).get("enabled"):
+        knobs = _overlap_knobs(config_data)
+        if knobs:
+            logger.warning(
+                "search.annotator_claim under qda_mode with %s: annotators "
+                "who claim their own items decide which items get a second "
+                "coder, so the requested overlap is not guaranteed.",
+                ", ".join(knobs))
+        return
+
+    conflicts = []
+
+    strat = config_data.get("assignment_strategy")
+    if isinstance(strat, dict):
+        strat = strat.get("name")
+    if strat and str(strat).lower() in _CLAIM_INCOMPATIBLE_STRATEGIES:
+        conflicts.append(
+            f"assignment_strategy: {strat} (self-selection breaks "
+            f"sampling/ordering)")
+
+    for knob in _overlap_knobs(config_data):
+        conflicts.append(
+            f"{knob} (inter-annotator overlap cannot be guaranteed under "
+            f"self-selection)")
 
     if (config_data.get("attention_checks") or {}).get("enabled"):
         conflicts.append("attention_checks.enabled (annotators could "
@@ -3576,17 +3599,40 @@ def _crowd_backend(config_data: Dict[str, Any]) -> bool:
     return False
 
 
+def _requested_codebook_mode(config_data: Dict[str, Any]) -> Tuple[Any, str]:
+    """The codebook mode the config asks for, and the key it was written as.
+
+    ``codebook_mode`` wins, then ``codebook.mode``, then
+    ``qda_mode.codebook.mode`` (read only while QDA mode is on). The QDA
+    spelling is documented as equivalent to ``codebook_mode`` and was read
+    by nothing but /qda/status, so a project that set it there got the
+    QDA default (``open``) whatever it asked for. ``(None, "")`` when none
+    is set.
+    """
+    raw = config_data.get("codebook_mode")
+    if raw is not None:
+        return raw, "codebook_mode"
+    codebook = config_data.get("codebook")
+    if isinstance(codebook, dict) and codebook.get("mode") is not None:
+        return codebook["mode"], "codebook.mode"
+    qda = config_data.get("qda_mode")
+    if isinstance(qda, dict) and qda.get("enabled"):
+        qda_codebook = qda.get("codebook")
+        if isinstance(qda_codebook, dict) and qda_codebook.get("mode") is not None:
+            return qda_codebook["mode"], "qda_mode.codebook.mode"
+    return None, ""
+
+
 def get_codebook_mode(config_data: Dict[str, Any]) -> str:
     """Resolve the effective codebook mode.
 
-    Precedence: explicit ``codebook_mode`` / ``codebook.mode`` if set;
+    Precedence: explicit ``codebook_mode`` / ``codebook.mode`` /
+    ``qda_mode.codebook.mode`` if set (see ``_requested_codebook_mode``);
     else ``open`` when solo/QDA mode is enabled; else ``fixed``. A crowd
     backend force-locks ``fixed`` regardless of the request (annotators
     on a paid HIT must not reshape the shared codebook).
     """
-    raw = config_data.get("codebook_mode")
-    if raw is None:
-        raw = (config_data.get("codebook") or {}).get("mode")
+    raw, _ = _requested_codebook_mode(config_data)
 
     if raw is None:
         single = (
@@ -3606,15 +3652,13 @@ def validate_codebook_config(config_data: Dict[str, Any]) -> None:
     """Reject an invalid ``codebook_mode`` value, warn when a crowd
     backend overrides a requested non-fixed mode, and warn when an open
     codebook sits behind url_direct self-registration."""
-    raw = config_data.get("codebook_mode")
-    if raw is None:
-        raw = (config_data.get("codebook") or {}).get("mode")
+    raw, key = _requested_codebook_mode(config_data)
 
     if raw is not None:
         mode = str(raw).strip().lower()
         if mode not in _CODEBOOK_MODES:
             raise ConfigValidationError(
-                f"codebook_mode must be one of {', '.join(_CODEBOOK_MODES)}; "
+                f"{key} must be one of {', '.join(_CODEBOOK_MODES)}; "
                 f"got {raw!r}."
             )
     else:
@@ -7808,6 +7852,22 @@ def warn_about_unreadable_optional_files(config_data: Dict[str, Any],
             continue
         if value.startswith(("http://", "https://")):
             continue
+        if key == 'annotation_codebook_url' and value.startswith('/'):
+            # A link the page serves, not a path on disk: /media/<file> is
+            # <media_directory>/<file>; any other site path cannot be checked.
+            if not value.startswith('/media/'):
+                continue
+            from urllib.parse import unquote, urlsplit
+            relative = unquote(urlsplit(value).path)[len('/media/'):]
+            media_dir = config_data.get('media_directory') or 'media'
+            if os.path.isabs(media_dir):
+                # Served from there as configured; no project path to check against.
+                if not os.path.exists(os.path.join(media_dir, relative)):
+                    messages.append(
+                        f"{key} names {value!r}, which is not in {media_dir}. The "
+                        f"server starts anyway and the link is broken.")
+                continue
+            value = os.path.join(media_dir, relative)
         try:
             resolved = validate_path_security(value, base_dir, project_dir)
         except ConfigSecurityError as e:

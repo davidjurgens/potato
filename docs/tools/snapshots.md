@@ -32,8 +32,9 @@ potato snapshot verify --dir ./downloaded-snapshot
 | `verify [ref]` | Re-hash the snapshot's files and contents against its manifest. `--dir <folder>` checks a folder holding a snapshot's files instead, such as a copy downloaded from a deposit, and needs no config |
 | `deposit [ref]` | Upload the snapshot's files to Zenodo (see [Depositing a snapshot](#depositing-a-snapshot)) |
 
-A `ref` is a snapshot id, the start of one (`20261019-1205`), a tag, or
-`latest`. `list`, `show` and `diff` take `--json`.
+A `ref` is a snapshot id, the start of one (`20261019-1205`), the start of its
+content hash, a tag, or `latest`. Tags cannot be named `latest`. `list`,
+`show` and `diff` take `--json`.
 
 ## Snapshot contents
 
@@ -87,6 +88,10 @@ ids and the annotation rows. Editing a survey question is a change. The SQLite d
 hash, because the server rewrites them as it runs, and a hash that changed with
 every rewrite could not tell a reader whether the annotations had changed.
 
+Memos, the codebook and cases live in those databases, so editing only them
+leaves the hash as it was, and `create` reports no change and writes nothing.
+Use `create --force` to freeze them.
+
 `verify` checks three things. The bundle and `annotations.jsonl` must match the
 hashes in the manifest. The config and data inside the bundle, together with
 the annotation rows, must hash to `content_hash`. Someone holding only the
@@ -105,15 +110,21 @@ curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
      http://localhost:8000/admin/api/snapshots
 ```
 
-`POST` returns 201 with the new manifest. If nothing has changed it returns
-200 with `"unchanged": true` and the existing snapshot. A tag that is not
-1-64 letters, digits, `.`, `_` or `-` gets a 400, and nothing is written.
+The `POST` body takes `note`, `tag` and `force` (a boolean, like `create
+--force`). It needs the admin API key, or a logged-in user whose role has the
+`export_data` permission.
+
+`POST` returns 201 with `{"unchanged": false, "snapshot": {...}}`, the new
+manifest. If nothing has changed it returns 200 with `"unchanged": true` and
+the existing snapshot. A tag that is not 1-64 letters, digits, `.`, `_` or `-`,
+or is `latest`, gets a 400, and nothing is written. A snapshot id that already
+exists, or a create of the same content already running, gets a 409.
 
 ## Publishing
 
-Every publish (archive, Hugging Face or Zenodo) freezes a snapshot first, or
-reuses the latest one if nothing has changed. The dataset card's citation
-section names it:
+A publish started from the admin **Publish Dataset** page or its API (archive,
+Hugging Face or Zenodo) freezes a snapshot first, or reuses the latest one if
+nothing has changed. The dataset card's citation section names it:
 
 > This release is Potato snapshot `20261019-044005-335ae51e` (content hash
 > `335ae51e…`). Anyone holding the project folder can check that their copy is
@@ -121,6 +132,10 @@ section names it:
 
 If freezing fails, the release still goes out and the failure is reported as
 a warning.
+
+`python -m potato.publish` does not freeze a snapshot, and its dataset card
+names none. To keep a frozen copy of what you publish from the command line,
+run `potato snapshot create config.yaml` first.
 
 ## Depositing a snapshot
 
@@ -131,7 +146,9 @@ with `potato snapshot verify --dir <folder>`. That re-hashes the files,
 recomputes the content hash and prints it. A passing check only shows that the
 files agree with the manifest beside them, so compare the printed hash with
 the one the paper or dataset card cites. The title, authors, licence and
-keywords come from `dataset_metadata`; the record's version is the snapshot id.
+keywords come from `dataset_metadata` in the config frozen in the snapshot's
+bundle, so later edits to the live config do not change the record. The
+record's version is the snapshot id.
 
 ```bash
 export ZENODO_TOKEN=...
@@ -140,6 +157,10 @@ potato snapshot deposit config.yaml paper-v1 --annotator-ids-public     # sandbo
 potato snapshot deposit config.yaml paper-v1 --annotator-ids-public --production --publish
 ```
 
+`--check` runs the checks below too. If any of them fails, it prints each
+reason on a line starting `refused:` and exits 1. For a project with
+annotators, `--check` without `--annotator-ids-public` therefore always exits 1.
+
 The default is the Zenodo sandbox and an unpublished draft; `--production`
 and `--publish` (which mints the DOI) are both needed for a public record.
 Each deposit is recorded in `snapshots/deposits.json`, and `show` lists it.
@@ -147,7 +168,7 @@ Once a snapshot has a published DOI on zenodo.org, the dataset card of a
 release frozen as that snapshot links to it.
 
 The files go out exactly as frozen, because the hash check depends on it.
-`potato publish` works differently: a published dataset maps annotator
+`python -m potato.publish` works differently: a published dataset maps annotator
 ids to `A1`..`An` and leaves internal fields out, and a deposited snapshot
 does neither. Two checks run before anything is sent:
 
@@ -168,7 +189,7 @@ does neither. Two checks run before anything is sent:
   each state goes out in the bundle with its consent and survey answers, even
   for an annotator who labelled nothing. If the ids must not be public,
   publish the anonymized dataset with
-  [`potato publish`](../data-export/publishing_datasets.md) instead.
+  [`python -m potato.publish`](../data-export/publishing_datasets.md) instead.
 
 ## Troubleshooting
 

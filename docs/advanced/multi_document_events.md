@@ -117,7 +117,10 @@ registry is for, but it means the registry cannot answer "which event does
 
 That answer is stored per annotator, alongside every other annotation, as the
 scheme's own value: a JSON list of the event ids this annotator has this
-document in. It is what the export and `/admin/iaa` read. Because the registry
+document in. That list is exported with the other annotations, but `/admin/iaa`
+does not score `multi_document_event` schemes. No export includes the registry
+itself (`event_registry.json`, with the titles, slots and evidence); copy it
+from `output_annotation_dir`. Because the registry
 seeds memberships, opening a document that a seeded event already claims does
 **not** count as an answer; only a membership the annotator changes does.
 

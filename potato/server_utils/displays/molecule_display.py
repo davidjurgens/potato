@@ -84,6 +84,10 @@ class MoleculeDisplay(ViewerDisplay):
 
     def validate_options(self, options: Dict[str, Any], path: str) -> List[str]:
         errors = []
+        if options.get("allow_remote"):
+            errors.append(f"{path}.allow_remote: molecule reads structure files on the "
+                          f"server from the media directory; remote files are not "
+                          f"supported, so remove allow_remote")
         if options.get("format") not in FORMATS:
             errors.append(f"{path}.format must be one of {', '.join(FORMATS)}")
         for key in ("show_atom_numbers", "atom_list"):
@@ -109,7 +113,12 @@ class MoleculeDisplay(ViewerDisplay):
             raise ViewerDataError("A molecule field holds a SMILES string, a molfile, "
                                   "or a .mol/.sdf/.smi file name, not a mapping.")
         if structures.is_structure_path(data):
-            _url, path = resolve_source(data, False, "structure file")
+            _url, path = resolve_source(
+                data, False, "structure file",
+                remote_message="The structure file for this item is a URL. Structure "
+                               "files are read on the server from the media directory, "
+                               "and Potato does not download them: copy the file into "
+                               "the media directory and name it relative to that.")
             try:
                 return structures.read_structure_file(path)
             except (OSError, ValueError) as e:

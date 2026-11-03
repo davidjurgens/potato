@@ -325,7 +325,15 @@ When a schema becomes hidden because its conditions are no longer met, the annot
 
 ### Stale Annotations
 
-In the output, annotations for hidden schemas are tracked separately as "stale" to indicate they may no longer be relevant to the current selections.
+On annotation pages, answers to hidden schemas are kept and exported unchanged,
+with no mark in the export. Hiding a schema that has a value records an
+`annotation_stale` interaction event in the behavioral data, with the schema,
+its value and the reason it was hidden.
+
+On survey and other phase pages, answers to questions the page hides are
+dropped when the participant leaves the page, and are left out of the phase
+data the server exports unless `exclude_hidden_survey_answers: false` (see
+[Server-side enforcement](#server-side-enforcement)).
 
 ### Smooth Animations
 

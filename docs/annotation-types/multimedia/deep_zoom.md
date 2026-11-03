@@ -124,8 +124,8 @@ implementation for the tiled case.
 **Masks work, and they do not depend on the GPU.** The mask buffer indexes
 *image pixels*, at the source's full resolution rather than at whatever size the
 image happened to be displayed at, so a mask painted zoomed in is directly
-comparable with one painted zoomed out — and nothing about it is bounded by a
-texture limit.
+comparable with one painted zoomed out. No texture limit applies to the stored
+mask. The overlay that draws it on screen has a size cap (see [Limits](#limits)).
 
 That last part is the practical difference from a WebGL-backed painter. V7, for
 example, tiles automatically above 10,000 px and lets you annotate a tiled file
@@ -200,6 +200,13 @@ slide pixels: see [Clinical and Pathology Formats](../science/clinical_formats.m
   single source image in the page to read.
 - **Pillow is required.** Without it the viewer reports what is missing and
   suggests `viewer: fabric`; it does not fail silently.
+- **The mask overlay is drawn at reduced resolution on large images.** The
+  masks are stored and exported at the source's full resolution, but the page
+  draws them through one overlay image of at most 4,096 pixels on its longest
+  side and 16 million pixels in all. On a 40,000 × 30,000 slide that is about
+  one overlay pixel per ten image pixels, so a fine brush stroke looks coarser
+  on screen than it is in the saved mask. Images under that size are drawn at
+  full resolution.
 
 ---
 

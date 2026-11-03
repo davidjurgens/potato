@@ -429,6 +429,52 @@ class TestOls4Source:
             with pytest.raises(OntologyServiceError, match="503"):
                 _ols_source().search("y cell")
 
+    def test_a_failed_version_lookup_is_not_cached_for_hours(self, monkeypatch):
+        # One OLS4 failure on /ontologies/cl was cached as version "" for six
+        # hours, and every search in that time was cached stamped with "".
+        import potato.ontology.source as source_module
+        clock = [1_000_000.0]
+        monkeypatch.setattr(source_module.time, "time", lambda: clock[0])
+        failures = [1]
+
+        def fake_get(self, url, params):
+            if url.endswith("/ontologies/cl"):
+                if failures[0]:
+                    failures[0] -= 1
+                    raise OntologyServiceError("OLS4 answered HTTP 503")
+                return {"config": {"version": "2026-09-30"}}
+            return {"response": {"numFound": 1, "docs": OLS_DOCS[:1]}}
+
+        monkeypatch.setattr(Ols4Source, "_get", fake_get)
+        src = _ols_source()
+        assert src.version == ""
+        during = src.search("b cell")
+        assert during["results"][0]["ontology_version"] == ""
+        # Past the short retry window, not the six-hour cache.
+        clock[0] += Ols4Source.VERSION_RETRY_S + 1
+        assert src.version == "2026-09-30"
+        after = src.search("b cell")
+        assert after["version"] == "2026-09-30"
+        assert after["results"][0]["ontology_version"] == "2026-09-30"
+
+    def test_a_failure_keeps_an_earlier_version(self, monkeypatch):
+        import potato.ontology.source as source_module
+        clock = [1_000_000.0]
+        monkeypatch.setattr(source_module.time, "time", lambda: clock[0])
+        up = [True]
+
+        def fake_get(self, url, params):
+            if not up[0]:
+                raise OntologyServiceError("down")
+            return {"config": {"version": "2026-09-30"}}
+
+        monkeypatch.setattr(Ols4Source, "_get", fake_get)
+        src = _ols_source()
+        assert src.version == "2026-09-30"
+        up[0] = False
+        clock[0] += Ols4Source.CACHE_TTL_S + 1
+        assert src.version == "2026-09-30"
+
     def test_no_request_without_opt_in(self):
         src = _ols_source()
         src.ls["allow_network"] = False
@@ -704,3 +750,33 @@ def test_a_stored_term_restores_with_the_value_the_picker_wrote():
            "ontology_version": 2025, "extra": "ignored"}
     assert encode_record(rec) == (
         '{"obo_id":"CL:0000084","label":"T cell","iri":"","ontology_version":"2025"}')
+
+
+def test_an_empty_or_fallback_version_is_not_cached_as_known(monkeypatch):
+    """Audit 105 P3: a lookup answering "" cached the first search for six
+    hours as known; a failure re-stamped the old version for six hours."""
+    import potato.ontology.source as source_module
+    clock = [1_000_000.0]
+    monkeypatch.setattr(source_module.time, "time", lambda: clock[0])
+    answers = [{"config": {"version": ""}}, OntologyServiceError("503"),
+               {"config": {"version": "2026-10-01"}}]
+    searches = []
+
+    def fake_get(self, url, params):
+        if url.endswith("/ontologies/cl"):
+            answer = answers.pop(0) if answers else {"config": {"version": "2026-10-01"}}
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        searches.append(params)
+        return {"response": {"numFound": 1, "docs": OLS_DOCS[:1]}}
+
+    monkeypatch.setattr(Ols4Source, "_get", fake_get)
+    src = _ols_source()
+    src.search("b cell")
+    clock[0] += Ols4Source.VERSION_RETRY_S + 1       # the "" answer expires soon
+    src.search("b cell")                               # failed lookup: not cached either
+    clock[0] += Ols4Source.VERSION_RETRY_S + 1
+    after = src.search("b cell")
+    assert len(searches) == 3
+    assert after["results"][0]["ontology_version"] == "2026-10-01"

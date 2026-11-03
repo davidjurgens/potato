@@ -594,8 +594,52 @@
         /**
          * Render tracking overlay for current frame using interpolation.
          */
+        /**
+         * A keyframe a model wrote has its normalized box only: the server
+         * cannot know this annotator's canvas pixels. Put it in them once
+         * the video's picture has a size, so it draws (and interpolates)
+         * like any other. Not a change: nothing is saved for it.
+         */
+        _fillCanvasBoxes() {
+            // Boxes filled here, and the pixels they were given: refilled at
+            // the current size on each draw (a resize moved the picture and
+            // left them where they were), until the annotator edits one.
+            if (!this._normFilled) this._normFilled = new Map();
+            var content = this.videoContentRect();
+            if (!content) return;
+            var place = function (norm) {
+                return {
+                    x: content.left + norm.x * content.width,
+                    y: content.top + norm.y * content.height,
+                    width: norm.width * content.width,
+                    height: norm.height * content.height,
+                };
+            };
+            var same = function (a, b) {
+                return a && b && a.x === b.x && a.y === b.y
+                    && a.width === b.width && a.height === b.height;
+            };
+            for (var id in this.tracks) {
+                var keyframes = (this.tracks[id] || {}).keyframes || {};
+                for (var f in keyframes) {
+                    var kf = keyframes[f];
+                    if (!kf || !kf.bboxNorm) continue;
+                    var given = this._normFilled.get(kf);
+                    if (!kf.bbox || (given && same(kf.bbox, given))) {
+                        kf.bbox = place(kf.bboxNorm);
+                        this._normFilled.set(kf, {x: kf.bbox.x, y: kf.bbox.y,
+                                                  width: kf.bbox.width,
+                                                  height: kf.bbox.height});
+                    } else if (given) {
+                        this._normFilled.delete(kf);   // edited: the annotator's now
+                    }
+                }
+            }
+        }
+
         renderOverlay() {
             if (!this.ctx || !this.canvas) return;
+            this._fillCanvasBoxes();
 
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             var currentFrame = this._getCurrentFrame();

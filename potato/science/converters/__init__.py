@@ -36,6 +36,8 @@ _BUILTIN: Dict[str, Tuple[str, str, Optional[str]]] = {
     ".fit": ("potato.science.converters.fits", "fits_cutout", "astro"),
     ".fts": ("potato.science.converters.fits", "fits_cutout", "astro"),
     ".fits.gz": ("potato.science.converters.fits", "fits_cutout", "astro"),
+    ".fit.gz": ("potato.science.converters.fits", "fits_cutout", "astro"),
+    ".fts.gz": ("potato.science.converters.fits", "fits_cutout", "astro"),
     ".edf": ("potato.science.converters.edf", "read_edf", None),
     ".bdf": ("potato.science.converters.edf", "read_edf", None),
     ".hea": ("potato.science.converters.wfdb_record", "read_wfdb", "signals"),

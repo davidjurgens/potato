@@ -94,11 +94,13 @@ class TestAnnotatorClaim:
         ])
         # default assignment is fixed_order, no overlap/QC/crowd ->
         # annotator_claim is allowed by the startup guard.
-        # Cap per-user assignments so the corpus isn't all pre-assigned,
-        # making claim a meaningful "pull this one in" action.
+        # An unlimited quota makes fixed_order hand out one item at a time,
+        # so the corpus isn't all pre-assigned and claim is a meaningful
+        # "pull this one in" action. (A cap used to do this, but the cap
+        # also binds claims -- see TestAnnotatorClaimRespectsTheCap.)
         config_file = create_test_config(
             test_dir, _SCHEMES, data_files=[data_file],
-            require_password=False, max_annotations_per_user=1,
+            require_password=False, max_annotations_per_user=-1,
             additional_config={"search": {"annotator_claim": True}})
         server = FlaskTestServer(config_file=config_file, debug=False)
         if not server.start():
@@ -141,6 +143,63 @@ class TestAnnotatorClaim:
         s = _login(self.server, "claimer3")
         assert s.get(
             f"{self.server.base_url}/api/search").status_code == 400
+
+
+class TestAnnotatorClaimRespectsTheCap:
+    """max_annotations_per_user binds claimed items too.
+
+    The claim route appended to the queue without looking at the cap, so an
+    annotator could pull in as many items as search returned."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        test_dir = create_test_directory("search_claim_cap")
+        data_file = create_test_data_file(test_dir, [
+            {"id": f"c{n}", "text": f"capped swan item {n}"} for n in range(1, 6)
+        ])
+        # priority tops the queue up three at a time, so with a cap of 4
+        # there is room for exactly one claim after login.
+        config_file = create_test_config(
+            test_dir, _SCHEMES, data_files=[data_file],
+            require_password=False, max_annotations_per_user=4,
+            assignment_strategy="priority",
+            additional_config={"search": {"annotator_claim": True}})
+        server = FlaskTestServer(config_file=config_file, debug=False)
+        if not server.start():
+            pytest.fail("server did not start")
+        request.cls.server = server
+        yield server
+        server.stop()
+        cleanup_test_directory(test_dir)
+
+    def _claim(self, s, instance_id):
+        return s.post(f"{self.server.base_url}/api/search/claim",
+                      json={"instance_id": instance_id})
+
+    def test_claims_stop_at_the_cap(self):
+        s = _login(self.server, "capped")
+        s.get(f"{self.server.base_url}/annotate")
+        outcomes = {}
+        for n in range(1, 6):
+            r = self._claim(s, f"c{n}")
+            if r.status_code == 409:
+                outcomes[f"c{n}"] = "refused"
+                assert "max_annotations_per_user" in r.json()["error"]
+                assert r.json()["max_assignments"] == 4
+            else:
+                assert r.status_code == 200, r.text
+                outcomes[f"c{n}"] = ("already" if r.json()["already_assigned"]
+                                     else "claimed")
+        assert sorted(outcomes.values()) == [
+            "already", "already", "already", "claimed", "refused"], outcomes
+
+        # The refusal held: the queue is at the cap, not past it.
+        refused = next(k for k, v in outcomes.items() if v == "refused")
+        assert self._claim(s, refused).status_code == 409
+        # An item already in the queue can still be "claimed" -- it is a no-op.
+        claimed = next(k for k, v in outcomes.items() if v == "claimed")
+        r = self._claim(s, claimed)
+        assert r.status_code == 200 and r.json()["already_assigned"] is True
 
 
 class TestAnnotatorClaimDisabledByDefault:

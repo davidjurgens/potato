@@ -313,12 +313,20 @@ def agreement_summary(config_path: str) -> Dict[str, Any]:
     from potato.paper.metrics import compute_metrics
 
     metrics = compute_metrics(collect_project(config_path))
-    keep = ("name", "annotation_type", "alpha", "alpha_interpretation", "n_units",
-            "n_multi_annotated", "mean_kappa", "percent_agreement")
-    schemes = [{k: s.get(k) for k in keep if k in s} for s in metrics.get("schemes") or []]
+    # The manifest's names, mapped from compute_metrics' own. Copying keys by
+    # the manifest's names found almost none of them and froze nulls.
+    schemes = [{"name": s.get("name"),
+                "annotation_type": s.get("annotation_type"),
+                "alpha": s.get("alpha"),
+                "alpha_interpretation": s.get("alpha_interpretation"),
+                "n_units": s.get("total_units"),
+                "n_multi_annotated": s.get("multi_annotated_units"),
+                "mean_kappa": (s.get("pairwise_kappa") or {}).get("mean"),
+                "percent_agreement": s.get("percent_agreement")}
+               for s in metrics.get("schemes") or []]
     return {"schemes": schemes,
-            "num_annotators": metrics.get("num_annotators"),
-            "num_annotations": metrics.get("num_annotations")}
+            "num_annotators": metrics.get("n_annotators"),
+            "num_annotations": metrics.get("n_label_records")}
 
 
 def content_hash(paths: Dict[str, Any], records: List[dict], ids: List[str],

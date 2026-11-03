@@ -3720,11 +3720,20 @@ def _annotation_sidebar_flags(cfg) -> dict:
         from potato.search.service import search_settings
         return (search_settings(cfg) or {}).get("annotator_claim")
 
-    return {
+    flags = {
         "memos_enabled": gate("memos", memos),
         "codebook_ui_enabled": gate("codebook", codebook),
         "search_claim_enabled": gate("search", search_claim),
     }
+    # The memo composer's starting visibility (annotation_ui.visibility).
+    # The select always sends its value, so the default in post_memo only
+    # ever reached API callers; the page has to start on it as well.
+    try:
+        from potato.memos.api import _default_visibility
+        flags["memo_default_visibility"] = _default_visibility(cfg)
+    except Exception:
+        flags["memo_default_visibility"] = "private"
+    return flags
 
 
 def _strip_machine_fields(record, username, instance_id):
@@ -4540,6 +4549,24 @@ def render_page_with_annotations(username: str):
                             logger.warning(
                                 f"Pre-annotation for image schema {schema_name}: {dropped} "
                                 f"shape(s) left out that the canvas cannot show as they are")
+                if scheme['annotation_type'] == 'spatial_annotation':
+                    # The same for a point cloud: an object the viewer cannot
+                    # place, or with no label of the scheme, is left out.
+                    from potato.server_utils.prelabel_values import client_spatial
+                    parsed = predicted_value
+                    if isinstance(parsed, str):
+                        try:
+                            parsed = json.loads(parsed)
+                        except ValueError:
+                            parsed = None
+                    if isinstance(parsed, list):
+                        labels = [str(l.get('name') if isinstance(l, dict) else l)
+                                  for l in scheme.get('labels') or []]
+                        predicted_value, dropped = client_spatial(parsed, labels or None)
+                        if dropped:
+                            logger.warning(
+                                f"Pre-annotation for spatial schema {schema_name}: {dropped} "
+                                f"object(s) left out that the viewer cannot show")
                 if isinstance(predicted_value, str):
                     annotations[schema_name]['_data'] = predicted_value
                 elif isinstance(predicted_value, list) or (
@@ -7264,7 +7291,12 @@ def main():
     elif args.mode == 'codebook':
         logger.info("Starting codebook initialization")
         from potato.codebook_cli import main as codebook_main
-        sys.exit(codebook_main([args.config_file]))
+        # Forward --dry-run: dropping it made `potato codebook --dry-run`
+        # write every code it was asked only to report.
+        codebook_args = [args.config_file]
+        if args.dry_run:
+            codebook_args.append("--dry-run")
+        sys.exit(codebook_main(codebook_args))
     elif args.mode == 'repair-annotations':
         logger.info("Starting single-select annotation repair")
         from potato.repair_cli import run_repair

@@ -97,7 +97,7 @@ cases:                     # group excerpts into units of analysis
   key: participant_id
   attributes: [condition]
 
-search:                    # let the coder jump to any matching excerpt
+search:                    # let the coder add matching excerpts to their queue
   enabled: true
   annotator_claim: true
 
@@ -127,20 +127,20 @@ python potato/flask_server.py start \
 qda_mode:
   enabled: true
   memos:
-    enabled: true                 # QDA-Mode memo defaults
+    enabled: true                 # with the next key: start the Notes sidebar open
     show_sidebar_by_default: true
   codebook:
-    enabled: true
+    enabled: true                 # informational; see the table
     mode: open                    # open | extensible | fixed
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `qda_mode.enabled` | `false` | Master switch. Initialises QDA Mode and applies the qualitative defaults above. |
-| `qda_mode.memos.enabled` | `true` | QDA-Mode memo default. (Memo storage is universal — see [Memos](memos.md).) |
-| `qda_mode.memos.show_sidebar_by_default` | `true` | Whether the Notes sidebar starts open. |
-| `qda_mode.codebook.enabled` | `true` | Whether the codebook is active. |
-| `qda_mode.codebook.mode` | `open` | Annotator edit rights — `open` / `extensible` / `fixed` (see [Codebook modes](codebook.md#modes)). Equivalent to top-level `codebook_mode`. |
+| `qda_mode.memos.enabled` | `true` | Together with `show_sidebar_by_default`, decides whether the Notes sidebar starts open; set it to `false` and the sidebar starts closed. It does not turn memos off: use `annotation_ui.memos: false` for that. (Memo storage is universal — see [Memos](memos.md).) |
+| `qda_mode.memos.show_sidebar_by_default` | `true` | Whether the Notes sidebar starts open (only while `qda_mode.memos.enabled` is true). |
+| `qda_mode.codebook.enabled` | `true` | Informational: reported by `/qda/status`, read by nothing else. The codebook is on under QDA Mode either way; set top-level `codebook.enabled: false` to turn it off. |
+| `qda_mode.codebook.mode` | `open` | Annotator edit rights — `open` / `extensible` / `fixed` (see [Codebook modes](codebook.md#modes)). Equivalent to top-level `codebook_mode`; when both are set, `codebook_mode` (or `codebook.mode`) wins. A crowdsourcing backend still force-locks `fixed`. |
 
 Unknown `qda_mode.*` keys are preserved (not rejected) so you can write
 forward-compatible YAML for features that land in later phases.
@@ -173,8 +173,9 @@ universal namespaces — see the linked feature docs.
   document) and lift case-level attributes (e.g. `condition`) so the
   admin **code crosstab** can tabulate codes by participant-level
   variables.
-- **Search** (FTS5) lets you find any excerpt by text; with
-  `annotator_claim: true` you can pull a match into your queue.
+- **Search** (FTS5) finds excerpts by text. With
+  `annotator_claim: true`, Claim adds a match to the end of your queue;
+  it does not open it, and you reach it by paging forward with Next.
 
 ## Exporting your coding
 

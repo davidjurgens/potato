@@ -51,6 +51,10 @@ directory.
 | `molstar` | 5.12.0 | MIT | `protein_structure` with the Mol* engine |
 | `rdkit` (RDKit.js MinimalLib) | 2026.3.6 | BSD-3-Clause | InChI and InChIKey in `chemical_structure`; `molecule` display with `engine: rdkit` |
 
+Versions are the npm package's. The `rdkit` package 2026.3.6 is RDKit release
+2026.03.6, the string stored in a `chemical_structure` answer's
+`toolkits.rdkit`.
+
 ## Optional Python packages for science features
 
 Each group is an install extra, imported only when a feature that needs it

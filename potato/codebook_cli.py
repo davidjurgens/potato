@@ -4,10 +4,11 @@
 codebook from its YAML config.
 
 For every annotation scheme with ``codebook: true`` it ensures a code
-exists for each YAML label. Codes get **deterministic** ids
-(``uuid5`` over ``project | parent_id | name``) so re-running is a
-no-op and the same config always yields the same ids across machines
-(important when annotation rows carry a parallel ``code_id``).
+exists for each YAML label, with the label's colour and description,
+through the same seeding path the server uses. Codes get
+**deterministic** ids (``uuid5`` over ``project | parent_id | name``) so
+re-running is a no-op and the same config always yields the same ids
+across machines (saved annotations link to codes by id).
 
 Idempotent: existing codes are left untouched; only missing ones are
 created. Safe to run repeatedly and in CI.
@@ -22,30 +23,18 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import uuid
 from typing import Any, Dict, List
 
 import yaml
 
-from potato.codebook import create_code
 from potato.codebook.codebook import Codebook
-from potato.codebook.service import DuplicateCodeError
-from potato.codebook.store import ROOT
-
-# Stable namespace so ids are reproducible across machines/runs.
-_NS = uuid.UUID("6b9b1f6e-1c2d-5a4b-9e3f-c0deb00c0de5")
-
-
-def deterministic_code_id(project: str, parent_id: str, name: str) -> str:
-    return uuid.uuid5(_NS, f"{project}\x1f{parent_id}\x1f{name}").hex
-
-
-def _label_name(entry: Any) -> str:
-    if isinstance(entry, str):
-        return entry
-    if isinstance(entry, dict):
-        return str(entry.get("name") or entry.get("label") or "").strip()
-    return str(entry).strip()
+# deterministic_code_id is re-exported: it lived here before the server's
+# seeding path shared it.
+from potato.codebook.schema_bridge import (  # noqa: F401
+    _label_name,
+    deterministic_code_id,
+    seed_label,
+)
 
 
 def _resolve_task_dir(config_file: str, config: Dict[str, Any]) -> str:
@@ -82,13 +71,13 @@ def init_codebook(config_file: str, *, dry_run: bool = False) -> Dict[str, int]:
                 created += 1
                 present.add(name)
                 continue
-            cid = deterministic_code_id(project, ROOT, name)
-            try:
-                create_code(task_dir, project=project, name=name,
-                            created_by="codebook-cli", code_id=cid)
+            # The server's seeding path, so a code created here carries
+            # the label's colour and description too.
+            if seed_label(task_dir, project, entry,
+                          created_by="codebook-cli") is not None:
                 created += 1
                 present.add(name)
-            except DuplicateCodeError:
+            else:
                 existing += 1
 
     return {"created": created, "existing": existing}

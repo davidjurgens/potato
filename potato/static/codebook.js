@@ -430,7 +430,12 @@
             input.id = newId;
             input.checked = false;
             input.removeAttribute("data-key");
-            input.setAttribute("label_name", newId);
+            // The code's own name, as a server-rendered option has: the
+            // saved Label is named after label_name, and the server maps
+            // saved names to code ids. Named after the element id, a code
+            // added here was saved as "<schema>__cb__<slug>", which no code
+            // has, so it was never linked and merge/split could not reach it.
+            input.setAttribute("label_name", name);
             if (isCheckbox) input.setAttribute("name", schema + ":::" + name);
             label.setAttribute("for", newId);
             label.textContent = name;   // drops any keybinding badge
@@ -523,6 +528,7 @@
 
     var staleDismissBound = false;
     var staleInstance = null;
+    var staleRevision = null;
 
     function renderBanner(p) {
         var bar = el("cb-stale-banner");
@@ -534,15 +540,29 @@
         if (!staleDismissBound) {
             var x = el("cb-stale-dismiss");
             if (x) x.addEventListener("click", function () {
-                if (staleInstance) dismissed[staleInstance] = true;
+                if (staleInstance) {
+                    dismissed[staleInstance] = true;
+                    // Remembered for this revision: a reload kept bringing
+                    // it back, and a later change should show again.
+                    try {
+                        sessionStorage.setItem("cb-dismissed:" + staleInstance
+                            + ":" + staleRevision, "1");
+                    } catch (e) { /* storage blocked: this page only */ }
+                }
                 bar.hidden = true;
             });
             staleDismissBound = true;
         }
-        if (!p || !p.stale || dismissed[p.instance_id]) {
+        var stored = false;
+        try {
+            stored = !!(p && sessionStorage.getItem("cb-dismissed:" + p.instance_id
+                                                    + ":" + p.current_revision));
+        } catch (e) { /* storage blocked */ }
+        if (!p || !p.stale || dismissed[p.instance_id] || stored) {
             bar.hidden = true;
             return;
         }
+        staleRevision = p.current_revision;
         var added = p.codes_added_since || [];
         staleInstance = p.instance_id;
         msgEl.textContent = added.length
