@@ -31,6 +31,10 @@ from potato.training.base import BundleRef, SchemaSpec, TrainerError
 
 logger = logging.getLogger(__name__)
 
+#: Scheme types whose ``source_field`` names a text field, not a media file.
+#: Looked up as media, every gloss item counted as missing media.
+TEXT_SOURCE_TYPES = frozenset({"interlinear_gloss", "error_span", "text_edit", "cloze"})
+
 __all__ = [
     "DEFAULT_SPLITS",
     "BundleStats",
@@ -178,14 +182,28 @@ def schema_specs_from_config(config: Dict[str, Any],
     return tuple(specs)
 
 
-def _annotation_index(annotations: Sequence[Dict[str, Any]]
+def _annotation_index(annotations: Sequence[Dict[str, Any]],
+                      schemes: Sequence[Dict[str, Any]] = ()
                       ) -> Tuple[Dict[Tuple[str, str], Dict[str, Any]], List[str]]:
     """``{(user, instance): {scheme: value_map}}`` plus the annotator list.
 
     ``load_annotations_from_output_dir`` hands back a flat list of per-user,
     per-instance records; the aggregators want a lookup. Spans are folded in
     under their schema so a span scheme aggregates like any other.
+
+    A structured scheme among *schemes* (links, chains, events, soft labels,
+    glosses, conversation trees) is stored as ``{"_structured": answer}``,
+    the annotator's answer in the canonical form of
+    :mod:`potato.training.structured`, so that two annotators who gave the
+    same answer agree in the vote.
     """
+    from potato.training.registry import kind_of_schema
+    from potato.training.structured import (LINK_KINDS, STRUCTURED_KINDS,
+                                            canonical_answer, span_schema_of)
+    structured = [(s, kind_of_schema(s)) for s in schemes or ()
+                  if s.get("name")]
+    structured = [(s, k) for s, k in structured if k in STRUCTURED_KINDS]
+
     index: Dict[Tuple[str, str], Dict[str, Any]] = {}
     users: List[str] = []
 
@@ -205,6 +223,21 @@ def _annotation_index(annotations: Sequence[Dict[str, Any]]
         for scheme, objects in (record.get("image_annotations") or {}).items():
             by_scheme[scheme] = {"_objects": objects}
 
+        for scheme, kind in structured:
+            name = scheme["name"]
+            if kind in LINK_KINDS:
+                answer = canonical_answer(
+                    kind, scheme,
+                    spans=(record.get("spans") or {}).get(span_schema_of(scheme)),
+                    links=(record.get("links") or {}).get(name),
+                    events=(record.get("events") or {}).get(name))
+            else:
+                answer = canonical_answer(kind, scheme, by_scheme.get(name))
+            if answer is None:
+                by_scheme.pop(name, None)
+            else:
+                by_scheme[name] = {"_structured": answer}
+
         if by_scheme:
             index[(user, iid)] = by_scheme
 
@@ -213,7 +246,8 @@ def _annotation_index(annotations: Sequence[Dict[str, Any]]
 
 def _resolve_labels(annotations: Sequence[Dict[str, Any]],
                     instance_ids: Sequence[str],
-                    aggregation: str = "consensus"
+                    aggregation: str = "consensus",
+                    schemes: Sequence[Dict[str, Any]] = ()
                     ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
     """One agreed answer per instance.
 
@@ -222,7 +256,7 @@ def _resolve_labels(annotations: Sequence[Dict[str, Any]],
     annotator does not get equal say. Both implementations already exist in
     ``eval_datasets.annotation_aggregation`` and are tested there.
     """
-    index, users = _annotation_index(annotations)
+    index, users = _annotation_index(annotations, schemes)
 
     def get_user_annotations(user: str, iid: str) -> Dict[str, Any]:
         return index.get((str(user), str(iid)), {})
@@ -295,12 +329,35 @@ def _target_for(spec: SchemaSpec, value_map: Any,
         from potato.server_utils.annotation_values import temporal_segments
         return [s for s in temporal_segments(scheme, value_map)
                 if s.get("label") not in (None, "")]
+    from potato.training.structured import STRUCTURED_KINDS
+    if spec.kind in STRUCTURED_KINDS:
+        return value_map.get("_structured") if isinstance(value_map, dict) else None
+    if spec.kind == "bws":
+        # Tuple positions as letters; the row's candidates say what they are.
+        if not isinstance(value_map, dict):
+            return None
+        best, worst = value_map.get("best"), value_map.get("worst")
+        if best in (None, "") or worst in (None, "") or best == worst:
+            return None
+        return {"best": str(best), "worst": str(worst)}
+    if spec.kind == "preference_scale":
+        # Already in data order: negative prefers A, positive prefers B.
+        values = value_map.values() if isinstance(value_map, dict) else [value_map]
+        for value in values:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return None
     # A type that stores its whole answer under one fixed key -- pairwise
     # {"selection": "A"}, ranking {"rank_order": ...} -- reads as that key
     # below, so every pairwise item trained as the label "selection".
     from potato.server_utils.iaa.dispatcher import packed_answer
     packed = packed_answer(scheme, value_map)
     if packed is not None:
+        if spec.kind == "ranking":
+            # The whole order, best first. One element is no ranking.
+            return packed if len(packed) > 1 else None
         if spec.kind == "multilabel":
             return packed
         return packed[0] if len(packed) == 1 else None
@@ -468,6 +525,64 @@ def _candidates(scheme: Dict[str, Any], item_data: Dict[str, Any]) -> List[str]:
 
 #: Item fields that hold what a pair of responses answers, first found wins.
 PROMPT_KEYS = ("prompt", "question", "instruction", "query", "input", "context")
+
+
+def _is_tree_node(value: Any) -> bool:
+    return isinstance(value, dict) and "id" in value and isinstance(
+        value.get("children", []), list)
+
+
+def _conversation_tree(config: Dict[str, Any], item_data: Dict[str, Any]
+                       ) -> Optional[Dict[str, Any]]:
+    """The conversation tree an item shows: the field of its
+    ``conversation_tree`` display, or else the first field holding a tree
+    (a node with an ``id`` and ``children``)."""
+    fields = ((config.get("instance_display") or {}).get("fields") or [])
+    for field in fields:
+        if isinstance(field, dict) and field.get("type") == "conversation_tree":
+            value = item_data.get(field.get("key"))
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except ValueError:
+                    value = None
+            if _is_tree_node(value):
+                return value
+    for value in item_data.values():
+        if _is_tree_node(value):
+            return value
+    return None
+
+
+def _bws_candidates(item_data: Dict[str, Any]) -> List[str]:
+    """The items of a BWS tuple in position order, so ``A`` is the first.
+    A tuple is a synthetic item the server builds; its answer is letters."""
+    entries = [e for e in item_data.get("_bws_items") or [] if isinstance(e, dict)]
+    entries.sort(key=lambda e: e.get("position", 0))
+    return [_as_text(e.get("text")) for e in entries]
+
+
+#: Kinds that get a soft target beside the voted one when two or more
+#: annotators answered.
+SOFT_KINDS = ("nominal", "ordinal", "multilabel", "distribution")
+
+
+def _soft_target(kind: str, answers: Sequence[Any]) -> Optional[Dict[str, float]]:
+    """The annotators' answers as a label distribution, or None.
+
+    Only with two or more answers, except for a soft label, which is a
+    distribution even from one annotator."""
+    from potato.training.structured import soft_target
+    if kind not in SOFT_KINDS:
+        return None
+    if kind == "distribution":
+        shares = [a.get("_structured") for a in answers if isinstance(a, dict)]
+        return soft_target(kind, [s for s in shares if s])
+    if len(answers) < 2:
+        return None
+    labels_of = (_labels_of if kind == "multilabel"
+                 else lambda a: [x for x in [_label_of(a)] if x is not None])
+    return soft_target(kind, answers, labels_of)
 
 
 def _pair_prompt(item_data: Dict[str, Any]) -> str:
@@ -659,9 +774,19 @@ def build_bundle(
     stats.n_items = len(items)
 
     instance_ids = sorted(items)
+    trained_schemes = [s for s in config.get("annotation_schemes", [])
+                       if s.get("name") in set(schema_names)]
     references, agg_meta = _resolve_labels(
-        context.annotations or [], instance_ids, aggregation)
+        context.annotations or [], instance_ids, aggregation, trained_schemes)
     stats.n_annotated = len(references)
+    # Every annotator's answer per item and scheme, before the vote keeps
+    # one: what the soft targets are made of.
+    answers_by_item: Dict[str, Dict[str, List[Any]]] = defaultdict(
+        lambda: defaultdict(list))
+    for (_user, iid), by_scheme in _annotation_index(
+            context.annotations or [], trained_schemes)[0].items():
+        for name, value_map in by_scheme.items():
+            answers_by_item[iid][name].append(value_map)
 
     if not references:
         raise TrainerError(
@@ -685,6 +810,8 @@ def build_bundle(
 
     def attach_media(row, item_data):
         if not include_media:
+            return
+        if by_name.get(schema_names[0], {}).get("annotation_type") in TEXT_SOURCE_TYPES:
             return
         source_field = by_name.get(schema_names[0], {}).get("source_field")
         reference = _media_reference(item_data, source_field)
@@ -714,12 +841,40 @@ def build_bundle(
         row["prompt"] = inputs["task"]
         row["text"] = ("%s\n\n%s" % (inputs["task"], inputs["rendered"])).strip()
 
+    def attach_candidates(row, item_data):
+        # What a preference or reward model compares. An unlabelled row
+        # needs them most: without them nothing could be predicted on the
+        # items still waiting for an annotator.
+        candidates = (_bws_candidates(item_data)
+                      if kinds.get(schema_names[0]) == "bws"
+                      else _candidates(primary, item_data))
+        if candidates:
+            row["candidates"] = candidates
+            prompt = _pair_prompt(item_data)
+            if prompt:
+                row["prompt"] = prompt
+
+    def attach_tree(row, item_data):
+        # A conversation-tree scheme's input is the tree, node by node.
+        if kinds.get(schema_names[0]) == "conversation_tree":
+            tree = _conversation_tree(config, item_data)
+            if tree is not None:
+                row["tree"] = tree
+        # A gloss scheme's input is the words the page shows, with any
+        # segmentation or gloss the item pre-fills.
+        if kinds.get(schema_names[0]) == "gloss":
+            from potato.igt import initial_answer
+            row["gloss_input"] = initial_answer(item_data, primary)
+
     def unlabeled(iid, item_data):
         if include_unlabeled:
             row = {"instance_id": iid,
                    "text": _item_text(item_data, text_key)}
             attach_media(row, item_data)
             attach_trace(row, item_data)
+            attach_tree(row, item_data)
+            if not trace_inputs:
+                attach_candidates(row, item_data)
             unlabeled_rows.append(row)
 
     for iid in instance_ids:
@@ -732,6 +887,7 @@ def build_bundle(
             continue
 
         targets: Dict[str, Any] = {}
+        soft_targets: Dict[str, Dict[str, float]] = {}
         for name in schema_names:
             if name not in resolved:
                 continue
@@ -747,6 +903,14 @@ def build_bundle(
                 target = _target_for(fake_spec, resolved[name], by_name.get(name))
             if target is None or target == [] or target == "":
                 continue
+            soft = _soft_target(spec_kind, answers_by_item[iid].get(name) or [])
+            if spec_kind == "distribution" and soft:
+                # The annotators' mean, not the one answer the vote kept:
+                # a soft label is already a distribution, and averaging
+                # them is what several people's soft labels mean.
+                target = soft
+            elif soft is not None:
+                soft_targets[name] = soft
             targets[name] = target
 
             if spec_kind == "multilabel":
@@ -764,6 +928,21 @@ def build_bundle(
                     str(s.get("name") or s.get("label"))
                     for s in target if isinstance(s, dict)
                     and (s.get("name") or s.get("label")))
+            elif spec_kind == "ranking":
+                # A tie "A=D" is two items, not a third.
+                from potato.server_utils.iaa.dispatcher import rank_tiers
+                seen_labels[name].update(
+                    item for tier in rank_tiers(target) for item in tier)
+            elif spec_kind == "distribution":
+                seen_labels[name].update(str(t) for t in target)
+            elif spec_kind in ("relation", "event", "coreference"):
+                # The link, event or entity types: what the pair classifier
+                # predicts. Mention labels are in each target's spans.
+                group = {"relation": "links", "event": "events",
+                         "coreference": "clusters"}[spec_kind]
+                seen_labels[name].update(
+                    str(g.get("type")) for g in target.get(group) or []
+                    if g.get("type"))
 
         if not targets:
             stats.n_skipped_no_label += 1
@@ -775,26 +954,34 @@ def build_bundle(
             "text": _item_text(item_data, text_key),
             "targets": targets,
         }
+        if soft_targets:
+            row["soft_targets"] = soft_targets
 
         attach_media(row, item_data)
         attach_trace(row, item_data)
+        attach_tree(row, item_data)
         trajectory = targets.get(schema_names[0]) \
             if kinds.get(schema_names[0]) == "trajectory" else None
         # The corrected steps first, so a preference model's "A" means it
         # prefers the correction.
-        candidates = ([trajectory["chosen"], trajectory["rejected"]]
-                      if isinstance(trajectory, dict)
-                      else _candidates(by_name.get(schema_names[0], {}), item_data))
-        if candidates:
-            row["candidates"] = candidates
+        if isinstance(trajectory, dict):
+            row["candidates"] = [trajectory["chosen"], trajectory["rejected"]]
             prompt = _pair_prompt(item_data)
             if prompt:
                 row["prompt"] = prompt
+        else:
+            attach_candidates(row, item_data)
 
         rows.append(row)
 
     for name in schema_names:
-        label_index[name] = sorted(seen_labels[name])
+        declared = [str(lab.get("name", lab) if isinstance(lab, dict) else lab)
+                    for lab in (by_name.get(name, {}).get("labels") or [])]
+        if kinds.get(name) == "ranking" and declared:
+            # A ranking orders the scheme's labels, whichever were ranked.
+            label_index[name] = sorted(declared)
+        else:
+            label_index[name] = sorted(seen_labels[name])
 
     # Splits, by a seeded hash of the instance id so they are stable across
     # runs. Reuses the publish pipeline's partitioner.

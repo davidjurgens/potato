@@ -56,7 +56,8 @@ class HFImageClassificationTrainer(Trainer):
                 "gradient_accumulation": 1, "learning_rate": None,
                 "weight_decay": 0.01, "warmup_ratio": 0.1, "patience": 2,
                 "precision": "auto", "lora": None, "threshold": 0.5,
-                "flip": True, "min_instances": 20}
+                "flip": True, "acquisition": "least_confident", "mc_samples": 10,
+                "min_instances": 20}
 
     @classmethod
     def params_schema(cls) -> Dict[str, Any]:
@@ -72,6 +73,18 @@ class HFImageClassificationTrainer(Trainer):
                           "default": 0.5, "description": "Multilabel only."},
             "flip": {"type": "boolean", "default": True,
                      "description": "Random horizontal flips in training."},
+            "acquisition": {"type": "string",
+                            "enum": ["least_confident", "margin", "entropy",
+                                     "bald", "coreset"],
+                            "default": "least_confident",
+                            "description": "How llm_confidence assignment "
+                                           "orders items: by confidence "
+                                           "(least_confident), or by a score "
+                                           "written on each prediction."},
+            "mc_samples": {"type": "integer", "minimum": 2, "maximum": 100,
+                           "default": 10,
+                           "description": "acquisition: bald only. Forward "
+                                          "passes with dropout on."},
         })
         return {"type": "object", "properties": props,
                 "additionalProperties": False}
@@ -97,6 +110,10 @@ class HFImageClassificationTrainer(Trainer):
         if len(bundle.labels(schema.name)) < 2:
             problems.append("Schema %r has fewer than two labels in the data."
                             % schema.name)
+        if params.get("acquisition", "least_confident") != "least_confident" \
+                and schema.kind == "multilabel":
+            problems.append("acquisition: %s needs a single-label scheme; %r is "
+                            "multilabel." % (params["acquisition"], schema.name))
         problems.extend(hf.quantize_unsupported(params))
         return problems
 
@@ -214,6 +231,8 @@ class HFImageClassificationTrainer(Trainer):
             "base_model": params["model_name"], "lora": params["lora"],
             "label_order": labels, "multilabel": multilabel,
             "threshold": float(params["threshold"]), "device": device,
+            "acquisition": params.get("acquisition", "least_confident"),
+            "mc_samples": int(params.get("mc_samples", 10)),
             "n_train": len(train), "bundle_digest": bundle.digest,
             "selected_epoch": summary["best_epoch"]})
 
@@ -265,7 +284,9 @@ class HFImageClassificationTrainer(Trainer):
                                   torch.softmax(logits, -1).cpu().tolist()):
                     best = max(range(len(p)), key=p.__getitem__)
                     yield row, {"label": labels[best],
-                                "confidence": round(p[best], 4)}, p[best]
+                                "confidence": round(p[best], 4),
+                                "probabilities": {labels[i]: round(v, 4)
+                                                  for i, v in enumerate(p)}}, p[best]
             if report is not None:
                 report.progress("predict", start + len(chunk), len(rows))
                 if report.should_stop():
@@ -300,10 +321,67 @@ class HFImageClassificationTrainer(Trainer):
         # An image model given no image would score nothing and still return
         # a confident-looking label; those items get no prediction.
         usable = [item for item in items if _local_image(item.media)]
-        for item, payload, confidence in self._predict_rows(
+        results = list(self._predict_rows(
                 model, to_pixels, usable, labels, multilabel,
                 {"batch_size": 32, "threshold": card.get("threshold", 0.5)},
-                report):
+                report))
+        method = card.get("acquisition") or "least_confident"
+        if method != "least_confident" and not multilabel:
+            scores = self._acquisition(method, model, to_pixels, spec, card,
+                                       [r[0] for r in results], [r[1] for r in results],
+                                       report)
+            for (_, payload, _), score in zip(results, scores):
+                payload["acquisition"] = round(float(score), 6)
+        for item, payload, confidence in results:
             yield PredictionRecord(instance_id=item.instance_id,
                                    schema_name=card["schema"], payload=payload,
                                    confidence=round(float(confidence), 4))
+
+    def _acquisition(self, method, model, to_pixels, spec, card, items, payloads,
+                     report=None):
+        """One acquisition score per predicted image; see
+        ``potato.training.acquisition``."""
+        import torch
+
+        from potato.training import acquisition
+        if method == "bald" and not acquisition.has_dropout(model):
+            # ViT checkpoints ship with dropout 0.
+            if report is not None:
+                report.log("warning", "acquisition: bald needs dropout, and this "
+                                      "model has none; scored by entropy instead")
+            method = "entropy"
+        if method in ("margin", "entropy"):
+            return acquisition.scores_for(
+                method, probabilities=[list(p["probabilities"].values()) for p in payloads])
+
+        def batches(chunk_items):
+            for start in range(0, len(chunk_items), 32):
+                yield to_pixels(chunk_items[start:start + 32])
+
+        if method == "bald":
+            samples = acquisition.mc_dropout(
+                model,
+                lambda pixels: torch.softmax(model(pixel_values=pixels).logits.float(),
+                                             -1).cpu().tolist(),
+                lambda: batches(items), int(card.get("mc_samples", 10)))
+            return acquisition.scores_for("bald", samples=samples)
+
+        def embed(chunk_items):
+            out = []
+            with torch.inference_mode():
+                for pixels in batches(chunk_items):
+                    states = model(pixel_values=pixels,
+                                   output_hidden_states=True).hidden_states[-1]
+                    pooled = states[:, 0] if states.dim() == 3 else states.mean(dim=(2, 3))
+                    out.extend(pooled.float().cpu().tolist())
+            return out
+
+        train = []
+        if spec.bundle_dir and os.path.isdir(spec.bundle_dir):
+            bundle = BundleRef.load(spec.bundle_dir)
+            train = [PredictItem(instance_id=r.get("instance_id", ""),
+                                 media=bundle.resolve_media(r["media"]))
+                     for r in bundle.read_split("train") if r.get("media")]
+            train = [t for t in train if _local_image(t.media)]
+        return acquisition.scores_for("coreset", embeddings=embed(items),
+                                      labelled=embed(train) if train else [])

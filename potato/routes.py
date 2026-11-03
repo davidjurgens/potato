@@ -6948,11 +6948,13 @@ def get_span_data(instance_id):
     # Get span annotations (returns a list of SpanAnnotation objects)
     spans = get_span_annotations_for_user_on(username, instance_id)
     from_prelabel = False
-    if not spans:
+    if not spans and not (_span_state is not None
+                          and _span_state.prelabels_resolved(instance_id)):
         # The page marks up a span prelabel when the annotator has no spans
         # here; hand the same spans to the span manager, or they are drawn
         # but not editable, and Next saves none of them -- every other type
-        # saves its untouched prelabel as the annotator's answer.
+        # saves its untouched prelabel as the annotator's answer. Not once
+        # they have taken the prelabels over: deleting every span is an answer.
         try:
             from potato.flask_server import (  # noqa: cross-import
                 _span_annotations_from_pre_annotations, visible_pre_annotations)
@@ -7516,6 +7518,14 @@ def update_instance():
                     logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
                     logger.debug(f"Current event IDs: {list(current_events.keys())}")
 
+            # A model's spans, links and events are offered until the
+            # annotator takes them over: by storing a link or event, or by
+            # moving on from a page that showed them, so that deleting every
+            # one of them is kept as "nothing here".
+            if (request.json.get("prelabels_reviewed") or link_annotations
+                    or event_annotations):
+                user_state.resolve_prelabels(instance_id)
+
         # Check if this is the backend format (schema, state, type)
         elif "schema" in request.json and "state" in request.json and "type" in request.json:
             logger.debug("Processing backend format (schema, state, type)")
@@ -7526,6 +7536,7 @@ def update_instance():
 
             if annotation_type == "span":
                 logger.debug(f"Processing span annotation state: {schema_state}")
+                user_state.resolve_prelabels(instance_id)
                 for sv in schema_state:
                     # Validate and correct negative offsets
                     start_offset = int(sv["start"])
@@ -10597,6 +10608,29 @@ def clear_span_annotations(instance_id):
         logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
 
 
+def _structure_prelabels(username, user_state, instance_id, which):
+    """A model's links or events on this item, as prelabels, while the
+    annotator has no spans and no links or events of their own here: the
+    same rule as span prelabels, whose ids these refer to."""
+    if (user_state.get_span_annotations(instance_id)
+            or user_state.prelabels_resolved(instance_id)):
+        return []
+    try:
+        from potato.flask_server import visible_pre_annotations  # noqa: cross-import
+        from potato.server_utils import link_prelabels
+        item = get_item_state_manager().get_item(instance_id)
+        if item is None:
+            return []
+        pre_data, _, _ = visible_pre_annotations(username, instance_id, item)
+        text = item.get_text() or ""
+        if which == "links":
+            return link_prelabels.predicted_links(pre_data, config, text)
+        return link_prelabels.predicted_events(pre_data, config, text)
+    except Exception:  # noqa: BLE001 - a prelabel must not break the page
+        logger.debug("Could not read %s prelabels", which, exc_info=True)
+        return []
+
+
 @app.route("/api/links/<instance_id>")
 def get_link_annotations(instance_id):
     """
@@ -10631,6 +10665,9 @@ def get_link_annotations(instance_id):
         links_data = []
         for link_id, link in links.items():
             links_data.append(link.to_dict())
+        if not links_data:
+            links_data = _structure_prelabels(username, user_state, instance_id,
+                                              "links")
 
         logger.debug(f"Found {len(links_data)} link annotations for instance {instance_id}")
 
@@ -10683,6 +10720,7 @@ def delete_link_annotation(instance_id, link_id):
         success = user_state.remove_link_annotation(instance_id, link_id)
 
         if success:
+            user_state.resolve_prelabels(instance_id)
             logger.debug(f"Deleted link annotation: {link_id} from instance {instance_id}")
             return jsonify({
                 "status": "success",
@@ -10749,6 +10787,9 @@ def get_event_annotations(instance_id):
             events_data.append(event_dict)
             logger.debug(f"  Event ID: {event_id}, data: {event_dict}")
 
+        if not events_data:
+            events_data = _structure_prelabels(username, user_state, instance_id,
+                                               "events")
         logger.debug(f"Found {len(events_data)} event annotations for instance {instance_id}")
         logger.debug(f"Event IDs in storage: {list(events.keys())}")
 
@@ -10806,6 +10847,7 @@ def delete_event_annotation(instance_id, event_id):
         success = user_state.remove_event_annotation(instance_id, event_id)
 
         if success:
+            user_state.resolve_prelabels(instance_id)
             logger.debug(f"Deleted event annotation: {event_id} from instance {instance_id}")
             return jsonify({
                 "status": "success",

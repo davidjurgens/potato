@@ -1979,6 +1979,11 @@ class ItemStateManager:
         rather than dropped, and the study can finish. Predictions without a
         confidence come between the two, for the reason ``review_order``
         gives. Shared with ``has_unlabeled_items_for_user``.
+
+        A prediction with an ``acquisition`` score (a trainer's margin,
+        entropy, BALD or core-set setting) goes ahead of the rest, highest
+        score first: the trainer was asked for a better ordering than
+        confidence gives, and this is it.
         """
         from potato import model_review
 
@@ -1987,7 +1992,7 @@ class ItemStateManager:
                         self.config.get('annotation_schemes', []) or []
                         if s.get('name')]
 
-        scored, unscored, unpredicted = [], [], []
+        acquired, scored, unscored, unpredicted = [], [], [], []
         for position, iid in enumerate(list(self.remaining_instance_ids)):
             if self._item_is_complete(iid):
                 if iid in self.remaining_instance_ids:
@@ -2003,13 +2008,17 @@ class ItemStateManager:
                 iid, data, field_name, schema_names)
             if summary.empty:
                 unpredicted.append(iid)
+            elif summary.max_acquisition is not None:
+                acquired.append((-summary.max_acquisition, position, iid))
             elif summary.min_confidence is None:
                 unscored.append(iid)
             else:
                 scored.append((summary.min_confidence, position, iid))
 
+        acquired.sort()
         scored.sort()
-        return [iid for _, _, iid in scored] + unscored + unpredicted
+        return ([iid for _, _, iid in acquired] + [iid for _, _, iid in scored]
+                + unscored + unpredicted)
 
     def _holds_unannotated_item(self, user_state: 'UserState') -> bool:
         """True if the user is already holding something they have not answered.

@@ -12,6 +12,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _tier_of(ranking: Sequence) -> dict:
+    """Each item's tier, best first. An element ``"A=D"`` is a tie (the
+    ranking schema stores one so), and both its items share the tier."""
+    tier = {}
+    for n, element in enumerate(ranking):
+        members = [m for m in str(element).split("=") if m] or [str(element)]
+        for item in members:
+            tier.setdefault(item, n)
+    return tier
+
+
+def _ranks_within(items: list, tier: dict) -> dict:
+    """Ranks 0..n-1 of *items* by tier; tied items share the mean rank of
+    the places they span, so Kendall's tau is tau-b."""
+    order = sorted(items, key=tier.__getitem__)
+    ranks, i = {}, 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and tier[order[j + 1]] == tier[order[i]]:
+            j += 1
+        for item in order[i:j + 1]:
+            ranks[item] = (i + j) / 2
+        i = j + 1
+    return ranks
+
+
 def _shared_positions(ranking_a: Sequence, ranking_b: Sequence):
     """Positions in each ranking of the items both rankings contain, in the
     order of ``ranking_a``.
@@ -19,14 +45,14 @@ def _shared_positions(ranking_a: Sequence, ranking_b: Sequence):
     A ranking here is an ordered list of item ids, best first. Correlating the
     lists directly paired a[i] with b[i] and compared the item NAMES, so
     renaming an item changed the coefficient: ABCED vs ABDEC read 0.80 where
-    the rank correlation is 0.40.
+    the rank correlation is 0.40. A tie read as one item named "D=A", which
+    no other annotator's ranking contained, so D and A dropped out.
     """
-    pos_b = {item: i for i, item in enumerate(ranking_b)}
-    shared = [item for item in dict.fromkeys(ranking_a) if item in pos_b]
+    tier_a, tier_b = _tier_of(ranking_a), _tier_of(ranking_b)
+    shared = [item for item in tier_a if item in tier_b]
     # Re-rank within the shared items, so a missing item shifts nobody.
-    order_b = sorted(shared, key=pos_b.__getitem__)
-    rank_b = {item: i for i, item in enumerate(order_b)}
-    return list(range(len(shared))), [rank_b[item] for item in shared]
+    rank_a, rank_b = _ranks_within(shared, tier_a), _ranks_within(shared, tier_b)
+    return [rank_a[item] for item in shared], [rank_b[item] for item in shared]
 
 
 def kendall_tau(ranking_a: Sequence, ranking_b: Sequence) -> float:

@@ -173,3 +173,36 @@ class TestCoNLLUExporter:
             result = self.exporter.export(ctx, tmpdir)
             assert result.success
             assert result.stats["num_tokens"] == 2
+
+
+def test_conll_u_heads_come_from_a_dependency_link_scheme():
+    """Potato stores a dependency as a directed span_link, head first, over a
+    span scheme. HEAD and DEPREL were always ``_``, and links never reached
+    an exporter at all."""
+    from tests.helpers.test_utils import create_test_directory
+    text = "the cat sat"
+    spans = [{"start": 0, "end": 3, "name": "W", "id": "a"},
+             {"start": 4, "end": 7, "name": "W", "id": "b"},
+             {"start": 8, "end": 11, "name": "W", "id": "c"}]
+    context = ExportContext(
+        config={"item_properties": {"text_key": "text"}},
+        annotations=[{"instance_id": "doc1", "user_id": "user1", "labels": {},
+                      "spans": {"words": spans},
+                      "links": {"deps": [
+                          {"link_type": "det", "span_ids": ["b", "a"],
+                           "direction": "directed"},
+                          {"link_type": "nsubj", "span_ids": ["c", "b"],
+                           "direction": "directed"}]}}],
+        items={"doc1": {"text": text}},
+        schemas=[{"annotation_type": "span", "name": "words", "labels": ["W"]},
+                 {"annotation_type": "span_link", "name": "deps", "span_schema": "words",
+                  "link_types": [{"name": "det", "directed": True},
+                                 {"name": "nsubj", "directed": True}]}],
+        output_dir="")
+    out = create_test_directory("conll_u_heads")
+    result = CoNLLUExporter().export(context, out)
+    with open(result.files_written[0]) as fh:
+        rows = [line.split("\t") for line in fh.read().splitlines()
+                if line and not line.startswith("#")]
+    assert [(r[1], r[6], r[7]) for r in rows] == [
+        ("the", "2", "det"), ("cat", "3", "nsubj"), ("sat", "0", "root")]

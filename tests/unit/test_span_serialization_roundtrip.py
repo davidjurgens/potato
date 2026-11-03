@@ -346,3 +346,59 @@ def test_export_cli_handles_legacy_dict_span_format(temp_user_dir):
     )
     assert len(records) == 1
     assert records[0]["spans"]["ner"][0]["name"] == "PER"
+
+
+def test_export_cli_carries_links_and_events(temp_user_dir):
+    """Links and events have stores of their own. The export loader read
+    neither: ``links`` was always ``{}``, ``events`` was absent, and an item
+    with only links was missing from the export altogether."""
+    from potato.export.cli import load_annotations_from_output_dir
+
+    user_dir = os.path.join(temp_user_dir, "user1")
+    os.makedirs(user_dir)
+    user = InMemoryUserState("user1")
+    user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+    user.add_span_annotation("i1", SpanAnnotation("ents", "PER", "t", 0, 5,
+                                                  id="s1"), True)
+    user.add_span_annotation("i1", SpanAnnotation("ents", "ORG", "t", 15, 22,
+                                                  id="s2"), True)
+    user.add_link_annotation("i1", SpanLink(
+        schema="rels", link_type="WORKS_FOR", span_ids=["s1", "s2"],
+        direction="directed", id="l1"))
+    # An item whose only annotation is a link.
+    user.add_link_annotation("i2", SpanLink(
+        schema="coref", link_type="PERSON", span_ids=["a", "b"], id="c1"))
+    user.add_event_annotation("i1", EventAnnotation(
+        schema="events", event_type="HIRE", trigger_span_id="s2",
+        arguments=[{"role": "employee", "span_id": "s1"}], id="e1"))
+    user.save(user_dir)
+
+    records = {r["instance_id"]: r for r in load_annotations_from_output_dir(
+        temp_user_dir, [{"name": "ents", "annotation_type": "span"},
+                        {"name": "rels", "annotation_type": "span_link"},
+                        {"name": "coref", "annotation_type": "coreference"},
+                        {"name": "events", "annotation_type": "event_annotation"}])}
+    assert set(records) == {"i1", "i2"}
+    (link,) = records["i1"]["links"]["rels"]
+    assert (link["link_type"], link["span_ids"], link["direction"]) == (
+        "WORKS_FOR", ["s1", "s2"], "directed")
+    (event,) = records["i1"]["events"]["events"]
+    assert event["trigger_span_id"] == "s2"
+    assert event["arguments"] == [{"role": "employee", "span_id": "s1"}]
+    assert records["i2"]["links"]["coref"][0]["span_ids"] == ["a", "b"]
+    assert records["i2"]["labels"] == {} and records["i2"]["spans"] == {}
+
+
+def test_csv_and_tsv_rows_carry_links_and_events():
+    """jsonl carried links and events; the delimited exports dropped them."""
+    import json as _json
+    from potato.export.tabular_exporter import _flatten_annotation
+    link = {"id": "l1", "schema": "rels", "link_type": "WORKS_FOR", "span_ids": ["s1", "s2"]}
+    event = {"id": "e1", "schema": "events", "event_type": "HIRE", "trigger_span_id": "s2",
+             "arguments": [{"role": "employee", "span_id": "s1"}]}
+    row = _flatten_annotation({"instance_id": "i1", "user_id": "u", "labels": {},
+                               "spans": {}, "links": {"rels": [link], "coref": []},
+                               "events": {"events": [event]}})
+    assert _json.loads(row["rels._links"]) == [link]
+    assert _json.loads(row["events._events"]) == [event]
+    assert "coref._links" not in row

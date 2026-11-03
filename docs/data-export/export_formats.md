@@ -411,8 +411,24 @@ NER tags.
 4	Paris.	_	_	_	_	_	_	_	NER=B-LOC
 ```
 
-Lemma, POS, features and dependencies are left `_`: Potato records spans, not
-parses. `SpaceAfter=No` is set where the source has no space between tokens.
+Lemma, POS and features are left `_`. HEAD and DEPREL are filled when the
+project annotates dependencies the way Potato stores them: a `span_link`
+scheme with directed link types over the exported span scheme, each link
+from the head span to the dependent span. The first token of each span is
+attached to the first token of its head span, a span with no head is `0` /
+`root`, and every other token is `_`. A link that crosses a sentence boundary
+(sentences are split by the tokenizer) is left out, with a warning. Pass
+`link_schema` to choose the link scheme; otherwise it is the first `span_link`
+over that span scheme with a directed link type. `SpaceAfter=No` is set where
+the source has no space between tokens.
+
+```
+# sent_id = item_002-s1
+# text = the cat sat
+1	the	_	_	_	_	2	det	_	_
+2	cat	_	_	_	_	3	nsubj	_	_
+3	sat	_	_	_	_	0	root	_	_
+```
 
 **Usage:**
 ```bash
@@ -586,6 +602,9 @@ JOIN 'export/items.parquet' i ON a.instance_id = i.item_id;
 ### CSV (csv)
 
 Export annotations as comma-separated values with one row per annotation.
+Spans are a JSON column per span scheme, `<scheme>._spans`. Links and
+chains are `<scheme>._links` and events `<scheme>._events`, JSON in the same
+shape as the JSONL `links` and `events` below.
 
 ```bash
 python -m potato.export --config config.yaml --format csv --output ./export/
@@ -912,6 +931,13 @@ python -m potato.export --config config.yaml --format asap_xml --output ./asap/
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
+
+Each line carries `labels`, `spans` (by span scheme), `links` and `events`.
+`links` holds the `span_link` and `coreference` answers, `{scheme: [link,
+...]}`, each link naming the ids of the spans it joins (`span_ids`) in its
+order, with `link_type` and `direction`. `events` holds the
+`event_annotation` answers, `{scheme: [event, ...]}`, each with
+`event_type`, `trigger_span_id` and `arguments` (`role`, `span_id`).
 
 Answers stored as a JSON blob stay a JSON string inside the line. Video object
 tracks are one example: they sit at `labels.<scheme>._data`, and the

@@ -394,6 +394,30 @@ def _unpack_joined(values: Dict[str, Any], key: str) -> List[str]:
     return [part.strip() for part in str(raw).split(",") if part.strip()]
 
 
+def rank_tiers(order: Any) -> List[List[str]]:
+    """``"B,D=A,C"`` -> ``[["B"], ["D", "A"], ["C"]]``: a ranking, best first,
+    with the items it ties (joined by ``=``, the ranking schema's tie format)
+    in one tier. Takes the stored string, or a list of tiers or tier strings."""
+    if order is None:
+        return []
+    parts = order if isinstance(order, (list, tuple)) else str(order).split(",")
+    tiers = []
+    for part in parts:
+        members = part if isinstance(part, (list, tuple)) else str(part).split("=")
+        tier = [str(m).strip() for m in members if str(m).strip()]
+        if tier:
+            tiers.append(tier)
+    return tiers
+
+
+def _unpack_ranking(values: Dict[str, Any], key: str) -> List[str]:
+    """``{"rank_order": "B,D=A,C"}`` -> ``["B", "A=D", "C"]``: one atom per
+    tier, best first. Split on "," alone, a tie read as an item named "D=A".
+    A tie stays one atom, its members sorted so that two annotators' ties
+    compare equal; rank_tiers() splits it."""
+    return ["=".join(sorted(tier)) for tier in rank_tiers(values.get(key))]
+
+
 def _unpack_card_sort(values: Dict[str, Any], key: str) -> List[str]:
     """A card sort compares as the set of (group, card) placements.
 
@@ -431,7 +455,7 @@ def _unpack_single(values: Dict[str, Any], key: str) -> List[str]:
 #: ``label_name``, which is what becomes the dict key in the stored state.
 _PACKED_ANSWER: Dict[str, Any] = {
     "hierarchical_multiselect": ("selected_labels", _unpack_joined),
-    "ranking": ("rank_order", _unpack_joined),
+    "ranking": ("rank_order", _unpack_ranking),
     "card_sort": (None, _unpack_card_sort),   # key is the schema's own name
     "conjoint": (None, _unpack_single),       # key is the schema's own name
     "pairwise": ("selection", _unpack_single),

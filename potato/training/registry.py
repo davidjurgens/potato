@@ -164,6 +164,22 @@ def get_trainer(name: str):
     return get_trainer_class(name)()
 
 
+#: Types whose training target is not what agreement compares. Agreement
+#: classifies a link, chain, event or conversation-tree scheme as ``span``,
+#: which offered the span tagger for them, and that tagger found no spans:
+#: the scheme's answer is links between another scheme's spans, or labels on
+#: tree nodes. A BWS or soft-label answer is a ``matrix`` of per-row values
+#: there, and a training target of its own here.
+TRAINING_KINDS = {
+    "span_link": "relation",
+    "event_annotation": "event",
+    "coreference": "coreference",
+    "tree_annotation": "conversation_tree",
+    "bws": "bws",
+    "soft_label": "distribution",
+}
+
+
 def kind_of_schema(scheme: Dict[str, Any]) -> str:
     """The ``SchemaKind`` value for one scheme, as a string.
 
@@ -181,6 +197,12 @@ def kind_of_schema(scheme: Dict[str, Any]) -> str:
     # annotators' corrections are not compared field by field.
     if (scheme.get("annotation_type") or "") == "trajectory_edit":
         return "trajectory"
+    kind = TRAINING_KINDS.get(scheme.get("annotation_type") or "")
+    if kind:
+        return kind
+    if ((scheme.get("annotation_type") or "") == "pairwise"
+            and str(scheme.get("mode") or "").lower() == "scale"):
+        return "preference_scale"
     try:
         from potato.server_utils.iaa.dispatcher import classify_schema
         return str(classify_schema(scheme).value)
@@ -362,10 +384,12 @@ def _register_builtins() -> None:
         "potato.training.trainers.hf_text_classification",
         "HFTextClassificationTrainer",
         hint="pip install 'potato-annotation[train-text]'",
-        kinds=("nominal", "ordinal", "multilabel"), modalities=("text",),
+        kinds=("nominal", "ordinal", "multilabel", "distribution"),
+        modalities=("text",),
         description="Fine-tunes a Hugging Face transformer to classify "
-                    "text. With lora: true, also an LLM such as Qwen or "
-                    "Llama.",
+                    "text, or to predict a soft label's distribution. With "
+                    "lora: true, also an LLM such as Qwen or Llama; with "
+                    "soft_targets: true, trains on annotators' vote splits.",
         licence="Apache-2.0", commercial_use=True)
     register_lazy(
         "hf-token-classification",
@@ -476,6 +500,42 @@ def _register_builtins() -> None:
         description="Direct Preference Optimization of an LLM (LoRA by "
                     "default) on which of two responses annotators preferred, "
                     "or on corrected over original agent traces.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "reward-model", "potato.training.trainers.reward_model",
+        "RewardModelTrainer",
+        hint="pip install 'potato-annotation[train-text]'",
+        kinds=("preference", "preference_scale", "ranking", "bws"),
+        modalities=("text",),
+        description="A scalar reward model (Bradley-Terry, or "
+                    "Plackett-Luce for rankings) from pairwise, ranking and "
+                    "best-worst answers; predicts the scheme's answer and "
+                    "each option's reward.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "hf-relation", "potato.training.trainers.hf_relation",
+        "HFRelationTrainer",
+        hint="pip install 'potato-annotation[train-text]'",
+        kinds=("relation", "event", "coreference"), modalities=("text",),
+        description="Relations, events and coreference: fine-tunes a "
+                    "transformer to tag the spans and classify pairs of "
+                    "them (link type, argument role, same entity).",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "hf-conversation-tree", "potato.training.trainers.hf_conversation_tree",
+        "HFConversationTreeTrainer",
+        hint="pip install 'potato-annotation[train-text]'",
+        kinds=("conversation_tree",), modalities=("text",),
+        description="Conversation trees: fine-tunes a transformer to answer "
+                    "each turn's node question and to pick the best path, "
+                    "from tree_annotation answers.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "byt5-gloss", "potato.training.trainers.byt5_gloss", "ByT5GlossTrainer",
+        hint="pip install 'potato-annotation[train-text]'",
+        kinds=("gloss",), modalities=("text",),
+        description="Interlinear glossing: fine-tunes ByT5 to segment words "
+                    "into morphemes and gloss each one.",
         licence="Apache-2.0", commercial_use=True)
     register_lazy(
         "label-studio-ml", "potato.training.trainers.label_studio_ml",

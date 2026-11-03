@@ -679,7 +679,13 @@ class SpanLinkManager {
         // Add to local list
         this.links.push(link);
 
-        // Save to backend
+        // Save to backend, the kept prelabels first: every scheme's, since
+        // the server offers none once the annotator has stored a link.
+        if (typeof window.commitAllPrelabels === 'function') {
+            await window.commitAllPrelabels();
+        } else {
+            await this.commitPrelabels();
+        }
         await this.saveLink(link);
 
         // Update UI
@@ -694,6 +700,30 @@ class SpanLinkManager {
         this.exitLinkMode();
 
         console.log('Created link:', link);
+    }
+
+    /**
+     * Store this scheme's prelabel links as the annotator's.
+     *
+     * /api/links hands over a model's links, flagged `prelabel`, while the
+     * annotator has no spans or links of their own on the item. They are
+     * drawn and deletable but not stored, so an untouched prelabel is saved
+     * when the annotator moves on, as a span prelabel is; and before a link
+     * of their own is saved, because the next load returns only stored links.
+     */
+    async commitPrelabels() {
+        const live = typeof window.potatoLiveSpanIds === 'function'
+            ? window.potatoLiveSpanIds() : null;
+        const dangling = l => l.prelabel && live
+            && !(l.span_ids || []).every(id => live.has(id));
+        // A model's link to a span the annotator deleted goes with the span.
+        this.links = this.links.filter(l => !dangling(l));
+        const pending = this.links.filter(l => l.prelabel && l.schema === this.schemaName);
+        if (!pending.length) return;
+        pending.forEach(l => { delete l.prelabel; });
+        for (const link of pending) {
+            await this.saveLink(link);
+        }
     }
 
     async saveLink(link) {
@@ -731,7 +761,15 @@ class SpanLinkManager {
         if (!instanceId) return;
 
         // Remove from local list
+        const removed = this.links.find(l => l.id === linkId);
         this.links = this.links.filter(l => l.id !== linkId);
+
+        // A prelabel link was never stored; there is nothing to delete.
+        if (removed && removed.prelabel) {
+            this.updateLinkList();
+            this.renderArcs();
+            return;
+        }
 
         try {
             const response = await fetch(`/api/links/${instanceId}/${linkId}`, {
@@ -768,7 +806,13 @@ class SpanLinkManager {
             }
 
             const data = await response.json();
-            this.links = data.links || [];
+            // Only this scheme's links. The route returns every link on the
+            // item, so a project with a coreference scheme or a second link
+            // scheme listed and drew the other scheme's links here too.
+            this.links = (data.links || []).filter(l => !l.schema || l.schema === this.schemaName);
+            if (this.links.some(l => l.prelabel)) {
+                this.prelabelsOffered = true;
+            }
 
             // Update UI
             this.updateLinkList();

@@ -86,6 +86,10 @@ class PredictionSummary:
     #: predictions carry no confidence at all.
     min_confidence: Optional[float] = None
     mean_confidence: Optional[float] = None
+    #: Highest acquisition score over this item's predictions, or None. A
+    #: trainer's ``acquisition`` parameter writes it (margin, entropy, BALD,
+    #: core-set); higher means more worth a person's time.
+    max_acquisition: Optional[float] = None
     schemes: List[str] = field(default_factory=list)
 
     @property
@@ -99,6 +103,7 @@ class PredictionSummary:
             "n_predictions": self.n_predictions,
             "min_confidence": self.min_confidence,
             "mean_confidence": self.mean_confidence,
+            "max_acquisition": self.max_acquisition,
             "schemes": list(self.schemes),
             "empty": self.empty,
         }
@@ -143,6 +148,19 @@ def _confidences(payload: Any) -> List[float]:
                 visit(value)
 
     visit(payload)
+    return found
+
+
+def _acquisitions(payload: Any) -> List[float]:
+    """Every ``acquisition`` score in one scheme's prediction payload: on the
+    payload itself, or on the entries of a list payload."""
+    entries = payload if isinstance(payload, list) else [payload]
+    found = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            value = _confidence_value(entry.get("acquisition"))
+            if value is not None:
+                found.append(value)
     return found
 
 
@@ -191,6 +209,7 @@ def summarize_predictions(instance_id: str, item_data: Dict[str, Any],
 
     wanted = set(schema_names) if schema_names is not None else None
     confidences: List[float] = []
+    acquisitions: List[float] = []
     for scheme, payload in predictions.items():
         if wanted is not None and scheme not in wanted:
             continue
@@ -199,7 +218,10 @@ def summarize_predictions(instance_id: str, item_data: Dict[str, Any],
         if count:
             summary.schemes.append(str(scheme))
         confidences.extend(_confidences(payload))
+        acquisitions.extend(_acquisitions(payload))
 
+    if acquisitions:
+        summary.max_acquisition = max(acquisitions)
     if confidences:
         summary.min_confidence = min(confidences)
         summary.mean_confidence = statistics.fmean(confidences)
@@ -221,6 +243,11 @@ def review_order(summaries: Sequence[PredictionSummary]) -> List[str]:
     Empty-prediction items are excluded entirely -- they have no confidence to
     rank and reviewing them is a different job, see
     :func:`empty_prediction_ids`.
+
+    A prediction's ``acquisition`` score is not read here. It ranks what is
+    worth labelling, not what is likely wrong: a core-set score puts the item
+    farthest from the training data first however sure the model is about
+    it. ``llm_confidence`` assignment orders by it.
     """
     ranked = [s for s in summaries if not s.empty]
     with_conf = [s for s in ranked if s.min_confidence is not None]

@@ -282,6 +282,9 @@
         /** Turn stored SpanLink records into chains and paint them. */
         _adoptLinks(links) {
             if (!Array.isArray(links) || links.length === 0) return;
+            if (links.some(function(l) { return l.prelabel; })) {
+                this.prelabelsOffered = true;
+            }
 
             for (var i = 0; i < links.length; i++) {
                 var link = links[i];
@@ -290,6 +293,8 @@
                     id: link.id || ('chain_' + this.nextChainId++),
                     entityType: link.link_type || link.entity_type || '',
                     spanIds: link.span_ids || [],
+                    // A model's chain from /api/links, not yet stored.
+                    prelabel: !!link.prelabel,
                     color: props.color || link.color
                         || this.colorPalette[this.chains.length % this.colorPalette.length]
                 });
@@ -742,10 +747,31 @@
          * than inventing a second one. The input keeps its value for form
          * submission and for anything reading the DOM.
          */
-        _save() {
+        /** Store the model's chains as the annotator's when they move on,
+         *  as span prelabels are; see SpanLinkManager.commitPrelabels. */
+        commitPrelabels() {
+            if (!this.chains.some(function(c) { return c.prelabel; })) return;
+            // A model's chain loses a mention whose span the annotator
+            // deleted, and goes when too few mentions are left.
+            var live = typeof window.potatoLiveSpanIds === 'function'
+                ? window.potatoLiveSpanIds() : null;
+            if (live) {
+                var minimum = this.allowSingletons ? 1 : 2;
+                this.chains = this.chains.filter(function(c) {
+                    if (!c.prelabel) return true;
+                    c.spanIds = c.spanIds.filter(function(id) { return live.has(id); });
+                    return c.spanIds.length >= minimum;
+                });
+            }
+            return this._save(true);
+        }
+
+        _save(committingPrelabels) {
             if (!this.chainData) return;
 
             var self = this;
+            // Saving stores every chain shown, a model's included.
+            this.chains.forEach(function(c) { c.prelabel = false; });
             var links = this.chains.map(function(chain) { return self._chainToLink(chain); });
             this.chainData.value = JSON.stringify(links);
 
@@ -763,17 +789,25 @@
 
             if (links.length === 0) return;
 
-            fetch('/updateinstance', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    instance_id: instanceId,
-                    annotations: {},  // Required for frontend format detection
-                    link_annotations: links
-                })
-            }).catch(function(err) {
-                console.error('CoreferenceManager: failed to save chains', err);
-            });
+            var post = function() {
+                return fetch('/updateinstance', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        instance_id: instanceId,
+                        annotations: {},  // Required for frontend format detection
+                        link_annotations: links
+                    })
+                }).catch(function(err) {
+                    console.error('CoreferenceManager: failed to save chains', err);
+                });
+            };
+            // On an edit, the other schemes' prelabels first: the server
+            // offers none once the annotator has stored a chain (annotation.js).
+            if (committingPrelabels || typeof window.commitAllPrelabels !== 'function') {
+                return post();
+            }
+            return window.commitAllPrelabels().then(post, post);
         }
 
         /** Not `_deleteChain` -- that name is taken by the local-array removal

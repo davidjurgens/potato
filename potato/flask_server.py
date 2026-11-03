@@ -3964,14 +3964,16 @@ def render_page_with_annotations(username: str):
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
     span_annotations = get_span_annotations_for_user_on(username, instance_id)
-    if not span_annotations:
+    if not span_annotations and not user_state.prelabels_resolved(instance_id):
         # Span pre-annotations have to be applied HERE, not in the soup walk
         # below that handles every other schema type. Spans are not an input
         # value: they are markup baked into the instance text, and by the time
         # that walk runs the text has already been rendered. Without this a
         # config with `pre_annotation.enabled` and a span scheme fell through
         # to "not yet supported" and showed the annotator nothing -- which is
-        # exactly what an imported brat/CoNLL/QDPX project produces.
+        # exactly what an imported brat/CoNLL/QDPX project produces. Once
+        # the annotator has taken the prelabels over, an item they emptied
+        # stays empty.
         span_annotations = _span_annotations_from_pre_annotations(
             pre_annotation_data, config)
     if span_annotations is not None and len(span_annotations) > 0:
@@ -4466,7 +4468,11 @@ def render_page_with_annotations(username: str):
                         names = _prelabel_names(predicted_value)
                         predicted_value = names[0] if names else ""
                     if predicted_value not in (None, ""):
-                        annotations[schema_name]['slider'] = str(predicted_value)
+                        # A number box's input is labelled "number"; stored
+                        # under "slider" it never reached the box.
+                        key = ('number' if scheme['annotation_type'] == 'number'
+                               else 'slider')
+                        annotations[schema_name][key] = str(predicted_value)
             elif scheme['annotation_type'] in ('image_annotation', 'spatial_annotation',
                                                'tiered_annotation', 'spectrogram_annotation',
                                                'audio_annotation'):
@@ -4512,6 +4518,43 @@ def render_page_with_annotations(username: str):
                         f"list of annotation objects or a JSON string, got "
                         f"{type(predicted_value).__name__}"
                     )
+            elif scheme['annotation_type'] in _PRELABEL_TYPES:
+                # A ranking's order, a BWS pick, soft-label sliders, a gloss
+                # or a conversation tree: hidden inputs (or sliders) the DOM
+                # walk below fills and marks server-set.
+                values = _prelabel_values(scheme, predicted_value)
+                if values:
+                    annotations[schema_name].update(values)
+                else:
+                    logger.warning(
+                        f"Pre-annotation for {scheme['annotation_type']} schema "
+                        f"'{schema_name}' does not fit the scheme; nothing will "
+                        f"be pre-filled")
+            elif (scheme['annotation_type'] == 'pairwise'
+                  and str(scheme.get('mode') or '').lower() == 'scale'):
+                # A reward model's scale prediction is in data order, negative
+                # preferring the first candidate; under randomize_order it is
+                # mirrored to where this annotator sees the cards.
+                value = (predicted_value.get('value')
+                         if isinstance(predicted_value, dict) else predicted_value)
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    value = None
+                if value is not None:
+                    from potato.server_utils import presentation_order as _po
+                    order = _po.item_order(scheme, item.get_data(), username,
+                                           instance_id)
+                    if order:
+                        recorded = _po.record(user_state, instance_id,
+                                              {schema_name: order})
+                        order = recorded.get(schema_name) or order
+                    shown = _po.source_pairwise_values(
+                        scheme, {'scale_value': value}, order or [0, 1])
+                    shown_value = float(shown['scale_value'])
+                    annotations[schema_name]['scale_value'] = (
+                        str(int(shown_value)) if shown_value.is_integer()
+                        else str(shown_value))
             elif (scheme['annotation_type'] == 'pairwise'
                   and str(scheme.get('mode') or 'binary').lower() == 'binary'):
                 # A preference model (llm-dpo) predicts in data order, "A"
@@ -5416,6 +5459,10 @@ def get_annotations_for_user_on(username, instance_id):
     return processed_annotations
 
 
+from potato.server_utils.prelabel_values import (  # noqa: E402
+    PRELABEL_TYPES as _PRELABEL_TYPES, prelabel_values as _prelabel_values)
+
+
 def _prelabel_names(predicted_value):
     """
     The label names in a categorical pre-annotation, whatever shape it is in.
@@ -5476,6 +5523,26 @@ def _span_annotations_from_pre_annotations(pre_annotation_data, config):
     }
     if not span_schemes:
         return []
+
+    # A relation, chain or event prediction carries the spans it links,
+    # for its scheme's span_schema, with ids its links refer to.
+    from potato.server_utils.link_prelabels import predicted_spans
+    derived = predicted_spans(pre_annotation_data, config)
+    if derived:
+        pre_annotation_data = dict(pre_annotation_data)
+        for schema_name, linked in derived.items():
+            direct = pre_annotation_data.get(schema_name)
+            merged = [dict(e) for e in direct if isinstance(e, dict)] \
+                if isinstance(direct, list) else []
+            known = {(e.get("start"), e.get("end"), e.get("name") or e.get("label")): e
+                     for e in merged}
+            for span in linked:
+                key = (span["start"], span["end"], span["label"])
+                if key in known:
+                    known[key].setdefault("id", span["id"])
+                else:
+                    merged.append(span)
+            pre_annotation_data[schema_name] = merged
 
     spans = []
     for schema_name, predicted in pre_annotation_data.items():

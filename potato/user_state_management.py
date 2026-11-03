@@ -1393,6 +1393,18 @@ class UserState:
     def get_span_annotations(self):
         return self.span_annotations
 
+    def resolve_prelabels(self, instance_id: str) -> None:
+        '''Record that this annotator took over the item's span, link and
+        event prelabels, so they are not offered again.'''
+        resolved = getattr(self, 'prelabels_resolved_ids', None)
+        if resolved is None:
+            resolved = self.prelabels_resolved_ids = set()
+        resolved.add(str(instance_id))
+
+    def prelabels_resolved(self, instance_id: str) -> bool:
+        '''Whether resolve_prelabels() was called for this item.'''
+        return str(instance_id) in getattr(self, 'prelabels_resolved_ids', ())
+
     def get_current_instance_index(self) -> int:
         raise NotImplementedError()
 
@@ -1728,6 +1740,7 @@ class UserState:
         d['flow_record'] = getattr(self, 'flow_record', {})
         d['instance_id_to_trial'] = getattr(self, 'instance_id_to_trial', {})
         d['prestudy_passed'] = getattr(self, 'prestudy_passed', None)
+        d['prelabels_resolved_ids'] = sorted(getattr(self, 'prelabels_resolved_ids', ()))
 
         # Whether this participant is a person, and if not, which machine.
         # Absent means human, so a state written before this field existed
@@ -1890,6 +1903,7 @@ class UserState:
         user_state.flow_record = upgrade_flow_record(j.get('flow_record', {}) or {})
         user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
         user_state.prestudy_passed = j.get('prestudy_passed')
+        user_state.prelabels_resolved_ids = set(j.get('prelabels_resolved_ids') or ())
 
         # Restore the rater's origin if present. An absent key is a person.
         user_state.origin = j.get('origin', {}) or {}
@@ -2230,6 +2244,13 @@ class InMemoryUserState(UserState):
         # Prestudy pass/fail. None until something decides it (a screen-out
         # sets False). Read by get_prestudy_status().
         self.prestudy_passed = None
+
+        # Items whose span, link and event prelabels this annotator has taken
+        # over: they stored one, edited one, or moved on with them shown.
+        # After that the prelabels are not offered again, so deleting every
+        # predicted span records "nothing here" instead of bringing the
+        # prediction back. See prelabels_resolved().
+        self.prelabels_resolved_ids = set()
 
         # Whether this participant is a person, and if not, which machine and
         # which version of it. Empty means human. Stamped from the
@@ -2987,6 +3008,7 @@ class InMemoryUserState(UserState):
         self.instance_id_to_behavioral_data.pop(instance_id, None)
         if isinstance(getattr(self, 'instance_id_to_trial', None), dict):
             self.instance_id_to_trial.pop(instance_id, None)
+        getattr(self, 'prelabels_resolved_ids', set()).discard(str(instance_id))
         self.ai_hints.pop(instance_id, None)
 
     def has_remaining_assignments(self) -> bool:
@@ -3432,6 +3454,7 @@ class InMemoryUserState(UserState):
         d['flow_record'] = getattr(self, 'flow_record', {})
         d['instance_id_to_trial'] = getattr(self, 'instance_id_to_trial', {})
         d['prestudy_passed'] = getattr(self, 'prestudy_passed', None)
+        d['prelabels_resolved_ids'] = sorted(getattr(self, 'prelabels_resolved_ids', ()))
 
         # Whether this participant is a person, and if not, which machine.
         # Absent means human, so a state written before this field existed
@@ -3656,6 +3679,7 @@ class InMemoryUserState(UserState):
         user_state.flow_record = upgrade_flow_record(j.get('flow_record', {}) or {})
         user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
         user_state.prestudy_passed = j.get('prestudy_passed')
+        user_state.prelabels_resolved_ids = set(j.get('prelabels_resolved_ids') or ())
 
         # Restore the rater's origin if present. An absent key is a person.
         user_state.origin = j.get('origin', {}) or {}

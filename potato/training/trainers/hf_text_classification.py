@@ -14,10 +14,27 @@ absolute error beside accuracy when they are numbers.
 
 The checkpoint kept is the one that scored best on val, so the run's headline
 score is taken from the test split, which the loop never sees.
+
+**Learning from disagreement.** With ``soft_targets: true``, an item two or
+more annotators labelled trains toward their vote split (two of three said
+positive: 0.67 positive, 0.33 negative) rather than the one label the vote
+kept, by cross-entropy against that distribution; a multilabel item trains
+each label toward the share of annotators who ticked it. Items with one
+annotator train on their label as before. A ``soft_label`` scheme, where each
+annotator gives a distribution, always trains this way, toward the
+annotators' mean, and predicts a distribution. Predictions carry the model's
+probabilities, so the held-out score reports how far they are from the
+annotators' distribution (``soft_jsd``) and expected calibration error.
+
+**Choosing what to ask next.** ``acquisition`` (margin, entropy, bald,
+coreset) writes a score on each prediction that ``llm_confidence``
+assignment orders by, highest first, instead of by confidence; see
+``potato.training.acquisition``. Single-label schemes only.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, ClassVar, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from potato.training.base import (BundleRef, FitResult, PredictItem,
@@ -35,7 +52,8 @@ class HFTextClassificationTrainer(Trainer):
     description: ClassVar[str] = (
         "Fine-tunes a Hugging Face transformer (an encoder, or an LLM with "
         "LoRA) to classify text.")
-    kinds: ClassVar[Tuple[str, ...]] = ("nominal", "ordinal", "multilabel")
+    kinds: ClassVar[Tuple[str, ...]] = ("nominal", "ordinal", "multilabel",
+                                        "distribution")
     modalities: ClassVar[Tuple[str, ...]] = ("text",)
     install_hint: ClassVar[str] = INSTALL_HINT
     licence: ClassVar[str] = "Apache-2.0"
@@ -51,7 +69,9 @@ class HFTextClassificationTrainer(Trainer):
                 "gradient_accumulation": 1, "learning_rate": None,
                 "weight_decay": 0.01, "warmup_ratio": 0.1, "patience": 2,
                 "precision": "auto", "lora": None, "max_length": 256,
-                "threshold": 0.5, "min_instances": 20}
+                "threshold": 0.5, "soft_targets": False,
+                "acquisition": "least_confident", "mc_samples": 10,
+                "min_instances": 20}
 
     @classmethod
     def params_schema(cls) -> Dict[str, Any]:
@@ -70,6 +90,24 @@ class HFTextClassificationTrainer(Trainer):
                           "default": 0.5,
                           "description": "Multilabel only: the probability "
                                          "at which a label is predicted."},
+            "acquisition": {"type": "string",
+                            "enum": ["least_confident", "margin", "entropy",
+                                     "bald", "coreset"],
+                            "default": "least_confident",
+                            "description": "How llm_confidence assignment "
+                                           "orders items: by confidence "
+                                           "(least_confident), or by a score "
+                                           "written on each prediction."},
+            "mc_samples": {"type": "integer", "minimum": 2, "maximum": 100,
+                           "default": 10,
+                           "description": "acquisition: bald only. Forward "
+                                          "passes with dropout on."},
+            "soft_targets": {"type": "boolean", "default": False,
+                             "description": "Train items with two or more "
+                                            "annotators toward their vote "
+                                            "split instead of the voted "
+                                            "label. Always on for "
+                                            "soft_label schemes."},
         })
         return {"type": "object", "properties": props,
                 "additionalProperties": False}
@@ -92,6 +130,10 @@ class HFTextClassificationTrainer(Trainer):
         if len(bundle.labels(schema.name)) < 2:
             problems.append("Schema %r has fewer than two labels in the data."
                             % schema.name)
+        if params.get("acquisition", "least_confident") != "least_confident" \
+                and schema.kind in ("multilabel", "distribution"):
+            problems.append("acquisition: %s needs a single-label scheme; %r is %s."
+                            % (params["acquisition"], schema.name, schema.kind))
         problems.extend(hf.quantize_problems(params, spec))
         return problems
 
@@ -109,6 +151,8 @@ class HFTextClassificationTrainer(Trainer):
             params["learning_rate"] = 2e-4 if params["lora"] else 3e-5
         schema = spec.primary_schema
         multilabel = schema.kind == "multilabel"
+        distribution = schema.kind == "distribution"
+        soft = distribution or bool(params.get("soft_targets"))
         labels = bundle.labels(schema.name)
         index = {label: i for i, label in enumerate(labels)}
 
@@ -119,6 +163,10 @@ class HFTextClassificationTrainer(Trainer):
                                % schema.name)
         report.log("info", "%d train and %d val rows, %d labels"
                    % (len(train), len(val), len(labels)))
+        if soft and not distribution:
+            n_soft = sum(1 for r in train if schema.name in (r.get("soft_targets") or {}))
+            report.log("info", "Soft targets: %d of %d train items have two or "
+                               "more annotators" % (n_soft, len(train)))
 
         hf.seed_everything(spec.seed)
         device = hf.pick_device(spec, report)
@@ -141,6 +189,13 @@ class HFTextClassificationTrainer(Trainer):
             if multilabel:
                 out = torch.zeros(len(rows), len(labels))
                 for i, row in enumerate(rows):
+                    shares = (row.get("soft_targets") or {}).get(schema.name) \
+                        if soft else None
+                    if shares:
+                        for label, share in shares.items():
+                            if str(label) in index:
+                                out[i, index[str(label)]] = float(share)
+                        continue
                     for label in row["targets"][schema.name]:
                         if str(label) in index:
                             out[i, index[str(label)]] = 1.0
@@ -148,7 +203,28 @@ class HFTextClassificationTrainer(Trainer):
             return torch.tensor([index.get(str(r["targets"][schema.name]), 0)
                                  for r in rows], device=device)
 
+        def soft_tensor(rows):
+            """Each row's label distribution: its soft target, the scheme's
+            own distribution, or its one label."""
+            out = torch.zeros(len(rows), len(labels))
+            for i, row in enumerate(rows):
+                target = row["targets"][schema.name]
+                shares = target if distribution else \
+                    (row.get("soft_targets") or {}).get(schema.name)
+                if shares:
+                    for label, share in shares.items():
+                        if str(label) in index:
+                            out[i, index[str(label)]] = float(share)
+                    out[i] /= out[i].sum().clamp(min=1e-9)
+                else:
+                    out[i, index.get(str(target), 0)] = 1.0
+            return out.to(device)
+
         def loss_of(batch):
+            if soft and not multilabel:
+                logits = model(**encode(batch)).logits.float()
+                return -(soft_tensor(batch)
+                         * torch.log_softmax(logits, dim=-1)).sum(-1).mean()
             return model(**encode(batch), labels=target_tensor(batch)).loss
 
         selected = {"saved": False}
@@ -175,7 +251,10 @@ class HFTextClassificationTrainer(Trainer):
         card = {"trainer": self.name, "schema": schema.name,
                 "kind": schema.kind, "base_model": params["model_name"],
                 "lora": params["lora"], "label_order": labels,
-                "multilabel": multilabel, "threshold": float(params["threshold"]),
+                "multilabel": multilabel, "distribution": distribution,
+                "soft_targets": soft, "threshold": float(params["threshold"]),
+                "acquisition": params.get("acquisition", "least_confident"),
+                "mc_samples": int(params.get("mc_samples", 10)),
                 "max_length": int(params["max_length"]), "device": device,
                 "n_train": len(train), "bundle_digest": bundle.digest,
                 "selected_epoch": summary["best_epoch"]}
@@ -208,13 +287,14 @@ class HFTextClassificationTrainer(Trainer):
         predictions = {}
         for row, payload, _ in self._predict_rows(
                 model, tokenizer, rows, labels, schema.kind == "multilabel",
-                params, device):
+                params, device, distribution=schema.kind == "distribution"):
             predictions[(str(row.get("instance_id", "")), schema.name)] = payload
         metrics, _ = score_split(rows, predictions, schema.name, schema.kind)
         return metrics.get(HEADLINE[schema.kind], 0.0)
 
     def _predict_rows(self, model, tokenizer, rows, labels, multilabel,
-                      params, device, report: Optional[ProgressReporter] = None):
+                      params, device, report: Optional[ProgressReporter] = None,
+                      distribution: bool = False):
         import torch
 
         size = max(1, int(params.get("batch_size", 16)))
@@ -241,8 +321,15 @@ class HFTextClassificationTrainer(Trainer):
                 probs = torch.softmax(logits, dim=-1).cpu().tolist()
                 for row, p in zip(chunk, probs):
                     best = max(range(len(p)), key=p.__getitem__)
-                    yield row, {"label": labels[best],
-                                "confidence": round(p[best], 4)}, p[best]
+                    shares = {labels[i]: round(v, 4) for i, v in enumerate(p)}
+                    payload = {"label": labels[best],
+                               "confidence": round(p[best], 4),
+                               # The whole distribution: what soft-target
+                               # scoring compares, and a soft label's answer.
+                               "probabilities": shares}
+                    if distribution:
+                        payload["distribution"] = shares
+                    yield row, payload, p[best]
             done += len(chunk)
             if report is not None:
                 report.progress("predict", done, len(rows))
@@ -274,12 +361,67 @@ class HFTextClassificationTrainer(Trainer):
                   "threshold": card.get("threshold", 0.5)}
 
         items = list(items)
-        for item, payload, confidence in self._predict_rows(
-                model, tokenizer, items, labels, multilabel, params, device,
-                report):
+        results = list(self._predict_rows(
+            model, tokenizer, items, labels, multilabel, params, device,
+            report, distribution=bool(card.get("distribution"))))
+        method = card.get("acquisition") or "least_confident"
+        if method != "least_confident" and not multilabel:
+            scores = self._acquisition(method, model, tokenizer, spec, card,
+                                       [r[0] for r in results],
+                                       [r[1] for r in results], params, device,
+                                       report)
+            for (_, payload, _), score in zip(results, scores):
+                payload["acquisition"] = round(float(score), 6)
+        for item, payload, confidence in results:
             yield PredictionRecord(instance_id=item.instance_id,
                                    schema_name=card["schema"], payload=payload,
                                    confidence=round(float(confidence), 4))
+
+    def _acquisition(self, method, model, tokenizer, spec, card, items, payloads,
+                     params, device, report=None) -> List[float]:
+        """One acquisition score per predicted item."""
+        import torch
+
+        from potato.training import acquisition
+        if method == "bald" and not acquisition.has_dropout(model):
+            if report is not None:
+                report.log("warning", "acquisition: bald needs dropout, and this "
+                                      "model has none; scored by entropy instead")
+            method = "entropy"
+
+        texts = [getattr(i, "text", "") or "" for i in items]
+        if method in ("margin", "entropy"):
+            return acquisition.scores_for(
+                method, probabilities=[list(p["probabilities"].values()) for p in payloads])
+
+        def batches(values):
+            size = max(1, int(params.get("batch_size", 32)))
+            for start in range(0, len(values), size):
+                yield tokenizer(values[start:start + size], truncation=True,
+                                max_length=int(params["max_length"]), padding=True,
+                                return_tensors="pt").to(device)
+
+        if method == "bald":
+            samples = acquisition.mc_dropout(
+                model, lambda enc: torch.softmax(model(**enc).logits.float(), -1).cpu().tolist(),
+                lambda: batches(texts), int(card.get("mc_samples", 10)))
+            return acquisition.scores_for("bald", samples=samples)
+
+        # coreset: the encoder's first-token state, for the predicted items
+        # and for the items the model was trained on.
+        def embed(values):
+            out = []
+            with torch.inference_mode():
+                for enc in batches(values):
+                    states = model(**enc, output_hidden_states=True).hidden_states[-1]
+                    out.extend(states[:, 0].float().cpu().tolist())
+            return out
+
+        train = [r.get("text", "") for r in
+                 BundleRef.load(spec.bundle_dir).read_split("train")] \
+            if spec.bundle_dir and os.path.isdir(spec.bundle_dir) else []
+        return acquisition.scores_for("coreset", embeddings=embed(texts),
+                                      labelled=embed(train) if train else [])
 
 
 def hf_metric(kind: str) -> str:

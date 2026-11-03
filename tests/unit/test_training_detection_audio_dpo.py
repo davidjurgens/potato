@@ -171,10 +171,12 @@ class TestRegistry:
             return sorted(t.name for t in registry.trainers_for_schema(
                 scheme, modality=modality))
 
-        assert names({"annotation_type": "pairwise", "name": "p"}) == ["llm-dpo"]
-        # Scale mode is a rating, not a choice between two responses.
-        assert "llm-dpo" not in names({"annotation_type": "pairwise",
-                                       "name": "p", "mode": "scale"})
+        assert names({"annotation_type": "pairwise", "name": "p"}) == [
+            "llm-dpo", "reward-model"]
+        # Scale mode is a strength of preference: a reward model learns from
+        # it (weighted by how far the slider leans), DPO does not.
+        assert names({"annotation_type": "pairwise", "name": "p",
+                      "mode": "scale"}) == ["reward-model"]
         assert names({"annotation_type": "image_annotation", "name": "b"},
                      "image") == ["label-studio-ml", "torchvision-detect",
                                   "torchvision-segment", "ultralytics-detect",

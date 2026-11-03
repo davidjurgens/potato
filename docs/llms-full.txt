@@ -46752,6 +46752,12 @@ model that does not report confidence is not thereby unsure, and treating it as
 confidence zero fills the worst-first queue with items nobody has a reason to
 doubt.
 
+A trainer's `acquisition` score (see
+[Choosing what to ask next](model_training.md#choosing-what-to-ask-next)) does
+not change this order. It ranks the items most worth labelling, and a
+core-set score in particular can put a confidently right prediction first.
+The `llm_confidence` strategy uses it.
+
 The convention is to check the worst 10–20%. `worst_first` is the least
 confident 20% of the queue, and never fewer than one item.
 
@@ -47319,13 +47325,17 @@ other key.
 | Trainer | Schemes | Items | Install |
 |---|---|---|---|
 | `sklearn-text` | `radio`, `select`, `likert`, `multiselect` | text, images | nothing |
-| `hf-text-classification` | `radio`, `select`, `likert`, `multiselect` | text | `potato-annotation[train-text]` |
+| `hf-text-classification` | `radio`, `select`, `likert`, `multiselect`, `soft_label` | text | `potato-annotation[train-text]` |
 | `setfit` | `radio`, `select`, `likert`, `multiselect` | text | `potato-annotation[embeddings]` |
 | `hf-token-classification` | `span` | text | `potato-annotation[train-text]` |
 | `hf-image-classification` | `radio`, `select`, `likert`, `multiselect` | images | `potato-annotation[train-vision]` |
 | `llm-sft` | `text` (free-text answers), `trajectory_edit` | text | `potato-annotation[train-llm]` |
 | `llm-dpo` | `pairwise` in `binary` mode, `trajectory_edit` | text | `potato-annotation[train-llm]` |
 | `prm-reward` | `process_reward` | agent traces | `potato-annotation[train-text]` |
+| `reward-model` | `pairwise` (`binary` and `scale`), `ranking`, `bws` | text | `potato-annotation[train-text]` |
+| `hf-relation` | `span_link`, `event_annotation`, `coreference` | text | `potato-annotation[train-text]` |
+| `hf-conversation-tree` | `tree_annotation` | conversation trees | `potato-annotation[train-text]` |
+| `byt5-gloss` | `interlinear_gloss` | text | `potato-annotation[train-text]` |
 | `torchvision-detect` | `image_annotation` | images | `potato-annotation[train-vision]` |
 | `ultralytics-detect` | `image_annotation` | images | `pip install ultralytics` (AGPL-3.0) |
 | `torchvision-segment` | `image_annotation` (outlines) | images | `potato-annotation[train-vision]` |
@@ -47461,6 +47471,69 @@ Fine-tunes any model `AutoModelForSequenceClassification` loads. Default model:
 ```
 
 It also takes `max_length`, the tokens kept per item (default 256).
+
+#### Learning from disagreement
+
+A bundle normally keeps one label per item, the one the annotators' vote
+(or Dawid-Skene) settled on, and drops how they split. With
+`soft_targets: true`, an item that two or more annotators labelled trains
+toward their split instead: two of three said `positive`, so the target is
+0.67 `positive` and 0.33 `negative`, by cross-entropy against that
+distribution. For a `multiselect`, each label trains toward the share of
+annotators who ticked it. Items with one annotator train on their label as
+before.
+
+The model then stays unsure where people disagreed, rather than confident in
+whichever label the vote kept. Each prediction carries its `probabilities`,
+and the held-out score adds, on the val and test items that have a vote
+split:
+
+| Metric | Meaning |
+|---|---|
+| `soft_jsd` | Jensen-Shannon divergence (bits, 0 to 1) between the model's distribution and the annotators' split |
+| `soft_cross_entropy` | Cross-entropy of the annotators' split under the model's distribution |
+| `ece` | Expected calibration error of the top label against the voted label, over 10 confidence bins |
+
+A `soft_label` scheme, where each annotator gives a distribution with
+sliders, always trains this way. Its target is the annotators' mean
+distribution, the prediction is a distribution (`distribution` in the
+payload), and the prelabel sets the sliders to it, rounded to whole numbers
+that add up to the scheme's `total`. Its headline is
+`distribution_agreement`, 1 minus the Jensen-Shannon divergence from the
+annotators' distribution.
+
+```json
+{"soft_targets": true}
+```
+
+#### Choosing what to ask next
+
+[`assignment_strategy: llm_confidence`](../advanced/task_assignment.md)
+serves items least-confident first. `acquisition` replaces that ordering with
+a score written on each prediction as `acquisition`, highest first:
+
+| `acquisition` | Score |
+|---|---|
+| `least_confident` (default) | None written; items are ordered by confidence, as before |
+| `margin` | 1 minus the gap between the top two probabilities |
+| `entropy` | Entropy of the predicted distribution, scaled to 0–1 |
+| `bald` | Mutual information between the label and the model's weights, from `mc_samples` (default 10) forward passes with dropout on. It is high for items the model is unsure about for lack of data, and low for items that are ambiguous whatever the data. A model with no dropout cannot give it; the run then logs a warning and scores by entropy. |
+| `coreset` | Greedy k-centre over the model's embeddings: each item's distance to the nearest training item or already-chosen item, scaled to 0–1. Spreads the queue across the data, so ten near-copies of one hard item do not take the first ten places. |
+
+Items with an acquisition score are served first, then items that only have
+a confidence, then items with a prediction and no confidence, then items with
+no prediction. The [`model_review`](model_review.md) strategy still orders
+by confidence, because it looks for the model's wrong answers; an acquisition
+score ranks the items most worth labelling.
+
+`acquisition` is for single-label schemes (`radio`, `select`, `likert`). `hf-image-classification` takes the same two parameters. The
+order reads published prelabels, so as with confidence ordering the scheme
+must be in `writeback.schemas`, and `writeback.include_unlabeled: true` is
+needed for the unlabelled items to get a prediction and a score at all.
+
+```json
+{"acquisition": "bald", "mc_samples": 10}
+```
 
 ### `setfit`
 
@@ -47730,6 +47803,143 @@ model_training:
     schemas: [step_quality]
     include_unlabeled: true
 ```
+
+### `reward-model`
+
+A scalar reward model: a transformer with one output, trained so that the
+response annotators preferred scores higher. `llm-dpo` trains a policy from
+preferences; this trains the reward model itself, for RLHF, best-of-n
+sampling or ranking new outputs. It learns from every comparative type:
+
+| Scheme | Training signal |
+|---|---|
+| `pairwise`, `binary` | The chosen response beats the other. Ties are skipped. |
+| `pairwise`, `scale` | The side the slider leans to wins, weighted by how far it leans (a full push weighs 1). The midpoint is skipped. |
+| `ranking` | The whole order, by the Plackett-Luce loss. `ranking_loss: pairs` uses Bradley-Terry over every pair in it instead. A ranking with a tie (`allow_ties`, stored as `B,D=A,C`) trains on its pairs, and tied items are not compared with each other. The bundle keeps the order as stored, so its targets contain tier strings such as `D=A`; the trainer splits them. |
+| `bws` | The best item beats every other item in the tuple, and every other item beats the worst. |
+
+The loss is Bradley-Terry, `-log sigmoid(r_winner - r_loser)`, the
+reward-modelling loss of InstructGPT. When an item has a prompt (`prompt`,
+`question`, `instruction`, `query`, `input` or `context`), each reward is of
+the response given the prompt. A ranking's options are the scheme's labels,
+each scored given the item's text.
+
+Predictions answer the scheme's own question, so they are scored and written
+back like any other: the preferred letter (with confidence
+`sigmoid(|r_A - r_B|)`), a point on the scale, the order, or the best and
+worst. Every prediction also carries the `rewards` it came from. Only
+differences between rewards are meaningful.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `distilbert/distilroberta-base` | An encoder, or an LLM with `lora`. |
+| `ranking_loss` | `plackett_luce` | `ranking` only: `plackett_luce` or `pairs`. |
+| `max_length` | 512 | Tokens per scored text, prompt and response together. |
+| `batch_size` | 8 | Comparisons per step. |
+
+It also takes the parameters in [Parameters](#parameters), including `lora`
+with `quantize`. BWS tuples are built by the server from `bws_config`. A run
+from the server's own data has them; the tuples are not in the data files.
+
+### `hf-relation`
+
+For `span_link`, `event_annotation` and `coreference` schemes, whose answers
+are links between the spans of the scheme named by `span_schema`. One
+transformer encoder and three small heads, trained together:
+
+- a **mention tagger**, BIO tags over tokens for the spans annotators drew;
+- a **pair classifier** over two spans (the encoder states at each span's
+  first and last token, and their product): `none` or a link type for
+  relations, `none` or a role for a trigger and an argument, same entity or
+  not for coreference;
+- a **span classifier**: each span's event type (or `none`), which picks out
+  the triggers, and for coreference the entity type of a span's chain.
+
+Pairs are trained on the annotators' spans and predicted on the spans the
+tagger finds, so the held-out score measures the whole pipeline: a link
+counts only when both of its spans were found with the right boundaries.
+Coreference is decoded by mention ranking: each mention joins its most
+likely earlier mention, when that is more likely than not. An item counts
+as labelled when its annotator drew spans in the `span_schema`; one with
+spans and no links trains as "nothing linked here".
+
+| Kind | Held-out metrics | Headline |
+|---|---|---|
+| `span_link` | link precision, recall and F1 over (span offsets, type); mention F1 | F1 |
+| `event_annotation` | trigger F1 over (offsets, event type); argument F1 over (trigger, event type, argument offsets, role) | argument F1 |
+| `coreference` | MUC, B-cubed and entity CEAF F1; CoNLL F1, their mean | CoNLL F1 |
+
+For coreference, a mention annotators placed in no chain is a singleton.
+
+**Dependency parsing.** Potato stores a dependency parse as a span scheme
+plus a `span_link` scheme with directed link types, each link from the head
+to the dependent (see `demo/13-dependency-tree`). When every training answer
+is a tree (one link fewer than spans, no span with two heads), the run
+decodes trees: the span classifier scores each span as the root, the pair
+classifier scores each possible head, and the parse is the maximum spanning
+tree over those scores (Chu-Liu-Edmonds), so every prediction is one tree.
+The held-out score adds `uas` and `las` when every training answer is a
+tree, whatever the held-out items look like. `decode: pairs` turns tree
+decoding off (the scores then measure the heads the pair classifier picked),
+and `decode: tree` refuses a run whose answers are not trees.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `distilbert/distilroberta-base` | A Hugging Face encoder. |
+| `max_length` | 512 | Tokens per item. Spans past the cut are not trained on or predicted; the run log counts them. |
+| `max_negatives` | 100 | Unlinked span pairs trained on per item, sampled. |
+| `decode` | `auto` | `auto`, `tree` or `pairs`; see above. |
+| `epochs` | 10 | |
+| `patience` | 3 | |
+
+The prelabel is the spans and the links, chains or events between them. See
+[Write-back](#write-back) for how the page shows them.
+
+### `hf-conversation-tree`
+
+For `tree_annotation` schemes, where annotators answer a question about each
+turn of a conversation tree (`node_scheme`) and select the best path by
+clicking nodes. One encoder reads each turn with its parent's text as
+context; a node head predicts the answer to each node question, and a path
+head predicts whether a turn continues the selected path from its parent,
+trained on the path's turns against their siblings. A predicted path starts
+at the root and takes the child the path head scores highest, while that
+score is above 0.5.
+
+Turns annotators did not answer are left out of training, not treated as
+answered "none". The tree is read from the item field of the
+`conversation_tree` display. Held-out metrics are node-answer accuracy and
+macro-F1 (the headline) and `path_accuracy`, how often the whole selected
+path is right. It takes `model_name` (default
+`distilbert/distilroberta-base`), `max_length` (default 256, per turn and its
+parent) and the parameters in [Parameters](#parameters).
+
+### `byt5-gloss`
+
+For `interlinear_gloss` schemes. Fine-tunes ByT5 (`google/byt5-small` by
+default), a byte-level model: glossing data is small and its words are rare,
+and a byte model can still read a word it has never seen. One model learns
+two tasks, told apart by a prefix: a word's segmentation (with the word and
+its sentence) to its gloss line, and, when annotators segmented words, a word
+to its segmentation.
+
+A prediction starts from the words the page shows and any segmentation the
+item pre-fills (`morphemes_field`). A word with no segmentation is segmented
+first, then glossed. Held-out metrics are word gloss accuracy and morpheme
+gloss accuracy (the headline): each gold morpheme gloss matched at its
+position, as in the [gloss agreement report](../annotation-types/text/interlinear_gloss.md).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `google/byt5-small` | A seq2seq model. |
+| `epochs` | 20 | |
+| `max_length` | 256 | Bytes of input per word (word, segmentation and sentence). |
+| `max_new_tokens` | 64 | Longest gloss or segmentation generated, in bytes. |
+| `min_instances` | 10 | Glossed sentences in the train split. |
+
+The prelabel fills the gloss grid. As with the item's own `gloss_field`
+prefill, it is saved as the annotator's answer when they move on to the next
+item, whether or not they edited it; nothing is saved before that.
 
 ### `label-studio-ml`
 
@@ -48050,6 +48260,17 @@ scheme's kind:
 | `image_annotation` | COCO mAP at IoU 0.5 (`map_50`) and averaged over 0.5–0.95 (`map_50_95`) | `map_50` |
 | `audio_annotation` | precision, recall, F1 over segments with the same label at IoU of at least 0.5, and their mean IoU (`matched_iou`) | F1 |
 | `slider` | accuracy (the exact position), mean absolute error | accuracy |
+| `pairwise` (`scale`) | direction accuracy (the preferred side; a midpoint answer is not counted), mean absolute error on the scale | direction accuracy |
+| `ranking` | Kendall's tau, pairwise accuracy (the share of pairs in the annotators' order), top-1 accuracy. A pair the annotators tied is not scored. | Kendall's tau |
+| `bws` | best accuracy, worst accuracy, and their mean | best-worst accuracy |
+| `soft_label` | 1 − Jensen-Shannon divergence from the annotators' mean distribution, the divergence itself, cross-entropy, argmax accuracy | `distribution_agreement` |
+| `span_link`, `event_annotation`, `coreference` | see [`hf-relation`](#hf-relation) | F1, argument F1, CoNLL F1 |
+| `interlinear_gloss` | word and morpheme gloss accuracy | morpheme accuracy |
+| `tree_annotation` | node-answer accuracy and macro-F1, path accuracy | node macro-F1 |
+
+A classifier trained with `soft_targets` also reports `soft_jsd`,
+`soft_cross_entropy` and `ece`; see
+[Learning from disagreement](#learning-from-disagreement).
 
 Metric names carry the split (`val_macro_f1`, `test_f1`). An item with a label
 and no prediction counts as wrong, so a trainer cannot raise its score by
@@ -48106,7 +48327,21 @@ annotations live in user state, which write-back does not address.
 
 Prelabels show on the annotation page as a pre-filled answer once
 `writeback.schemas` is set: boxes, outlines and audio segments as shapes the
-annotator can edit, and a pairwise preference as the selected card; no `pre_annotation` block is needed. If
+annotator can edit, a pairwise preference as the selected card or the scale's
+slider position, a ranking as the list's order, a BWS pick as the selected
+best and worst, a soft label as slider positions, a gloss in the gloss grid,
+and a conversation tree's node answers and path. No `pre_annotation` block is
+needed.
+
+A relation, chain or event prediction shows as spans in the `span_schema`
+with the links, chains or events drawn between them, while the annotator has
+no spans of their own on the item. They can be edited or deleted, and they
+are stored as the annotator's answer when the annotator moves on to the next
+item. The first edit of any one scheme (a span, a link, a chain or an event)
+stores every scheme's prelabels first. Deleting a predicted span also drops
+the predicted links and event arguments that use it. Once the annotator has
+stored an edit or moved on, the prediction is not offered again, so an item
+whose every predicted span was deleted stays empty. If
 an enabled `pre_annotation` block is also present, its settings apply instead,
 and its `field` must match `writeback.field`; the server refuses to start when
 it does not, since no training prelabel would show. A prediction with nothing
@@ -48114,6 +48349,11 @@ in it (no spans, no shapes, no segments) is counted in `n_skipped_empty`, not
 written, and one for an item no longer in the data in
 `n_skipped_missing_item`. If the annotator leaves a span prelabel unchanged, it is saved as
 their answer on Next, the same as for every other type.
+
+A prelabel is not saved while the annotator is only looking at it. It
+becomes their answer when they edit it or move on, so an item nobody has
+answered does not count as done, and a model's answer does not go back into
+training as a human label.
 
 By default a run predicts only on the items in its `val` and `test` splits,
 which already have a resolved human label, so items nobody has labelled get no
@@ -61711,8 +61951,24 @@ NER tags.
 4	Paris.	_	_	_	_	_	_	_	NER=B-LOC
 ```
 
-Lemma, POS, features and dependencies are left `_`: Potato records spans, not
-parses. `SpaceAfter=No` is set where the source has no space between tokens.
+Lemma, POS and features are left `_`. HEAD and DEPREL are filled when the
+project annotates dependencies the way Potato stores them: a `span_link`
+scheme with directed link types over the exported span scheme, each link
+from the head span to the dependent span. The first token of each span is
+attached to the first token of its head span, a span with no head is `0` /
+`root`, and every other token is `_`. A link that crosses a sentence boundary
+(sentences are split by the tokenizer) is left out, with a warning. Pass
+`link_schema` to choose the link scheme; otherwise it is the first `span_link`
+over that span scheme with a directed link type. `SpaceAfter=No` is set where
+the source has no space between tokens.
+
+```
+# sent_id = item_002-s1
+# text = the cat sat
+1	the	_	_	_	_	2	det	_	_
+2	cat	_	_	_	_	3	nsubj	_	_
+3	sat	_	_	_	_	0	root	_	_
+```
 
 **Usage:**
 ```bash
@@ -61886,6 +62142,9 @@ JOIN 'export/items.parquet' i ON a.instance_id = i.item_id;
 ### CSV (csv)
 
 Export annotations as comma-separated values with one row per annotation.
+Spans are a JSON column per span scheme, `<scheme>._spans`. Links and
+chains are `<scheme>._links` and events `<scheme>._events`, JSON in the same
+shape as the JSONL `links` and `events` below.
 
 ```bash
 python -m potato.export --config config.yaml --format csv --output ./export/
@@ -62212,6 +62471,13 @@ python -m potato.export --config config.yaml --format asap_xml --output ./asap/
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
+
+Each line carries `labels`, `spans` (by span scheme), `links` and `events`.
+`links` holds the `span_link` and `coreference` answers, `{scheme: [link,
+...]}`, each link naming the ids of the spans it joins (`span_ids`) in its
+order, with `link_type` and `direction`. `events` holds the
+`event_annotation` answers, `{scheme: [event, ...]}`, each with
+`event_type`, `trigger_span_id` and `arguments` (`role`, `span_id`).
 
 Answers stored as a JSON blob stay a JSON string inside the line. Video object
 tracks are one example: they sit at `labels.<scheme>._data`, and the

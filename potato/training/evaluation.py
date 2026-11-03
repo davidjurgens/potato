@@ -22,7 +22,23 @@ trajectory     how often the model favours the corrected agent trace over
                the original; token F1 against the correction for a writer
 trace          per-step accuracy and macro-F1 over correct/neutral/wrong,
                and whether the first wrong step is the annotators' one
+relation       link precision, recall and F1 over (span offsets, type), and
+               mention F1; UAS and LAS when the gold links are trees
+coreference    MUC, B-cubed and entity CEAF F1, and CoNLL F1, their mean
+event          trigger F1 and argument F1
+ranking        Kendall's tau, pairwise and top-1 accuracy
+bws            best, worst and best-worst accuracy
+distribution   1 - Jensen-Shannon divergence from the annotators'
+               distribution, cross-entropy, argmax accuracy
+gloss          word and morpheme gloss accuracy
+conv. tree     node-answer accuracy and macro-F1, exact path accuracy
+pref. scale    direction accuracy, mean absolute error on the scale
 =============  ==========================================================
+
+A classifier trained on soft targets (several annotators' votes as a
+distribution) also gets ``soft_jsd``, ``soft_cross_entropy`` and ``ece``
+on the rows that have one, when its predictions carry probabilities. The
+structured kinds are scored in ``structured_metrics``.
 
 Metric names carry the split: ``val_accuracy``, ``test_macro_f1``. Each split
 also gets a headline, ``<split>_score``, and the result names which metric the
@@ -64,6 +80,24 @@ HEADLINE = {
     # Most steps in most traces are correct, so accuracy flatters a model that
     # never says "wrong".
     "trace": "step_macro_f1",
+    "relation": "f1",
+    "coreference": "conll_f1",
+    "event": "argument_f1",
+    "ranking": "kendall_tau",
+    "bws": "best_worst_accuracy",
+    "distribution": "distribution_agreement",
+    "gloss": "morpheme_accuracy",
+    "conversation_tree": "node_macro_f1",
+    "preference_scale": "direction_accuracy",
+}
+
+#: Kind to the ``structured_metrics`` function that scores it.
+_STRUCTURED_SCORERS = {
+    "relation": "score_relations", "coreference": "score_coreference",
+    "event": "score_events", "ranking": "score_rankings", "bws": "score_bws",
+    "distribution": "score_distributions", "gloss": "score_glosses",
+    "conversation_tree": "score_trees",
+    "preference_scale": "score_scale_preferences",
 }
 
 #: IoU at which a predicted segment matches an annotated one.
@@ -454,14 +488,16 @@ def _score_traces(gold: List[Any], predicted: List[Any]) -> Dict[str, float]:
 
 def score_split(rows: Iterable[Dict[str, Any]],
                 predictions: Dict[Tuple[str, str], Any],
-                schema_name: str, kind: str) -> Tuple[Dict[str, float], int]:
+                schema_name: str, kind: str,
+                trees: Optional[bool] = None) -> Tuple[Dict[str, float], int]:
     """Metrics for one schema over one split, and how many rows were scored.
 
     A labelled row the model gave no prediction for counts as wrong, not as
     missing: a trainer that skips the hard items must not score higher for
-    it. Rows with no target for the schema are not scored.
+    it. Rows with no target for the schema are not scored. *trees* is for
+    relations: whether every training answer is a dependency tree.
     """
-    gold_raw, pred_raw, ids = [], [], []
+    gold_raw, pred_raw, ids, soft = [], [], [], []
     for row in rows:
         target = (row.get("targets") or {}).get(schema_name)
         if target is None or target == "" or (target == [] and kind != "span"):
@@ -471,6 +507,7 @@ def score_split(rows: Iterable[Dict[str, Any]],
             # and a model that ranks two responses never answers it.
             continue
         gold_raw.append(target)
+        soft.append((row.get("soft_targets") or {}).get(schema_name))
         ids.append(str(row.get("instance_id", "")))
         pred_raw.append(predictions.get((str(row.get("instance_id", "")),
                                          schema_name)))
@@ -483,6 +520,9 @@ def score_split(rows: Iterable[Dict[str, Any]],
         gold = [str(g) for g in gold_raw]
         predicted = [_label(p) for p in pred_raw]
         metrics = _score_labels(gold, predicted, ordinal=kind == "ordinal")
+        if any(soft):
+            from potato.training.structured_metrics import soft_label_scores
+            metrics.update(soft_label_scores(soft, pred_raw, gold))
     elif kind == "multilabel":
         metrics = _score_multilabel([_label_set(g) for g in gold_raw],
                                     [_label_set(p) for p in pred_raw])
@@ -504,12 +544,29 @@ def score_split(rows: Iterable[Dict[str, Any]],
         metrics = _score_traces(gold_raw, pred_raw)
         if not metrics:
             return {}, n
+    elif kind in _STRUCTURED_SCORERS:
+        from potato.training import structured_metrics
+        scorer = getattr(structured_metrics, _STRUCTURED_SCORERS[kind])
+        metrics = scorer(gold_raw, pred_raw, trees=trees) if kind == "relation" \
+            else scorer(gold_raw, pred_raw)
+        if not metrics:
+            return {}, n
     else:
         return {}, n
 
     metrics["n"] = float(n)
     metrics["coverage"] = sum(1 for p in pred_raw if p is not None) / n
     return metrics, n
+
+
+def _trained_on_trees(bundle, schema_name: str) -> Optional[bool]:
+    """Whether every training answer for a relation scheme is a dependency
+    tree, the test hf-relation decodes trees on; None without a train split."""
+    from potato.training.structured import is_tree_answer
+    targets = [(row.get("targets") or {}).get(schema_name)
+               for row in bundle.read_split("train")]
+    targets = [t for t in targets if t]
+    return all(is_tree_answer(t) for t in targets) if targets else None
 
 
 def score_predictions(bundle, predictions: Dict[Tuple[str, str], Any],
@@ -534,9 +591,10 @@ def score_predictions(bundle, predictions: Dict[Tuple[str, str], Any],
         kind = getattr(schema, "kind", "")
         name = getattr(schema, "name", "")
         prefix_extra = "" if position == 0 else "%s_" % name
+        trees = _trained_on_trees(bundle, name) if kind == "relation" else None
         for split in splits:
             metrics, n = score_split(bundle.read_split(split), predictions,
-                                     name, kind)
+                                     name, kind, trees=trees)
             for metric, value in metrics.items():
                 out["%s_%s%s" % (split, prefix_extra, metric)] = round(value, 4)
             headline = HEADLINE.get(kind)

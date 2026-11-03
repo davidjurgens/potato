@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "5a13ac74e5453e7d",
-    "version": "54"
+    "sha256": "ab580c9513f4c1bf",
+    "version": "56"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -72,8 +72,8 @@
     "version": "3"
   },
   "coreference-manager.js": {
-    "sha256": "9a04297e4c9de0e5",
-    "version": "6"
+    "sha256": "9655e2f1436e44e8",
+    "version": "8"
   },
   "css/agent-chat.css": {
     "sha256": "3bba41a852d6913f",
@@ -200,8 +200,8 @@
     "version": "2"
   },
   "event-annotation.js": {
-    "sha256": "c177e47b974a3e0d",
-    "version": "3"
+    "sha256": "63b57190a6eadb28",
+    "version": "5"
   },
   "floating-panel-utils.js": {
     "sha256": "16e0b90c890792b8",
@@ -468,12 +468,12 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "996f01df39d740c9",
-    "version": "27"
+    "sha256": "080aba63067cccd4",
+    "version": "28"
   },
   "span-link-manager.js": {
-    "sha256": "6461cb278105a953",
-    "version": "16"
+    "sha256": "678c817a4974e379",
+    "version": "18"
   },
   "span-link-styles.css": {
     "sha256": "2cd95f97873ba162",

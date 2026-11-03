@@ -166,3 +166,18 @@ def beep_recordings(directory: str, n: int, seconds: float = 2.0,
         soundfile.write(path, samples, rate)
         out.append((path, segments))
     return out
+
+
+def tiny_byt5(directory: str) -> str:
+    """A two-layer T5 with ByT5's byte vocabulary (384 ids), saved to
+    *directory*. ByT5's tokenizer needs no vocabulary file."""
+    _seed()
+    from transformers import ByT5Tokenizer, T5Config, T5ForConditionalGeneration
+
+    config = T5Config(vocab_size=384, d_model=64, d_ff=128, d_kv=16, num_layers=2,
+                      num_decoder_layers=2, num_heads=4, decoder_start_token_id=0,
+                      pad_token_id=0, eos_token_id=1, dropout_rate=0.0)
+    os.makedirs(directory, exist_ok=True)
+    T5ForConditionalGeneration(config).save_pretrained(directory)
+    ByT5Tokenizer().save_pretrained(directory)
+    return directory

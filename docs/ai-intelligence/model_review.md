@@ -64,6 +64,12 @@ model that does not report confidence is not thereby unsure, and treating it as
 confidence zero fills the worst-first queue with items nobody has a reason to
 doubt.
 
+A trainer's `acquisition` score (see
+[Choosing what to ask next](model_training.md#choosing-what-to-ask-next)) does
+not change this order. It ranks the items most worth labelling, and a
+core-set score in particular can put a confidently right prediction first.
+The `llm_confidence` strategy uses it.
+
 The convention is to check the worst 10–20%. `worst_first` is the least
 confident 20% of the queue, and never fewer than one item.
 

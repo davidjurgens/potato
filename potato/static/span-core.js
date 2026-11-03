@@ -1763,6 +1763,9 @@ class SpanManager {
                 throw new Error(`JSON parse error: ${jsonError.message}`);
             }
             this.annotations = responseData;
+            if (((responseData && responseData.spans) || []).some(s => s.prelabel)) {
+                this.prelabelsOffered = true;
+            }
 
             // Only update data-original-text on legacy #text-content, not on per-field elements
             // Per-field elements already have correct data-original-text from server rendering
@@ -2369,8 +2372,21 @@ class SpanManager {
         pending.forEach(s => { s.prelabel = false; });
     }
 
+    /**
+     * Before the annotator's first edit is stored: store every prelabel on
+     * the item, links and events included (annotation.js), or this one's
+     * spans where that is not loaded.
+     */
+    async takeOverPrelabels() {
+        if (typeof window.commitAllPrelabels === 'function') {
+            await window.commitAllPrelabels();
+        } else {
+            await this.commitPrelabels();
+        }
+    }
+
     async saveSpanWithParts(span) {
-        await this.commitPrelabels();
+        await this.takeOverPrelabels();
         try {
             const postData = {
                 type: "span",
@@ -2416,7 +2432,7 @@ class SpanManager {
     }
 
     async saveSpan(span) {
-        await this.commitPrelabels();
+        await this.takeOverPrelabels();
         try {
             const spanState = {
                 name: span.label,

@@ -93,6 +93,37 @@ All notable changes to the Potato annotation platform are documented in this fil
   `predictions` and no `pre_annotation` block, the model-review queue, the
   Catalog's `model-found-nothing` slice and the assist-effect report read the
   wrong field and found no prelabels.
+- **Reward models** (`reward-model`): a transformer with one output, trained
+  by Bradley-Terry so the preferred response scores higher, from binary and
+  scale `pairwise`, `ranking` (Plackett-Luce over the whole order) and `bws`
+  answers. A ranking with ties trains on its pairs. Predictions answer the
+  scheme's question and carry each option's reward.
+- **Learning from disagreement.** `hf-text-classification` with
+  `soft_targets: true` trains items that several annotators labelled toward
+  their vote split rather than the voted label, and reports the distance
+  from that split (`soft_jsd`) and calibration (`ece`). It also trains
+  `soft_label` schemes, predicting a distribution that pre-fills the
+  sliders.
+- **Relations, events and coreference** (`hf-relation`) for `span_link`,
+  `event_annotation` and `coreference` schemes: one encoder tags the spans
+  and classifies pairs of them. Scored by link F1, argument F1 and CoNLL F1
+  (MUC, B-cubed, CEAF-e). When every training answer is a dependency tree
+  (directed links, head first), it decodes one tree per item by maximum
+  spanning tree and reports UAS and LAS. Before, these schemes were offered the span
+  tagger, which found nothing to tag.
+- **Conversation trees** (`hf-conversation-tree`) for `tree_annotation`:
+  each turn's node answer and the selected path.
+- **Interlinear glossing** (`byt5-gloss`): ByT5 learns to segment words into
+  morphemes and gloss them, scored by morpheme gloss accuracy.
+- **Choosing what to ask next.** `acquisition` on `hf-text-classification`
+  and `hf-image-classification` (`margin`, `entropy`, `bald` by Monte Carlo
+  dropout, `coreset` by k-centre over embeddings) writes a score on each
+  prediction, and `llm_confidence` assignment serves the highest first.
+- **More prelabels.** Training predictions now pre-fill ranking, BWS,
+  pairwise scale, soft label, interlinear gloss and conversation-tree
+  schemes, and relations, chains and events, drawn between predicted spans.
+  The annotator's first edit stores every scheme's prelabels, not only the
+  edited one's.
 - New settings: `model_training.trainer_params` (per-trainer defaults) and
   `model_training.auto_retrain.accept_licence`.
 - New extras: `embeddings` (`sentence-transformers`), `train-text`,
@@ -106,6 +137,9 @@ All notable changes to the Potato annotation platform are documented in this fil
 - **`segments` format**: one JSONL row per audio or video segment, plus an
   RTTM file per annotator. Recordings that share a file name get distinct
   RTTM ids, and zero-length segments stay in the JSONL but not the RTTM.
+- **CoNLL-U HEAD and DEPREL** come from a directed `span_link` scheme over
+  the exported spans (head first), with a span that has no head as `root`.
+  They were always `_`.
 
 ### Fixed
 
@@ -124,6 +158,24 @@ All notable changes to the Potato annotation platform are documented in this fil
   running, with no Cancel button, and the page stopped polling it.
 - If the Potato server died without running its exit handler, its ssh
   connection to a remote backend stayed open, and so did the remote agent.
+- `span_link`, `coreference` and `event_annotation` answers were missing from
+  every export: the export read neither store, so `links` was always empty
+  in JSONL and there was no `events` key. An item whose only annotation was
+  a link was left out entirely. CSV and TSV now carry them too, as
+  `<scheme>._links` and `<scheme>._events` columns.
+- A ranking tie (`B,D=A,C`, from `allow_ties`) was read as one item named
+  `D=A`, so agreement left both tied items out of Kendall's tau and the
+  Spearman footrule.
+- An annotator who deleted every span prelabel on an item and moved on got
+  the prediction back on returning, so "nothing here" could not be recorded.
+- A slider, soft-label or pairwise-scale prelabel was saved as the
+  annotator's answer when the page loaded, so the item counted as done
+  before anyone touched it. It is now saved when the annotator moves on, as
+  every other prelabel is.
+- A `number` prelabel was never shown: it was put under the slider's input
+  name, which a number box does not have.
+- A `span_link` scheme's link list also listed and drew the links of every
+  other link scheme on the item, such as a coreference scheme's chains.
 
 ### Changed
 

@@ -117,6 +117,13 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
     # does that slice here, once, against the item the span was drawn on.
     for schema_name, spans in _spans_with_text(ann, context).items():
         row[f"{schema_name}._spans"] = json.dumps(spans)
+    # Links, chains and events the same way, one column per scheme. Each
+    # refers to its spans by id, which the span column carries.
+    for kind in ("links", "events"):
+        grouped = ann.get(kind)
+        for schema_name, records in (grouped.items() if isinstance(grouped, dict) else ()):
+            if records:
+                row[f"{schema_name}._{kind}"] = json.dumps(records)
 
     # Which room produced the answer, when one did. The id gets its own column
     # because grouping by it is the whole point -- a reader who has to parse
@@ -264,6 +271,7 @@ class JSONLExporter(BaseExporter):
                     # and a label, and the words it covers are the point.
                     "spans": _spans_with_text(ann, context),
                     "links": ann.get("links", {}),
+                    "events": ann.get("events", {}),
                 })
                 if ann.get("_agent_chat"):
                     # This annotator's own finished interactive_chat.

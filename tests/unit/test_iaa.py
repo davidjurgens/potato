@@ -310,6 +310,25 @@ class TestRanking:
 # Alpha
 # ---------------------------------------------------------------------------
 
+class TestRankingTies:
+    """The ranking schema stores a tie as "B,D=A,C". Split on "," alone the
+    tie was an item named "D=A" that no other ranking contained."""
+
+    def test_a_tie_is_parsed_into_one_tier(self):
+        from potato.server_utils.iaa.dispatcher import packed_answer, rank_tiers
+        assert rank_tiers("B,D=A,C") == [["B"], ["D", "A"], ["C"]]
+        scheme = {"annotation_type": "ranking", "name": "r"}
+        assert packed_answer(scheme, {"rank_order": "B,D=A,C"}) == ["B", "A=D", "C"]
+
+    def test_tied_items_are_compared_not_dropped(self):
+        # Footrule over the shared items: with D=A an atom, only B and C were
+        # shared and the two rankings read as identical.
+        assert ranking.spearman_footrule(["B", "A=D", "C"], ["B", "C", "A", "D"]) > 0
+        # Tau-b: five concordant pairs, none discordant, one tied in the first.
+        assert isclose(ranking.kendall_tau(["B", "A=D", "C"], ["B", "A", "D", "C"]),
+                       5 / math.sqrt(5 * 6))
+
+
 class TestAlpha:
     def test_alpha_nominal_perfect(self):
         long_format = [

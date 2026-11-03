@@ -44,6 +44,17 @@ def _typing_summaries(user_state: dict, instance_id: str) -> dict:
     return bd.get("typing_summaries") or {}
 
 
+def _grouped_by_schema(records) -> dict:
+    """``{link_id: link}`` (or a list of links) as ``{schema: [link, ...]}``.
+    The same for events."""
+    values = records.values() if isinstance(records, dict) else (records or [])
+    grouped: dict = {}
+    for record in values:
+        if isinstance(record, dict):
+            grouped.setdefault(str(record.get("schema", "")), []).append(record)
+    return grouped
+
+
 def _agent_chat_record(row: Optional[dict]) -> dict:
     """An ``agent_chat_store`` row as it travels on an annotation record."""
     if not row:
@@ -198,8 +209,14 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
         label_data = user_state.get("instance_id_to_label_to_value", {})
         span_data = user_state.get("instance_id_to_span_to_value", {})
 
+        # Span links (span_link, coreference chains) and events have stores
+        # of their own, keyed by instance then by link or event id.
+        link_data = user_state.get("instance_id_to_link_to_value", {}) or {}
+        event_data = user_state.get("instance_id_to_event_to_value", {}) or {}
+
         # Collect all instance IDs
-        all_instances = set(label_data.keys()) | set(span_data.keys())
+        all_instances = (set(label_data.keys()) | set(span_data.keys())
+                         | set(link_data.keys()) | set(event_data.keys()))
 
         for instance_id in all_instances:
             # Labels may be stored as a list of [[{schema, name}, value], ...]
@@ -231,7 +248,11 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
                 "user_id": user_id,
                 "labels": raw_labels,
                 "spans": {},
-                "links": {},
+                # {schema: [link, ...]} and {schema: [event, ...]}. Both were
+                # never read, so every export and every training bundle
+                # lost them: "links" was always empty and "events" absent.
+                "links": _grouped_by_schema(link_data.get(instance_id)),
+                "events": _grouped_by_schema(event_data.get(instance_id)),
                 "image_annotations": {},
                 # Timestamped revision trail for this instance. Exporters use it to
                 # resolve a single-select schema that was stored with several values

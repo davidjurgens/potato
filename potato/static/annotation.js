@@ -1748,11 +1748,12 @@ async function saveAnnotations({ background = false } = {}) {
         // Sync currentAnnotations from DOM to ensure we have the latest state
         // This handles cases where change events may not have fired (e.g., JS clicks)
         syncAnnotationsFromDOM();
-        // Span prelabels the annotator kept are theirs once they move on: on
-        // a navigation save, not on an autosave while they are still here.
-        if (!background && window.spanManager
-                && typeof window.spanManager.commitPrelabels === 'function') {
-            await window.spanManager.commitPrelabels();
+        // Span, link and event prelabels the annotator kept are theirs once
+        // they move on: on a navigation save, not on an autosave while they
+        // are still here.
+        const reviewedPrelabels = !background && prelabelsOffered();
+        if (!background) {
+            await commitAllPrelabels();
         }
         // Save both label and span annotations via /updateinstance
         const spanAnnotations = extractSpanAnnotationsFromDOM();
@@ -1779,6 +1780,9 @@ async function saveAnnotations({ background = false } = {}) {
                 span_annotations: spanAnnotations,
                 client_timestamp: new Date().toISOString(),
                 response_time_seconds: currentInstanceResponseSeconds(),
+                // Moving on from predicted spans takes them over, so an item
+                // whose every span was deleted stays empty (routes.py).
+                prelabels_reviewed: reviewedPrelabels || undefined,
                 // The finished timed trial, if any (trial-timing.js).
                 trial: (window.potatoTrial && typeof window.potatoTrial.record === 'function')
                     ? (window.potatoTrial.record() || undefined) : undefined
@@ -2713,8 +2717,71 @@ function markSliderSchemeTouched(input) {
         .forEach(sibling => sibling.setAttribute('data-modified', 'true'));
 }
 
+/** The span manager, then every link, coreference and event manager. */
+function prelabelManagers() {
+    return [
+        window.spanManager,
+        ...Object.values(window.spanLinkManagers || {}),
+        ...Object.values(window.eventAnnotationManagers || {}),
+        ...Array.from(document.querySelectorAll('.coref-container'))
+            .map(el => el._coreferenceManager),
+    ].filter(Boolean);
+}
+
+/** Ids of the spans on the item now, deleted prelabels gone; null when
+ *  the page has no span manager. A model's link, chain mention or event
+ *  argument whose span the annotator deleted is dropped, not stored. */
+function liveSpanIds() {
+    const manager = window.spanManager;
+    if (!manager || !manager.annotations) return null;
+    return new Set((manager.annotations.spans || []).map(span => span.id));
+}
+window.potatoLiveSpanIds = liveSpanIds;
+
+/** Whether this page showed a model's spans, links, chains or events. */
+function prelabelsOffered() {
+    return prelabelManagers().some(manager => manager.prelabelsOffered);
+}
+
+/**
+ * Store every prelabel still on the item as the annotator's: the spans
+ * first, then the links, chains and events drawn between them. Runs on a
+ * navigation save, and before the first edit of any one scheme stores
+ * anything. Once the annotator has stored something here the server stops
+ * offering prelabels, so an edit that stored only its own scheme's lost the
+ * untouched ones of every other scheme.
+ */
+async function commitAllPrelabels() {
+    for (const manager of prelabelManagers()) {
+        if (typeof manager.commitPrelabels === 'function') {
+            try {
+                await manager.commitPrelabels();
+            } catch (err) {
+                console.error('Could not store prelabels', err);
+            }
+        }
+    }
+}
+window.commitAllPrelabels = commitAllPrelabels;
+
+/**
+ * The `input` event populateInputValues() dispatches after it sets a slider
+ * or number box, so constant_sum totals, VAS readouts and soft-label bars
+ * redraw. It is not an answer: the save listeners skip it. Dispatched as a
+ * plain `input` it was saved on page load, and a model's prelabel became the
+ * annotator's answer, and the item counted as done, before anyone touched it.
+ */
+function restoreInputEvent() {
+    return new CustomEvent('input', { bubbles: true, detail: { potatoRestore: true } });
+}
+
+function isRestoreEvent(event) {
+    return !!(event && event.detail && event.detail.potatoRestore);
+}
+
 /** Debounced `handleInputChange` for typing; flushed by every save path. */
 function debounceInputChange(event) {
+    if (isRestoreEvent(event)) return;
     const element = event.target;
     clearTimeout(pendingInputChanges.get(element));
     pendingInputChanges.set(element, setTimeout(() => {
@@ -2747,11 +2814,12 @@ function setupInputEventListeners() {
             // the first interaction: syncAnnotationsFromDOM skips unmarked
             // ranges, and the required-scheme check reads the same attribute.
             input.addEventListener('input', function (event) {
-                markSliderSchemeTouched(event.target);
                 const valueDisplay = document.getElementById(`${input.name}-value`);
                 if (valueDisplay) {
                     valueDisplay.textContent = event.target.value;
                 }
+                if (isRestoreEvent(event)) return;
+                markSliderSchemeTouched(event.target);
                 handleInputChange(event.target);
             });
         } else if (tagName === 'select') {
@@ -3126,8 +3194,8 @@ function populateInputValues() {
             if (valueDisplay) {
                 valueDisplay.textContent = currentAnnotations[schema][labelName];
             }
-            // Dispatch input event to trigger display updates (constant_sum, VAS, etc.)
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+            // Redraw displays (constant_sum, VAS, etc.) without saving.
+            input.dispatchEvent(restoreInputEvent());
             debugLog(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
@@ -3152,8 +3220,8 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
-            // Dispatch input event to trigger constant_sum display updates
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+            // Redraw constant_sum displays without saving.
+            input.dispatchEvent(restoreInputEvent());
             debugLog(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });

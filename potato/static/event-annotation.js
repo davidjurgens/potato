@@ -649,7 +649,31 @@ class EventAnnotationManager {
         }
     }
 
-    async syncToBackend() {
+    /** Store the model's events as the annotator's when they move on, as
+     *  span prelabels are; see SpanLinkManager.commitPrelabels. */
+    async commitPrelabels() {
+        if (!this.events.some(e => e.prelabel)) return;
+        // A model's event loses an argument whose span the annotator
+        // deleted, and goes entirely when its trigger was deleted.
+        const live = typeof window.potatoLiveSpanIds === 'function'
+            ? window.potatoLiveSpanIds() : null;
+        if (live) {
+            this.events = this.events.filter(e => !e.prelabel || live.has(e.trigger_span_id));
+            this.events.filter(e => e.prelabel).forEach(e => {
+                e.arguments = (e.arguments || []).filter(a => live.has(a.span_id));
+            });
+        }
+        await this.syncToBackend(true);
+    }
+
+    async syncToBackend(committingPrelabels = false) {
+        // Saving stores every event shown, a model's included.
+        this.events.forEach(e => { delete e.prelabel; });
+        // On an edit, the other schemes' prelabels first: the server offers
+        // none once the annotator has stored an event (annotation.js).
+        if (!committingPrelabels && typeof window.commitAllPrelabels === 'function') {
+            await window.commitAllPrelabels();
+        }
         const instanceId = window.currentInstanceId || this.getInstanceId();
         if (!instanceId) {
             console.error('[EventAnnotationManager] No instance ID found');
@@ -737,6 +761,9 @@ class EventAnnotationManager {
                     }
 
                     this.events = uniqueEvents;
+                    if (uniqueEvents.some(e => e.prelabel)) {
+                        this.prelabelsOffered = true;
+                    }
                     this._loadedForInstance = instanceId;
                     this.updateEventDataInput();
                     this.updateUI();
@@ -758,6 +785,16 @@ class EventAnnotationManager {
     async deleteEvent(eventId) {
         const instanceId = window.currentInstanceId || this.getInstanceId();
         if (!instanceId) return;
+
+        const removed = this.events.find(e => e.id === eventId);
+        if (removed && removed.prelabel) {
+            // Never stored; nothing to delete on the server.
+            this.events = this.events.filter(e => e.id !== eventId);
+            this.updateEventDataInput();
+            this.updateUI();
+            this.renderArcs();
+            return;
+        }
 
         try {
             const response = await fetch(`/api/events/${instanceId}/${eventId}`, {
