@@ -27,7 +27,9 @@ VISION_KINDS = ("geo", "caption", "grounding", "gui_click")
 #: Top-level keys of the answers themselves, which tell an already-parsed
 #: one-key answer (``{"captions": [...]}``) from a one-key value map.
 _ANSWER_KEYS = {"captions", "regions", "absent", "rois", "cells", "image",
-                "features", "type", "spans"}
+                "features", "type", "spans",
+                # A tiered answer, {"annotations": {tier: [...]}}.
+                "annotations"}
 
 
 def blob(value_map: Any) -> Any:

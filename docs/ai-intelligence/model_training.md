@@ -441,8 +441,8 @@ other key.
 | `hf-relation` | `span_link`, `event_annotation`, `coreference` | text | `potato-annotation[train-text]` |
 | `hf-conversation-tree` | `tree_annotation` | conversation trees | `potato-annotation[train-text]` |
 | `byt5-gloss` | `interlinear_gloss` | text | `potato-annotation[train-text]` |
-| `torchvision-detect` | `image_annotation`, `microscopy`, `geo_annotation` | images, slides, OME stacks, rasters | `potato-annotation[train-vision]` |
-| `ultralytics-detect` | `image_annotation`, `microscopy`, `geo_annotation` | images, slides, OME stacks, rasters | `pip install ultralytics` (AGPL-3.0) |
+| `torchvision-detect` | `image_annotation`, `microscopy`, `geo_annotation`, `spectrogram_annotation` | images, slides, OME stacks, rasters, recordings | `potato-annotation[train-vision]` |
+| `ultralytics-detect` | `image_annotation`, `microscopy`, `geo_annotation`, `spectrogram_annotation` | images, slides, OME stacks, rasters, recordings | `pip install ultralytics` (AGPL-3.0) |
 | `torchvision-segment` | `image_annotation`, `microscopy`, `geo_annotation` (outlines) | images, slides, OME stacks, rasters | `potato-annotation[train-vision]` |
 | `ultralytics-segment` | `image_annotation`, `microscopy`, `geo_annotation` (outlines) | images, slides, OME stacks, rasters | `pip install ultralytics` (AGPL-3.0) |
 | `cellpose` | `image_annotation`, `microscopy` (outlines) | images, OME stacks | `pip install cellpose` |
@@ -450,6 +450,8 @@ other key.
 | `layoutlmv3` | `image_annotation` on pages with a `words` field | page images | `potato-annotation[train-vision]` (weights CC BY-NC-SA 4.0) |
 | `vlm-sft` | `text` on image items, `region_caption`, `grounding_eval`, `gui_trajectory` | images, screenshots | `potato-annotation[train-vision]`; a GPU |
 | `hf-audio-tagger` | `audio_annotation` | audio | `potato-annotation[train-audio]` |
+| `whisper-asr` | `speech_transcript` (corrected turns) | audio | `potato-annotation[train-audio]` |
+| `diarization` | `tiered_annotation` (a speaker tier), `audio_annotation` (labels are speakers) | audio | `potato-annotation[train-audio]` |
 | `decision-calibrate` | `radio`, `select`, `likert`, `slider` | text | nothing; a configured decision model |
 | `laya-finetune` | `radio`, `select`, `likert`, `slider` | text | `potato-annotation[decision]` |
 | `openjev-finetune` | `radio`, `select`, `likert`, `slider` | text | `pip install wev-ai`; a GPU with about 16 GB free |
@@ -863,6 +865,29 @@ back.
 A map whose basemap is tiles from a server, or only a GeoJSON outline, has
 no raster to train on, and its items are left out with a warning. So is a
 `classify_region` answer, a label on an outlined region rather than a shape.
+
+### Spectrograms
+
+A `spectrogram_annotation` scheme's boxes train `torchvision-detect` and
+`ultralytics-detect`. Each recording is rendered as a spectrogram image the
+way the widget draws it: frequency on a linear axis from the scheme's
+`min_freq` at the bottom to `max_freq` (or half the sample rate) at the top,
+`fft_size` samples per frame, log magnitude, 256 pixels high and 100 pixels
+per second. Each box becomes an image box on it; a box with no frequency
+range covers the whole band. A box is cut to the recording's length, and one
+wholly past its end is left out. Time and frequency map linearly to the image's
+pixels, so a box's IoU on the image is its IoU in seconds by hertz, and the
+held-out mAP is the same in either.
+
+A recording of 41 seconds or more is an image at least 4,096 pixels wide,
+which [tiling](#whole-slides-and-other-large-images) cuts into windows and
+stitches back. The predictions come back as boxes in `start_s`, `end_s`,
+`low_hz` and `high_hz`, marked `source: ai` with the run's model version,
+and prefill the widget.
+
+The recording must be a local file that soundfile reads (WAV, FLAC, OGG and,
+with a recent libsndfile, MP3). An item whose audio is a URL is left out with
+a warning.
 
 ### `llm-sft`
 
@@ -1466,7 +1491,10 @@ Apache-2.0.
 Qwen-VL models compute part of their vision input with an op that torch
 compiles on the GPU when it first runs. On a machine whose NVRTC library does
 not match torch's CUDA, the run stops at validation with "torch cannot compile
-GPU kernels on this machine" and the package to install.
+GPU kernels on this machine" and the package to install. When the library is
+installed but in a folder the loader does not search (pip puts it under
+`site-packages/nvidia/`), the message names that folder to add to
+`LD_LIBRARY_PATH`, which a backend sets in its `env`.
 
 ### `hf-audio-tagger`
 
@@ -1496,6 +1524,92 @@ recent libsndfile, MP3), mixed to mono and resampled to the model's rate. A
 stretch of a recording that no annotator marked counts as "no label here".
 That suits a study where annotators mark every event; where they mark only
 some, the model learns to miss the rest.
+
+### `whisper-asr`
+
+`whisper-asr` fine-tunes [Whisper](https://huggingface.co/openai/whisper-small)
+on the turns annotators corrected in a `speech_transcript` scheme. Each
+corrected turn is one example: its audio, cut from the recording by the
+turn's start and end, and the corrected text. A turn nobody corrected is not
+an example: the scheme saves only the turns an annotator touched, so an
+untouched turn may be right or may be unread. A turn flagged with an error
+type and no correction is not an example either.
+
+Prediction transcribes every turn of every held-out and unlabelled item. A
+turn whose new text differs from the transcript's is a suggested correction,
+in the scheme's own shape (`errors: ["asr_error"]` and the new text), with
+the model's mean token probability as its confidence. The suggestions
+prefill the correction boxes.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `openai/whisper-small` | Any Whisper checkpoint (`-tiny` to `-large-v3-turbo`), or a local path. |
+| `language` | unset | The recordings' language (`en`, `fr`, ...). Unset, a multilingual Whisper detects it once, from up to 16 training turns spread over the train split, and the run uses that language for training and prediction; the log says which. When fewer than three in four of the sampled turns agree, the log warns; set it then, or train each language's items separately. |
+| `epochs` | 5 | |
+| `batch_size` | 8 | Turns per step. |
+| `learning_rate` | 1e-5, or 1e-4 with LoRA | |
+| `lora` | `false` | |
+| `max_new_tokens` | 128 | Longest transcription of one turn. |
+| `export_ct2` | `true` | Also write a CTranslate2 copy for faster-whisper (needs ctranslate2). |
+| `patience` | 2 | Epochs without a better val word accuracy before stopping. |
+| `min_instances` | 10 | Corrected turns needed in the train split. |
+
+A turn longer than 30 seconds, Whisper's input window, is left out with a
+warning. The recording is the scheme's `audio_key` field (`audio` by default),
+or the file the transcript names when the item has none.
+
+With `export_ct2`, the run's artifacts include a `ct2/` folder, an int8
+CTranslate2 copy of the selected model. `potato transcripts --transcribe
+--asr-model <path to ct2>` transcribes new recordings with it, and so does
+WhisperX, which runs the same format:
+`whisperx.load_model("<path to ct2>", device, compute_type="int8")`, with
+its word alignment and diarization on top.
+
+### `diarization`
+
+`diarization` learns who speaks when, from the speaker turns annotators
+corrected: a `tiered_annotation` scheme's speaker tier, or an `audio_annotation`
+scheme whose labels are speakers, such as an [RTTM import](../tools/import_cli.md).
+The speaker tier is the one named `speaker` or `speakers`; else the one
+tier whose name contains "speaker" (a `non-speaker` tier does not count);
+else the only tier with labels. When two tiers qualify, or several tiers
+have labels and none is named for speakers, the items are left out with a
+warning that names the tiers.
+
+It follows the recipe of pyannote's segmentation model without pyannote or
+its gated weights. A speech encoder (WavLM by default) with a frame head for
+up to `max_speakers` speakers runs on chunks of `chunk_s` seconds. Each
+chunk's loss is taken under the best matching of the model's speaker columns
+to the chunk's speakers, so each column stands for whichever speaker it is
+matched to in that chunk. A name like `SPEAKER_00` refers to different people
+in different recordings, so a classifier over names would have no consistent
+target.
+
+Prediction runs chunks that overlap by half and links each chunk's speakers
+to the ones found so far by their activity in the overlap. A speaker who is
+silent through an overlap and speaks again later gets a new name, because
+there are no voice embeddings to recognize them by. Speakers are named in
+order of first speech: by the scheme's labels when it lists them, then
+`SPEAKER_00`, `SPEAKER_01` and so on. The names are local to the recording.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `microsoft/wavlm-base-plus` | A speech encoder: WavLM, wav2vec 2.0, or a local path. |
+| `chunk_s` | 10 | Seconds the model sees at once. |
+| `max_speakers` | 3 | Most speakers active within one chunk (up to 6). |
+| `threshold` | 0.5 | Frame probability at which a speaker is active. |
+| `min_gap_s` | 0.2 | A gap this short inside a turn is closed. |
+| `min_duration_s` | 0.2 | Shorter turns are dropped. |
+| `epochs` | 10 | |
+| `batch_size` | 8 | Chunks per step. |
+| `learning_rate` | 1e-4 | |
+| `patience` | 3 | |
+| `min_instances` | 4 | Annotated recordings needed in the train split. |
+
+On an `audio_annotation` scheme, `diarization` is scored by diarization error
+rate, which ignores whether a turn is called `Interviewer` or `SPEAKER_01` and
+counts whether the speaker changes at the right times. `hf-audio-tagger` on
+the same scheme is scored by segment F1.
 
 ### Decision models
 
@@ -1651,6 +1765,9 @@ scheme's kind:
 | `region_caption` | token F1 per region (0 for a region with no caption), corpus BLEU-4 | token F1 |
 | `grounding_eval` | accuracy at IoU 0.5 (`acc_50`), also at 0.25 and 0.75, mean IoU, and `absent_accuracy`, the share of absent referents declined. With `region_type: point`, `point_in_region`. | acc@0.5, or point-in-region |
 | `gui_trajectory` | verdict accuracy and macro-F1 over the judged steps; `click_accuracy`, the share of steps judged `correct` where the model's click is within 5% of the screenshot of the agent's | verdict macro-F1 |
+| `speech_transcript` | word and character error rate over the corrected turns (`wer`, `cer`), and the original transcript's WER on the same turns (`wer_asr`). A turn the model left alone is scored as the transcript's text. | `word_accuracy`, 1 − WER (0 at worst) |
+| `tiered_annotation` speaker turns, and `audio_annotation` with `diarization` | diarization error rate (`der`): missed speech, false alarm and speaker confusion (each also reported) over the annotated speech, on a 10 ms grid, under the best one-to-one mapping of predicted to annotated speakers. No collar. | `diarization_accuracy`, 1 − DER (0 at worst) |
+| `spectrogram_annotation` | as `image_annotation`, on the rendered spectrogram | `map_50` |
 
 A classifier trained with `soft_targets` also reports `soft_jsd`,
 `soft_cross_entropy` and `ece`; see

@@ -181,8 +181,9 @@ class TestRegistry:
                      "image") == ["cellpose", "label-studio-ml", "layoutlmv3", "sam-finetune",
                                   "torchvision-detect", "torchvision-segment",
                                   "ultralytics-detect", "ultralytics-segment"]
+        # Labelled audio segments: tagged, or read as speakers.
         assert names({"annotation_type": "audio_annotation", "name": "c"},
-                     "audio") == ["hf-audio-tagger"]
+                     "audio") == ["diarization", "hf-audio-tagger"]
 
     def test_only_the_agpl_trainer_asks_for_a_licence(self):
         asking = [r["name"] for r in registry.list_trainers() if r["licence_ack"]]

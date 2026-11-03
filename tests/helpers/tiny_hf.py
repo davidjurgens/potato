@@ -299,3 +299,119 @@ def tiny_vlm(directory: str, texts: Iterable[str], image_size: int = 32) -> str:
         image_token="<image>", chat_template=_TINY_CHAT,
         num_additional_image_tokens=1).save_pretrained(directory)
     return directory
+
+
+_WHISPER_SPECIAL = ["<|startoftranscript|>", "<|en|>", "<|transcribe|>", "<|translate|>",
+                    "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
+
+
+def tiny_whisper(directory: str, texts: Iterable[str]) -> str:
+    """A one-layer Whisper on 16 mel bins, with a byte-level BPE tokenizer
+    trained on *texts* and Whisper's own special tokens, saved to
+    *directory*. Loads through AutoProcessor as a WhisperProcessor, and its
+    labels are ``<|startoftranscript|><|notimestamps|> text <|endoftext|>``
+    as a hub Whisper's are."""
+    _seed()
+    from tokenizers import ByteLevelBPETokenizer
+    from transformers import (GenerationConfig, WhisperConfig, WhisperFeatureExtractor,
+                              WhisperForConditionalGeneration, WhisperProcessor,
+                              WhisperTokenizer)
+
+    os.makedirs(directory, exist_ok=True)
+    bpe = ByteLevelBPETokenizer()
+    bpe.train_from_iterator(list(texts), vocab_size=400, min_frequency=1,
+                            special_tokens=["<|endoftext|>"])
+    bpe.save_model(directory)
+    tokenizer = WhisperTokenizer(
+        os.path.join(directory, "vocab.json"), os.path.join(directory, "merges.txt"),
+        unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>",
+        pad_token="<|endoftext|>")
+    tokenizer.add_special_tokens({"additional_special_tokens": _WHISPER_SPECIAL})
+    eot = tokenizer.convert_tokens_to_ids("<|endoftext|>")
+    start = tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
+    config = WhisperConfig(
+        vocab_size=len(tokenizer), num_mel_bins=16, d_model=32, encoder_layers=1,
+        decoder_layers=1, encoder_attention_heads=2, decoder_attention_heads=2,
+        encoder_ffn_dim=64, decoder_ffn_dim=64, max_source_positions=1500,
+        max_target_positions=448, pad_token_id=eot, bos_token_id=eot, eos_token_id=eot,
+        decoder_start_token_id=start)
+    model = WhisperForConditionalGeneration(config)
+    model.generation_config = GenerationConfig(
+        decoder_start_token_id=start, eos_token_id=eot, pad_token_id=eot,
+        no_timestamps_token_id=tokenizer.convert_tokens_to_ids("<|notimestamps|>"),
+        is_multilingual=True, max_length=64, suppress_tokens=[], begin_suppress_tokens=[],
+        # As a hub Whisper's has them; the CTranslate2 converter reads them.
+        lang_to_id={"<|en|>": tokenizer.convert_tokens_to_ids("<|en|>")},
+        task_to_id={"transcribe": tokenizer.convert_tokens_to_ids("<|transcribe|>"),
+                    "translate": tokenizer.convert_tokens_to_ids("<|translate|>")})
+    model.save_pretrained(directory)
+    WhisperProcessor(feature_extractor=WhisperFeatureExtractor(feature_size=16),
+                     tokenizer=tokenizer).save_pretrained(directory)
+    return directory
+
+
+def spoken_recordings(directory: str, n: int, words, rate: int = 16000, seed: int = 0):
+    """*n* WAV files, each a sequence of turns, one per word of a sampled
+    sentence: every word has its own tone, so a model can learn which word
+    a turn is. Returns ``[(path, [{"start", "end", "text"}])]``."""
+    import random
+
+    import numpy
+    import soundfile
+
+    rng = random.Random(seed)
+    noise = numpy.random.default_rng(seed)
+    pitch = {w: 400.0 * 3 ** i for i, w in enumerate(words)}
+    os.makedirs(directory, exist_ok=True)
+    out = []
+    for i in range(n):
+        turns, chunks, t = [], [], 0.0
+        for _ in range(rng.randint(2, 3)):
+            word = rng.choice(list(words))
+            length = 0.6
+            x = numpy.arange(int(length * rate)) / rate
+            chunks.append(0.4 * numpy.sin(2 * numpy.pi * pitch[word] * x))
+            turns.append({"start": round(t, 3), "end": round(t + length, 3), "text": word})
+            gap = numpy.zeros(int(0.2 * rate))
+            chunks.append(gap)
+            t += length + 0.2
+        samples = numpy.concatenate(chunks).astype("float32")
+        samples += noise.normal(0, 0.005, len(samples)).astype("float32")
+        path = os.path.join(directory, "talk%03d.wav" % i)
+        soundfile.write(path, samples, rate)
+        out.append((path, turns))
+    return out
+
+
+def speaker_recordings(directory: str, n: int, seconds: float = 6.0, rate: int = 16000,
+                       seed: int = 0):
+    """*n* WAV files of two alternating "speakers", a low and a high tone,
+    with silence between turns. Speaker names differ per file (``A``/``B``
+    in one, ``B``/``A`` in the next), as diarization output does. Returns
+    ``[(path, [{"start", "end", "speaker"}])]``."""
+    import random
+
+    import numpy
+    import soundfile
+
+    rng = random.Random(seed)
+    noise = numpy.random.default_rng(seed)
+    os.makedirs(directory, exist_ok=True)
+    out = []
+    for i in range(n):
+        samples = noise.normal(0, 0.005, int(seconds * rate)).astype("float32")
+        names = ("A", "B") if i % 2 == 0 else ("B", "A")
+        turns, t, voice = [], 0.2, rng.randint(0, 1)
+        while t < seconds - 0.8:
+            length = rng.uniform(0.6, 1.2)
+            end = min(seconds - 0.1, t + length)
+            a, b = int(t * rate), int(end * rate)
+            x = numpy.arange(b - a) / rate
+            samples[a:b] += 0.4 * numpy.sin(2 * numpy.pi * (220.0 if voice == 0 else 1400.0) * x)
+            turns.append({"start": round(t, 3), "end": round(end, 3), "speaker": names[voice]})
+            t = end + rng.uniform(0.2, 0.4)
+            voice = 1 - voice
+        path = os.path.join(directory, "meet%03d.wav" % i)
+        soundfile.write(path, samples, rate)
+        out.append((path, turns))
+    return out

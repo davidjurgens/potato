@@ -231,6 +231,8 @@ def test_a_gpu_that_cannot_compile_kernels_is_refused_before_loading():
                            "libnvrtc-builtins.so.13.0.\n  Make sure it is installed.")
 
     with patch.object(torch.cuda, "is_available", return_value=True), \
+            patch.object(torch.version, "cuda", "13.0"), \
+            patch.object(hf, "nvrtc_builtins_dir", return_value=None), \
             patch.object(torch, "ones", side_effect=broken):
         (problem,) = hf.jit_kernel_problems(spec)
     assert "libnvrtc-builtins.so.13.0" in problem and "nvidia-cuda-nvrtc" in problem
@@ -238,3 +240,30 @@ def test_a_gpu_that_cannot_compile_kernels_is_refused_before_loading():
         assert hf.jit_kernel_problems(spec) == []
     cpu = types.SimpleNamespace(limits=types.SimpleNamespace(device="cpu"))
     assert hf.jit_kernel_problems(cpu) == []
+
+
+def test_an_installed_but_unfound_nvrtc_is_named(tmp_path):
+    """burger had libnvrtc-builtins.so.13.0 in site-packages/nvidia/cu13/lib,
+    off the loader's path; "install nvidia-cuda-nvrtc" sent a person to
+    install what was there."""
+    import site
+    import types
+    from unittest.mock import patch
+    from potato.training.trainers import _hf_common as hf
+    torch = pytest.importorskip("torch")
+    lib = tmp_path / "nvidia" / "cu13" / "lib"
+    lib.mkdir(parents=True)
+    (lib / "libnvrtc-builtins.so.13.0").write_bytes(b"")
+    spec = types.SimpleNamespace(limits=types.SimpleNamespace(device="auto"))
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("nvrtc: error: failed to open libnvrtc-builtins.so.13.0.")
+
+    with patch.object(site, "getsitepackages", return_value=[str(tmp_path)]), \
+            patch.object(torch.version, "cuda", "13.0"), \
+            patch.object(torch.cuda, "is_available", return_value=True), \
+            patch.object(torch, "ones", side_effect=broken):
+        (problem,) = hf.jit_kernel_problems(spec)
+        assert hf.nvrtc_builtins_dir("12.9") is None
+    assert str(lib) in problem and "LD_LIBRARY_PATH" in problem
+    assert "nvidia-cuda-nvrtc" not in problem

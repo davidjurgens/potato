@@ -8,14 +8,14 @@ potato import --input instances_val2017.json --output-dir my-project
 python potato/flask_server.py start my-project/config.yaml -p 8000
 ```
 
-Forty-five formats are supported:
+Forty-six formats are supported:
 
 - sixteen computer-vision dataset formats, the Hugging Face Hub among them;
 - six text and qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA, TEI);
-- sixteen whole-project formats, which bring questions, annotators and model
+- seventeen whole-project formats, which bring questions, annotators and model
   suggestions across together: Label Studio, Argilla, Zooniverse, Ibex and
   PCIbex, TextGrid, ELAN, FLExText, Toolbox, MegaDetector, COCO Camera Traps,
-  Raven, Audacity labels, BirdNET, IIIF, W3C Web Annotation and PAGE XML;
+  Raven, Audacity labels, BirdNET, RTTM, IIIF, W3C Web Annotation and PAGE XML;
 - seven survey formats (see [Importing surveys](survey_import.md)), Network
   Canvas among them. See the
 [format matrix](../data-export/format_matrix.md) for what survives each
@@ -51,6 +51,27 @@ The research-tool formats take these:
 | `--page-xml-mode lines\|regions` | PAGE XML | One item per text line to correct (default), or one per page to correct the layout. In `regions` mode each page item also carries `words`, the transcribed words and their boxes, which the [`layoutlmv3` trainer](../ai-intelligence/model_training.md#layoutlmv3) reads |
 | `--iiif-size SIZE` | IIIF | Image size to request from an IIIF Image service, such as `max` or `!2000,2000` |
 | `--tei-unit p\|div\|s\|l` | TEI | What counts as one item (default `p`) |
+| `--rttm-scheme audio\|tiered` | RTTM | Correct the turns on an audio timeline whose labels are the speakers (default), or on a tiered scheme's `speaker` tier |
+| `--speaker-map MAP` | RTTM | Rename speakers: `SPEAKER_00=Interviewer,SPEAKER_01=Guest`. A speaker the map does not name keeps its RTTM name |
+| `--media-dir DIR` | RTTM | The folder holding the recordings, if they are not beside the RTTM files |
+
+An RTTM file is what pyannote, NeMo, dscore and md-eval write for speaker
+diarization: one `SPEAKER` line per turn. `potato import -i meeting.rttm -o
+proj` (or a folder of `.rttm` files) makes one item per recording file id,
+with its audio found by name (`rec1.wav`, `.flac`, `.mp3`, ...) beside the
+RTTM or in `--media-dir`, and the turns as pre-annotations to correct. Only
+`SPEAKER` lines are read; `SPKR-INFO` and the other line types are counted
+and skipped, as are zero-length turns, turns with a negative or non-finite
+time or no speaker name (`<NA>`), and the same turn listed twice. Overlapping
+turns stay two turns. RTTM fields are separated by spaces, so a speaker name
+with a space in it is read up to the space, with a warning. A recording whose
+turns are spread over several RTTM files is one item, its audio found beside
+any of them. `--speaker-map` warns about entries it cannot read, speakers that appear in none of the
+RTTM lines, and two speakers mapped to one name. The
+[`segments` exporter](../data-export/export_formats.md#timeline-segments-segments) writes the corrected
+turns back as RTTM, one file per annotator with the item ids as file ids, so
+they go back into a scoring tool unchanged. The corrected turns train the
+[`diarization` trainer](../ai-intelligence/model_training.md#diarization).
 
 Their guides: [Coming from Ibex](../guides/coming-from-ibex.md),
 [Linguistic fieldwork](../guides/linguistic-fieldwork.md),

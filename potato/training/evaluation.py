@@ -103,6 +103,12 @@ HEADLINE = {
     # Most steps an agent takes are right; accuracy flatters a model that
     # always says "correct".
     "gui_click": "verdict_macro_f1",
+    # max(0, 1 - WER) and max(0, 1 - DER): headlines are higher-is-better.
+    "transcript": "word_accuracy",
+    "segments": "diarization_accuracy",
+    # Boxes on the rendered spectrogram; time and frequency map linearly to
+    # its pixels, so IoU there is IoU in seconds by hertz.
+    "acoustic": "map_50",
 }
 
 #: Kind to the ``structured_metrics`` function that scores it.
@@ -549,8 +555,14 @@ def score_split(rows: Iterable[Dict[str, Any]],
                               [_text(p) for p in pred_raw])
     elif kind == "continuous":
         metrics = _score_numbers(gold_raw, pred_raw)
-    elif kind in ("geometry", "geo"):
+    elif kind in ("geometry", "geo", "acoustic"):
         metrics = _score_geometry(ids, gold_raw, pred_raw)
+    elif kind in ("transcript", "segments"):
+        from potato.training import audio_metrics
+        metrics = (audio_metrics.score_transcripts(gold_raw, pred_raw) if kind == "transcript"
+                   else audio_metrics.score_diarization(gold_raw, pred_raw))
+        if not metrics:
+            return {}, n
     elif kind in ("caption", "grounding", "gui_click"):
         from potato.training import vision_metrics
         if kind == "caption":

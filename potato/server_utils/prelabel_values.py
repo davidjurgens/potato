@@ -26,7 +26,7 @@ __all__ = ["PRELABEL_TYPES", "prelabel_values", "valid_shape", "client_shapes"]
 
 PRELABEL_TYPES = ("ranking", "bws", "soft_label", "interlinear_gloss",
                   "tree_annotation", "microscopy", "gui_trajectory",
-                  "grounding_eval", "region_caption")
+                  "grounding_eval", "region_caption", "speech_transcript")
 
 
 def _label_names(scheme: Dict[str, Any]) -> List[str]:
@@ -272,6 +272,53 @@ def prelabel_values(scheme: Dict[str, Any], payload: Any,
                        if isinstance(a, (str, int)) and not isinstance(a, bool)],
             "verdicts": {},
             "region_type": str(scheme.get("region_type") or "box")}, ensure_ascii=False)}
+    if atype == "speech_transcript":
+        # A suggested correction per turn, keyed by index like the stored
+        # list, on turns the item has; the times are the item's. The error
+        # types are the ones the widget offers: a pill it does not show, or
+        # one listed twice, could not be cleared.
+        error_types = [str(e) for e in (scheme["error_types"] if "error_types" in scheme else
+                       ("asr_error", "tts_artifact", "mispronunciation", "disfluency"))]
+        turns = None
+        if item:
+            from potato.training.audio import transcript_turns
+            turns = {t["index"]: t for t in transcript_turns(
+                scheme, item, (config or {}).get("task_dir"))["turns"]}
+        entries, seen = [], set()
+        offered = payload if isinstance(payload, list) else []
+        for entry in offered:
+            if not isinstance(entry, dict) or not isinstance(entry.get("correction"), str):
+                continue
+            index = entry.get("index")
+            if isinstance(index, float) and index.is_integer():
+                index = int(index)
+            if isinstance(index, str) and index.strip().isdecimal():
+                try:
+                    index = int(index)
+                except ValueError:
+                    continue
+            # 1.7 or True is no turn's index.
+            if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+                continue
+            correction = entry["correction"].strip()
+            if not correction or index in seen or (turns is not None and index not in turns):
+                continue
+            seen.add(index)
+            turn = turns[index] if turns is not None else entry
+            if turn.get("unread"):
+                # An unreadable transcript file's stand-in, not a turn.
+                continue
+            errors = []
+            for e in entry.get("errors") or []:
+                if e in error_types and e not in errors:
+                    errors.append(e)
+            entries.append({"index": index, "start": turn.get("start"), "end": turn.get("end"),
+                            "errors": errors, "correction": correction})
+        if len(entries) < len(offered):
+            logger.warning("Transcript prediction for %r: %d of %d suggestion(s) left out "
+                           "(no such turn, a repeated turn, or no correction)",
+                           name, len(offered) - len(entries), len(offered))
+        return {name: json.dumps(entries, ensure_ascii=False)} if entries else None
     if atype == "region_caption":
         captions = payload.get("captions") if isinstance(payload, dict) else None
         captions = [c for c in captions if isinstance(c, dict) and valid_shape(c.get("region"))

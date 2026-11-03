@@ -1,5 +1,5 @@
 """
-Whole-project importers: Label Studio, Argilla, Zooniverse, and tiered TextGrid / EAF files.
+Whole-project importers: Label Studio, Argilla, Zooniverse, tiered TextGrid / EAF files, RTTM, and more.
 
 See :mod:`potato.importers.projects.base` for why these are separate from the
 CV and text importers.
@@ -20,6 +20,7 @@ from .camera_traps import COCOCameraTrapsImporter, MegaDetectorImporter
 from .bioacoustics import AudacityLabelsImporter, BirdNETImporter, RavenImporter
 from .iiif import IIIFImporter
 from .page_xml import PageXMLImporter
+from .rttm import RTTMImporter
 from .pathology import ASAPImporter, QuPathImporter
 from .web_annotation import WebAnnotationImporter
 
@@ -38,6 +39,7 @@ IMPORTERS = {
     "birdnet": BirdNETImporter(),
     "raven": RavenImporter(),
     "audacity_labels": AudacityLabelsImporter(),
+    "rttm": RTTMImporter(),
     # IIIF before Web Annotation: a manifest holds annotation pages too.
     "iiif": IIIFImporter(),
     "web_annotation": WebAnnotationImporter(),

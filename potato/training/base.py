@@ -406,6 +406,11 @@ class Trainer(ABC):
     #: prediction pass is the run: when it fails, the run fails.
     predict_only: ClassVar[bool] = False
 
+    #: Kinds this trainer's held-out predictions are scored as, when not
+    #: their schema's own: speaker turns on an audio timeline are a
+    #: diarization, scored by DER, whatever the labels are named.
+    scored_as: ClassVar[Dict[str, str]] = {}
+
     @classmethod
     def server_params(cls, config: Dict[str, Any], schema_names: Sequence[str],
                       params: Dict[str, Any]) -> Dict[str, Any]:

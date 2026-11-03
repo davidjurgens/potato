@@ -232,9 +232,12 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
         try:
             from potato.training.evaluation import (read_predictions,
                                                     score_predictions)
+            import dataclasses
+            scored = [dataclasses.replace(s, kind=trainer.scored_as[s.kind])
+                      if s.kind in trainer.scored_as else s for s in spec.schemas]
             heldout = score_predictions(bundle,
                                         read_predictions(predictions_path),
-                                        spec.schemas,
+                                        scored,
                                         selected_on=result.selected_on)
             for name, value in heldout.items():
                 metrics[name] = value
@@ -261,8 +264,12 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
         try:
             from potato.training.rasters import finalize_file
             n_predictions = finalize_file(bundle, predictions_path) or n_predictions
+            from potato.training import spectrograms
+            n_predictions = spectrograms.finalize_file(
+                bundle, predictions_path, result.model_version) or n_predictions
         except Exception as exc:  # noqa: BLE001
-            report.log("warning", "Could not assemble the plane predictions: %s" % exc)
+            report.log("warning", "Could not convert the predictions back to the "
+                                  "scheme's shape: %s" % exc)
 
     report.result("success", model_version=result.model_version,
                   metrics=metrics, label_order=result.label_order,

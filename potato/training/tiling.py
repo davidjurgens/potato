@@ -49,7 +49,7 @@ __all__ = ["DEFAULTS", "TILED_KINDS", "PARENTS_FILE", "settings", "tile_rows",
            "clip_object", "to_parent", "merge", "stitch_file", "scoring_rows"]
 
 #: Kinds whose targets are shapes on the image, the only ones tiling applies to.
-TILED_KINDS = ("geometry", "geo")
+TILED_KINDS = ("geometry", "geo", "acoustic")
 
 PARENTS_FILE = "tiling.jsonl"
 

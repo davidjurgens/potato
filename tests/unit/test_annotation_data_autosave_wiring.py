@@ -142,8 +142,15 @@ class TestTheSharedHalf:
         """
         source = read(STATIC / "annotation.js")
         start = source.index("function scheduleAnnotationDataSave")
-        body = source[start:start + 600]
-        assert "textSaveTimer" in body, (
+        # The whole body, by its braces: a fixed-length slice stopped inside
+        # the function's opening comment once that comment grew.
+        depth, end = 0, source.index("{", start)
+        for end in range(end, len(source)):
+            depth += {"{": 1, "}": -1}.get(source[end], 0)
+            if depth == 0:
+                break
+        body = source[start:end + 1]
+        assert "textSaveTimer = setTimeout" in body, (
             "scheduleAnnotationDataSave must use textSaveTimer, the handle "
             "flushPendingSave checks on beforeunload")
 

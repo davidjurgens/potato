@@ -119,7 +119,7 @@ class UltralyticsDetectTrainer(Trainer):
     description: ClassVar[str] = (
         "Object detection with Ultralytics YOLO, fine-tuned from a COCO "
         "checkpoint. AGPL-3.0: confirm the licence before the first run.")
-    kinds: ClassVar[Tuple[str, ...]] = ("geometry", "geo")
+    kinds: ClassVar[Tuple[str, ...]] = ("geometry", "geo", "acoustic")
     modalities: ClassVar[Tuple[str, ...]] = ("image",)
     install_hint: ClassVar[str] = INSTALL_HINT
     licence: ClassVar[str] = "AGPL-3.0"

@@ -184,6 +184,10 @@ TRAINING_KINDS = {
     "microscopy": "geometry",
     "geo_annotation": "geo",
     "gui_trajectory": "gui_click",
+    # A corrected transcript turn is speech and its text; spectrogram boxes
+    # are trained as image boxes on the rendered spectrogram.
+    "speech_transcript": "transcript",
+    "spectrogram_annotation": "acoustic",
 }
 
 
@@ -427,9 +431,9 @@ def _register_builtins() -> None:
         "torchvision-detect", "potato.training.trainers.torchvision_detect",
         "TorchvisionDetectTrainer",
         hint="pip install 'potato-annotation[train-vision]'",
-        kinds=("geometry", "geo"), modalities=("image",),
+        kinds=("geometry", "geo", "acoustic"), modalities=("image",),
         description="Object detection: fine-tunes a torchvision Faster R-CNN "
-                    "on the annotated boxes.",
+                    "on the annotated boxes, or on spectrogram boxes.",
         licence="BSD-3-Clause", commercial_use=True)
     register_lazy(
         "torchvision-segment", "potato.training.trainers.torchvision_segment",
@@ -442,9 +446,10 @@ def _register_builtins() -> None:
     register_lazy(
         "ultralytics-detect", "potato.training.trainers.ultralytics_detect",
         "UltralyticsDetectTrainer", hint="pip install ultralytics",
-        kinds=("geometry", "geo"), modalities=("image",),
-        description="Object detection with Ultralytics YOLO. AGPL-3.0: "
-                    "confirm the licence before the first run.",
+        kinds=("geometry", "geo", "acoustic"), modalities=("image",),
+        description="Object detection with Ultralytics YOLO, on images or "
+                    "spectrograms. AGPL-3.0: confirm the licence before the "
+                    "first run.",
         licence="AGPL-3.0", commercial_use=False, licence_ack=True,
         licence_url="https://www.ultralytics.com/license")
     register_lazy(
@@ -501,6 +506,25 @@ def _register_builtins() -> None:
         description="Tags labelled time segments in audio with a fine-tuned "
                     "speech encoder (wav2vec 2.0, WavLM).",
         licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "whisper-asr", "potato.training.trainers.whisper_asr",
+        "WhisperASRTrainer",
+        hint="pip install 'potato-annotation[train-audio]'",
+        kinds=("transcript",), modalities=("audio",),
+        description="Fine-tunes Whisper on the transcript turns annotators "
+                    "corrected and suggests corrections for the rest; also "
+                    "writes a faster-whisper copy.",
+        licence="MIT", commercial_use=True)
+    register_lazy(
+        "diarization", "potato.training.trainers.diarization",
+        "DiarizationTrainer",
+        hint="pip install 'potato-annotation[train-audio]'",
+        kinds=("segments", "temporal"), modalities=("audio",),
+        annotation_types=("tiered_annotation", "audio_annotation"),
+        description="Speaker diarization: fine-tunes a speech encoder to "
+                    "find who speaks when, from speaker tiers or audio "
+                    "segments labelled by speaker.",
+        licence="MIT", commercial_use=True)
     register_lazy(
         "decision-calibrate", "potato.training.trainers.decision_calibrate",
         "DecisionCalibrateTrainer", hint="",

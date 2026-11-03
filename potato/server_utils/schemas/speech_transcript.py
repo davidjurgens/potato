@@ -67,6 +67,10 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         var SCHEMA = '{esc_schema}';
         var CONFIG = {config_json};
         var _segs = [];
+        // Arrived with an answer, stored or suggested: clearing every flag and
+        // correction is then an answer of its own ("[]"), or the suggestion
+        // came back on the next visit.
+        var _hadAnswer = false;
 
         function instanceData() {{
             try {{
@@ -124,6 +128,8 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             if (!segs.length) {{ list.innerHTML = ''; if (empty) empty.style.display = ''; return; }}
             if (empty) empty.style.display = 'none';
 
+            var h0 = hidden();
+            _hadAnswer = !!(h0 && h0.value);
             var byIndex = {{}};
             restore().forEach(function(s) {{ if (s && s.index !== undefined) byIndex[s.index] = s; }});
             _segs = segs.map(function(c, idx) {{
@@ -165,7 +171,9 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
         function paint(i) {{
             var c = _segs[i];
-            var card = document.querySelector('.st-card[data-idx="' + i + '"]');
+            // This scheme's card: two transcript schemes share the indexes.
+            var list = document.getElementById(SCHEMA + '-list');
+            var card = list && list.querySelector('.st-card[data-idx="' + i + '"]');
             if (!card) return;
             card.classList.toggle('st-flagged', c.errors.length > 0);
             card.querySelectorAll('.st-ebtn').forEach(function(b) {{
@@ -179,7 +187,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
                                             errors: c.errors, correction: c.correction}}; }});
             var h = hidden();
             if (h) {{
-                h.value = data.length ? JSON.stringify(data) : '';
+                h.value = (data.length || _hadAnswer) ? JSON.stringify(data) : '';
                 h.setAttribute('data-modified', 'true');
                 h.dispatchEvent(new Event('change', {{ bubbles: true }}));
             }}

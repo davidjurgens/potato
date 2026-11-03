@@ -183,12 +183,41 @@ def jit_kernel_problems(spec: TrainingSpec) -> List[str]:
         return []
     except Exception as exc:  # noqa: BLE001
         lines = [line.strip() for line in str(exc).splitlines() if "nvrtc" in line.lower()]
-        return ["torch cannot compile GPU kernels on this machine (torch %s, CUDA %s): %s "
-                "Install the NVRTC package that matches torch's CUDA, such as "
-                "nvidia-cuda-nvrtc for CUDA %s."
-                % (torch.__version__, torch.version.cuda,
-                   lines[0] if lines else type(exc).__name__, torch.version.cuda)]
+        cuda = torch.version.cuda
+        if not lines:
+            # Not NVRTC: say what failed, and no NVRTC advice.
+            return ["torch cannot run a kernel on this machine's GPU (torch %s%s): %s: %s"
+                    % (torch.__version__, ", CUDA %s" % cuda if cuda else "", type(exc).__name__,
+                       (str(exc).strip().splitlines() or [""])[0][:300])]
+        found = nvrtc_builtins_dir(str(cuda or ""))
+        if found:
+            fix = ("The library is installed, in %s, but not on the loader's path: add that "
+                   "folder to LD_LIBRARY_PATH (for an ssh or SLURM backend, in its env)." % found)
+        elif cuda:
+            fix = ("Install the NVRTC package that matches torch's CUDA, such as "
+                   "nvidia-cuda-nvrtc for CUDA %s." % cuda)
+        else:
+            fix = "Install the NVRTC library that matches this torch build."
+        return ["torch cannot compile GPU kernels on this machine (torch %s%s): %s %s"
+                % (torch.__version__, ", CUDA %s" % cuda if cuda else "", lines[0], fix)]
     return []
+
+
+def nvrtc_builtins_dir(cuda: str) -> Optional[str]:
+    """The folder of an installed ``libnvrtc-builtins.so.<major>.<minor>`` for
+    *cuda* (``13.0``) among the NVIDIA wheels beside torch, or None. pip puts
+    it in ``site-packages/nvidia/<pkg>/lib``, which the loader does not
+    search unless torch's own libraries were linked against it."""
+    import glob
+    import site
+    if not cuda:
+        return None
+    roots = list(getattr(site, "getsitepackages", lambda: [])()) + [site.getusersitepackages()]
+    for root in roots:
+        for path in sorted(glob.glob(os.path.join(root, "nvidia", "*", "lib",
+                                                  "libnvrtc-builtins.so.%s*" % cuda))):
+            return os.path.dirname(path)
+    return None
 
 
 def quantize_unsupported(params: Dict[str, Any]) -> List[str]:

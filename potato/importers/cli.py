@@ -165,6 +165,19 @@ def parse_args(args=None):
         "--label-column", metavar="COLUMN",
         help=("Raven / BirdNET: the column the box label comes from (default: "
               "Annotation, Species, ... for Raven; Scientific Name for BirdNET)"))
+    rttm = parser.add_argument_group("speaker diarization (RTTM)")
+    rttm.add_argument(
+        "--rttm-scheme", choices=["audio", "tiered"], default="audio",
+        help=("RTTM: correct the turns on an audio timeline whose labels are the "
+              "speakers (default; the segments exporter writes RTTM back) or on a "
+              "tiered scheme's speaker tier"))
+    rttm.add_argument(
+        "--speaker-map", metavar="MAP",
+        help="RTTM: rename speakers, e.g. SPEAKER_00=Interviewer,SPEAKER_01=Guest")
+    rttm.add_argument(
+        "--media-dir", metavar="DIR",
+        help=("RTTM: a folder of the recordings, named after each RTTM file id "
+              "(default: beside the RTTM files)"))
     dh = parser.add_argument_group("digital humanities (IIIF, Web Annotation, PAGE XML, TEI)")
     dh.add_argument(
         "--texts", metavar="PATH",
@@ -708,7 +721,10 @@ def _run_project_import(parsed, fmt: str) -> int:
             "md_threshold": parsed.md_threshold,
             "sequences": parsed.sequences,
             "min_confidence": parsed.min_confidence,
-            "label_column": parsed.label_column})
+            "label_column": parsed.label_column,
+            "rttm_scheme": parsed.rttm_scheme,
+            "speaker_map": parsed.speaker_map,
+            "media_dir": parsed.media_dir})
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

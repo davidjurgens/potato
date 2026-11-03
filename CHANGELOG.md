@@ -154,6 +154,24 @@ All notable changes to the Potato annotation platform are documented in this fil
 - **Held-out scores for captions, grounding and GUI steps**: token F1 and
   BLEU-4; accuracy at IoU 0.5 and absent accuracy; verdict macro-F1 and
   click accuracy.
+- **Speech recognition** (`whisper-asr`): fine-tunes Whisper on the turns
+  annotators corrected in a `speech_transcript` scheme and suggests
+  corrections for the rest, which pre-fill the correction boxes. The run also
+  writes a CTranslate2 copy that `potato transcripts --transcribe
+  --asr-model` uses. Scored by word error rate against the corrections,
+  reported next to the original transcript's word error rate on the same
+  turns.
+- **Speaker diarization** (`diarization`): a speech encoder trained with
+  permutation-invariant loss on the speaker turns of a `tiered_annotation`
+  speaker tier or an `audio_annotation` scheme whose labels are speakers,
+  so the same speaker name need not refer to the same person in different
+  recordings. Predicted
+  turns go back in the scheme's own shape. Scored by diarization error rate.
+- **Spectrogram detection** (`torchvision-detect`, `ultralytics-detect`): a `spectrogram_annotation`
+  scheme's recordings are rendered as spectrograms the way the widget draws
+  them, its boxes trained as image boxes (long recordings tiled), and the
+  predictions turned back into `start_s`, `end_s`, `low_hz` and `high_hz`
+  for the widget's prefill.
 - New settings: `model_training.trainer_params` (per-trainer defaults) and
   `model_training.auto_retrain.accept_licence`.
 - New extras: `embeddings` (`sentence-transformers`), `train-text`,
@@ -161,6 +179,15 @@ All notable changes to the Potato annotation platform are documented in this fil
   is in `all`.
 - New example: `examples/ai-assisted/model-training/`, 160 reviews with gold
   labels the simulator can annotate from, trained with `sklearn-text`.
+
+### Import
+
+- **RTTM** (`potato import -f rttm`): a speaker diarization file, or a folder
+  of them, as one item per recording with the turns to correct, on an audio
+  timeline whose labels are the speakers or (`--rttm-scheme tiered`) a tiered
+  scheme's speaker tier. `--speaker-map` renames speakers and `--media-dir`
+  says where the recordings are. The `segments` exporter writes the corrected
+  turns back as RTTM.
 
 ### Export
 

@@ -27,7 +27,7 @@ import shutil
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from potato.training import rasters, tiling
+from potato.training import rasters, spectrograms, tiling
 from potato.training.base import BundleRef, SchemaSpec, TrainerError
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,9 @@ _MODALITY_BY_TYPE = {
     "audio_annotation": "audio",
     "video_annotation": "video",
     "tiered_annotation": "audio",
+    "speech_transcript": "audio",
+    # Trained as boxes on the recording's rendered spectrogram.
+    "spectrogram_annotation": "image",
     "spatial_annotation": "point_cloud",
     "episode_annotation": "video",
 }
@@ -408,6 +411,20 @@ def _target_for(spec: SchemaSpec, value_map: Any,
 TRACE_KINDS = ("trajectory", "trace")
 
 from potato.training.vision import VISION_KINDS  # noqa: E402
+from potato.training.audio import AUDIO_KINDS  # noqa: E402
+
+
+def _audio_target(kind: str, scheme: Dict[str, Any], value_map: Any,
+                  item_data: Dict[str, Any], task_dir: Optional[str] = None,
+                  problems: Optional[List[str]] = None) -> Any:
+    from potato.training import audio
+    if kind == "transcript":
+        return audio.transcript_target(scheme, value_map, item_data, task_dir)
+    if kind == "segments":
+        return audio.speaker_turns(value_map, problems=problems)
+    if kind == "acoustic":
+        return audio.acoustic_target(value_map)
+    return None
 
 
 def _vision_target(kind: str, scheme: Dict[str, Any], value_map: Any,
@@ -653,6 +670,8 @@ def _media_field(config: Dict[str, Any], scheme: Dict[str, Any]) -> Optional[str
         return scheme["source_field"]
     if scheme.get("annotation_type") == "microscopy":
         return scheme.get("image_key") or "image"
+    if scheme.get("annotation_type") == "speech_transcript":
+        return scheme.get("audio_key") or "audio"
     if scheme.get("annotation_type") in ("region_caption", "grounding_eval"):
         for other in config.get("annotation_schemes") or []:
             if isinstance(other, dict) and other.get("annotation_type") == "image_annotation":
@@ -1083,11 +1102,30 @@ def build_bundle(
         if isinstance(objects, list) and objects:
             row["prior"] = [o for o in objects if isinstance(o, dict)]
 
+    def attach_turns(row, item_data):
+        # Every turn of a transcript, with its times and the ASR's text: what
+        # a speech model is predicted on, corrected or not. The recording
+        # comes from the transcript when the item names none.
+        if kinds.get(schema_names[0]) != "transcript":
+            return
+        from potato.training.audio import transcript_turns
+        normalized = transcript_turns(primary, item_data, task_dir)
+        row["turns"] = normalized["turns"]
+        if include_media and "media" not in row and normalized["audio"]:
+            row.pop("media_missing", None)
+            linked = _link_media(str(normalized["audio"]), task_dir, media_dir, stats,
+                                 media_directory)
+            if linked:
+                row["media"] = linked
+            else:
+                row["media_missing"] = str(normalized["audio"])[:200]
+
     def unlabeled(iid, item_data):
         if include_unlabeled:
             row = {"instance_id": iid,
                    "text": _item_text(item_data, text_key)}
             attach_media(row, item_data)
+            attach_turns(row, item_data)
             attach_trace(row, item_data)
             attach_tree(row, item_data)
             attach_steps(row, item_data)
@@ -1099,6 +1137,7 @@ def build_bundle(
                 attach_candidates(row, item_data)
             unlabeled_rows.append(row)
 
+    audio_problems: List[str] = []
     for iid in instance_ids:
         resolved = references.get(iid)
         item_data = items.get(iid) or {}
@@ -1124,6 +1163,9 @@ def build_bundle(
             elif spec_kind in VISION_KINDS:
                 target = _vision_target(spec_kind, by_name.get(name, {}),
                                         resolved[name], item_data)
+            elif spec_kind in AUDIO_KINDS:
+                target = _audio_target(spec_kind, by_name.get(name, {}),
+                                       resolved[name], item_data, task_dir, audio_problems)
             else:
                 target = _target_for(fake_spec, resolved[name], by_name.get(name))
             if target is None or target == [] or target == "":
@@ -1165,6 +1207,10 @@ def build_bundle(
                     str(f["properties"]["label"]) for f in target)
             elif spec_kind == "gui_click":
                 seen_labels[name].update(str(s["verdict"]) for s in target)
+            elif spec_kind == "segments":
+                seen_labels[name].update(str(t["speaker"]) for t in target)
+            elif spec_kind == "acoustic":
+                seen_labels[name].update(str(b["label"]) for b in target)
             elif spec_kind in ("relation", "event", "coreference"):
                 # The link, event or entity types: what the pair classifier
                 # predicts. Mention labels are in each target's spans.
@@ -1188,6 +1234,7 @@ def build_bundle(
             row["soft_targets"] = soft_targets
 
         attach_media(row, item_data)
+        attach_turns(row, item_data)
         attach_trace(row, item_data)
         attach_tree(row, item_data)
         attach_steps(row, item_data)
@@ -1208,6 +1255,12 @@ def build_bundle(
             attach_candidates(row, item_data)
 
         rows.append(row)
+
+    if audio_problems:
+        # One reason, usually, for every item: the tiers are named alike.
+        for why in sorted(set(audio_problems)):
+            stats.warnings.append("%d item(s) left out: %s."
+                                  % (audio_problems.count(why), why))
 
     for name in schema_names:
         declared = [str(lab.get("name", lab) if isinstance(lab, dict) else lab)
@@ -1243,6 +1296,20 @@ def build_bundle(
             unlabeled_rows = rasters.geo_rasters(
                 unlabeled_rows, media_dir, schema_names[0], task_dir,
                 media_directory, problems)
+        for problem in problems[:20]:
+            stats.warnings.append("Left out %s." % problem)
+
+    # A spectrogram answer becomes image boxes on the recording's rendered
+    # spectrogram, which a long recording's width then tiles.
+    if include_media and kinds.get(schema_names[0]) == "acoustic":
+        problems = []
+        for split_name in list(partitioned):
+            partitioned[split_name] = spectrograms.spectrogram_rows(
+                partitioned[split_name], media_dir, schema_names[0], primary,
+                problems=problems)
+        if unlabeled_rows:
+            unlabeled_rows = spectrograms.spectrogram_rows(
+                unlabeled_rows, media_dir, schema_names[0], primary, problems=problems)
         for problem in problems[:20]:
             stats.warnings.append("Left out %s." % problem)
 
@@ -1298,7 +1365,7 @@ def build_bundle(
                                "n_tiles": summary.get("n_tiles", 0)}
                 tiling_manifest = dict(tiling_opts, parents=tiling.PARENTS_FILE)
 
-    if include_media and (tiling_manifest or kinds.get(schema_names[0]) == "geo"
+    if include_media and (tiling_manifest or kinds.get(schema_names[0]) in ("geo", "acoustic")
                           or primary.get("annotation_type") in rasters.PLANE_TYPES):
         _prune_media(media_dir, [r for rows_ in partitioned.values() for r in rows_]
                      + unlabeled_rows)
