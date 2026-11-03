@@ -1,0 +1,3697 @@
+{
+  "variant_id": "seed",
+  "overall_accuracy": 0.030612244897959183,
+  "per_label_accuracy": {
+    "fear": 0.0,
+    "embarrassment": 0.0,
+    "surprise": 0.0,
+    "annoyance": 0.0,
+    "love": 0.14285714285714285,
+    "confusion": 0.0,
+    "excitement": 0.0,
+    "caring": 0.0,
+    "disapproval": 0.0,
+    "admiration": 0.375,
+    "pride": 0.0,
+    "neutral": 0.0,
+    "disappointment": 0.0,
+    "grief": 0.0,
+    "remorse": 0.0,
+    "gratitude": 0.0,
+    "desire": 0.0,
+    "amusement": 0.125,
+    "joy": 0.0,
+    "relief": 0.0,
+    "sadness": 0.0,
+    "anger": 0.0,
+    "curiosity": 0.0,
+    "disgust": 0.125,
+    "optimism": 0.0,
+    "approval": 0.0,
+    "nervousness": 0.0,
+    "realization": 0.0
+  },
+  "multi_label": true,
+  "macro_f1": 0.37072351610753845,
+  "per_label_f1": {
+    "fear": 0.5,
+    "disapproval": 0.14545454545454545,
+    "nervousness": 0.36363636363636365,
+    "anger": 0.3870967741935484,
+    "disgust": 0.23728813559322035,
+    "embarrassment": 0.35294117647058826,
+    "remorse": 0.2553191489361702,
+    "surprise": 0.09523809523809523,
+    "disappointment": 0.35294117647058826,
+    "annoyance": 0.3076923076923077,
+    "admiration": 0.25,
+    "love": 0.7058823529411765,
+    "confusion": 0.5333333333333333,
+    "excitement": 0.5384615384615384,
+    "optimism": 0.15384615384615385,
+    "desire": 0.21052631578947367,
+    "amusement": 0.7272727272727273,
+    "caring": 0.25,
+    "pride": 0.6666666666666666,
+    "approval": 0.24,
+    "neutral": 0.0,
+    "sadness": 0.4444444444444444,
+    "grief": 0.75,
+    "gratitude": 0.4,
+    "realization": 0.46153846153846156,
+    "relief": 0.6153846153846154,
+    "joy": 0.2,
+    "curiosity": 0.23529411764705882
+  },
+  "per_label_counts": {
+    "fear": {
+      "tp": 6,
+      "fp": 10,
+      "fn": 2
+    },
+    "disapproval": {
+      "tp": 8,
+      "fp": 94,
+      "fn": 0
+    },
+    "nervousness": {
+      "tp": 2,
+      "fp": 1,
+      "fn": 6
+    },
+    "anger": {
+      "tp": 6,
+      "fp": 17,
+      "fn": 2
+    },
+    "disgust": {
+      "tp": 7,
+      "fp": 44,
+      "fn": 1
+    },
+    "embarrassment": {
+      "tp": 6,
+      "fp": 20,
+      "fn": 2
+    },
+    "remorse": {
+      "tp": 6,
+      "fp": 33,
+      "fn": 2
+    },
+    "surprise": {
+      "tp": 2,
+      "fp": 32,
+      "fn": 6
+    },
+    "disappointment": {
+      "tp": 6,
+      "fp": 20,
+      "fn": 2
+    },
+    "annoyance": {
+      "tp": 2,
+      "fp": 3,
+      "fn": 6
+    },
+    "admiration": {
+      "tp": 6,
+      "fp": 34,
+      "fn": 2
+    },
+    "love": {
+      "tp": 6,
+      "fp": 3,
+      "fn": 2
+    },
+    "confusion": {
+      "tp": 4,
+      "fp": 3,
+      "fn": 4
+    },
+    "excitement": {
+      "tp": 7,
+      "fp": 11,
+      "fn": 1
+    },
+    "optimism": {
+      "tp": 1,
+      "fp": 4,
+      "fn": 7
+    },
+    "desire": {
+      "tp": 2,
+      "fp": 9,
+      "fn": 6
+    },
+    "amusement": {
+      "tp": 8,
+      "fp": 6,
+      "fn": 0
+    },
+    "caring": {
+      "tp": 2,
+      "fp": 6,
+      "fn": 6
+    },
+    "pride": {
+      "tp": 6,
+      "fp": 4,
+      "fn": 2
+    },
+    "approval": {
+      "tp": 3,
+      "fp": 14,
+      "fn": 5
+    },
+    "neutral": {
+      "tp": 0,
+      "fp": 2,
+      "fn": 8
+    },
+    "sadness": {
+      "tp": 4,
+      "fp": 5,
+      "fn": 5
+    },
+    "grief": {
+      "tp": 3,
+      "fp": 1,
+      "fn": 1
+    },
+    "gratitude": {
+      "tp": 3,
+      "fp": 4,
+      "fn": 5
+    },
+    "realization": {
+      "tp": 3,
+      "fp": 2,
+      "fn": 5
+    },
+    "relief": {
+      "tp": 4,
+      "fp": 1,
+      "fn": 4
+    },
+    "joy": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 8
+    },
+    "curiosity": {
+      "tp": 2,
+      "fp": 7,
+      "fn": 6
+    }
+  },
+  "predictions": [
+    {
+      "example_id": "ed0fw6m",
+      "true_label": "fear",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses fear and nervousness about the potential consequences of a no-deal Brexit. They also express disapproval and disgust towards the idea, which is intensified by their anger. Additionally, they show signs of disgust and disapproval towards the situation, indicating strong negative emotions.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust",
+        "fear",
+        "nervousness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed0wflq",
+      "true_label": "embarrassment",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the teasing they received, embarrassment about being teased, and remorse for the experience.",
+      "error": null,
+      "true_labels": [
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed0wlth",
+      "true_label": "surprise",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses surprise at the person's condition, and disappointment that they were not more seriously injured.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed1h5g1",
+      "true_label": "annoyance",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval of the individual's identity, disgust at the situation, embarrassment for the TSA experience, anger and annoyance towards the difficulties of going through security.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "anger",
+        "annoyance",
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed23cfo",
+      "true_label": "love",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses nervousness about hiring someone, disapproval of their potential as an OC, and admiration for them as a character.",
+      "error": null,
+      "true_labels": [
+        "love",
+        "nervousness"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disapproval",
+        "nervousness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed29p28",
+      "true_label": "confusion",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses confusion about what to do with their hands, and embarrassment at not knowing how to handle the situation.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed37dzj",
+      "true_label": "excitement",
+      "predicted_label": "desire",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses excitement for the project to be finished and a desire to retire in 30 something years, indicating optimism about their future plans.",
+      "error": null,
+      "true_labels": [
+        "excitement"
+      ],
+      "predicted_labels": [
+        "desire",
+        "excitement",
+        "optimism"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed3mf1l",
+      "true_label": "surprise",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses amusement at finding the quote, disapproval of its content, disgust at its offensiveness, and embarrassment at having to look for it. The tone is lighthearted and playful, suggesting that the author finds the experience mildly entertaining.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed42h26",
+      "true_label": "embarrassment",
+      "predicted_label": "embarrassment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses embarrassment due to admitting their initial shock, and surprise at the unexpected discovery about the books' weights.",
+      "error": null,
+      "true_labels": [
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "embarrassment",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed4glqk",
+      "true_label": "caring",
+      "predicted_label": "caring",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses a caring sentiment by wishing the friend to stay strong, and also conveys pride in their ability to support their friend.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "caring",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed4wo23",
+      "true_label": "disapproval",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses strong negative emotions towards the term 'BDS', indicating anger, disapproval, and disgust. The mention of 'bigoted hateful movement' further reinforces these emotions.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": [
+        "hate"
+      ]
+    },
+    {
+      "example_id": "ed51u06",
+      "true_label": "admiration",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses embarrassment due to the speaker's awkwardness in complimenting someone, and admiration for the person being complimented.",
+      "error": null,
+      "true_labels": [
+        "admiration"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed5o8h3",
+      "true_label": "admiration",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses admiration for the person's good behavior, approval of their actions, and pride in their achievements.",
+      "error": null,
+      "true_labels": [
+        "admiration",
+        "pride"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "approval",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed67bvy",
+      "true_label": "pride",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses pride and approval, as indicated by the phrase 'so proud!' which suggests a feeling of pleasure or satisfaction due to an accomplishment.",
+      "error": null,
+      "true_labels": [
+        "pride"
+      ],
+      "predicted_labels": [
+        "approval",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed6hrx0",
+      "true_label": "neutral",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disgust at the use of certain characters and remorses about their own writing style, indicating a negative emotional tone.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed7f4rm",
+      "true_label": "disappointment",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disappointment and sadness due to the nonfulfillment of their educational goals, and remorse for wasting their GPA.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "remorse",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed7myzb",
+      "true_label": "grief",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses grief due to the death of someone, and disapproval and remorse towards the circumstances surrounding the death.",
+      "error": null,
+      "true_labels": [
+        "grief",
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "grief",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed7niut",
+      "true_label": "remorse",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses disgust due to the explicit and off-putting nature of the suggestion. The author also displays anger and annoyance towards the person who made such a suggestion, as indicated by the phrase 'Jerk off'.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "anger",
+        "annoyance",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed7zetw",
+      "true_label": "gratitude",
+      "predicted_label": "gratitude",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses gratitude for the clarification provided, and also realizes that they didn't know something before.",
+      "error": null,
+      "true_labels": [
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "gratitude",
+        "realization"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed8un4o",
+      "true_label": "embarrassment",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval towards the person's suggestion to refer to a girl as a sandwich, and embarrassment at their own mistake or lack of awareness.",
+      "error": null,
+      "true_labels": [
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed9d7vj",
+      "true_label": "remorse",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disgust due to the mention of dropping something, and surprise due to the use of a Japanese emoticon (/sノ( ゜-゜ノ) ) which is unexpected in an English text.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ed9hw2m",
+      "true_label": "confusion",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses approval and optimism when asking what makes it okay as it is, implying that they have a positive view of the situation and are hopeful about its acceptance.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "approval",
+        "optimism"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eda854m",
+      "true_label": "remorse",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the internet's inconvenience, and remorse for having to apologize for it.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edamkri",
+      "true_label": "neutral",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval by using the phrase 'I clearly recall being told the same thing', implying that they do not think the information is new or impressive. They also express surprise by mentioning a specific year ('74) and noting that it was different from what they were told, indicating that this unexpected detail caught their attention.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edatseh",
+      "true_label": "desire",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses amusement at the idea of a bicycle being a profound philosophical concept. They also express disgust and surprise, likely due to the unexpected twist on a mundane topic.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "disgust",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edaxt25",
+      "true_label": "desire",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses fear due to the need for medical attention, disappointment that they cannot take themselves to the hospital, and remorse for not being able to care for their own needs.",
+      "error": null,
+      "true_labels": [
+        "desire",
+        "nervousness",
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edb7kse",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": true,
+      "confidence": 0.8,
+      "reasoning": "The author realizes that the picture is funny, but still expresses amusement. The realization of this fact is what allows them to acknowledge its humor.",
+      "error": null,
+      "true_labels": [
+        "amusement",
+        "realization"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "realization"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edbmho6",
+      "true_label": "annoyance",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses strong emotions of anger, disapproval, and disgust towards people who complain about being too tall, implying that they are being hypocritical or unfair.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edcau2b",
+      "true_label": "joy",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for being part of a group, and relief that they are not alone in their feelings.",
+      "error": null,
+      "true_labels": [
+        "joy",
+        "relief"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "relief"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edcgi6l",
+      "true_label": "remorse",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval through the word 'Damn', indicating a strong negative emotion. They also express sadness and remorse, as indicated by the words 'misery' and 'sorry'. The tone is regretful and disappointed.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edcgo3h",
+      "true_label": "relief",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval and disgust towards the person who has something to say about their social media post, indicating that they are upset by the negative reaction. The mention of 'I don't care what anyway has to say' suggests embarrassment at being exposed on social media.",
+      "error": null,
+      "true_labels": [
+        "relief"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edcm0it",
+      "true_label": "desire",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for their good teeth and easy-to-maintain hair. They also show curiosity about maintaining their appearance, a desire to have good teeth, and pride in their current state.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "curiosity",
+        "desire",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edcqf5m",
+      "true_label": "sadness",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses disappointment and sadness due to the use of the phrase 'so sad' with a crying face emoticon, indicating a negative emotional state.",
+      "error": null,
+      "true_labels": [
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eddktov",
+      "true_label": "love",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the person's taste in Monster High, as indicated by 'That dad must love monster high'. This suggests a positive opinion and respect for their preferences.",
+      "error": null,
+      "true_labels": [
+        "love"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "approval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eddrd42",
+      "true_label": "excitement",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses excitement about something, but also mentions that they are not sure if the event will happen as planned, implying disapproval of the uncertainty.",
+      "error": null,
+      "true_labels": [
+        "excitement",
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ede4md6",
+      "true_label": "pride",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of racism, but also takes pride in holding racist beliefs. The comment is not neutral or admiring, and does not express any positive emotions like love or joy. The tone is one of self-satisfaction and possibly even arrogance.",
+      "error": null,
+      "true_labels": [
+        "pride"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "pride"
+      ],
+      "invalid_labels": [
+        "racism"
+      ]
+    },
+    {
+      "example_id": "edej0vb",
+      "true_label": "anger",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the situation where someone gets hurt again, disappointment that this is a recurring issue, fear for their safety, and remorse for not being able to prevent it.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edej9qa",
+      "true_label": "caring",
+      "predicted_label": "caring",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses that the person has a girlfriend he really cares about, indicating both caring and love.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "caring",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edem6q7",
+      "true_label": "sadness",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disappointment and sadness, as indicated by the phrase 'literally I feel like crying', which suggests a strong emotional pain or sorrow.",
+      "error": null,
+      "true_labels": [
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edeshen",
+      "true_label": "curiosity",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval by using the phrase 'Is he your source?', which implies a negative opinion. The author also expresses surprise by asking the question, which is unexpected and attention-grabbing.",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edg7om0",
+      "true_label": "curiosity",
+      "predicted_label": "relief",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses relief and surprise in the comment, as they are surprised that someone else knows something that is a relief to them.",
+      "error": null,
+      "true_labels": [
+        "curiosity",
+        "relief"
+      ],
+      "predicted_labels": [
+        "relief",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edg8cja",
+      "true_label": "disgust",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses strong negative emotions towards the paneling, indicating disgust and disapproval.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edgsl7n",
+      "true_label": "disapproval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval by stating 'You're wrong', and remorse by saying 'Source: I looked before I commented the first time', indicating they feel regretful about their initial mistake.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edhb7vy",
+      "true_label": "optimism",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses a positive sentiment towards the idea of improving their loan system, indicating approval and optimism about making it work better.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "approval",
+        "optimism"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edi91jt",
+      "true_label": "gratitude",
+      "predicted_label": "curiosity",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses curiosity about seeing something they've been wanting to see, and desire for that experience.",
+      "error": null,
+      "true_labels": [
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "curiosity",
+        "desire"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edirhr2",
+      "true_label": "surprise",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses admiration for the person's longevity in the league, but also disapproval or disappointment that they have been there for so long.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edj5ocz",
+      "true_label": "curiosity",
+      "predicted_label": "curiosity",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses curiosity about the assumption made by someone, and disapproval towards that assumption.",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "curiosity",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edl3cvd",
+      "true_label": "approval",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the subject (almonds) and approval of a specific action (nourishing it). The tone is positive and suggests a recommendation, indicating confidence in the suggested course of action.",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "approval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edl3jz1",
+      "true_label": "gratitude",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses a positive sentiment, with the author expressing thanks and appreciation for something (implied by 'Perfect! Thanks'). The tone is polite and appreciative, indicating approval and gratitude.",
+      "error": null,
+      "true_labels": [
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "approval",
+        "gratitude"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edl8mqz",
+      "true_label": "desire",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses disappointment and sadness about not being able to find support in their life, and also feels remorse for trying something that didn't work out. The tone is negative and regretful.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "remorse",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edlxi1r",
+      "true_label": "admiration",
+      "predicted_label": "admiration",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The author expresses pride and admiration for the random internet stranger, as indicated by the phrases 'I am proud of you' and 'you peopled good today'.",
+      "error": null,
+      "true_labels": [
+        "admiration",
+        "pride"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edlzkq1",
+      "true_label": "joy",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses approval and pride in the general area, specifically highlighting sections 203-205 as good pricewise and viewwise.",
+      "error": null,
+      "true_labels": [
+        "joy"
+      ],
+      "predicted_labels": [
+        "approval",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edm59ci",
+      "true_label": "optimism",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses admiration for the subject's power, disgust at the idea of being unable to control it, and fear of its consequences.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disgust",
+        "fear"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edmd8j9",
+      "true_label": "excitement",
+      "predicted_label": "curiosity",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses excitement and anticipation for the FOV slider to be added to the live server, indicating a strong desire to see it implemented.",
+      "error": null,
+      "true_labels": [
+        "excitement"
+      ],
+      "predicted_labels": [
+        "curiosity",
+        "desire",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edncf9f",
+      "true_label": "surprise",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the person receiving downvotes (implied by 'Go you!'), and excitement due to the rapid accumulation of downvotes.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edobacw",
+      "true_label": "nervousness",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses fear due to the unexpected and disturbing scenario described. It also contains disgust, as the author is repulsed by the idea of being taken in as a pet and surrounded by mannequins. Finally, it expresses embarrassment, as the author would likely feel self-conscious about their situation.",
+      "error": null,
+      "true_labels": [
+        "nervousness",
+        "realization"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "embarrassment",
+        "fear"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edotqiz",
+      "true_label": "embarrassment",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the misunderstanding, disgust at the potential harm caused by viruses and bacteria, and fear for the person's safety.",
+      "error": null,
+      "true_labels": [
+        "embarrassment",
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "fear"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edp09u3",
+      "true_label": "sadness",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses sadness due to the nonfulfillment of their expectations. Additionally, they express disapproval towards American culture or society, as indicated by 'but American'.",
+      "error": null,
+      "true_labels": [
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edpemfy",
+      "true_label": "desire",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval of the speaker's own experiences with rejection, disgust at the phrase 'You are not my kind', and embarrassment about being rejected. The speaker also expresses remorse for having to go through this experience.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edq1nvk",
+      "true_label": "realization",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disgust at the idea of someone's hand coming through a window, and surprise at the realization of this action.",
+      "error": null,
+      "true_labels": [
+        "realization"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edqc1yz",
+      "true_label": "relief",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author uses phrases like 'really helpful' and 'point out', which convey a sense of enthusiasm and appreciation, indicating admiration. Additionally, the use of exclamation marks adds to the excitement.",
+      "error": null,
+      "true_labels": [
+        "relief"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edrpy4s",
+      "true_label": "fear",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the artwork's haunting quality, feels curious about its inspiration, and is disappointed that it doesn't evoke a stronger emotional response. They also experience excitement and gratitude upon contemplating its potential in alternate futures and dystopian sci-fi worlds.",
+      "error": null,
+      "true_labels": [
+        "fear",
+        "nervousness"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "curiosity",
+        "disappointment",
+        "excitement",
+        "gratitude"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edrvbyy",
+      "true_label": "optimism",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the person's ability to 'make out well' and find true love, but also disapproves of their current situation. The author has a strong desire for them to move on and find happiness, which is rooted in their gratitude for the person's potential. The author also expresses love and appreciation for the person's well-being.",
+      "error": null,
+      "true_labels": [
+        "optimism",
+        "surprise"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "desire",
+        "disapproval",
+        "gratitude",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eds5rgs",
+      "true_label": "love",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses admiration and love, as it states 'I like you', indicating a positive feeling towards the person being addressed.",
+      "error": null,
+      "true_labels": [
+        "love"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edslyqc",
+      "true_label": "admiration",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval towards the person's profession, and surprise at their ability to maintain a professional image despite their personal life.",
+      "error": null,
+      "true_labels": [
+        "admiration",
+        "confusion"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edt92z8",
+      "true_label": "anger",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses anger towards the police, disgust at their behavior, and remorse for any harm caused to them. The tone is aggressive and critical.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edtiht5",
+      "true_label": "disapproval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the narrator's actions ('They did not'), and remorse for their own role in the situation, indicated by the phrase 'They did not'.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edts5dr",
+      "true_label": "grief",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses a strong negative emotional tone, with words like 'senseless', 'Why?', and 'based gods have forsaken us' indicating intense anger, disgust, fear, grief, and remorse. The use of all caps for emphasis further reinforces the intensity of these emotions.",
+      "error": null,
+      "true_labels": [
+        "grief"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust",
+        "fear",
+        "grief",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edur7a5",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment contains a sarcastic tone, with 'Lol ok' indicating amusement and the 👌🏾 emoji suggesting disapproval or disdain. The use of 'ok' in response to 'Lol' also implies a sense of annoyance or frustration.",
+      "error": null,
+      "true_labels": [
+        "amusement"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edvaz3h",
+      "true_label": "realization",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses nostalgia for a meal they had as a kid, but also disappointment that it's not something they can have now. The tone is neutral, indicating that the emotion is not strong enough to be expressed with enthusiasm or excitement.",
+      "error": null,
+      "true_labels": [
+        "realization"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "neutral"
+      ],
+      "invalid_labels": [
+        "nostalgia"
+      ]
+    },
+    {
+      "example_id": "edvb2r4",
+      "true_label": "neutral",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval and disgust towards the title 'r/dbdgonewild/', implying that it is inappropriate or offensive.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edvey02",
+      "true_label": "anger",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses strong negative emotions towards Reddit's rules, using violent and derogatory language.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edvnv86",
+      "true_label": "nervousness",
+      "predicted_label": "annoyance",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses frustration due to the difficulty of finding a small object, and tiredness from having to search for it. The tone suggests annoyance at the inconvenience.",
+      "error": null,
+      "true_labels": [
+        "nervousness"
+      ],
+      "predicted_labels": [
+        "annoyance"
+      ],
+      "invalid_labels": [
+        "frustration",
+        "tiredness"
+      ]
+    },
+    {
+      "example_id": "edvsbyt",
+      "true_label": "caring",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval because it advises someone to go to the doctor, implying that they might not be taking care of themselves. The mention of 'take the time' also implies a sense of responsibility or obligation, which is reflected in the remorse label.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edy1rlg",
+      "true_label": "disappointment",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses disappointment and disapproval towards something, likely a situation or event related to BTS (the K-pop group they are an 'army' for). The use of the word 'disappointed' directly indicates their emotional state, while 'disapproval' suggests a negative opinion about the situation.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edy5dg0",
+      "true_label": "joy",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration for the happiness they felt, excitement about sharing their experience with others, and joy in hoping that the original poster (OP) also felt a similar sensation.",
+      "error": null,
+      "true_labels": [
+        "joy"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement",
+        "joy"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edy973x",
+      "true_label": "fear",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses fear about potentially scaring the person more, disapproval of their own actions, and remorse for possibly causing distress.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edygcq1",
+      "true_label": "admiration",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author uses the phrase 'legend' to express admiration and excitement, indicating a strong positive emotional response.",
+      "error": null,
+      "true_labels": [
+        "admiration"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edz2b6d",
+      "true_label": "remorse",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the person's trust being broken, and remorse for their own role in causing this situation.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "edzwmxs",
+      "true_label": "approval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the game's rule, surprise at still playing it despite their dislike, and remorse for not being able to change the rule in previous versions.",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee0hr0f",
+      "true_label": "disgust",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author uses strong language to express their negative emotions, including 'worst' and 'one of the worst', indicating a strong sense of displeasure and unfavorable opinion. The tone is critical and disapproving, suggesting disgust and embarrassment at what they've seen.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disappointment",
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee0tuha",
+      "true_label": "love",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration for the person ('Love this guy') and also love for the team, indicating a strong positive emotional connection.",
+      "error": null,
+      "true_labels": [
+        "love"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee0wuyn",
+      "true_label": "annoyance",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment describes a person making aggressive grunts while breathing, which evokes feelings of disgust and anger.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee1qdz6",
+      "true_label": "desire",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of their current wardrobe choices, disappointment that they can't have a completely black wardrobe, and embarrassment about being dressed by their mom.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee1vj38",
+      "true_label": "annoyance",
+      "predicted_label": "annoyance",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses disapproval of the Michigan fans' behavior, irritation at their overwhelming presence, and annoyance at being affected by it.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "annoyance",
+        "disapproval"
+      ],
+      "invalid_labels": [
+        "irritation"
+      ]
+    },
+    {
+      "example_id": "ee27gps",
+      "true_label": "disapproval",
+      "predicted_label": "caring",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses a desire for the baby to be 'normal' and 'fussy', implying a disapproval of unhealthy behavior. The use of the word 'surprise' suggests that the author is expressing a sense of astonishment or unexpectedness at the idea of a 'normal/fussy baby'. Finally, the author's tone implies a caring concern for the well-being of the baby.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "caring",
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee2907w",
+      "true_label": "fear",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses strong negative emotions, with 'terrifying' indicating a sense of fear and disgust. The use of the word 'terrifying' suggests that the author is experiencing intense emotional pain or distress.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust",
+        "fear"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee2t4ek",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses amusement at the existence of a name for their condition, disapproval that it's not more well-known, and surprise at the unexpected twist (the actual name).",
+      "error": null,
+      "true_labels": [
+        "amusement"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee3fd6l",
+      "true_label": "remorse",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of their past belief, remorse for letting go of it, and sadness about the loss of that belief.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee4elj6",
+      "true_label": "approval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval by stating that the reader should not ignore the photos, and surprise by implying that the solution is right there if they try to notice it.",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee4ghbt",
+      "true_label": "disapproval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment 'That's not cute' expresses disapproval and embarrassment, as it is a negative reaction to something (likely an action or behavior) that the speaker finds unappealing or awkward.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee4w0uu",
+      "true_label": "realization",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disgust at the idea of spending time around fire without proper precautions, and surprise at the realization that it's super hot.",
+      "error": null,
+      "true_labels": [
+        "realization"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee5ne6r",
+      "true_label": "annoyance",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses strong negative emotions, with 'dumbass' being a derogatory term and the phrase '0.1% is a 1 in a thousand chance there' implying a low probability of something positive happening, suggesting anger, disapproval, and disgust.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee5nuv9",
+      "true_label": "caring",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the person who has gone through difficult experiences, disapproval of those who may have caused them harm or discomfort, and remorse for their own role in potentially contributing to these situations.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee5o9qc",
+      "true_label": "remorse",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of themselves, disappointment with the ending of certain TV shows, disgust at their lack of interest in other shows, embarrassment about their own preferences, and remorse for not being able to find something they enjoy watching.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee5qys7",
+      "true_label": "disgust",
+      "predicted_label": "disgust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses disgust towards something, and embarrassment towards the person's behavior.",
+      "error": null,
+      "true_labels": [
+        "disgust",
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee5xnm0",
+      "true_label": "disappointment",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disappointment and disapproval towards the situation where they are being stereotyped as punks.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee63efc",
+      "true_label": "disappointment",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author uses strong language to express displeasure and revulsion, indicating anger and disgust towards the comment's content.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee66rq1",
+      "true_label": "gratitude",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration for the recipient's action (thank you!), approval of their behavior, and gratitude towards them.",
+      "error": null,
+      "true_labels": [
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "approval",
+        "gratitude"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee67x4u",
+      "true_label": "curiosity",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses surprise at the unbanning of words, and disapproval that they were banned in the first place.",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee68h6r",
+      "true_label": "surprise",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the newcomers' behavior, disgust at their hypocrisy, and remorse for possibly being part of a problem.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee7j6q5",
+      "true_label": "disappointment",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disappointment with the counter attack, indicating a negative emotional state. Additionally, they express disapproval by stating that the team was 'the best', implying a sense of superiority or judgment.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee83rob",
+      "true_label": "excitement",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the existing talent and is excited about the prospect of adding more WR and TE players.",
+      "error": null,
+      "true_labels": [
+        "excitement"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee8d53d",
+      "true_label": "disapproval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval through the statement 'I believe it was clear I disagreed', indicating a negative opinion. Additionally, they express remorse by stating 'And I don’t play wow', implying regret or guilt about not playing World of Warcraft.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee8gc3a",
+      "true_label": "excitement",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses excitement and approval for the person, indicating a positive emotional state. The mention of 'the best' also suggests that the author is genuinely happy for the person.",
+      "error": null,
+      "true_labels": [
+        "excitement"
+      ],
+      "predicted_labels": [
+        "approval",
+        "caring",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee8tvi8",
+      "true_label": "admiration",
+      "predicted_label": "admiration",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses admiration for the person's achievement and pride in their accomplishment, as indicated by the phrase 'super proud of you' and the exclamation mark.",
+      "error": null,
+      "true_labels": [
+        "admiration",
+        "pride"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee8wf77",
+      "true_label": "anger",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses strong negative emotions towards their hometown, indicating anger and disapproval. The mention of 'hate' further suggests disgust.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee8wv5f",
+      "true_label": "excitement",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration for the person's emotional response, excitement about their situation, and love for hearing them express themselves in a vulnerable way.",
+      "error": null,
+      "true_labels": [
+        "excitement",
+        "love"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ee9mvpt",
+      "true_label": "realization",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval of the author's own lack of trust in others, disappointment that they don't take tasks seriously, disgust at their own naivety, embarrassment at being so trusting, and remorse for not being more cautious.",
+      "error": null,
+      "true_labels": [
+        "realization"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eea18ii",
+      "true_label": "desire",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the sport, disgust at the clay exploding, and excitement about the resulting feeling.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disgust",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeaq6n6",
+      "true_label": "approval",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval of the person's current behavior, disappointment that they are still dragging others down, and remorse for not being able to change them sooner.",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eearbor",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment uses 'lol' to express amusement and the phrase 'guess it's time for me to re-up' is a surprise, indicating that the author was not expecting this outcome.",
+      "error": null,
+      "true_labels": [
+        "amusement"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeb4jqw",
+      "true_label": "pride",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the number on their jersey, as indicated by 'great number'. They also express excitement, as shown by the double exclamation marks!!",
+      "error": null,
+      "true_labels": [
+        "pride"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eebxv46",
+      "true_label": "caring",
+      "predicted_label": "surprise",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment 'Drive safely now.' is neutral because it doesn't express any strong emotions. However, it also contains a hint of surprise or urgency, indicated by the word 'now', which suggests that the speaker is trying to convey a sense of importance or warning.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "surprise",
+        "neutral"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eed7qb0",
+      "true_label": "excitement",
+      "predicted_label": "curiosity",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses curiosity about the presence of goldfish in the picture, and disappointment that it seems to be a distraction or an unexpected element.",
+      "error": null,
+      "true_labels": [
+        "excitement"
+      ],
+      "predicted_labels": [
+        "curiosity",
+        "disappointment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eedek9c",
+      "true_label": "relief",
+      "predicted_label": "relief",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses pain due to the injury, but also relief that it feels better immediately after. The tone suggests a positive outcome, which is consistent with relief.",
+      "error": null,
+      "true_labels": [
+        "relief"
+      ],
+      "predicted_labels": [
+        "relief"
+      ],
+      "invalid_labels": [
+        "pain"
+      ]
+    },
+    {
+      "example_id": "eedvwoz",
+      "true_label": "embarrassment",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses strong negative emotions towards the person being addressed, including anger and disgust. They also express embarrassment on behalf of the person, indicating a sense of shame or awkwardness. Additionally, they express remorse for their own feelings, suggesting regret or guilt.",
+      "error": null,
+      "true_labels": [
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eedxtl7",
+      "true_label": "grief",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses strong negative emotions towards the person referred to as 'the guy from psych'. The use of the phrase 'Rip the guy from psych' suggests a strong feeling of displeasure and antagonism, which aligns with anger. Additionally, the tone implies revulsion or strong disapproval, which is consistent with disgust.",
+      "error": null,
+      "true_labels": [
+        "grief"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eef48yd",
+      "true_label": "nervousness",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the person's attitude and approach, as indicated by 'I'm just worried about his attitude'. Additionally, they convey nervousness through the phrase 'Edit-re worded', suggesting a sense of apprehension or concern.",
+      "error": null,
+      "true_labels": [
+        "nervousness"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "nervousness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eegcof4",
+      "true_label": "neutral",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the living situation due to its high cost and lack of insurance coverage. They also express disappointment, disgust, fear, and remorse about their experience.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "disgust",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eegouvj",
+      "true_label": "optimism",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses approval and desire through the phrase 'I honestly hope you do that', indicating a positive sentiment towards the person's actions.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "approval",
+        "desire"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eegst1x",
+      "true_label": "curiosity",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author uses the phrase 'These are awesome!' which expresses admiration and amusement. The tone is positive and playful, indicating that the author finds something impressive or worthy of respect (admiration) and is entertained by it (amusement).",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "amusement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eehxep8",
+      "true_label": "remorse",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the people they are interacting with, feeling embarrassed by their behavior. They also express disgust and remorse for having to interact with them, indicating a strong negative emotional response.",
+      "error": null,
+      "true_labels": [
+        "remorse"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeibo6i",
+      "true_label": "anger",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses strong negative emotions, including anger and disgust towards the person posting pictures of themselves. Disapproval is also evident as the commenter calls out the behavior. Embarrassment is present due to the facetuned nature of the photos.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeiidu7",
+      "true_label": "disgust",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the common translation of 'Son of man' as a reference to Jesus, and surprise at the alternative interpretation that refers to humans in general.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeis7pu",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses amusement through the use of 'lol' at the end, indicating they find the situation funny. They also express disapproval towards others who might shoot them while grinding gameplay.",
+      "error": null,
+      "true_labels": [
+        "amusement",
+        "joy"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eejaqiz",
+      "true_label": "disgust",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses disgust at the taste of the 'peanut butter', anger at its unpleasantness, and annoyance at having to deal with it.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "anger",
+        "annoyance",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eekyspm",
+      "true_label": "fear",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses fear due to the potential compromise of their field. They also express disapproval and remorse, indicating a negative emotional state.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eel1zmu",
+      "true_label": "confusion",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval and disgust towards individuals who identify as Incels, implying that they are worse than regular Incels. The mention of 'guys like that' suggests embarrassment and possibly remorse for their own beliefs or actions. However, the tone is not strong enough to label it as anger or disgust exclusively.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eel3qgk",
+      "true_label": "disappointment",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the person's mental errors, confusion about their actions, and remorse for not correcting them. The tone is critical and somewhat negative.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eelw51m",
+      "true_label": "desire",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author admires their friend's decision to keep things simple, disapproves of the traditional wedding setup, and desires to have a similar experience.",
+      "error": null,
+      "true_labels": [
+        "desire"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "desire",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eemglel",
+      "true_label": "admiration",
+      "predicted_label": "admiration",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration and pride through the use of enthusiastic language, such as 'so proud' and 'good job dude', which indicates a strong positive emotion towards the person being addressed.",
+      "error": null,
+      "true_labels": [
+        "admiration",
+        "pride"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eemi935",
+      "true_label": "approval",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses approval and caring through the words 'thanks' and 'I agree', indicating a positive and supportive tone.",
+      "error": null,
+      "true_labels": [
+        "approval",
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "approval",
+        "caring"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eemlaus",
+      "true_label": "confusion",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses confusion about their own proposal, and disapproval towards the current state of affairs they are describing.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eemn1s5",
+      "true_label": "fear",
+      "predicted_label": "desire",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses fear due to their scared state, a desire to go back, and sadness as a result of their current emotional pain.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "desire",
+        "fear",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eemo4po",
+      "true_label": "approval",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the places their brain goes when buying a car, disappointment that these thoughts occur, and disapproval of the thought process itself.",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disappointment",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "een1kbk",
+      "true_label": "disapproval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval and disgust towards women, indicating a strong negative emotion towards them.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "een9ben",
+      "true_label": "curiosity",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses curiosity about ancient religious history and admiration for nonfiction books. They also show approval by asking for book recommendations.",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "approval",
+        "curiosity"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eenni73",
+      "true_label": "joy",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the people being watched, as indicated by 'It's amazing to watch'. They also convey excitement through the use of the word 'amazing', which suggests a strong positive emotion.",
+      "error": null,
+      "true_labels": [
+        "joy"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eennia4",
+      "true_label": "optimism",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval and disgust towards their own situation, feeling embarrassed about having to go to the doctor. They also express fear and remorse about potentially having a serious health issue.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eentnff",
+      "true_label": "nervousness",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards their current emotional state, feeling insecure. Additionally, they express remorse for this insecurity.",
+      "error": null,
+      "true_labels": [
+        "nervousness"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eenvcj6",
+      "true_label": "embarrassment",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author mentions that watching the documentary with their mother was 'very awkward', indicating embarrassment. Additionally, they express disapproval by stating it was an 'awkward' experience.",
+      "error": null,
+      "true_labels": [
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeozbej",
+      "true_label": "neutral",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval and disgust towards Nickelback, implying that they find the band's music unimpressive or unpleasant.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eep5zgh",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author mentions that 'this exact thing happened to me', which suggests a sense of surprise and amusement at the coincidence.",
+      "error": null,
+      "true_labels": [
+        "amusement"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eepmtvu",
+      "true_label": "love",
+      "predicted_label": "love",
+      "correct": true,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses sadness due to the 'Terribly sad story' and love for the story, indicated by 'I loved it'.",
+      "error": null,
+      "true_labels": [
+        "love",
+        "sadness"
+      ],
+      "predicted_labels": [
+        "love",
+        "sadness"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeq5v95",
+      "true_label": "confusion",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the ambiguity of their instructional coach role, confusion about its classification, a desire for clarity, and remorse for not being certain about it.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "desire",
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeqqd04",
+      "true_label": "optimism",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the situation and remorse for their own role in it, as indicated by the phrase 'I'm sorry that happened' and the tone of the message.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eer5zb1",
+      "true_label": "relief",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the person's actions or behavior, as indicated by 'evil [NAME]'. The phrase 'at least' suggests a sense of surprise or relief that it wasn't worse, implying that the author was expecting something even more negative.",
+      "error": null,
+      "true_labels": [
+        "relief"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eerhlgd",
+      "true_label": "joy",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration for their life in the 'big smoke' and love for it, indicating a strong positive emotion towards their current situation.",
+      "error": null,
+      "true_labels": [
+        "joy",
+        "pride"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eert8li",
+      "true_label": "neutral",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of [NAME] not being someone they want to hang out with more often, and disappointment that this is the case.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ees61na",
+      "true_label": "neutral",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the Reddit comment's format, disappointment with the lack of organization, and surprise at the brevity of the text.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eesfw7d",
+      "true_label": "nervousness",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses fear about the outcome of something ('that worries me a lot') and disappointment that it is working, implying that they had hoped for a different result.",
+      "error": null,
+      "true_labels": [
+        "nervousness"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "fear"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eesysv3",
+      "true_label": "disgust",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author uses the word 'disgusting' to express strong disapproval, and the phrase 'absolutely disgusting' emphasizes their surprise at finding something so repulsive.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eetfduz",
+      "true_label": "anger",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses disapproval of [NAME] being overrated, anger towards their playing style, disgust at the lack of defense in the league, and embarrassment at being associated with someone who is considered a 'volume chucker/flopper'.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eetfhzg",
+      "true_label": "disappointment",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disappointment that they missed a part, and surprise at the realization of their mistake.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eetk2u6",
+      "true_label": "curiosity",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval towards the year being mentioned (776), and surprise at the unexpected mention of it, indicated by 'Fuck, wait, really?' which is a colloquial expression of astonishment.",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eetrfd1",
+      "true_label": "surprise",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses surprise at the continued occurrence of an event despite threats, indicating a sense of astonishment. Additionally, they express disapproval and anger towards those responsible for these threats.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeuaa0v",
+      "true_label": "realization",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the lack of progress, confusion about why this is the case, and realization that the loop is short.",
+      "error": null,
+      "true_labels": [
+        "realization"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "disapproval",
+        "realization"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eev7adx",
+      "true_label": "caring",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval at the suggestion of using 'lame openers', and surprise that this is considered acceptable by others.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eey3wm1",
+      "true_label": "annoyance",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the fact that a waste of money can be beneficial to someone else, and disapproval for those who would consider it a waste of money.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeyb62a",
+      "true_label": "optimism",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses a positive sentiment, wishing others to have a nice day, indicating approval and gratitude.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "approval",
+        "gratitude"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eeyhxzq",
+      "true_label": "disgust",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses disgust at the opponent's skill, but also admiration for it. Additionally, they express pride in their own ability to play against such a strong opponent.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disgust",
+        "pride"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "eezvlxt",
+      "true_label": "admiration",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses disapproval because it uses the ♭ symbol, which is often used to express disappointment or disapproval. The surprise label applies because the comment is reacting to something (the use of the ♭ symbol) in a way that suggests it's unexpected or surprising.",
+      "error": null,
+      "true_labels": [
+        "admiration"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef00phy",
+      "true_label": "realization",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the person's ability to dismount a horse without jumping off, curiosity about how they achieved this feat, and realization that it is possible to do so.",
+      "error": null,
+      "true_labels": [
+        "realization"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "curiosity",
+        "realization"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef0ekxx",
+      "true_label": "sadness",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the person's memory, acknowledges their loss with grief, and conveys gratitude through the use of a heart symbol (❤️) often associated with love and appreciation.",
+      "error": null,
+      "true_labels": [
+        "sadness"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "gratitude",
+        "grief"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef17w5q",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment contains a lighthearted expression ('LOL') that suggests amusement, but the phrase 'Your name needs some work' implies disapproval or criticism.",
+      "error": null,
+      "true_labels": [
+        "amusement"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef1d12n",
+      "true_label": "joy",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses a caring tone by wishing the person help, and approval for their situation. The phrase 'Perhaps over time you'll find it easier' suggests optimism about their future.",
+      "error": null,
+      "true_labels": [
+        "joy",
+        "relief"
+      ],
+      "predicted_labels": [
+        "approval",
+        "caring",
+        "optimism"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef1gm6j",
+      "true_label": "caring",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of home remedies that may exacerbate eczema, and remorse for not seeking a second opinion earlier.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef1h4if",
+      "true_label": "joy",
+      "predicted_label": "realization",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment expresses a sense of surprise and realization that the mystery has been solved, indicating a positive emotional response.",
+      "error": null,
+      "true_labels": [
+        "joy"
+      ],
+      "predicted_labels": [
+        "realization",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef1r7bj",
+      "true_label": "surprise",
+      "predicted_label": "curiosity",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the sub's sudden shift in opinion, and shows curiosity about why this change occurred. Additionally, they express disgust at the idea of 'worshiping' a particular group or entity.",
+      "error": null,
+      "true_labels": [
+        "surprise"
+      ],
+      "predicted_labels": [
+        "curiosity",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef236od",
+      "true_label": "gratitude",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses approval for the karma they've received and excitement about it, as indicated by the phrase 'Thank you all' and the enthusiastic tone of the comment.",
+      "error": null,
+      "true_labels": [
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "approval",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef2bgwu",
+      "true_label": "optimism",
+      "predicted_label": "caring",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses caring for the person's well-being, disapproval of their situation, and relief that they are okay.",
+      "error": null,
+      "true_labels": [
+        "optimism"
+      ],
+      "predicted_labels": [
+        "caring",
+        "disapproval",
+        "relief"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef2f4xp",
+      "true_label": "approval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the commenter's perspective, as indicated by 'I agree with you for the most part'. The author also expresses surprise at the commenter's mention of cats and upholstered furniture, which is an unexpected detail.",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef2jec1",
+      "true_label": "love",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for music, disapproval of the Triple J's Hottest 100, and love for music itself.",
+      "error": null,
+      "true_labels": [
+        "love"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disapproval",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef2ycmu",
+      "true_label": "grief",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval through the phrase 'My condolences', which is a polite but somewhat formal expression. The word 'condolences' itself implies a sense of sadness and loss, suggesting that the author is expressing grief.",
+      "error": null,
+      "true_labels": [
+        "grief",
+        "sadness"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "grief"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef4bv31",
+      "true_label": "love",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses admiration for the parents' actions, finds it amusing that they would do such a thing, and loves the fact that they are willing to take an unconventional approach to make a point.",
+      "error": null,
+      "true_labels": [
+        "love"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "amusement",
+        "love"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef4byo4",
+      "true_label": "anger",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The comment contains strong language and a negative tone, indicating anger, disapproval, and disgust towards the person or situation being addressed.",
+      "error": null,
+      "true_labels": [
+        "anger"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef4eh5e",
+      "true_label": "approval",
+      "predicted_label": "approval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses approval and caring through the phrases 'No offense taken' (indicating a positive response to an insult) and 'I agree with your last statement' (showing understanding and respect for the other person's opinion).",
+      "error": null,
+      "true_labels": [
+        "approval"
+      ],
+      "predicted_labels": [
+        "approval",
+        "caring"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef4gzmc",
+      "true_label": "gratitude",
+      "predicted_label": "desire",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses excitement and desire to attend an event in May, indicated by the use of 'Congrats!!!' and 'cant freaking wait!' which convey a strong sense of enthusiasm and eagerness.",
+      "error": null,
+      "true_labels": [
+        "gratitude"
+      ],
+      "predicted_labels": [
+        "desire",
+        "excitement"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef64yhq",
+      "true_label": "disgust",
+      "predicted_label": "disgust",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disgust at the person's behavior, as indicated by 'Stop being disgusting'. The surprise is implied by the unexpected statement about dogs being naked.",
+      "error": null,
+      "true_labels": [
+        "disgust"
+      ],
+      "predicted_labels": [
+        "disgust",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef7c27s",
+      "true_label": "joy",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses admiration for the enjoyment of pints, amusement at the excessive amount, disapproval of overindulgence, and desire to continue enjoying it.",
+      "error": null,
+      "true_labels": [
+        "joy"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "amusement",
+        "desire",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef8g88z",
+      "true_label": "anger",
+      "predicted_label": "admiration",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses admiration for the username's creativity, disapproval of the username's actions, disgust at the action itself, embarrassment on behalf of the person who did it, excitement about the attention drawn to the situation, fear that others might think less of the person, and remorse for the hurtful behavior.",
+      "error": null,
+      "true_labels": [
+        "anger",
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "admiration",
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "excitement",
+        "fear",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef8nzih",
+      "true_label": "caring",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval towards the behavior of aiming at someone, and surprise that it can lock onto the wrong target due to a bigger lock on area.",
+      "error": null,
+      "true_labels": [
+        "caring"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef9jsun",
+      "true_label": "annoyance",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses anger and disapproval towards the concept of 'borrowed time', implying that it is unfair or unjust.",
+      "error": null,
+      "true_labels": [
+        "annoyance"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "ef9qs73",
+      "true_label": "disapproval",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the statement 'No I’m not' implying that it is a negative or untruthful statement. The use of 'No I’m not' also implies remorse for possibly being dishonest, which aligns with the definition of remorse.",
+      "error": null,
+      "true_labels": [
+        "disapproval"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efafosi",
+      "true_label": "relief",
+      "predicted_label": "optimism",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses optimism about their ability to handle tests without anxiety, and relief that this helps them in such situations.",
+      "error": null,
+      "true_labels": [
+        "relief"
+      ],
+      "predicted_labels": [
+        "optimism",
+        "relief"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efakc1k",
+      "true_label": "disappointment",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disappointment with the tier markings not being different shades of green, and disapproval that this design choice was made.",
+      "error": null,
+      "true_labels": [
+        "disappointment"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efbzsc2",
+      "true_label": "amusement",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment 'Ah does look fun' expresses amusement as it implies finding something funny or entertaining. The phrase 'does look fun' is a lighthearted and playful way of expressing interest, indicating amusement. Additionally, the comment contains the word 'fun', which further supports the label of surprise, as it suggests that the speaker is astonished by the idea of something being enjoyable.",
+      "error": null,
+      "true_labels": [
+        "amusement"
+      ],
+      "predicted_labels": [
+        "amusement",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efbzz7y",
+      "true_label": "confusion",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses confusion about the wording of the statement, and disapproval towards the idea that billionaire psychopaths suffer the most.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efe3iuv",
+      "true_label": "confusion",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author is expressing disapproval of the question 'Someone tell me how to feel about this' as it implies a lack of emotional understanding or maturity. The surprise label is also applicable as the author's tone suggests they are taken aback by the simplicity and directness of the question.",
+      "error": null,
+      "true_labels": [
+        "confusion"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efeymfg",
+      "true_label": "fear",
+      "predicted_label": "disappointment",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses fear for the fiancé's safety, and disappointment that he was given a smilie by his partner, implying that this reaction is not what they would have expected.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "disappointment",
+        "fear"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efgetp6",
+      "true_label": "neutral",
+      "predicted_label": "disapproval",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval of the state of their house, embarrassment at their toddler's behavior, and disgust at the situation.",
+      "error": null,
+      "true_labels": [
+        "neutral"
+      ],
+      "predicted_labels": [
+        "disapproval",
+        "disgust",
+        "embarrassment"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efgs56j",
+      "true_label": "excitement",
+      "predicted_label": "excitement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses excitement and surprise with the phrase 'Yeah would be exciting!' as they seem to be reacting positively to an unexpected or positive situation.",
+      "error": null,
+      "true_labels": [
+        "excitement"
+      ],
+      "predicted_labels": [
+        "excitement",
+        "surprise"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efh50bc",
+      "true_label": "fear",
+      "predicted_label": "anger",
+      "correct": false,
+      "confidence": 0.9,
+      "reasoning": "The author expresses strong negative emotions, including anger and disgust, towards the situation described. Disapproval and remorse are also evident in their criticism of the father's behavior.",
+      "error": null,
+      "true_labels": [
+        "fear"
+      ],
+      "predicted_labels": [
+        "anger",
+        "disapproval",
+        "disgust",
+        "embarrassment",
+        "remorse"
+      ],
+      "invalid_labels": []
+    },
+    {
+      "example_id": "efh8gxu",
+      "true_label": "embarrassment",
+      "predicted_label": "amusement",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The comment expresses amusement at the idea of cringing being cathartic, as it implies finding a painful or awkward experience pleasurable. The use of 'cathartic' itself suggests a sense of relief and release, which is also present in the emotion of relief.",
+      "error": null,
+      "true_labels": [
+        "embarrassment"
+      ],
+      "predicted_labels": [
+        "amusement"
+      ],
+      "invalid_labels": [
+        "catharsis"
+      ]
+    },
+    {
+      "example_id": "efha0zn",
+      "true_label": "curiosity",
+      "predicted_label": "confusion",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The author expresses disapproval by asking a question that implies they have an opinion about the respondent's age, and confusion because the question is unclear or ambiguous.",
+      "error": null,
+      "true_labels": [
+        "curiosity"
+      ],
+      "predicted_labels": [
+        "confusion",
+        "disapproval"
+      ],
+      "invalid_labels": []
+    }
+  ]
+}

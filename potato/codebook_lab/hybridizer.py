@@ -2,7 +2,9 @@
 Build a "best of breed" hybrid codebook: for each label, take the
 structured fields (definition/clarification/examples/exclusion_rules)
 from whichever scored variant did best on that specific label, ties
-broken by that variant's overall accuracy.
+broken by that variant's overall score. "Best" is per-label accuracy for
+single-label runs and per-label F1 for multi-label runs (see
+VariantScore.per_label_score).
 """
 
 from __future__ import annotations
@@ -35,12 +37,12 @@ def build_hybrid(
         best_id = None
         best_acc = -1.0
         for s in scores:
-            acc = s.per_label_accuracy().get(label, 0.0)
+            acc = s.per_label_score().get(label, 0.0)
             better = (
                 acc > best_acc
                 or (acc == best_acc and best_id is not None
-                    and score_by_id[s.variant_id].overall_accuracy
-                    > score_by_id[best_id].overall_accuracy)
+                    and score_by_id[s.variant_id].overall_score
+                    > score_by_id[best_id].overall_score)
             )
             if best_id is None or better:
                 best_acc = acc

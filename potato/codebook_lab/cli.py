@@ -55,8 +55,14 @@ def run_experiment(
     seed = io_utils.load_seed_codebook(
         _resolve(base_dir, cfg["seed_codebook"]))
     label_names = [c.name for c in seed]
+    task_type = cfg.get("task_type", "single_label")
+    if task_type not in ("single_label", "multi_label"):
+        raise ValueError(
+            f"task_type must be 'single_label' or 'multi_label', got {task_type!r}")
+    multi_label = task_type == "multi_label"
     platinum = io_utils.load_platinum_examples(
-        _resolve(base_dir, cfg["platinum_examples"]), label_names)
+        _resolve(base_dir, cfg["platinum_examples"]), label_names,
+        multi_label=multi_label)
     task_description = cfg.get("task_description", "")
     if not task_description:
         logger.warning(
@@ -89,13 +95,15 @@ def run_experiment(
         cfg, "scoring_model", base_dir, fallback_key="generation_model")
     scores = []
     for v in all_candidates:
-        s = score_variant(score_endpoint, v, task_description, platinum)
+        s = score_variant(score_endpoint, v, task_description, platinum,
+                          multi_label=multi_label)
         io_utils.save_score(output_dir, s)
         scores.append(s)
 
     hybrid = build_hybrid(all_candidates, scores, hybrid_id="hybrid")
     io_utils.save_hybrid(output_dir, hybrid)
-    hybrid_score = score_variant(score_endpoint, hybrid, task_description, platinum)
+    hybrid_score = score_variant(score_endpoint, hybrid, task_description, platinum,
+                                 multi_label=multi_label)
     io_utils.save_score(output_dir, hybrid_score)
 
     print()

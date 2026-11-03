@@ -17,6 +17,11 @@ Platinum examples file (YAML or JSON) — a flat list:
     - id: "p1"
       text: "..."
       label: "wait times"   # must match a seed codebook label name
+
+    # multi-label tasks (task_type: multi_label) list every gold label:
+    - id: "p2"
+      text: "..."
+      labels: ["gratitude", "joy"]
 """
 
 from __future__ import annotations
@@ -59,7 +64,9 @@ def load_seed_codebook(path: str) -> List[Code]:
     return codes
 
 
-def load_platinum_examples(path: str, valid_labels: List[str]) -> List[PlatinumExample]:
+def load_platinum_examples(
+    path: str, valid_labels: List[str], multi_label: bool = False,
+) -> List[PlatinumExample]:
     raw = _load_structured(path)
     if not isinstance(raw, list) or not raw:
         raise ValueError(
@@ -69,8 +76,15 @@ def load_platinum_examples(path: str, valid_labels: List[str]) -> List[PlatinumE
     if len(set(ids)) != len(ids):
         dupes = {i for i in ids if ids.count(i) > 1}
         raise ValueError(f"Platinum examples have duplicate id(s): {dupes}")
+    if not multi_label:
+        multi = [e.example_id for e in examples if len(e.labels) > 1]
+        if multi:
+            raise ValueError(
+                f"Platinum example(s) {multi[:5]} have more than one label, "
+                f"but the experiment is single-label — set "
+                f"task_type: multi_label in the experiment config")
     valid = set(valid_labels)
-    unknown = sorted({e.label for e in examples if e.label not in valid})
+    unknown = sorted({l for e in examples for l in e.labels if l not in valid})
     if unknown:
         raise ValueError(
             f"Platinum examples reference label(s) not in the seed "

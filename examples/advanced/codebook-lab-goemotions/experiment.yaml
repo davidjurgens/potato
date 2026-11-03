@@ -1,0 +1,54 @@
+# codebook_lab experiment on GoEmotions (Demszky et al., ACL 2020):
+# Reddit comments, 27 emotions + neutral, multi-label.
+#
+# Build the data files first (downloads ~45MB once):
+#   python examples/advanced/codebook-lab-goemotions/build_dataset.py
+#
+# Then run:
+#   ollama serve
+#   ollama pull llama3.1:8b && ollama pull llama3.2:3b
+#   python -m potato.codebook_lab.cli run examples/advanced/codebook-lab-goemotions/experiment.yaml
+#
+# All paths below are relative to this file's own directory.
+
+seed_codebook: seed_codebook.yaml
+platinum_examples: platinum.yaml
+
+# multi_label: platinum items carry `labels: [...]`, the model may return
+# several labels per item, and scoring is per-label F1 / macro-F1
+# instead of accuracy (so over-labeling is penalized, not just misses).
+task_type: multi_label
+
+task_description: >-
+  Label the emotions expressed by the author of this Reddit comment. Choose
+  every emotion from the codebook that the comment clearly expresses; most
+  comments express one emotion, some express two or three. Use "neutral"
+  only when the comment expresses none of the other emotions, and never
+  together with another label.
+
+# One variant per directive (improve, specialize, regress, shorten,
+# paraphrase, overlap). Each 28-label variant takes ~6 min on llama3.1:8b.
+num_variants: 6
+
+output_dir: run
+
+# Writes the variants. A 28-label codebook is ~5-8k tokens of JSON per
+# variant, which is beyond what a 3B model returns reliably (it drops
+# labels, and the variant gets discarded) — use the biggest model you have.
+generation_model:
+  endpoint_type: "ollama"
+  model: "llama3.1:8b"
+  base_url: "http://localhost:11434"
+  max_tokens: 8000
+  temperature: 0.7
+  timeout: 600
+
+# Labels the platinum set with each variant: 196 items x (seed + 6
+# variants + hybrid) = ~1,600 calls, ~2.5s each.
+scoring_model:
+  endpoint_type: "ollama"
+  model: "llama3.2:3b"
+  base_url: "http://localhost:11434"
+  max_tokens: 300
+  temperature: 0.1
+  timeout: 120
