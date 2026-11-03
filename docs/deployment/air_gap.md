@@ -149,7 +149,7 @@ and those are too large to ship in the package:
 
 | Feature | Fetches | Staging it offline |
 |---|---|---|
-| `potato transcripts --transcribe` | A Whisper model from Hugging Face | Pass `--asr-model` a local CTranslate2 model directory |
+| `potato transcripts --transcribe` | A Whisper model from Hugging Face; with WhisperX and `--asr-word-timestamps`, a word-alignment model per language | Pass `--asr-model` a local CTranslate2 model directory; copy the alignment model's torch hub and Hugging Face caches, or leave word times off |
 | `potato transcripts --diarize` | Two ONNX models (~47 MB) | Set `POTATO_MODEL_CACHE`, or pass `--diarize-segmentation-model` and `--diarize-embedding-model` |
 | [Think-Aloud](../advanced/think_aloud.md) | A Whisper model on the first recording | Set `thinkaloud.model` to a local model directory |
 

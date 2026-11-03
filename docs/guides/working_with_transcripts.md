@@ -26,7 +26,18 @@ Then point the CLI at a folder of recordings:
 potato transcripts ./interviews --transcribe --asr-model small.en -o data/interviews.json
 ```
 
-That runs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) on your own machine. No cloud API, no per-minute charge, and the audio never leaves the box. Each transcript is written beside its media as `<name>.whisper.json` and reused on later runs, so re-running the command after changing an unrelated flag costs nothing.
+That runs Whisper on your own machine. No cloud API, no per-minute charge, and the audio never leaves the box. Each transcript is written beside its media as `<name>.whisper.json` and reused on later runs, so re-running the command after changing an unrelated flag costs nothing.
+
+### Which engine runs it
+
+Two engines run the same Whisper models:
+
+- [WhisperX](https://github.com/m-bain/whisperX), when it is installed (`pip install whisperx`, separately: it pins its own torch) and works on this machine. It decodes speech segments in batches, and with `--asr-word-timestamps` it times each word by forced alignment against a per-language speech model, which it downloads on first use.
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper), from the `transcribe` extra.
+
+`--asr-engine auto`, the default, uses WhisperX and falls back to faster-whisper when WhisperX is not installed, does not import (a WhisperX built for another torch raises on import), cannot run on the device (neither engine runs on Apple's Metal), or cannot load the model. A file WhisperX fails on is transcribed with faster-whisper; the next file tries WhisperX again. A fallback logs its reason once, and the summary names the engine for each file, as `ASR (whisperx)` or `ASR (faster-whisper)`. `--asr-engine whisperx` or `--asr-engine faster-whisper` uses that engine only, and fails rather than falling back. A cached transcript is reused only when it came from the engine this run would use: after installing or fixing WhisperX, an `auto` run re-transcribes what faster-whisper did, except files WhisperX already failed on or a model it would not load, which keep their faster-whisper transcript until you pass `--asr-no-cache`. A run that names `--asr-engine whisperx` always wants WhisperX's own transcript.
+
+WhisperX always runs voice-activity detection, so `--asr-no-vad` applies only to faster-whisper. Alignment can also split a segment at a sentence end, so the same file may come back as more turns with `--asr-word-timestamps` than without. A word alignment cannot place, such as a number, has no time and is left out of the word list, though it stays in the segment's text. If alignment fails (no network for its model, or a language it has no model for), the segments keep their times and the words have none, with a warning.
 
 ### Picking a model
 
@@ -69,7 +80,8 @@ Expect to correct the result. Clustering does badly on crosstalk and on similar 
 
 Both stages fetch weights on first use. To run with no network at all, prime the caches on a connected machine and copy them across:
 
-- Whisper: set `--asr-model` to a local CTranslate2 model directory.
+- Whisper: set `--asr-model` to a local CTranslate2 model directory. Both engines read it.
+- WhisperX's word alignment: run once with `--asr-word-timestamps` on a connected machine and copy the alignment model's cache (torch hub and Hugging Face) across, or leave word times off.
 - Diarization: set `POTATO_MODEL_CACHE`, or pass `--diarize-segmentation-model` and `--diarize-embedding-model` explicitly.
 
 ---

@@ -309,6 +309,11 @@ def test_audit_103_follow_ups():
     # And with no item to check against, a prediction without times is kept.
     (value,) = prelabel_values(TRANSCRIPT, [{"index": 0, "correction": "hey"}]).values()
     assert json.loads(value)[0]["correction"] == "hey"
+    # R2: a transcript written inline as one line is a turn, not a path.
+    inline = {"segments": "hello wrold this is one turn"}
+    (value,) = prelabel_values(TRANSCRIPT, [{"index": 0, "correction": "hello world"}],
+                               inline).values()
+    assert json.loads(value)[0]["correction"] == "hello world"
     # N5: "²" is a digit but no index.
     assert prelabel_values(TRANSCRIPT, [{"index": "²", "correction": "y"}], untimed) is None
 

@@ -134,7 +134,7 @@ class TestSpeakerAssignment:
 
 class TestMissingBackend:
     def test_transcription_error_names_the_extra(self, monkeypatch):
-        monkeypatch.setattr(transcribe_mod, "is_available", lambda: False)
+        monkeypatch.setattr(transcribe_mod, "is_available", lambda *engine: False)
         with pytest.raises(transcribe_mod.TranscriptionError) as excinfo:
             transcribe_mod.require_backend()
         assert "potato-annotation[transcribe]" in str(excinfo.value)
@@ -194,11 +194,14 @@ class TestTranscribeMediaCaching:
 
     def _stub(self, monkeypatch, calls):
         import potato.transcript_cli as cli
+        # The engine a cache entry is checked against does not depend on
+        # whether this machine has WhisperX.
+        monkeypatch.setattr(transcribe_mod, "_WHISPERX_STATUS", (False, "not installed"))
 
         def fake_transcribe(path, **kwargs):
             calls.append("transcribe")
             return {"segments": [{"start": 0.0, "end": 1.0, "text": "hello"}],
-                    "language": "en", "duration": 1.0}
+                    "language": "en", "duration": 1.0, "engine": "faster-whisper"}
 
         def fake_diarize(path, **kwargs):
             calls.append("diarize")
@@ -385,7 +388,7 @@ class TestCLIGating:
         import potato.server_utils.transcripts as pkg
         from potato.transcript_cli import main
 
-        monkeypatch.setattr(pkg, "transcription_available", lambda: False)
+        monkeypatch.setattr(pkg, "transcription_available", lambda *engine: False)
         (tmp_path / "a.mp3").write_bytes(b"")
 
         assert main([str(tmp_path), "--transcribe", "--dry-run"]) == 1
@@ -396,7 +399,7 @@ class TestCLIGating:
         import potato.server_utils.transcripts as pkg
         from potato.transcript_cli import main
 
-        monkeypatch.setattr(pkg, "transcription_available", lambda: True)
+        monkeypatch.setattr(pkg, "transcription_available", lambda *engine: True)
         monkeypatch.setattr(pkg, "diarization_available", lambda: False)
         (tmp_path / "a.mp3").write_bytes(b"")
 

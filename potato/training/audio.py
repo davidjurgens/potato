@@ -66,10 +66,12 @@ def transcript_turns(scheme: Dict[str, Any], item_data: Dict[str, Any],
                       "speaker": str(turn.get("speaker") or turn.get("role") or ""),
                       "text": str(turn.get("text") or turn.get("content") or "")})
     raw = item_data.get(field)
-    if isinstance(raw, str) and len(turns) == 1 and turns[0]["text"] == raw.strip():
+    from potato.server_utils.transcripts.loader import is_transcript_path
+    if is_transcript_path(raw) and len(turns) == 1 and turns[0]["text"] == raw.strip():
         # A transcript file that could not be read (missing, or outside the
         # task directory) comes back as one turn holding its path; the page
-        # shows it, but it is no turn of speech.
+        # shows it, but it is no turn of speech. A one-line transcript
+        # written inline is a turn.
         turns[0]["unread"] = True
     return {"audio": audio, "turns": turns}
 

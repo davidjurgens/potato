@@ -180,6 +180,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 - New example: `examples/ai-assisted/model-training/`, 160 reviews with gold
   labels the simulator can annotate from, trained with `sklearn-text`.
 
+### Transcripts
+
+- **WhisperX runs local transcription when it is installed.** `potato
+  transcripts --transcribe` uses WhisperX (batched decoding, and word times
+  by forced alignment with `--asr-word-timestamps`) and falls back to
+  faster-whisper when WhisperX is missing, does not import, cannot run on
+  the device, or cannot load the model. A fallback logs its reason, and each
+  file's summary names the engine. `--asr-engine whisperx|faster-whisper` picks
+  one. A `whisper-asr` run's `ct2/` copy loads in both. WhisperX is a
+  separate install.
+
 ### Import
 
 - **RTTM** (`potato import -f rttm`): a speaker diarization file, or a folder

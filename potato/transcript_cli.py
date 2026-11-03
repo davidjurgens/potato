@@ -229,6 +229,25 @@ def _signature(options: Dict[str, Any], keys) -> Dict[str, Any]:
     return {key: options.get(key) for key in keys}
 
 
+def _cached_engine_fits(cached: Dict[str, Any], options: Dict[str, Any]) -> bool:
+    """Whether a cached transcript came from the engine this run would use.
+    Keyed on the engine that ran, not the one asked for: an ``auto`` run
+    that fell back to faster-whisper once kept serving that transcript after
+    WhisperX started working. A file WhisperX already failed on keeps its
+    faster-whisper transcript; a cache written before engines were recorded
+    is faster-whisper's."""
+    from potato.server_utils.transcripts.transcribe import expected_engine
+    want = expected_engine(options.get("engine", "auto"), options.get("model", "base"),
+                           options.get("device", "cpu"), options.get("compute_type", "int8"))
+    ran = cached.get("engine") or "faster-whisper"
+    if ran == want:
+        return True
+    # Only auto may stand in faster-whisper's transcript of a file WhisperX
+    # failed on; a run that names WhisperX asked for WhisperX's.
+    return (options.get("engine", "auto") == "auto" and want == "whisperx"
+            and bool(cached.get("whisperx_failed")))
+
+
 def transcribe_media(
     path: str,
     *,
@@ -269,7 +288,8 @@ def transcribe_media(
             # A truncated or hand-edited cache should cost one re-run, not the
             # whole command.
             candidate = None
-        if isinstance(candidate, dict) and candidate.get("asr") == asr_signature:
+        if (isinstance(candidate, dict) and candidate.get("asr") == asr_signature
+                and _cached_engine_fits(candidate, options)):
             payload = candidate
             from_cache = True
 
@@ -360,9 +380,11 @@ def convert_file(
             return None, report
 
     if is_media:
+        # Which engine ran: under auto, WhisperX or the faster-whisper fallback.
+        engine = content.get("engine") if isinstance(content, dict) else None
+        asr = "ASR (%s)" % engine if engine else "local ASR"
         report["format"] = (
-            "local ASR + diarization"
-            if transcribe.get("diarize") is not None else "local ASR")
+            "%s + diarization" % asr if transcribe.get("diarize") is not None else asr)
     else:
         report["format"] = detect_format(content)
 
@@ -506,8 +528,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Run local speech-to-text over audio and video inputs instead of "
-            'requiring an existing transcript. Needs pip install '
-            '"potato-annotation[transcribe]".'
+            "requiring an existing transcript. Uses WhisperX when it is "
+            'installed, else faster-whisper (pip install "potato-annotation[transcribe]").'
         ),
     )
     parser.add_argument(
@@ -518,6 +540,17 @@ def build_parser() -> argparse.ArgumentParser:
             "(default: base). Larger is slower and more accurate: tiny, base, "
             "small, medium, large-v3. The .en variants are English-only and "
             "better than the multilingual model of the same size on English."
+        ),
+    )
+    parser.add_argument(
+        "--asr-engine",
+        default="auto",
+        choices=["auto", "whisperx", "faster-whisper"],
+        help=(
+            "auto (default): WhisperX when it is installed and runs here, else "
+            "faster-whisper. Name one to use only it. Under auto, a file WhisperX "
+            "failed on keeps its cached faster-whisper transcript until "
+            "--asr-no-cache."
         ),
     )
     parser.add_argument(
@@ -660,12 +693,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # attempt: the message names the extra to install, and there is no
         # point reporting it once per file.
         from potato.server_utils.transcripts import transcription_available
-        if not transcription_available():
-            print(
-                'Local transcription needs faster-whisper: pip install '
-                '"potato-annotation[transcribe]"',
-                file=sys.stderr,
-            )
+        if not transcription_available(args.asr_engine):
+            if args.asr_engine == "whisperx":
+                from potato.server_utils.transcripts.transcribe import whisperx_status
+                print("%s. WhisperX is a separate install: pip install whisperx"
+                      % whisperx_status()[1], file=sys.stderr)
+            else:
+                print(
+                    'Local transcription needs faster-whisper: pip install '
+                    '"potato-annotation[transcribe]"',
+                    file=sys.stderr,
+                )
             return 1
         transcribe = {
             "model": args.asr_model,
@@ -674,6 +712,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "compute_type": "float16" if args.asr_device == "cuda" else "int8",
             "word_timestamps": args.asr_word_timestamps,
             "vad_filter": not args.asr_no_vad,
+            "engine": args.asr_engine,
             "cache_dir": args.asr_cache,
             "reuse_cache": not args.asr_no_cache,
             "diarize": None,
