@@ -18,6 +18,7 @@
 (function (global) {
     'use strict';
 
+
     class RegionCaptionManager {
         constructor(container, config) {
             this.container = container;

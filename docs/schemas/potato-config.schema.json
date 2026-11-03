@@ -6686,6 +6686,62 @@
           ],
           "type": "object"
         },
+        "tiling": {
+          "additionalProperties": true,
+          "description": "Cut whole-slide and other large images into tiles when a detection or segmentation bundle is built, and merge the tile predictions back into one prediction per image",
+          "properties": {
+            "auto_min_side": {
+              "default": 4096,
+              "description": "Longer side, in pixels, from which auto tiles an image",
+              "type": "integer"
+            },
+            "background": {
+              "default": 0.25,
+              "description": "Empty tiles sampled per tile with an object, as negatives. Assumes every object on an annotated image was drawn; set 0 when slides are annotated sparsely",
+              "type": "number"
+            },
+            "downsample": {
+              "default": 1.0,
+              "description": "Full-resolution pixels per tile pixel; 4 trains a 40x slide at 10x",
+              "type": "number"
+            },
+            "enabled": {
+              "default": "auto",
+              "description": "auto tiles slide formats and images whose longer side is at least auto_min_side; true tiles every image; false never tiles",
+              "type": "string"
+            },
+            "max_predict_tiles": {
+              "default": 2000,
+              "description": "Most tiles predicted on per image; the ones with the most tissue are kept",
+              "type": "integer"
+            },
+            "min_visible": {
+              "default": 0.4,
+              "description": "Share of an object that must be inside a tile to train on it there",
+              "type": "number"
+            },
+            "mpp": {
+              "description": "Microns per tile pixel, from the slide's own resolution; overrides downsample when the slide records one",
+              "type": "number"
+            },
+            "overlap": {
+              "default": 128,
+              "description": "Pixels shared by neighbouring tiles, at most half of tile_size. An object larger than this can be found in pieces",
+              "type": "integer"
+            },
+            "tile_size": {
+              "default": 1024,
+              "description": "Side of a tile in the pixels the trainer sees",
+              "type": "integer"
+            },
+            "tissue_threshold": {
+              "default": 0.05,
+              "description": "Share of a slide tile that must be tissue to predict on it",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
         "trainer_params": {
           "description": "Parameter defaults per trainer, such as `hf-text-classification: {model_name: ..., lora: true}`. A run's own parameters override them. Names a trainer does not take are refused",
           "type": "object"

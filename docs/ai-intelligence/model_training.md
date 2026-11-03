@@ -80,7 +80,7 @@ All keys sit under `model_training`:
 | `update_frequency` | `25` | New annotations since the last automatic run before another starts. |
 | `params` | `{}` | Trainer parameters, as in the `params` of an API run. |
 | `backend` | `model_training.backend` | Backend for automatic runs. |
-| `accept_licence` | `false` | Confirms the licence of a trainer that asks for it (`ultralytics-detect`, `ultralytics-segment`). Without it, automatic runs of that trainer are skipped and `skip_reason` says why. |
+| `accept_licence` | `false` | Confirms the licence of a trainer that asks for it (`ultralytics-detect`, `ultralytics-segment`, `layoutlmv3`). Without it, automatic runs of that trainer are skipped and `skip_reason` says why. |
 
 When a check decides not to start a run, the reason ("waiting for 3 more
 annotation(s)", "a run is already in progress", "runs are waiting in the
@@ -441,10 +441,14 @@ other key.
 | `hf-relation` | `span_link`, `event_annotation`, `coreference` | text | `potato-annotation[train-text]` |
 | `hf-conversation-tree` | `tree_annotation` | conversation trees | `potato-annotation[train-text]` |
 | `byt5-gloss` | `interlinear_gloss` | text | `potato-annotation[train-text]` |
-| `torchvision-detect` | `image_annotation` | images | `potato-annotation[train-vision]` |
-| `ultralytics-detect` | `image_annotation` | images | `pip install ultralytics` (AGPL-3.0) |
-| `torchvision-segment` | `image_annotation` (outlines) | images | `potato-annotation[train-vision]` |
-| `ultralytics-segment` | `image_annotation` (outlines) | images | `pip install ultralytics` (AGPL-3.0) |
+| `torchvision-detect` | `image_annotation`, `microscopy`, `geo_annotation` | images, slides, OME stacks, rasters | `potato-annotation[train-vision]` |
+| `ultralytics-detect` | `image_annotation`, `microscopy`, `geo_annotation` | images, slides, OME stacks, rasters | `pip install ultralytics` (AGPL-3.0) |
+| `torchvision-segment` | `image_annotation`, `microscopy`, `geo_annotation` (outlines) | images, slides, OME stacks, rasters | `potato-annotation[train-vision]` |
+| `ultralytics-segment` | `image_annotation`, `microscopy`, `geo_annotation` (outlines) | images, slides, OME stacks, rasters | `pip install ultralytics` (AGPL-3.0) |
+| `cellpose` | `image_annotation`, `microscopy` (outlines) | images, OME stacks | `pip install cellpose` |
+| `sam-finetune` | `image_annotation` (outlines) | images | `potato-annotation[train-vision]` |
+| `layoutlmv3` | `image_annotation` on pages with a `words` field | page images | `potato-annotation[train-vision]` (weights CC BY-NC-SA 4.0) |
+| `vlm-sft` | `text` on image items, `region_caption`, `grounding_eval`, `gui_trajectory` | images, screenshots | `potato-annotation[train-vision]`; a GPU |
 | `hf-audio-tagger` | `audio_annotation` | audio | `potato-annotation[train-audio]` |
 | `decision-calibrate` | `radio`, `select`, `likert`, `slider` | text | nothing; a configured decision model |
 | `laya-finetune` | `radio`, `select`, `likert`, `slider` | text | `potato-annotation[decision]` |
@@ -452,8 +456,8 @@ other key.
 | `label-studio-ml` | `radio`, `select`, `multiselect`, `span`, `image_annotation` | text, images | nothing; a running Label Studio ML backend |
 
 `pip install "potato-annotation[train]"` installs what the text, image,
-audio and LLM trainers need. Laya (`[decision]`), `wev-ai` and `ultralytics`
-are separate installs. None of these is part of `potato-annotation[all]`,
+audio and LLM trainers need. Laya (`[decision]`), `wev-ai`, `ultralytics`
+and `cellpose` are separate installs. None of these is part of `potato-annotation[all]`,
 because torch is a multi-gigabyte install. A trainer that is not installed is
 listed on the Training page as "not installed", with the command that
 installs it.
@@ -742,15 +746,123 @@ otherwise the first non-empty item field among `image_url`, `image`,
 `image_path`, `file_name`, `audio_url`, `audio`, `audio_path`, `video_url`,
 `video`, `video_path`, `url` and `path`.
 
-**Images must be local files.** A relative path is resolved against
-`task_dir`, and a URL-style path such as `/media/img_001.jpg` (what the
-annotation page uses) against the task's `media_directory`; the file is linked
-into the run's bundle. Remote `http(s)` URLs are not downloaded. An image run
+**Images must be local files, inside the project.** A relative path is resolved against
+`task_dir`, or against the task's `media_directory` when it is not found
+there (the deep-zoom viewer takes a path inside `media_directory`, such as
+`slide_01.svs`). A URL-style path such as `/media/img_001.jpg` (what the
+annotation page uses) is resolved against `media_directory`. The file is
+linked into the run's bundle. A file outside the task directory and
+`media_directory`, by an absolute path, `../` or a symbolic link, is left out
+with a warning: the annotation page cannot show it either, and a remote run
+would download it. Remote `http(s)` URLs are not downloaded. An image run
 leaves out every row whose image is remote or missing, and the run log says
 how many; the model gives no prediction for such items. Download remote images
 into `media_directory` to train on them.
 
 To train an image corpus on text instead, name a text vectorizer in `params`.
+
+A GUI trace's screenshots (`gui_trajectory`) are read from each step, and an
+inline `data:image/...;base64,` screenshot is written into the bundle as a
+file. A caption or grounding scheme's image is the `source_field` of the
+`image_annotation` scheme it draws on.
+
+### Whole slides and other large images
+
+The detection and segmentation trainers resize each image to a few hundred
+pixels, which is no use for a 100,000-pixel pathology slide or a satellite
+scene. So when a run's bundle is built for an `image_annotation`,
+`microscopy` or `geo_annotation` scheme, a large image is cut into tiles on
+the Potato host:
+
+- **Train:** the tiles that contain an annotated object, with each object
+  clipped to its tile. Also a sample of empty tiles, so the model sees what
+  is not an object.
+- **Val, test and unlabeled:** every tile over tissue, or every tile of an
+  image that is not a slide, up to `max_predict_tiles` per image.
+
+Each image's split is decided before it is cut, so the tiles of one slide
+are never in two splits. After prediction, each tile's shapes are mapped
+back onto the whole image. Where tiles overlap, an object both tiles found
+is kept once: per label, the most confident copy of two boxes that overlap
+at IoU 0.5, or, when one lies mostly inside the other and was cut by its
+tile's inner edge, the larger one (the other tile saw only part of it). An
+object inside another that was not cut, such as a nucleus inside a cell with
+the same label, is a second object and stays, unless it too touches the
+inner edge of its tile, when it is taken for a cut copy. Points two tiles
+found within 4 full-resolution pixels of each other are one point. Held-out scores are computed on the
+whole images, and the prelabels are in the whole image's coordinates, the
+ones the deep-zoom viewer stores.
+
+```yaml
+model_training:
+  enabled: true
+  tiling:
+    tile_size: 1024
+    overlap: 128
+    downsample: 2        # train a 40x slide at 20x
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `auto` | `auto` tiles slide formats (`.svs`, `.ndpi`, `.mrxs`, `.scn`, ...) and images whose longer side is at least `auto_min_side`; `true` tiles every image; `false` never tiles. |
+| `auto_min_side` | 4096 | |
+| `tile_size` | 1024 | Side of a tile, in the pixels the trainer sees. |
+| `overlap` | 128 | Pixels neighbouring tiles share, at most half of `tile_size`. Keep it at least as large as the objects: a larger object is found in pieces, one per tile. |
+| `downsample` | 1 | Full-resolution pixels per tile pixel. |
+| `mpp` | none | Microns per tile pixel. Overrides `downsample` for a slide that records its resolution. |
+| `background` | 0.25 | Empty tiles sampled per tile with an object. |
+| `max_predict_tiles` | 2000 | The tiles with the most tissue are kept when an image has more. |
+| `min_visible` | 0.4 | Share of an object that must be inside a tile for it to train there. A piece covering a quarter of the tile trains whatever its share. |
+| `tissue_threshold` | 0.05 | Share of a slide tile that must be tissue to predict on it. |
+
+Slides are read with openslide (`pip install "potato-annotation[wsi]"`) and
+other images with Pillow, on the machine that builds the bundle. Tiles are
+written into the bundle as JPEG (slides) or PNG, and the link to the whole
+image is removed, so a remote backend downloads the tiles, not the slide.
+
+Tissue is the part of a slide's thumbnail darker than Otsu's threshold on
+its brightness. A slide with no bare glass is split in two by that
+threshold, and its paler half is skipped; set `tissue_threshold: 0` for
+such slides.
+
+The empty training tiles assume that every object on an annotated image was
+drawn. For slides annotated in part, set `background: 0`, or the model is
+taught that the objects nobody drew are background.
+
+### Microscopy and maps
+
+A `microscopy` scheme's ROIs train the detection and segmentation trainers
+and `cellpose`. Each z-slice and time point with ROIs on it is rendered with
+the scheme's default channels and contrast, by the same compositor the
+viewer uses, and becomes a row of its own. An item with nothing drawn yet is
+rendered at its middle z-slice and first time point, what the viewer opens
+on. The predictions come back as the microscopy answer, with each ROI's
+`z` and `t`. Cell classifications refer to a label image, not to a shape,
+and are not trained on.
+
+A `geo_annotation` scheme's features train the detection and segmentation
+trainers on the item's raster basemap:
+
+- **GeoTIFF:** the transform comes from the file's own tags: ModelPixelScale
+  with ModelTiepoint, or ModelTransformation, and the EPSG code in its
+  GeoKey directory. A projected GeoTIFF is reprojected with pyproj.
+- **Image with an extent:** the image is placed in longitude and latitude,
+  as the map shows it.
+
+Polygons, rectangles, lines and points become shapes on the raster. A
+polygon's holes are filled: the image tools have no polygons with holes. A
+GeoTIFF that marks its raster as PixelIsPoint is placed half a pixel over,
+as its tiepoint is a pixel's centre; one with a user-defined coordinate
+system (EPSG code 32767) cannot be reprojected and its items are left out. The
+predictions come back as GeoJSON in EPSG:4326, with each feature marked
+`source: model`. On the map they are suggestions, like `preannotation_field`:
+they count as an answer only when the annotator edits one or accepts them.
+Deleting every suggestion is saved as an empty answer, so they do not come
+back.
+
+A map whose basemap is tiles from a server, or only a GeoJSON outline, has
+no raster to train on, and its items are left out with a warning. So is a
+`classify_region` answer, a label on an outlined region rather than a shape.
 
 ### `llm-sft`
 
@@ -1126,7 +1238,8 @@ size, one training step on Metal took longer than an epoch on the CPU. Images
 are read as [Image items](#image-items) describes.
 Only images with at least one box are trained on, for the same
 reason as spans: an image with no boxes looks the same as one nobody looked
-at. With several annotators, an image's boxes are one annotator's answer,
+at. The exception is a tile of an annotated slide; see
+[Whole slides](#whole-slides-and-other-large-images). With several annotators, an image's boxes are one annotator's answer,
 the one `aggregation` resolves to: the aggregators compare whole answers, and
 two people's boxes rarely match exactly.
 
@@ -1193,6 +1306,167 @@ GPU server for it.
 model (default `yolo11n-seg.pt`) on the same outlines and predicting polygons
 of at most 64 vertices. It has the parameters, the AGPL-3.0 licence, the
 licence confirmation and the analytics handling of `ultralytics-detect`.
+
+### `cellpose`
+
+`cellpose` fine-tunes [Cellpose](https://github.com/MouseLand/cellpose) on
+the cell or nucleus outlines of an `image_annotation` or `microscopy`
+scheme. Each image's outlines become an instance label image, one id per
+outline. Predicted masks are traced back into polygons, each with its mean
+cell probability as confidence. Cellpose segments without classes, so every
+predicted cell gets the `label` parameter, or the scheme's most common label
+when that is unset. Train one model per label if the classes look different.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `base_model` | `cyto3` | `cyto3`, `nuclei` or `cyto2` with Cellpose 3; `cpsam` with Cellpose 4; or a path to your own model. |
+| `epochs` | 100 | |
+| `learning_rate` | 1e-5 | |
+| `weight_decay` | 0.1 | |
+| `batch_size` | 8 | |
+| `diameter` | none | Typical cell diameter in pixels at prediction; unset lets Cellpose estimate it. |
+| `label` | none | Label for every predicted cell. |
+| `min_instances` | 5 | Annotated images needed in the train split. |
+| `min_train_masks` | 1 | Images with fewer outlines are skipped. |
+
+Install it with `pip install cellpose`; it is in none of Potato's extras.
+Both Cellpose 3 and Cellpose 4 work: the trainer passes only the arguments
+the installed version accepts. Cellpose's code is BSD-3-Clause; its weights
+come from the Cellpose authors under their terms.
+
+### `sam-finetune`
+
+`sam-finetune` fine-tunes Segment Anything's mask decoder to turn a box into
+the outline the study's annotators would draw. It trains on the outlines of
+an `image_annotation` scheme, each prompted with its bounding box (moved and
+resized by up to `box_jitter` of its size, so it learns from boxes as loose
+as a detector's). The image encoder stays frozen, and each image's
+embedding is computed once.
+
+It refines boxes, so it needs boxes to start from:
+
+- On an item that already carries box prelabels, such as a
+  `torchvision-detect` or `ultralytics-detect` run's write-back, each box
+  becomes a polygon prelabel.
+- On a held-out item, the annotators' own boxes are the prompts, and the
+  held-out score measures how close the outline is when the box is right.
+  These predictions are scored but never stored or published, because they
+  are made from another annotator's answer. The write-back report counts
+  them in `n_skipped_heldout_only`.
+
+So the usual sequence is a detection run with write-back on, with
+`include_unlabeled: true`, then a `sam-finetune` run on the same scheme.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `facebook/sam-vit-base` | Also `facebook/sam-vit-large` and `-huge`, or a local directory. |
+| `epochs` | 10 | |
+| `batch_size` | 8 | Boxes per step. |
+| `learning_rate` | 1e-4 | |
+| `box_jitter` | 0.05 | |
+| `mask_threshold` | 0 | Logit above which a pixel is inside. |
+| `patience` | 3 | Epochs without a better val mask IoU before stopping. |
+| `min_instances` | 10 | Annotated outlines needed in the train split. |
+
+The val split's mean mask IoU is reported as `val_mask_iou`. The SAM weights
+are Apache-2.0. The fine-tuned decoder is for prelabels: the image tool's
+browser SAM runs separate ONNX weights, and this run does not replace them.
+
+### `layoutlmv3`
+
+`layoutlmv3` fine-tunes LayoutLMv3 for document layout: the regions of an
+`image_annotation` scheme drawn on page images (title, table, total, and so
+on), learned from the page's words and their positions. Potato runs no OCR,
+so each item needs its words:
+
+```json
+{"id": "page_001", "image": "pages/page_001.png",
+ "words": [{"text": "INVOICE", "bbox": [40, 52, 180, 82]},
+           {"text": "Total", "bbox": [300, 700, 380, 730]}]}
+```
+
+`bbox` is `[x0, y0, x1, y1]` in the page image's pixels, or from 0 to 1. A
+[PAGE XML import](../tools/import_cli.md) in `regions` mode fills
+`words` from the file's `Word` elements, or its text lines when it has no
+words. Words from a PDF's text layer or another OCR tool work the same way.
+
+Each word is labelled by the region its centre falls in (the smallest one
+when regions nest), as BIO tags, so two neighbouring regions with the same
+label stay two. Predicted words are merged back into regions, and each region
+becomes a box prelabel around its words, with the words' mean probability
+as confidence. Held-out scores are box mAP against the annotated regions.
+Regions drawn much larger than their words score lower than the model's
+boxes deserve, since a predicted box ends at the words.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `microsoft/layoutlmv3-base` | Or `-large`. |
+| `epochs` | 10 | |
+| `batch_size` | 2 | Pages per step. |
+| `learning_rate` | 2e-5 | |
+| `max_length` | 512 | Tokens per page; words past it are not trained on or predicted. |
+| `min_instances` | 10 | Annotated pages with words needed in the train split. |
+
+**The LayoutLMv3 weights are CC BY-NC-SA 4.0**, not for commercial use. As
+with the YOLO trainers, the Training page asks for confirmation before a run,
+an API run needs `accept_licence: true`, and an automatic retrain needs
+`auto_retrain.accept_licence: true`.
+
+### `vlm-sft`
+
+`vlm-sft` fine-tunes a vision-language model on answers about images. Each
+answer becomes an image, a prompt and the answer to learn:
+
+| Scheme | One example per | Prompt | Answer |
+|---|---|---|---|
+| `text` on image items | item | The scheme's description (or `instruction`), and the item's text if it has any beside the image. | What the annotator wrote. |
+| `region_caption` | captioned region | The image with the region drawn as a red box, and the box's coordinates. | The caption. |
+| `grounding_eval` | answered expression | The expression, asking for JSON. | `{"bbox": [x0, y0, x1, y1]}`, `{"point": [x, y]}` with `region_type: point`, or `{"absent": true}`. |
+| `gui_trajectory` | step judged `correct` that has a click | The screenshot and the step's action text. | The agent's click, `{"point": [x, y]}`. |
+
+Coordinates are on a 0–1000 grid of the image, so any checkpoint can learn
+the format from the examples. An answer that does not parse is scored as a
+miss. A GUI step judged wrong is not trained on, since nobody marked where
+the right click was.
+
+What it predicts:
+
+- **Text:** the generated answer, as a text prelabel.
+- **Grounding:** a region or an absence for every expression on the item,
+  published as the grounding answer.
+- **GUI trajectories:** the model's own click for each step with one, and a
+  verdict suggestion: `correct` when it is within `click_radius` of the
+  agent's click, otherwise `wrong_element`. The confidence grows with the
+  distance from that radius.
+- **Captions:** one for each region the annotators drew. These are
+  scored but not stored or published, since the regions are an annotator's
+  answer. A caption run is for the held-out score and for the model itself.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_name` | `Qwen/Qwen2.5-VL-3B-Instruct` | Any image-text-to-text model on the Hub (Qwen2.5-VL, Qwen3-VL, SmolVLM, LLaVA, ...) or a local path. |
+| `lora` | on, attention projections | `false` fine-tunes every weight; `{quantize: 4bit}` is [QLoRA](#qlora-4-bit-base-weights). |
+| `epochs` | 3 | |
+| `batch_size` | 2 | |
+| `gradient_accumulation` | 4 | |
+| `learning_rate` | 1e-4 with LoRA, 1e-5 without | |
+| `max_new_tokens` | 64 | |
+| `max_image_side` | 896 | Images are shrunk to this longer side; larger images cost more tokens. |
+| `instruction` | the scheme's description | The question, for text answers. |
+| `click_radius` | 0.05 | Share of the screenshot within which two clicks count as the same. |
+| `gradient_checkpointing` | `false` | |
+| `min_instances` | 10 | Training examples needed. |
+
+Real checkpoints need a GPU. A 2B model trains on a Mac's Metal GPU: two
+epochs of `Qwen/Qwen3-VL-2B-Instruct` with LoRA over 26 images took 46
+seconds. Check the licence of the model you pick: they vary, and
+Qwen2.5-VL-3B carries the Qwen research licence while the 7B model is
+Apache-2.0.
+
+Qwen-VL models compute part of their vision input with an op that torch
+compiles on the GPU when it first runs. On a machine whose NVRTC library does
+not match torch's CUDA, the run stops at validation with "torch cannot compile
+GPU kernels on this machine" and the package to install.
 
 ### `hf-audio-tagger`
 
@@ -1372,6 +1646,11 @@ scheme's kind:
 | `span_link`, `event_annotation`, `coreference` | see [`hf-relation`](#hf-relation) | F1, argument F1, CoNLL F1 |
 | `interlinear_gloss` | word and morpheme gloss accuracy | morpheme accuracy |
 | `tree_annotation` | node-answer accuracy and macro-F1, path accuracy | node macro-F1 |
+| `microscopy` | as `image_annotation`, per rendered plane | `map_50` |
+| `geo_annotation` | as `image_annotation`, on the raster | `map_50` |
+| `region_caption` | token F1 per region (0 for a region with no caption), corpus BLEU-4 | token F1 |
+| `grounding_eval` | accuracy at IoU 0.5 (`acc_50`), also at 0.25 and 0.75, mean IoU, and `absent_accuracy`, the share of absent referents declined. With `region_type: point`, `point_in_region`. | acc@0.5, or point-in-region |
+| `gui_trajectory` | verdict accuracy and macro-F1 over the judged steps; `click_accuracy`, the share of steps judged `correct` where the model's click is within 5% of the screenshot of the agent's | verdict macro-F1 |
 
 A classifier trained with `soft_targets` also reports `soft_jsd`,
 `soft_cross_entropy` and `ece`; see
@@ -1437,6 +1716,18 @@ slider position, a ranking as the list's order, a BWS pick as the selected
 best and worst, a soft label as slider positions, a gloss in the gloss grid,
 and a conversation tree's node answers and path. No `pre_annotation` block is
 needed.
+
+Shapes a widget could not show as they are, which it would repair as it drew
+them, are left out of the prelabel: a box with no width, a shape off the
+image, a label the scheme does not have, a microscopy ROI on a plane its
+image lacks, a GUI verdict the scheme does not offer, a map feature off the
+globe. A microscopy prediction shows as ROIs on their planes. A grounding prediction
+shows as each expression's region, or as absent. A GUI trajectory
+prediction shows as a suggested verdict on each step. A map shows its
+prediction as suggested features, which become the answer only when the
+annotator edits one or accepts them. A caption run, and a `sam-finetune` run's
+predictions on held-out items, are scored but not published (see those
+trainers).
 
 A relation, chain or event prediction shows as spans in the `span_schema`
 with the links, chains or events drawn between them, while the annotator has
@@ -1604,7 +1895,7 @@ A missing or invalid token is `401`.
 
 ### QLoRA: 4-bit base weights
 
-`llm-sft`, `llm-dpo` and `hf-text-classification` take
+`llm-sft`, `llm-dpo`, `hf-text-classification` and `vlm-sft` take
 `lora: {quantize: 4bit}`. The base model is loaded with its weights in 4 bits
 (NF4 with double quantization, the QLoRA setup), and a LoRA adapter is trained
 on top of it in bf16 where the GPU supports bf16. A model needs about a

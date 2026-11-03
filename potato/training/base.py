@@ -288,18 +288,26 @@ class PredictionRecord:
     schema_name: str
     payload: Any
     confidence: Optional[float] = None
+    #: Scored on the held-out split but never stored or published: a
+    #: prediction made from the annotators' own answer (sam-finetune
+    #: refining their boxes) would show one annotator's work to the next.
+    heldout_only: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"instance_id": self.instance_id,
-                "schema_name": self.schema_name,
-                "payload": self.payload, "confidence": self.confidence}
+        out = {"instance_id": self.instance_id,
+               "schema_name": self.schema_name,
+               "payload": self.payload, "confidence": self.confidence}
+        if self.heldout_only:
+            out["heldout_only"] = True
+        return out
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PredictionRecord":
         return cls(instance_id=data["instance_id"],
                    schema_name=data["schema_name"],
                    payload=data.get("payload"),
-                   confidence=data.get("confidence"))
+                   confidence=data.get("confidence"),
+                   heldout_only=bool(data.get("heldout_only")))
 
 
 @dataclass

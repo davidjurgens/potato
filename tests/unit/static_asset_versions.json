@@ -8,8 +8,8 @@
     "version": "6"
   },
   "annotation.js": {
-    "sha256": "ab580c9513f4c1bf",
-    "version": "56"
+    "sha256": "229105a50096ebe3",
+    "version": "57"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -220,16 +220,16 @@
     "version": "1"
   },
   "geo-annotation.js": {
-    "sha256": "ba8707241550bcce",
-    "version": "2"
+    "sha256": "756d528e0df82723",
+    "version": "4"
   },
   "grounding-eval.css": {
     "sha256": "6f947831b1b92db6",
     "version": "2"
   },
   "grounding-eval.js": {
-    "sha256": "883d7b4f342a1b9d",
-    "version": "1"
+    "sha256": "55485326dc2dd9b7",
+    "version": "2"
   },
   "image-annotation.css": {
     "sha256": "4b620abc809b8aa0",
@@ -416,8 +416,8 @@
     "version": "2"
   },
   "region-caption.js": {
-    "sha256": "faf81b57803c5c91",
-    "version": "3"
+    "sha256": "3c43dbfa4962f66f",
+    "version": "5"
   },
   "rollout-eval.css": {
     "sha256": "6440ece9f7609138",

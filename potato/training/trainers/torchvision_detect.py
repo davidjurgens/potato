@@ -99,7 +99,7 @@ class TorchvisionDetectTrainer(Trainer):
     description: ClassVar[str] = (
         "Object detection: fine-tunes a torchvision Faster R-CNN on the "
         "annotated boxes (any shape trains as its bounding box).")
-    kinds: ClassVar[Tuple[str, ...]] = ("geometry",)
+    kinds: ClassVar[Tuple[str, ...]] = ("geometry", "geo")
     modalities: ClassVar[Tuple[str, ...]] = ("image",)
     install_hint: ClassVar[str] = INSTALL_HINT
     licence: ClassVar[str] = "BSD-3-Clause"
@@ -240,7 +240,9 @@ class TorchvisionDetectTrainer(Trainer):
                         flip: bool, device: str) -> Dict[str, Any]:
         import torch
 
-        boxes = torch.tensor(target["boxes"], dtype=torch.float32)
+        # An empty tile is a (0, 4) tensor, which the detector reads as "no
+        # object here"; torch.tensor([]) is (0,) and is refused.
+        boxes = torch.tensor(target["boxes"], dtype=torch.float32).reshape(-1, 4)
         if flip:
             boxes = torch.stack([width - boxes[:, 2], boxes[:, 1],
                                  width - boxes[:, 0], boxes[:, 3]], dim=1)
@@ -261,7 +263,8 @@ class TorchvisionDetectTrainer(Trainer):
     def _image_rows(self, bundle: BundleRef, split: str, schema: str,
                     report: ProgressReporter) -> List[Dict[str, Any]]:
         rows, missing = [], 0
-        for row in hf.rows_with_target(bundle.read_split(split), schema):
+        for row in hf.rows_with_target(bundle.read_split(split), schema,
+                                       negative_tiles=split == "train"):
             path = bundle.resolve_media(row["media"]) if row.get("media") else None
             if not _local_image(path):
                 missing += 1
@@ -315,8 +318,9 @@ class TorchvisionDetectTrainer(Trainer):
             target = self._row_target(row["targets"][schema.name], w, h, index)
             targets[row["instance_id"]] = target
             n_boxes += len(target["boxes"])
-        train = [r for r in train if targets[r["instance_id"]]["boxes"]]
-        if not train:
+        train = [r for r in train if targets[r["instance_id"]]["boxes"]
+                 or hf.is_negative_tile(r, schema.name)]
+        if not any(targets[r["instance_id"]]["boxes"] for r in train):
             raise TrainerError("None of the train images has usable %s for %r"
                                % (self.unit, schema.name))
         report.log("info", "%d train images with %d %s, %d val images, "

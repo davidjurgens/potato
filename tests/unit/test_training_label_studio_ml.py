@@ -451,14 +451,17 @@ def test_an_image_outside_the_task_directory_is_left_out(tmp_path, backend):
         shutil.copy(tmp_path / "img" / name, outside / name)
         context.items["i%03d" % n]["image"] = str(outside / name)
     try:
-        bundle, _, _ = build_bundle(context, str(tmp_path / "bundle"), ["boxes"])
+        bundle, stats, _ = build_bundle(context, str(tmp_path / "bundle"), ["boxes"])
         spec = _ls_spec(tmp_path, config, bundle, "boxes", backend,
                         media_url_prefix="/data/local-files/?d=")
         _, _, report = _run(spec)
     finally:
         shutil.rmtree(outside)
+    # The bundle leaves them out (audit 102), so they never reach the trainer.
+    assert stats.n_media_outside == 10
+    assert any("outside the task directory" in w for w in stats.warnings)
     logged = " ".join(e["msg"] for e in report.of_type("log"))
-    assert "outside the task directory" in logged and "not sent" in logged
+    assert "have no image file" in logged and "not sent" in logged
     sent = [t["data"]["image"] for r in FakeBackend.seen for t in r["body"]["tasks"]]
     assert sent and all(s.startswith("/data/local-files/?d=img/") for s in sent)
     assert _predictions(spec)

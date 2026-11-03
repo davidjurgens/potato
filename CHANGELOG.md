@@ -124,6 +124,36 @@ All notable changes to the Potato annotation platform are documented in this fil
   schemes, and relations, chains and events, drawn between predicted spans.
   The annotator's first edit stores every scheme's prelabels, not only the
   edited one's.
+- **Whole slides and other large images.** Detection and segmentation runs
+  cut slides (`.svs`, `.ndpi`, `.mrxs`, ...) and images of 4096 pixels or
+  more into tiles when the bundle is built, train on the tiles that hold
+  objects and a sample of empty ones, and predict over tissue only. Tile
+  predictions are merged back into one per image, in the coordinates the
+  deep-zoom viewer stores. A remote backend downloads the tiles, not the
+  slide. Settings are under `model_training.tiling`.
+- **Microscopy and maps train the detectors.** A `microscopy` scheme's ROIs
+  are trained on each annotated plane, rendered with the viewer's own
+  channels, and predicted back as ROIs with their `z` and `t`. A
+  `geo_annotation` scheme's features are trained on its GeoTIFF basemap
+  (georeferenced from the file's tags, reprojected with pyproj) or its
+  image and extent, and predicted back as GeoJSON that the map offers as
+  suggestions.
+- **Cell segmentation** (`cellpose`): fine-tunes Cellpose 3 or 4 on cell or
+  nucleus outlines and predicts polygons. `pip install cellpose`.
+- **Box-to-outline refinement** (`sam-finetune`): fine-tunes SAM's mask
+  decoder on the study's outlines, then outlines the boxes an earlier
+  detection run wrote back.
+- **Document layout** (`layoutlmv3`): LayoutLMv3 on the page's words and
+  their boxes, labelled by the regions drawn around them. PAGE XML imports in
+  `regions` mode now carry the page's words. The weights are CC BY-NC-SA, so
+  the licence is confirmed before a run.
+- **Vision-language fine-tuning** (`vlm-sft`): a VLM such as Qwen2.5-VL, with
+  LoRA or QLoRA, on text answers about images, region captions, grounding
+  boxes and points, and GUI clicks. A GUI trajectory gets a verdict suggestion
+  per step from where the model would click.
+- **Held-out scores for captions, grounding and GUI steps**: token F1 and
+  BLEU-4; accuracy at IoU 0.5 and absent accuracy; verdict macro-F1 and
+  click accuracy.
 - New settings: `model_training.trainer_params` (per-trainer defaults) and
   `model_training.auto_retrain.accept_licence`.
 - New extras: `embeddings` (`sentence-transformers`), `train-text`,
@@ -142,6 +172,35 @@ All notable changes to the Potato annotation platform are documented in this fil
   They were always `_`.
 
 ### Fixed
+
+- A training run on a deep-zoom study found none of its slides: items name
+  a file inside `media_directory`, and the bundle looked for it beside the
+  task directory.
+- A grounding scheme was offered for training, but every item came out
+  with no training target, so every run had nothing to fit.
+- Opening an item with a `grounding_eval` scheme saved it, so the item
+  counted as done before anyone answered: the widget's blank answer carried
+  its region type and was not recognised as blank. A one-item study ended
+  on arrival.
+- A prelabel could be saved as the annotator's answer as soon as the page
+  opened: a widget wrote it back with different spacing, or with the
+  label's colour filled in, and that read as an edit. A canvas that
+  `grounding_eval` or `region_caption` draws on now counts as changed only
+  when their own answer does.
+- Two training images with the same file name in different folders could
+  share one place in a run's data (one pair in 256), and the second item
+  trained on the first one's image.
+- A training run linked media from outside the project (an absolute path,
+  `../`, or a symbolic link out of `media/`) into its data, and a remote run
+  downloaded it. Such files are now left out with a warning.
+- Undoing a saved drawing back to what the item arrived with was not saved,
+  so the undone shape came back on reload.
+- On a map, deleting every feature, suggested or stored, was not saved, and
+  they came back on reload.
+- Scoring detections compared every prediction with every annotated object
+  at each of ten IoU thresholds. One slide with 3,000 nuclei took longer to
+  score than to train on; it now takes under a second, with the same
+  results.
 
 - Items landed in different splits depending on the order
   `model_training.splits` listed `train`, `val` and `test`.

@@ -175,7 +175,8 @@
             fail(state, 'The map library did not load. Reload the page; if it happens again, tell the researcher.');
             return;
         }
-        var needItem = cfg.basemap_field || (cfg.preannotation_field && !storedAnswer(state));
+        var needItem = cfg.basemap_field ||
+            ((cfg.preannotation_field || cfg.predictions_field) && !storedAnswer(state));
         var itemPromise = needItem ? fetch('/api/instance_data', {credentials: 'same-origin'})
             .then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })
             : Promise.resolve({});
@@ -441,6 +442,14 @@
             if (stored && cfg.coordinate_order === 'latlon') { stored = swapped(stored); }
             fromPre = !!stored;
         }
+        // A trained model's features (model_training write-back), under the
+        // scheme's name in the predictions field. Always lon/lat.
+        if (!stored && cfg.predictions_field && state.item) {
+            var predicted = state.item[cfg.predictions_field];
+            stored = predicted && typeof predicted === 'object'
+                ? usableSuggestions(cfg, asFeatureCollection(predicted[cfg.schema])) : null;
+            fromPre = !!stored;
+        }
         if (!stored) { return; }
         if (cfg.task === 'classify_region') {
             (stored.features || []).forEach(function (f) {
@@ -463,7 +472,9 @@
             if (!m || state.source.getFeatureById(id)) {
                 f.setId('f' + state.nextId);
             }
-            if (fromPre) { f.set('source', 'preannotation'); }
+            // A model's feature keeps saying so; a pre-filled one without a
+            // source is marked as pre-filled.
+            if (fromPre && !f.get('source')) { f.set('source', 'preannotation'); }
             if (!f.get('tool')) { f.set('tool', toolOf(f)); }
             if (state.cfg.task === 'pin' && f.getGeometry().getType() !== 'Point') { return; }
             state.source.addFeature(f);
@@ -474,6 +485,30 @@
         // them or presses "Accept suggestions": an item nobody looked at must
         // not count as labelled.
         state.pendingPre = fromPre && state.source.getFeatures().length > 0;
+        // Arrived with features, suggested or stored: deleting them all is
+        // then something to save.
+        state.hadAnswer = state.hadAnswer || !!stored;
+    }
+
+    /* A model's features this map can show as they are: a label the scheme
+       has and coordinates on the globe. Shown anyway, they were repaired as
+       they were drawn, and the repair was saved as the annotator's answer. */
+    function usableSuggestions(cfg, fc) {
+        if (!fc) { return null; }
+        var names = (cfg.labels || []).map(function (l) { return String(l.name); });
+        function onGlobe(coords) {
+            if (typeof coords[0] === 'number') {
+                return isFinite(coords[0]) && isFinite(coords[1]) &&
+                    Math.abs(coords[0]) <= 180 && Math.abs(coords[1]) <= 90;
+            }
+            return coords.length > 0 && coords.every(onGlobe);
+        }
+        var features = (fc.features || []).filter(function (f) {
+            var g = f && f.geometry, p = (f && f.properties) || {};
+            return g && Array.isArray(g.coordinates) && onGlobe(g.coordinates) &&
+                (!names.length || names.indexOf(String(p.label)) >= 0);
+        });
+        return features.length ? {type: 'FeatureCollection', features: features} : null;
     }
 
     function toolOf(f) {
@@ -524,7 +559,12 @@
         var h = state.input;
         state.touched = true;
         state.pendingPre = false;
-        h.value = obj.features.length ? JSON.stringify(obj) : '';
+        // Deleting every suggestion, or every stored feature, is an answer
+        // ("none of these"): saved as an empty collection, since an empty
+        // input is not saved and the suggestions or the old features came
+        // back on reload. On a map that arrived empty, nothing drawn is no
+        // answer at all.
+        h.value = (obj.features.length || state.hadAnswer) ? JSON.stringify(obj) : '';
         h.setAttribute('data-modified', 'true');
         h.dispatchEvent(new Event('change', {bubbles: true}));
         h.dispatchEvent(new Event('input', {bubbles: true}));
@@ -939,7 +979,8 @@
                 'data-feature-id': f.getId()}, [
                 el('span', {className: 'geo-swatch', style: 'background:' + color, 'aria-hidden': 'true'}),
                 el('span', {className: 'geo-feature-name', text: name +
-                    (f.get('source') === 'preannotation' ? ' (suggested)' : '')}),
+                    (state.pendingPre && (f.get('source') === 'preannotation'
+                        || f.get('source') === 'model') ? ' (suggested)' : '')}),
                 labelSelect(state, f.get('label'), 'Label for ' + name, function () {
                     f.set('label', this.value);
                     f.unset('source');

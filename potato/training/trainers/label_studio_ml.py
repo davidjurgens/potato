@@ -442,6 +442,17 @@ class LabelStudioMLTrainer(Trainer):
         headers = self._headers(params)
         size = int(params["batch_size"])
         items = list(items)
+        if card["kind"] == "geometry":
+            # An item whose image is missing (or outside the project, which
+            # the bundle leaves out) has nothing to send; sent, it went as an
+            # empty image path, and a backend fails the whole batch on it.
+            imageless = [i for i in items if not i.media]
+            if imageless:
+                items = [i for i in items if i.media]
+                report.log("warning", "%d item(s) have no image file in the run's data, "
+                                      "so they were not sent and have no prediction "
+                                      "(first: %s)" % (len(imageless),
+                                                      imageless[0].instance_id))
         if card["kind"] == "geometry" and params.get("media_url_prefix"):
             # A backend serving the task directory cannot find these, and
             # one missing file fails its whole batch with a 500: leave them

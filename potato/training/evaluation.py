@@ -33,6 +33,12 @@ distribution   1 - Jensen-Shannon divergence from the annotators'
 gloss          word and morpheme gloss accuracy
 conv. tree     node-answer accuracy and macro-F1, exact path accuracy
 pref. scale    direction accuracy, mean absolute error on the scale
+geo            as geometry, in the raster's pixels
+caption        token F1 per region and corpus BLEU-4
+grounding      accuracy at IoU 0.5 (point-in-region for points), mean IoU,
+               and how often an absent referent was declined
+gui_click      verdict accuracy and macro-F1 over judged steps; click
+               accuracy within 5% of the screenshot on approved steps
 =============  ==========================================================
 
 A classifier trained on soft targets (several annotators' votes as a
@@ -89,6 +95,14 @@ HEADLINE = {
     "gloss": "morpheme_accuracy",
     "conversation_tree": "node_macro_f1",
     "preference_scale": "direction_accuracy",
+    # Converted to the raster's pixels at bundle time, so scored as geometry.
+    "geo": "map_50",
+    "caption": "token_f1",
+    # acc@0.5, or point-in-region when the scheme collects points.
+    "grounding": "accuracy",
+    # Most steps an agent takes are right; accuracy flatters a model that
+    # always says "correct".
+    "gui_click": "verdict_macro_f1",
 }
 
 #: Kind to the ``structured_metrics`` function that scores it.
@@ -497,7 +511,7 @@ def score_split(rows: Iterable[Dict[str, Any]],
     it. Rows with no target for the schema are not scored. *trees* is for
     relations: whether every training answer is a dependency tree.
     """
-    gold_raw, pred_raw, ids, soft = [], [], [], []
+    gold_raw, pred_raw, ids, soft, steps = [], [], [], [], []
     for row in rows:
         target = (row.get("targets") or {}).get(schema_name)
         if target is None or target == "" or (target == [] and kind != "span"):
@@ -508,6 +522,7 @@ def score_split(rows: Iterable[Dict[str, Any]],
             continue
         gold_raw.append(target)
         soft.append((row.get("soft_targets") or {}).get(schema_name))
+        steps.append(row.get("steps"))
         ids.append(str(row.get("instance_id", "")))
         pred_raw.append(predictions.get((str(row.get("instance_id", "")),
                                          schema_name)))
@@ -534,8 +549,18 @@ def score_split(rows: Iterable[Dict[str, Any]],
                               [_text(p) for p in pred_raw])
     elif kind == "continuous":
         metrics = _score_numbers(gold_raw, pred_raw)
-    elif kind == "geometry":
+    elif kind in ("geometry", "geo"):
         metrics = _score_geometry(ids, gold_raw, pred_raw)
+    elif kind in ("caption", "grounding", "gui_click"):
+        from potato.training import vision_metrics
+        if kind == "caption":
+            metrics = vision_metrics.score_captions(gold_raw, pred_raw)
+        elif kind == "grounding":
+            metrics = vision_metrics.score_grounding(gold_raw, pred_raw)
+        else:
+            metrics = vision_metrics.score_gui_clicks(gold_raw, pred_raw, steps)
+        if not metrics:
+            return {}, n
     elif kind == "temporal":
         metrics = _score_segments(gold_raw, pred_raw)
     elif kind == "trajectory":
@@ -593,7 +618,9 @@ def score_predictions(bundle, predictions: Dict[Tuple[str, str], Any],
         prefix_extra = "" if position == 0 else "%s_" % name
         trees = _trained_on_trees(bundle, name) if kind == "relation" else None
         for split in splits:
-            metrics, n = score_split(bundle.read_split(split), predictions,
+            # A tiled image is scored whole, on its merged predictions.
+            from potato.training.tiling import scoring_rows
+            metrics, n = score_split(scoring_rows(bundle, split), predictions,
                                      name, kind, trees=trees)
             for metric, value in metrics.items():
                 out["%s_%s%s" % (split, prefix_extra, metric)] = round(value, 4)

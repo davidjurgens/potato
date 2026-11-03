@@ -119,7 +119,7 @@ class UltralyticsDetectTrainer(Trainer):
     description: ClassVar[str] = (
         "Object detection with Ultralytics YOLO, fine-tuned from a COCO "
         "checkpoint. AGPL-3.0: confirm the licence before the first run.")
-    kinds: ClassVar[Tuple[str, ...]] = ("geometry",)
+    kinds: ClassVar[Tuple[str, ...]] = ("geometry", "geo")
     modalities: ClassVar[Tuple[str, ...]] = ("image",)
     install_hint: ClassVar[str] = INSTALL_HINT
     licence: ClassVar[str] = "AGPL-3.0"
@@ -206,7 +206,8 @@ class UltralyticsDetectTrainer(Trainer):
             os.makedirs(image_dir, exist_ok=True)
             os.makedirs(label_dir, exist_ok=True)
             n_images = missing = 0
-            for row in hf.rows_with_target(bundle.read_split(split), schema):
+            for row in hf.rows_with_target(bundle.read_split(split), schema,
+                                           negative_tiles=split == "train"):
                 path = bundle.resolve_media(row["media"]) if row.get("media") else None
                 if not _local_image(path):
                     missing += 1
@@ -215,7 +216,8 @@ class UltralyticsDetectTrainer(Trainer):
                     width, height = img.size
                 lines = self._label_lines(row["targets"][schema], width, height,
                                           index)
-                if not lines:
+                # An empty label file is YOLO's background image.
+                if not lines and not hf.is_negative_tile(row, schema):
                     continue
                 stem = "%06d" % n_images
                 ext = os.path.splitext(path)[1].lower() or ".jpg"
@@ -225,7 +227,7 @@ class UltralyticsDetectTrainer(Trainer):
                 except OSError:
                     shutil.copy2(path, link)
                 with open(os.path.join(label_dir, stem + ".txt"), "w") as fh:
-                    fh.write("\n".join(lines) + "\n")
+                    fh.write("\n".join(lines) + "\n" if lines else "")
                 n_images += 1
                 counts[split + "_boxes"] = counts.get(split + "_boxes", 0) + len(lines)
             counts[split] = n_images

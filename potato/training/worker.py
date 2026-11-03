@@ -220,6 +220,13 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
         if not _keep_partial(report, predictions_path, n_predictions):
             predictions_path = ""
 
+    if predictions_path and bundle.manifest.get("tiling"):
+        try:
+            from potato.training.tiling import stitch_file
+            n_predictions = stitch_file(bundle, predictions_path)
+        except Exception as exc:  # noqa: BLE001
+            report.log("warning", "Could not merge the tile predictions: %s" % exc)
+
     metrics = dict(result.metrics)
     if predictions_path:
         try:
@@ -248,6 +255,14 @@ def run(spec: TrainingSpec, report: JsonlReporter) -> int:
             report.metric("val", name, value)
     except Exception as exc:  # noqa: BLE001
         report.log("warning", "Evaluation failed: %s" % exc)
+
+    if predictions_path:
+        # Scored per plane above; written back as one answer per item.
+        try:
+            from potato.training.rasters import finalize_file
+            n_predictions = finalize_file(bundle, predictions_path) or n_predictions
+        except Exception as exc:  # noqa: BLE001
+            report.log("warning", "Could not assemble the plane predictions: %s" % exc)
 
     report.result("success", model_version=result.model_version,
                   metrics=metrics, label_order=result.label_order,

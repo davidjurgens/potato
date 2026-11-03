@@ -3509,6 +3509,7 @@ def get_current_page_html(config, username):
             types_tag.string = "window.priorPhaseAnswerTypes = " + types_json + ";"
             target.append(types_tag)
 
+    mark_arrival_values(soup)
     from potato.server_utils.phase_flow import apply_condition_markup
     return apply_condition_markup(str(soup), context.get('potato_conditions'))
 
@@ -3818,6 +3819,20 @@ def visible_pre_annotations(username: str, instance_id: str, item):
     if held_out:
         pre_annotation_data = None
     return pre_annotation_data, engine_request, held_out
+
+
+def mark_arrival_values(soup) -> None:
+    """Copy each blob input's rendered value into ``data-arrived-value``.
+
+    The page's autosave saves a blob input only when it differs from what
+    the item arrived with. Read from the page, that baseline is not reliable:
+    on a hidden input, setting ``.value`` also rewrites the ``value``
+    attribute, so a widget that wrote an empty answer while it set itself up
+    (region_caption, before its canvas loaded) replaced the arrival value,
+    and the prelabel filling it in then read as an edit and was stored.
+    """
+    for element in soup.find_all("input", class_="annotation-data-input"):
+        element["data-arrived-value"] = element.get("value", "") or ""
 
 
 def render_page_with_annotations(username: str):
@@ -4505,6 +4520,26 @@ def render_page_with_annotations(username: str):
                 # An audio timeline is also one object, {"segments":
                 # [{start_time, end_time, label}]}, read back by
                 # AudioAnnotationManager._loadExistingAnnotations().
+                if scheme['annotation_type'] == 'image_annotation':
+                    # Shapes the canvas can draw as they are: a normalized
+                    # points/bbox outline converted, anything it would drop
+                    # or repair on load left out (the repair or the loss was
+                    # saved as the annotator's answer).
+                    from potato.server_utils.prelabel_values import client_shapes
+                    parsed = predicted_value
+                    if isinstance(parsed, str):
+                        try:
+                            parsed = json.loads(parsed)
+                        except ValueError:
+                            parsed = None
+                    if isinstance(parsed, list):
+                        labels = [str(l.get('name') if isinstance(l, dict) else l)
+                                  for l in scheme.get('labels') or []]
+                        predicted_value, dropped = client_shapes(parsed, labels or None)
+                        if dropped:
+                            logger.warning(
+                                f"Pre-annotation for image schema {schema_name}: {dropped} "
+                                f"shape(s) left out that the canvas cannot show as they are")
                 if isinstance(predicted_value, str):
                     annotations[schema_name]['_data'] = predicted_value
                 elif isinstance(predicted_value, list) or (
@@ -4522,7 +4557,9 @@ def render_page_with_annotations(username: str):
                 # A ranking's order, a BWS pick, soft-label sliders, a gloss
                 # or a conversation tree: hidden inputs (or sliders) the DOM
                 # walk below fills and marks server-set.
-                values = _prelabel_values(scheme, predicted_value)
+                values = _prelabel_values(scheme, predicted_value,
+                                          item.get_data() if hasattr(item, "get_data") else None,
+                                          config)
                 if values:
                     annotations[schema_name].update(values)
                 else:
@@ -4775,6 +4812,7 @@ def render_page_with_annotations(username: str):
 
     # If the admin has turned on AI hints, add them to the page
     soup = add_ai_hints(soup, instance_id)
+    mark_arrival_values(soup)
 
     rendered_html = str(soup)
 

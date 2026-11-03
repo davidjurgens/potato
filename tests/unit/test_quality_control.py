@@ -998,6 +998,8 @@ def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
 
     class StubUserState:
         instance_id_ordering = ["attn_runtime_001"]
+        def prelabels_resolved(self, instance_id):
+            return False
         def get_current_phase_and_page(self):
             return (UserPhase.ANNOTATION, "Sentiment Analysis with Quality Control")
         def get_current_instance(self):

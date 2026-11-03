@@ -42,7 +42,7 @@ class TorchvisionSegmentTrainer(TorchvisionDetectTrainer):
     description: ClassVar[str] = (
         "Instance segmentation: fine-tunes a torchvision Mask R-CNN on the "
         "annotated outlines (polygons, ellipses, masks) and predicts polygons.")
-    kinds: ClassVar[Tuple[str, ...]] = ("geometry",)
+    kinds: ClassVar[Tuple[str, ...]] = ("geometry", "geo")
     modalities: ClassVar[Tuple[str, ...]] = ("image",)
     install_hint: ClassVar[str] = INSTALL_HINT
     architectures: ClassVar[Dict[str, str]] = ARCHITECTURES
@@ -105,8 +105,9 @@ class TorchvisionSegmentTrainer(TorchvisionDetectTrainer):
         import torch
 
         tensors = super()._target_tensors(target, width, height, flip, device)
-        masks = numpy.stack([seg.rasterize(rings, width, height)
-                             for rings in target["outlines"]])
+        masks = (numpy.stack([seg.rasterize(rings, width, height)
+                              for rings in target["outlines"]])
+                 if target["outlines"] else numpy.zeros((0, height, width), "uint8"))
         if flip:
             masks = masks[:, :, ::-1].copy()
         tensors["masks"] = torch.from_numpy(masks).to(device)

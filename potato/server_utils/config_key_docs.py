@@ -3212,6 +3212,54 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "model_training.writeback": _D(
         "Publish a run's predictions as prelabels", type="object", category=AI,
     ),
+    "model_training.tiling": _D(
+        "Cut whole-slide and other large images into tiles when a detection "
+        "or segmentation bundle is built, and merge the tile predictions back "
+        "into one prediction per image", type="object", category=AI,
+    ),
+    "model_training.tiling.enabled": _D(
+        "auto tiles slide formats and images whose longer side is at least "
+        "auto_min_side; true tiles every image; false never tiles",
+        type="string", default="auto", category=AI,
+    ),
+    "model_training.tiling.auto_min_side": _D(
+        "Longer side, in pixels, from which auto tiles an image",
+        type="integer", default=4096, category=AI,
+    ),
+    "model_training.tiling.tile_size": _D(
+        "Side of a tile in the pixels the trainer sees", type="integer",
+        default=1024, category=AI,
+    ),
+    "model_training.tiling.overlap": _D(
+        "Pixels shared by neighbouring tiles, at most half of tile_size. An "
+        "object larger than this can be found in pieces", type="integer",
+        default=128, category=AI,
+    ),
+    "model_training.tiling.downsample": _D(
+        "Full-resolution pixels per tile pixel; 4 trains a 40x slide at 10x",
+        type="number", default=1.0, category=AI,
+    ),
+    "model_training.tiling.mpp": _D(
+        "Microns per tile pixel, from the slide's own resolution; overrides "
+        "downsample when the slide records one", type="number", category=AI,
+    ),
+    "model_training.tiling.background": _D(
+        "Empty tiles sampled per tile with an object, as negatives. Assumes "
+        "every object on an annotated image was drawn; set 0 when slides are "
+        "annotated sparsely", type="number", default=0.25, category=AI,
+    ),
+    "model_training.tiling.max_predict_tiles": _D(
+        "Most tiles predicted on per image; the ones with the most tissue "
+        "are kept", type="integer", default=2000, category=AI,
+    ),
+    "model_training.tiling.min_visible": _D(
+        "Share of an object that must be inside a tile to train on it there",
+        type="number", default=0.4, category=AI,
+    ),
+    "model_training.tiling.tissue_threshold": _D(
+        "Share of a slide tile that must be tissue to predict on it",
+        type="number", default=0.05, category=AI,
+    ),
     "model_training.writeback.schemas": _D(
         "Schemes whose predictions are published", type="array", category=AI,
     ),

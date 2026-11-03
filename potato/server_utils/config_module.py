@@ -705,6 +705,10 @@ KNOWN_CONFIG_KEYS = {
         "max_predictions_mb": None,
         # Per-trainer parameter defaults, merged under a run's own params.
         "trainer_params": None,
+        # Large images cut into tiles at bundle time (training/tiling.py).
+        "tiling": {"enabled", "auto_min_side", "tile_size", "overlap",
+                   "downsample", "mpp", "background", "max_predict_tiles",
+                   "min_visible", "tissue_threshold"},
     },
     # The labeling engine (potato/labeling_engine): machines label, humans
     # calibrate and certify. Sources, cascade and contracts are lists of

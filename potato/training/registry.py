@@ -177,6 +177,13 @@ TRAINING_KINDS = {
     "tree_annotation": "conversation_tree",
     "bws": "bws",
     "soft_label": "distribution",
+    # Agreement has no kind for these (they fall through to "unsupported"),
+    # but each answer is a training target: microscopy ROIs are image-widget
+    # shapes on a rendered plane, a geo answer is GeoJSON over a raster, and
+    # a judged GUI step is a click the agent got right or wrong.
+    "microscopy": "geometry",
+    "geo_annotation": "geo",
+    "gui_trajectory": "gui_click",
 }
 
 
@@ -420,7 +427,7 @@ def _register_builtins() -> None:
         "torchvision-detect", "potato.training.trainers.torchvision_detect",
         "TorchvisionDetectTrainer",
         hint="pip install 'potato-annotation[train-vision]'",
-        kinds=("geometry",), modalities=("image",),
+        kinds=("geometry", "geo"), modalities=("image",),
         description="Object detection: fine-tunes a torchvision Faster R-CNN "
                     "on the annotated boxes.",
         licence="BSD-3-Clause", commercial_use=True)
@@ -428,14 +435,14 @@ def _register_builtins() -> None:
         "torchvision-segment", "potato.training.trainers.torchvision_segment",
         "TorchvisionSegmentTrainer",
         hint="pip install 'potato-annotation[train-vision]'",
-        kinds=("geometry",), modalities=("image",),
+        kinds=("geometry", "geo"), modalities=("image",),
         description="Instance segmentation: fine-tunes a torchvision Mask "
                     "R-CNN on the annotated outlines and predicts polygons.",
         licence="BSD-3-Clause", commercial_use=True)
     register_lazy(
         "ultralytics-detect", "potato.training.trainers.ultralytics_detect",
         "UltralyticsDetectTrainer", hint="pip install ultralytics",
-        kinds=("geometry",), modalities=("image",),
+        kinds=("geometry", "geo"), modalities=("image",),
         description="Object detection with Ultralytics YOLO. AGPL-3.0: "
                     "confirm the licence before the first run.",
         licence="AGPL-3.0", commercial_use=False, licence_ack=True,
@@ -443,12 +450,49 @@ def _register_builtins() -> None:
     register_lazy(
         "ultralytics-segment", "potato.training.trainers.ultralytics_segment",
         "UltralyticsSegmentTrainer", hint="pip install ultralytics",
-        kinds=("geometry",), modalities=("image",),
+        kinds=("geometry", "geo"), modalities=("image",),
         description="Instance segmentation with Ultralytics YOLO-seg, "
                     "predicting polygons. AGPL-3.0: confirm the licence "
                     "before the first run.",
         licence="AGPL-3.0", commercial_use=False, licence_ack=True,
         licence_url="https://www.ultralytics.com/license")
+    register_lazy(
+        "sam-finetune", "potato.training.trainers.sam_finetune",
+        "SamFinetuneTrainer",
+        hint="pip install 'potato-annotation[train-vision]'",
+        kinds=("geometry",), modalities=("image",),
+        annotation_types=("image_annotation",),
+        description="Box-to-outline refinement: fine-tunes SAM's mask decoder "
+                    "on the annotated outlines, then outlines the boxes an "
+                    "earlier detection run wrote back.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "layoutlmv3", "potato.training.trainers.layoutlmv3", "LayoutLMv3Trainer",
+        hint="pip install 'potato-annotation[train-vision]'",
+        kinds=("geometry",), modalities=("image",),
+        annotation_types=("image_annotation",),
+        description="Document layout from the page's words and their "
+                    "positions (items need a words field). Weights are CC "
+                    "BY-NC-SA 4.0: confirm the licence before the first run.",
+        licence="CC-BY-NC-SA-4.0", commercial_use=False, licence_ack=True,
+        licence_url="https://huggingface.co/microsoft/layoutlmv3-base")
+    register_lazy(
+        "vlm-sft", "potato.training.trainers.vlm_sft", "VLMSFTTrainer",
+        hint="pip install 'potato-annotation[train-vision]'",
+        kinds=("text", "caption", "grounding", "gui_click"), modalities=("image",),
+        description="Fine-tunes a vision-language model (Qwen2.5-VL and "
+                    "others) on text answers about images, region captions, "
+                    "grounding boxes or GUI clicks, with LoRA or 4-bit QLoRA. "
+                    "Needs a GPU for real models.",
+        licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "cellpose", "potato.training.trainers.cellpose_trainer",
+        "CellposeTrainer", hint="pip install cellpose",
+        kinds=("geometry",), modalities=("image",),
+        annotation_types=("image_annotation", "microscopy"),
+        description="Cell and nucleus segmentation: fine-tunes Cellpose on "
+                    "the annotated outlines and predicts polygons.",
+        licence="BSD-3-Clause", commercial_use=True)
     register_lazy(
         "hf-audio-tagger", "potato.training.trainers.hf_audio_tagger",
         "HFAudioTaggerTrainer",

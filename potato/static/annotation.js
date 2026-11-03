@@ -159,6 +159,10 @@ function collectAnnotationDataInputs(labelAnnotations) {
             // ::: is the separator the other annotation types use.
             labelAnnotations[`${input.name}:::_data`] = input.value;
         }
+        // What is being saved is the new baseline for the autosave check:
+        // measured against the arrival value forever, an edit undone back to
+        // it after a save was never saved, and the undone shape came back.
+        if (input.dataset.autosaveWired === 'true') input._arrivedWith = input.value;
     });
     return labelAnnotations;
 }
@@ -2879,10 +2883,22 @@ function setupAnnotationDataAutosave() {
             // must not be saved: an empty answer still counts as an answer, so
             // an init-time save marks an untouched instance as done, and
             // `/annotate` ends the task as soon as nothing is left unanswered.
-            const arrivedWith = input.value;
+            // From the value the server rendered (mark_arrival_values), not
+            // the live value or the `value` attribute, which on a hidden
+            // input is the same thing: a widget that set itself up first
+            // (region_caption writes an empty caption list before its canvas
+            // loads) moved both, and the prelabel filling it in then read as
+            // an edit.
+            const rendered = input.getAttribute('data-arrived-value');
+            input._arrivedWith = rendered === null ? input.value : rendered;
             input.addEventListener('change', function () {
-                if (!annotationDataChanged(input, arrivedWith)) return;
-                scheduleAnnotationDataSave();
+                // Every event reschedules, changed or not: a widget redraws in
+                // bursts (region_caption went empty, then the image tool moved
+                // a polygon, then both came back), and a timer left running
+                // from the middle of the burst checked a passing state.
+                if (!annotationDataChanged(input, input._arrivedWith)
+                        && !textSaveTimer) return;
+                scheduleAnnotationDataSave({ onlyIfChanged: true });
             });
             debugLog('Set up autosave for annotation data input:', input.id);
         });
@@ -2899,7 +2915,39 @@ function setupAnnotationDataAutosave() {
 function annotationDataChanged(input, arrivedWith) {
     const now = input.value;
     if (now === arrivedWith) return false;
+    // A prelabel arrives as the server's JSON ({"a": 1, "b": 2}) and a
+    // widget writes it back compactly ({"a":1,"b":2}): the same answer,
+    // which byte comparison read as an edit, so an untouched prelabel was
+    // saved on arrival and the item counted as done.
+    if (sameAnnotationData(now, arrivedWith)) return false;
     return !(isEmptyAnnotationData(now) && isEmptyAnnotationData(arrivedWith));
+}
+
+function sameAnnotationData(a, b) {
+    if (!a || !b) return false;
+    // `color` is left out: the image tool fills in the label's colour on a
+    // shape that arrived without one, which is presentation, not an edit.
+    const canonical = (value) => {
+        if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+        if (value && typeof value === 'object') {
+            return '{' + Object.keys(value).filter((key) => key !== 'color').sort().map(
+                (key) => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
+        }
+        return JSON.stringify(value);
+    };
+    // A region_caption answer lists every region on its canvas, captioned or
+    // not; a region with no caption is no part of the answer. Compared as
+    // listed, a canvas prelabel with one more region than the caption
+    // prelabel read as an edit and both were stored on arrival.
+    const answered = (value) => (value && Array.isArray(value.captions))
+        ? Object.assign({}, value, {captions: value.captions.filter(
+            (entry) => entry && String(entry.caption || '').trim())})
+        : value;
+    try {
+        return canonical(answered(JSON.parse(a))) === canonical(answered(JSON.parse(b)));
+    } catch (e) {
+        return false;
+    }
 }
 
 function isEmptyAnnotationData(value) {
@@ -2934,13 +2982,40 @@ function isEmptyAnnotationData(value) {
  * because drawing arrives in bursts — a mask stroke fires on every path, and
  * dragging a box fires on every modify.
  */
-function scheduleAnnotationDataSave() {
+function scheduleAnnotationDataSave(options) {
     if (!currentInstance) return;
+    // A direct call from a widget always saves; the autosave listener's call
+    // checks again when the timer fires. A companion schema can pass through
+    // a different value while the page sets itself up (grounding_eval
+    // captured the canvas while annotation.js cleared it, then restored it),
+    // and a save scheduled for that moment stored an untouched prelabel.
+    // A save already pending that is not this check's own (a widget's
+    // direct call, or a text box's debounce, which shares the timer) stays a
+    // save that happens.
+    const onlyIfChanged = !!(options && options.onlyIfChanged)
+        && !(textSaveTimer && textSaveTimer !== conditionalSaveTimer);
     clearTimeout(textSaveTimer);
     textSaveTimer = setTimeout(() => {
         textSaveTimer = null;
+        conditionalSaveTimer = null;
+        if (onlyIfChanged && !anyAnnotationDataChanged()) return;
         saveAnnotations({ background: true });
     }, 800);
+    conditionalSaveTimer = onlyIfChanged ? textSaveTimer : null;
+}
+
+let conditionalSaveTimer = null;
+
+function anyAnnotationDataChanged() {
+    // A companion canvas (the image_annotation scheme grounding_eval draws
+    // on) shows one expression's regions at a time and changes whenever an
+    // expression is put on screen; grounding's own input says whether
+    // anything was edited. region_caption's canvas is not one: its shapes
+    // are the regions themselves, and deleting an uncaptioned one is an edit.
+    return Array.from(document.querySelectorAll('input.annotation-data-input'))
+        .some(input => input.dataset.autosaveWired === 'true'
+            && input.dataset.companionCanvas !== 'true'
+            && annotationDataChanged(input, input._arrivedWith));
 }
 
 window.scheduleAnnotationDataSave = scheduleAnnotationDataSave;

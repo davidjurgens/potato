@@ -108,6 +108,9 @@ def test_the_rendered_counter_never_exceeds_its_total(qc_manager, monkeypatch):
     class StubUserState:
         instance_id_ordering = DATASET_IDS + INJECTED_IDS
 
+        def prelabels_resolved(self, instance_id):
+            return False
+
         def get_current_phase_and_page(self):
             return (UserPhase.ANNOTATION, "QC study")
 

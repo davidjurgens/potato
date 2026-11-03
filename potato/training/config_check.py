@@ -130,6 +130,13 @@ def training_config_problems(config: Dict[str, Any]) -> List[str]:
         problems.append("%s.queue_max must be a whole number of at least 1 "
                         "(got %r)" % (where, queue_max))
 
+    if training.get("tiling") is not None:
+        from potato.training.tiling import TilingError, settings
+        try:
+            settings(config)
+        except TilingError as exc:
+            problems.append(str(exc))
+
     splits = training.get("splits")
     if splits is not None:
         if not isinstance(splits, dict) or not splits:

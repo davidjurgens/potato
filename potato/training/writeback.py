@@ -66,6 +66,7 @@ class WritebackReport:
     n_skipped_rejected: int = 0
     n_skipped_missing_item: int = 0
     n_skipped_empty: int = 0
+    n_skipped_heldout_only: int = 0
     schemas_enabled: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
@@ -79,6 +80,7 @@ class WritebackReport:
             "n_skipped_rejected": self.n_skipped_rejected,
             "n_skipped_missing_item": self.n_skipped_missing_item,
             "n_skipped_empty": self.n_skipped_empty,
+            "n_skipped_heldout_only": self.n_skipped_heldout_only,
             "schemas_enabled": list(self.schemas_enabled),
             "warnings": list(self.warnings),
             # The sentence the docs' troubleshooting quotes; the status
@@ -174,6 +176,11 @@ def ingest_predictions(run, predictions_path: str,
             confidence = record.get("confidence")
 
             if not instance_id or not schema_name:
+                continue
+            if record.get("heldout_only"):
+                # Made from an annotator's answer to score the model; not
+                # stored, so a restart's rehydration cannot publish it.
+                report.n_skipped_heldout_only += 1
                 continue
 
             to_store.append((instance_id, schema_name, payload, confidence))

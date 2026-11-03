@@ -27,7 +27,7 @@ import html
 import json
 import logging
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .identifier_utils import (
     escape_html_content, generate_element_identifier, generate_layout_attributes,
@@ -53,6 +53,21 @@ def _attr_json(obj: Any) -> str:
 def _task_dir() -> str:
     from potato.server_utils.config_module import config
     return config.get("task_dir") or os.getcwd()
+
+
+def _prediction_field(annotation_scheme: Dict[str, Any]) -> Optional[str]:
+    """The item field holding model predictions for this scheme, when the
+    study shows predictions: ``pre_annotation`` is on, or training writes
+    this scheme back. Read as suggestions, like ``preannotation_field``."""
+    from potato.server_utils.config_module import config
+    pre = config.get("pre_annotation") or {}
+    writeback = (config.get("model_training") or {}).get("writeback") or {}
+    if isinstance(pre, dict) and pre.get("enabled"):
+        return str(pre.get("field") or "predictions")
+    if isinstance(writeback, dict) and annotation_scheme.get("name") in (
+            writeback.get("schemas") or []):
+        return str(writeback.get("field") or "predictions")
+    return None
 
 
 def _client_basemap(annotation_scheme: Dict[str, Any]) -> Tuple[Dict[str, Any], Any]:
@@ -91,6 +106,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         "basemap": basemap,
         "basemap_field": annotation_scheme.get("basemap_field"),
         "preannotation_field": annotation_scheme.get("preannotation_field"),
+        "predictions_field": _prediction_field(annotation_scheme),
         "coordinate_order": annotation_scheme.get("coordinate_order", "lonlat"),
         "projection": annotation_scheme.get("projection", "EPSG:3857"),
         "center": annotation_scheme.get("center"),

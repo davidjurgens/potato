@@ -48,7 +48,7 @@ The research-tool formats take these:
 | `--min-confidence CONF` | BirdNET | Lowest detection confidence to import (default 0.1) |
 | `--label-column COLUMN` | Raven | Which selection-table column holds the label |
 | `--texts PATH` | W3C Web Annotation | A folder or JSONL of the texts the annotations target |
-| `--page-xml-mode lines\|regions` | PAGE XML | One item per text line to correct (default), or one per page to correct the layout |
+| `--page-xml-mode lines\|regions` | PAGE XML | One item per text line to correct (default), or one per page to correct the layout. In `regions` mode each page item also carries `words`, the transcribed words and their boxes, which the [`layoutlmv3` trainer](../ai-intelligence/model_training.md#layoutlmv3) reads |
 | `--iiif-size SIZE` | IIIF | Image size to request from an IIIF Image service, such as `max` or `!2000,2000` |
 | `--tei-unit p\|div\|s\|l` | TEI | What counts as one item (default `p`) |
 

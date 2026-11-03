@@ -178,15 +178,15 @@ class TestRegistry:
         assert names({"annotation_type": "pairwise", "name": "p",
                       "mode": "scale"}) == ["reward-model"]
         assert names({"annotation_type": "image_annotation", "name": "b"},
-                     "image") == ["label-studio-ml", "torchvision-detect",
-                                  "torchvision-segment", "ultralytics-detect",
-                                  "ultralytics-segment"]
+                     "image") == ["cellpose", "label-studio-ml", "layoutlmv3", "sam-finetune",
+                                  "torchvision-detect", "torchvision-segment",
+                                  "ultralytics-detect", "ultralytics-segment"]
         assert names({"annotation_type": "audio_annotation", "name": "c"},
                      "audio") == ["hf-audio-tagger"]
 
     def test_only_the_agpl_trainer_asks_for_a_licence(self):
         asking = [r["name"] for r in registry.list_trainers() if r["licence_ack"]]
-        assert asking == ["ultralytics-detect", "ultralytics-segment"]
+        assert asking == ["layoutlmv3", "ultralytics-detect", "ultralytics-segment"]
 
 
 # --------------------------------------------------------------- scoring

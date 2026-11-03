@@ -181,3 +181,121 @@ def tiny_byt5(directory: str) -> str:
     T5ForConditionalGeneration(config).save_pretrained(directory)
     ByT5Tokenizer().save_pretrained(directory)
     return directory
+
+
+def tiny_sam(directory: str, image_size: int = 64) -> str:
+    """A two-layer SAM whose processor resizes to *image_size*, saved to
+    *directory*. The real checkpoints work at 1024; the trainer reads every
+    size from the processor, so a small one exercises the same code."""
+    _seed()
+    from transformers import SamConfig, SamImageProcessor, SamModel, SamProcessor
+    from transformers.models.sam.configuration_sam import (
+        SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig)
+
+    vision = SamVisionConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
+                             image_size=image_size, patch_size=8, output_channels=32,
+                             mlp_dim=64, global_attn_indexes=[1], window_size=4,
+                             num_pos_feats=16)
+    prompt = SamPromptEncoderConfig(hidden_size=32, image_size=image_size, patch_size=8,
+                                    mask_input_channels=4)
+    decoder = SamMaskDecoderConfig(hidden_size=32, num_hidden_layers=2,
+                                   num_attention_heads=2, mlp_dim=64,
+                                   iou_head_hidden_dim=32)
+    config = SamConfig(vision_config=vision.to_dict(), prompt_encoder_config=prompt.to_dict(),
+                       mask_decoder_config=decoder.to_dict())
+    os.makedirs(directory, exist_ok=True)
+    SamModel(config).save_pretrained(directory)
+    low = image_size // 4
+    SamProcessor(image_processor=SamImageProcessor(
+        size={"longest_edge": image_size},
+        pad_size={"height": image_size, "width": image_size},
+        mask_size={"longest_edge": low},
+        mask_pad_size={"height": low, "width": low})).save_pretrained(directory)
+    return directory
+
+
+def tiny_layoutlmv3(directory: str, texts: Iterable[str], image_size: int = 32) -> str:
+    """A two-layer LayoutLMv3 with a byte-level BPE tokenizer trained on
+    *texts*, and a processor that runs no OCR, saved to *directory*."""
+    _seed()
+    from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors, trainers
+    from transformers import (LayoutLMv3Config, LayoutLMv3ForTokenClassification,
+                              LayoutLMv3ImageProcessor, LayoutLMv3Processor,
+                              LayoutLMv3TokenizerFast)
+
+    specials = ["<s>", "<pad>", "</s>", "<unk>", "<mask>"]
+    tok = Tokenizer(models.BPE(unk_token="<unk>"))
+    tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+    tok.decoder = decoders.ByteLevel()
+    tok.train_from_iterator(list(texts) * 3, trainers.BpeTrainer(
+        vocab_size=400, special_tokens=specials,
+        initial_alphabet=pre_tokenizers.ByteLevel.alphabet()))
+    tok.post_processor = processors.RobertaProcessing(
+        ("</s>", tok.token_to_id("</s>")), ("<s>", tok.token_to_id("<s>")))
+    tokenizer = LayoutLMv3TokenizerFast(
+        tokenizer_object=tok, bos_token="<s>", eos_token="</s>", sep_token="</s>",
+        cls_token="<s>", unk_token="<unk>", pad_token="<pad>", mask_token="<mask>",
+        add_prefix_space=True)
+    processor = LayoutLMv3Processor(
+        image_processor=LayoutLMv3ImageProcessor(
+            apply_ocr=False, size={"height": image_size, "width": image_size}),
+        tokenizer=tokenizer)
+    # 4 * coordinate_size + 2 * shape_size must equal hidden_size.
+    config = LayoutLMv3Config(
+        vocab_size=tokenizer.vocab_size, hidden_size=32, num_hidden_layers=2,
+        num_attention_heads=2, intermediate_size=64, input_size=image_size, patch_size=8,
+        max_position_embeddings=130, max_2d_position_embeddings=1024,
+        coordinate_size=4, shape_size=8, rel_pos_bins=8, max_rel_pos=16,
+        rel_2d_pos_bins=8, max_rel_2d_pos=32, pad_token_id=tokenizer.pad_token_id)
+    os.makedirs(directory, exist_ok=True)
+    LayoutLMv3ForTokenClassification(config).save_pretrained(directory)
+    processor.save_pretrained(directory)
+    return directory
+
+
+#: A plain chat template for the tiny VLM: "role: content" lines, the image
+#: as its placeholder token.
+_TINY_CHAT = ("{% for m in messages %}{{ m['role'] }}: {% if m['content'] is string %}"
+              "{{ m['content'] }}{% else %}{% for c in m['content'] %}"
+              "{% if c['type'] == 'image' %}<image>{% else %}{{ c['text'] }}{% endif %}"
+              "{% endfor %}{% endif %} ; {% endfor %}"
+              "{% if add_generation_prompt %}assistant: {% endif %}")
+
+
+def tiny_vlm(directory: str, texts: Iterable[str], image_size: int = 32) -> str:
+    """A two-layer LLaVA (a CLIP vision tower and a Llama) with a word-level
+    tokenizer built from *texts*, saved to *directory*. Loads through
+    AutoModelForImageTextToText and AutoProcessor, as a hub VLM does."""
+    _seed()
+    from transformers import (CLIPImageProcessor, CLIPVisionConfig, LlamaConfig,
+                              LlavaConfig, LlavaForConditionalGeneration, LlavaProcessor)
+
+    from tokenizers import processors
+    tokenizer = build_tokenizer(list(texts) + ['{ } [ ] , : " 0 1 2 3 4 5 6 7 8 9 '
+                                               'point bbox absent true'])
+    # A chat model's prompt ends where the answer starts; BERT's [SEP] after
+    # "assistant:" would be the last thing it saw before generating.
+    tokenizer.backend_tokenizer.post_processor = processors.TemplateProcessing(
+        single="$A", pair="$A $B")
+    tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+    tokenizer.eos_token = "<eos>"
+    tokenizer.chat_template = _TINY_CHAT
+    vision = CLIPVisionConfig(hidden_size=32, intermediate_size=64, num_hidden_layers=2,
+                              num_attention_heads=2, image_size=image_size, patch_size=8,
+                              projection_dim=32)
+    text = LlamaConfig(vocab_size=len(tokenizer), hidden_size=32, intermediate_size=64,
+                       num_hidden_layers=2, num_attention_heads=2, num_key_value_heads=2,
+                       max_position_embeddings=256, pad_token_id=tokenizer.pad_token_id,
+                       eos_token_id=tokenizer.convert_tokens_to_ids("<eos>"))
+    config = LlavaConfig(vision_config=vision.to_dict(), text_config=text.to_dict(),
+                         image_token_index=tokenizer.convert_tokens_to_ids("<image>"),
+                         vision_feature_select_strategy="default", vision_feature_layer=-1)
+    os.makedirs(directory, exist_ok=True)
+    LlavaForConditionalGeneration(config).save_pretrained(directory)
+    LlavaProcessor(image_processor=CLIPImageProcessor(
+        size={"shortest_edge": image_size},
+        crop_size={"height": image_size, "width": image_size}),
+        tokenizer=tokenizer, patch_size=8, vision_feature_select_strategy="default",
+        image_token="<image>", chat_template=_TINY_CHAT,
+        num_additional_image_tokens=1).save_pretrained(directory)
+    return directory

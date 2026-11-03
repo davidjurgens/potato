@@ -65,6 +65,9 @@ class _StubItem:
 class _StubUserState:
     instance_id_ordering = ["item-1"]
 
+    def prelabels_resolved(self, instance_id):
+        return False
+
     def get_current_phase_and_page(self):
         return (UserPhase.ANNOTATION, "page")
 

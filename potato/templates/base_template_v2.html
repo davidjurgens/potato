@@ -869,7 +869,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=5"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=56"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=57"></script>
     {% if trial_timing_client_config %}
     <!-- Timed trials: fixation, stimulus duration, deadline, key-to-label RT.
          After annotation.js, whose navigation and save it drives. -->
@@ -956,13 +956,13 @@
          the image annotation canvas beside it. Gated on its own container so a
          plain image project does not load it. -->
     {% if frontend_assets.grounding_eval | default(false) %}
-    <script src="{{ url_for('static', filename='grounding-eval.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='grounding-eval.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Region captioning: a description per region drawn on the image
          annotation canvas beside it. -->
     {% if frontend_assets.region_caption | default(false) %}
-    <script src="{{ url_for('static', filename='region-caption.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='region-caption.js') }}?v=5"></script>
     {% endif %}
 
     {% if frontend_assets.deepzoom | default(false) %}
@@ -1193,7 +1193,7 @@
     <!-- Maps (geo_annotation): OpenLayers, vendored; geotiff.js loads on demand -->
     {% if frontend_assets.geo_annotation | default(false) %}
     <script src="{{ url_for('static', filename='vendor/ol-10.9.0/ol.js') }}"></script>
-    <script src="{{ url_for('static', filename='geo-annotation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='geo-annotation.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Math (top-level `math: {enabled: true}`): KaTeX, vendored. The JSON

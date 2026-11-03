@@ -163,13 +163,41 @@ def _bitsandbytes_runs(torch) -> List[str]:
     return []
 
 
+def jit_kernel_problems(spec: TrainingSpec) -> List[str]:
+    """Whether torch can compile a kernel at run time on this GPU.
+
+    Some ops (``prod``, which Qwen2.5-VL's vision tower runs on every image)
+    are compiled by NVRTC when first used. A torch built for one CUDA beside
+    an NVRTC from another imports and runs everything else, and fails there,
+    after the whole model has loaded, with a page of kernel source. Checked
+    in ``validate``, on the machine that trains."""
+    device = str(getattr(spec.limits, "device", "auto") or "auto")
+    if device != "auto" and not device.startswith("cuda"):
+        return []
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return []
+        torch.ones(2, device="cuda").prod().item()
+    except ImportError:
+        return []
+    except Exception as exc:  # noqa: BLE001
+        lines = [line.strip() for line in str(exc).splitlines() if "nvrtc" in line.lower()]
+        return ["torch cannot compile GPU kernels on this machine (torch %s, CUDA %s): %s "
+                "Install the NVRTC package that matches torch's CUDA, such as "
+                "nvidia-cuda-nvrtc for CUDA %s."
+                % (torch.__version__, torch.version.cuda,
+                   lines[0] if lines else type(exc).__name__, torch.version.cuda)]
+    return []
+
+
 def quantize_unsupported(params: Dict[str, Any]) -> List[str]:
     """For trainers that do not load quantized weights: a problem when
     ``lora.quantize`` is set, so the run stops before the model loads."""
     lora = params.get("lora")
     if isinstance(lora, dict) and lora.get("quantize"):
-        return ["lora.quantize is supported by llm-sft, llm-dpo and "
-                "hf-text-classification, not this trainer"]
+        return ["lora.quantize is supported by llm-sft, llm-dpo, "
+                "hf-text-classification and vlm-sft, not this trainer"]
     return []
 
 
@@ -245,8 +273,8 @@ def apply_lora(model, lora: Optional[Dict[str, Any]], task_type: Optional[str],
 
     if lora.get("quantize") and not is_quantized(model):
         # The trainers that load quantized weights never get here.
-        raise TrainerError("lora.quantize is supported by llm-sft, llm-dpo "
-                           "and hf-text-classification, not this trainer")
+        raise TrainerError("lora.quantize is supported by llm-sft, llm-dpo, "
+                           "hf-text-classification and vlm-sft, not this trainer")
     kwargs = dict(r=int(lora["r"]), lora_alpha=int(lora["alpha"]),
                   lora_dropout=float(lora["dropout"]))
     if task_type:
@@ -485,15 +513,26 @@ _OFFSET_POSITIONS = ("roberta", "xlm-roberta", "camembert", "longformer",
                      "data2vec-text", "xmod")
 
 
-def rows_with_target(rows: Iterable[Dict[str, Any]], schema: str
-                     ) -> List[Dict[str, Any]]:
+def rows_with_target(rows: Iterable[Dict[str, Any]], schema: str,
+                     negative_tiles: bool = False) -> List[Dict[str, Any]]:
+    """Rows with a target for *schema*. With *negative_tiles*, also the
+    tiles of an annotated slide that hold no object (``tiling``'s background
+    sample): there, empty is an answer, where an empty untiled image is
+    indistinguishable from one nobody finished."""
     out = []
     for row in rows:
         target = (row.get("targets") or {}).get(schema)
+        if target == [] and negative_tiles and row.get("parent_id"):
+            out.append(row)
+            continue
         if target is None or target == "" or target == []:
             continue
         out.append(row)
     return out
+
+
+def is_negative_tile(row: Dict[str, Any], schema: str) -> bool:
+    return bool(row.get("parent_id")) and (row.get("targets") or {}).get(schema) == []
 
 
 COMMON_PARAMS = {

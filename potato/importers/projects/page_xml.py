@@ -22,7 +22,9 @@ Two modes (``options["page_xml_mode"]``):
     on an ``image_annotation`` scheme, labelled with the region's type
     (``paragraph``, ``heading``, ``marginalia``, ...; ``image``, ``table``,
     ... for non-text regions; ``line`` for text lines), for correcting the
-    layout analysis.
+    layout analysis. The page's transcribed words, with their boxes, go on
+    the item as ``words`` (each ``Word`` element, or each text line when the
+    file has no words), which is what the ``layoutlmv3`` trainer reads.
 
 A copy of each XML file is kept under ``page_xml/`` in the project, and the
 ``page_xml`` exporter writes the corrections into that copy, leaving the rest
@@ -97,6 +99,25 @@ def text_equiv(element) -> str:
         return unicode_el.text
     plain = next((c for c in equivs[0] if local(c.tag) == "PlainText"), None)
     return (plain.text or "") if plain is not None else ""
+
+
+def page_words(regions) -> List[Dict[str, Any]]:
+    """``[{text, bbox: [x0, y0, x1, y1]}]`` in page pixels, in the file's
+    order: every ``Word`` with text and coordinates, or a line's whole text
+    when the line has no words."""
+    out: List[Dict[str, Any]] = []
+    for region in regions:
+        for line in (l for l in region if local(l.tag) == "TextLine"):
+            parts = [w for w in line if local(w.tag) == "Word"] or [line]
+            for part in parts:
+                text = text_equiv(part).strip()
+                points = coords_points(part)
+                if not text or len(points) < 2:
+                    continue
+                xs, ys = [p[0] for p in points], [p[1] for p in points]
+                out.append({"text": text, "bbox": [round(min(xs), 1), round(min(ys), 1),
+                                                   round(max(xs), 1), round(max(ys), 1)]})
+    return out
 
 
 def region_label(element) -> str:
@@ -383,6 +404,9 @@ class PageXMLImporter:
         fields = {"text": f"{xml.name}: {len(regions)} regions, {n_lines} text lines",
                   "image_url": image_url, "image_width": width, "image_height": height,
                   "page": xml.name, "page_xml": rel_xml}
+        words = page_words(regions)
+        if words:
+            fields["words"] = words
         item = ProjectItem(instance_id=iid, fields=fields)
         if objects:
             item.predictions[LAYOUT_SCHEME] = objects

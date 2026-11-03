@@ -87,9 +87,14 @@ class TestRegistry:
         distinct answer. `text` is the type name the registry uses;
         `textbox` used to be the only one classified."""
         for annotation_type in ("text", "textbox"):
-            matches = [t.name for t in registry.trainers_for_schema(
-                {"annotation_type": annotation_type, "name": "notes"})]
-            assert matches == ["llm-sft"], annotation_type
+            scheme = {"annotation_type": annotation_type, "name": "notes"}
+            matches = sorted(t.name for t in registry.trainers_for_schema(scheme))
+            assert matches == ["llm-sft", "vlm-sft"], annotation_type
+            # vlm-sft writes answers about images, llm-sft about text.
+            assert [t.name for t in registry.trainers_for_schema(scheme, "text")] \
+                == ["llm-sft"]
+            assert [t.name for t in registry.trainers_for_schema(scheme, "image")] \
+                == ["vlm-sft"]
 
     def test_an_unknown_type_has_no_trainer(self):
         assert registry.trainers_for_schema(

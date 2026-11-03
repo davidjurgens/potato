@@ -160,6 +160,16 @@ class TestLayout:
         assert ("heading", "r1") in labels and ("image", "img1") in labels and ("line", "r2l3") in labels
         assert set(result.schemes[0]["labels"]) == {"heading", "paragraph", "marginalia", "image", "line"}
 
+    def test_regions_mode_puts_the_words_on_the_item(self, out):
+        """The words, with their boxes, are what the layoutlmv3 trainer reads."""
+        _project_dir, result = _project(out, mode="regions")
+        words = result.items[0].fields["words"]
+        assert words and all(w["text"] and len(w["bbox"]) == 4 for w in words)
+        # The fixture's words are 8 px wide, 10 px apart.
+        first, second = words[0], words[1]
+        assert first["bbox"][2] - first["bbox"][0] == 8
+        assert second["bbox"][0] - first["bbox"][0] == 10
+
     def test_moved_deleted_and_new_shapes(self, out):
         project, result = _project(out, mode="regions")
         item = result.items[0]

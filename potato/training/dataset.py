@@ -27,6 +27,7 @@ import shutil
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from potato.training import rasters, tiling
 from potato.training.base import BundleRef, SchemaSpec, TrainerError
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,9 @@ _MODALITY_BY_TYPE = {
     "image_annotation": "image",
     "region_caption": "image",
     "grounding_eval": "image",
+    "microscopy": "image",
+    "geo_annotation": "image",
+    "gui_trajectory": "image",
     "audio_annotation": "audio",
     "video_annotation": "video",
     "tiered_annotation": "audio",
@@ -75,10 +79,14 @@ class BundleStats:
         self.n_skipped_no_label = 0
         self.n_media_linked = 0
         self.n_media_missing = 0
+        #: Of the missing, files outside the task and media directories.
+        self.n_media_outside = 0
         self.splits: Dict[str, int] = {}
         #: Per reason, items put in train whatever their hash split said, and
         #: how many of those the hash had held out.
         self.forced_train: Dict[str, Dict[str, int]] = {}
+        #: Images cut into tiles, and how many tiles they made.
+        self.tiles: Dict[str, int] = {}
         self.warnings: List[str] = []
 
     def to_dict(self) -> Dict[str, Any]:
@@ -86,12 +94,16 @@ class BundleStats:
                 "n_skipped_no_label": self.n_skipped_no_label,
                 "n_media_linked": self.n_media_linked,
                 "n_media_missing": self.n_media_missing,
+                "n_media_outside": self.n_media_outside,
                 "splits": dict(self.splits),
                 "forced_train": {k: dict(v) for k, v in self.forced_train.items()},
+                "tiles": dict(self.tiles),
                 "warnings": list(self.warnings)}
 
 
-_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif")
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif",
+                   # Whole-slide formats (openslide), cut into tiles at bundle time.
+                   ".svs", ".ndpi", ".mrxs", ".scn", ".vms", ".vmu", ".bif", ".svslide")
 
 
 def detect_modality(schemes: Sequence[Dict[str, Any]],
@@ -365,7 +377,10 @@ def _target_for(spec: SchemaSpec, value_map: Any,
         return _labels_of(value_map)
     if spec.kind == "span":
         return (value_map or {}).get("_spans", []) if isinstance(value_map, dict) else []
-    if spec.kind in ("geometry", "grounding"):
+    if spec.kind == "geometry" and spec.annotation_type == "microscopy":
+        from potato.training.vision import microscopy_target
+        return microscopy_target(value_map)
+    if spec.kind == "geometry":
         return (value_map or {}).get("_objects", []) if isinstance(value_map, dict) else []
     if spec.kind == "text":
         # A text box stores {"text_box": "what they wrote"}. The label-name
@@ -391,6 +406,23 @@ def _target_for(spec: SchemaSpec, value_map: Any,
 
 #: Kinds whose inputs are an agent trace on the item, not its text field.
 TRACE_KINDS = ("trajectory", "trace")
+
+from potato.training.vision import VISION_KINDS  # noqa: E402
+
+
+def _vision_target(kind: str, scheme: Dict[str, Any], value_map: Any,
+                   item_data: Dict[str, Any]) -> Any:
+    """The target for a scheme that stores its answer as one JSON blob."""
+    from potato.training import vision
+    if kind == "geo":
+        return vision.geo_target(value_map)
+    if kind == "caption":
+        return vision.caption_target(value_map)
+    if kind == "grounding":
+        return vision.grounding_target(scheme, value_map, item_data)
+    if kind == "gui_click":
+        return vision.gui_target(value_map)
+    return None
 
 
 def _render_step(step: Any) -> str:
@@ -602,15 +634,47 @@ def _media_reference(item_data: Dict[str, Any],
     return None
 
 
+def _image_size(path: str) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` from an image header, or None."""
+    try:
+        from PIL import Image
+        with Image.open(path) as image:
+            return image.size
+    except Exception:
+        return None
+
+
+def _media_field(config: Dict[str, Any], scheme: Dict[str, Any]) -> Optional[str]:
+    """The item field that names a scheme's image. A caption or grounding
+    scheme draws on an image_annotation scheme's canvas, whose
+    ``source_field`` is the image; a microscopy scheme names it
+    ``image_key``."""
+    if scheme.get("source_field"):
+        return scheme["source_field"]
+    if scheme.get("annotation_type") == "microscopy":
+        return scheme.get("image_key") or "image"
+    if scheme.get("annotation_type") in ("region_caption", "grounding_eval"):
+        for other in config.get("annotation_schemes") or []:
+            if isinstance(other, dict) and other.get("annotation_type") == "image_annotation":
+                return other.get("source_field")
+    return None
+
+
 def _media_file(reference: str, task_dir: str, media_directory: str = "media") -> str:
     """A media reference as a filesystem path. ``/media/x.jpg`` is the URL the
     annotation page serves from ``<task_dir>/<media_directory>/``; read as a
     path it pointed at /media, so an image study's files were never found."""
+    base = (media_directory if os.path.isabs(media_directory)
+            else os.path.join(task_dir, media_directory))
     if reference.startswith("/media/"):
-        base = (media_directory if os.path.isabs(media_directory)
-                else os.path.join(task_dir, media_directory))
         return os.path.join(base, reference[len("/media/"):])
-    return reference if os.path.isabs(reference) else os.path.join(task_dir, reference)
+    if os.path.isabs(reference):
+        return reference
+    # A bare name is the deep-zoom viewer's convention ("a path inside
+    # media_directory"): found only there, it was missing for every slide.
+    beside = os.path.join(task_dir, reference)
+    inside = os.path.join(base, reference)
+    return inside if not os.path.exists(beside) and os.path.exists(inside) else beside
 
 
 def _source_path(source: str, task_dir: str) -> str:
@@ -634,24 +698,102 @@ def _link_media(reference: str, task_dir: str, media_dir: str,
     if reference.startswith(("http://", "https://")):
         # A remote asset is the trainer's problem to fetch; record it as-is.
         return reference
+    if reference.startswith("data:"):
+        return _write_data_uri(reference, media_dir, stats)
 
     source = _media_file(reference, task_dir, media_directory)
-    if not os.path.isfile(source):
+    # A directory is an OME-Zarr image, rendered to planes later.
+    if not os.path.exists(source):
         stats.n_media_missing += 1
         return None
+    # Only files inside the project, as the annotation page serves them. An
+    # absolute path, a ../ path or a symlink out of media/ was linked in, and
+    # a remote run's archive follows links: /etc/passwd went to the GPU host.
+    real = os.path.realpath(source)
+    base = (media_directory if os.path.isabs(media_directory)
+            else os.path.join(task_dir, media_directory))
+    roots = [os.path.realpath(task_dir), os.path.realpath(base)]
+    if not any(real == root or real.startswith(root + os.sep) for root in roots):
+        stats.n_media_missing += 1
+        stats.n_media_outside += 1
+        return None
 
-    digest = hashlib.sha1(os.path.abspath(source).encode()).hexdigest()[:2]
+    # A folder per source file. Two folders of 001.jpg shared a two-digit
+    # folder one time in 256, and the second item trained on the first's image.
+    digest = hashlib.sha1(real.encode()).hexdigest()[:16]
     dest_dir = os.path.join(media_dir, digest)
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, os.path.basename(source))
 
-    if not os.path.exists(dest):
+    if not os.path.lexists(dest):
         try:
-            os.symlink(os.path.abspath(source), dest)
+            os.symlink(real, dest)
         except (OSError, NotImplementedError):
-            shutil.copy2(source, dest)
+            shutil.copy2(real, dest)
     stats.n_media_linked += 1
     return os.path.join(digest, os.path.basename(source))
+
+
+_DATA_URI_SUFFIXES = {"image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg",
+                      "image/webp": ".webp", "image/gif": ".gif"}
+
+
+def _write_data_uri(reference: str, media_dir: str,
+                    stats: BundleStats) -> Optional[str]:
+    """An inline ``data:image/...;base64,`` screenshot as a file in the
+    bundle, named by its content so a repeated screenshot is written once."""
+    import base64
+    head, _, payload = reference.partition(",")
+    mime = head[5:].split(";")[0].lower()
+    if ";base64" not in head or mime not in _DATA_URI_SUFFIXES:
+        stats.n_media_missing += 1
+        return None
+    try:
+        raw = base64.b64decode(payload, validate=False)
+    except (ValueError, TypeError):
+        stats.n_media_missing += 1
+        return None
+    digest = hashlib.sha1(raw).hexdigest()
+    name = "inline-%s%s" % (digest[:16], _DATA_URI_SUFFIXES[mime])
+    dest_dir = os.path.join(media_dir, digest[:2])
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, name)
+    if not os.path.exists(dest):
+        with open(dest, "wb") as fh:
+            fh.write(raw)
+    stats.n_media_linked += 1
+    return os.path.join(digest[:2], name)
+
+
+def _prune_media(media_dir: str, rows: Sequence[Dict[str, Any]]) -> None:
+    """Remove the links to sources no row reads any more. A tiled slide or a
+    rendered microscopy stack is replaced by its tiles or planes, and the
+    link left behind would be dereferenced into the archive a remote run
+    downloads: the whole slide, which tiling exists to avoid."""
+    used = set()
+    for row in rows:
+        if row.get("media"):
+            used.add(os.path.normpath(str(row["media"])))
+        for step in row.get("steps") or []:
+            if isinstance(step, dict) and step.get("media"):
+                used.add(os.path.normpath(str(step["media"])))
+    if not os.path.isdir(media_dir):
+        return
+    for folder in os.listdir(media_dir):
+        if folder in ("tiles", "planes"):
+            continue
+        path = os.path.join(media_dir, folder)
+        if not os.path.isdir(path) or os.path.islink(path):
+            continue
+        for name in os.listdir(path):
+            if os.path.normpath(os.path.join(folder, name)) not in used:
+                target = os.path.join(path, name)
+                if os.path.islink(target) or os.path.isfile(target):
+                    os.remove(target)
+                elif os.path.isdir(target):
+                    shutil.rmtree(target)
+        if not os.listdir(path):
+            os.rmdir(path)
 
 
 def _force_into_train(partitioned: Dict[str, List[Dict[str, Any]]],
@@ -813,7 +955,7 @@ def build_bundle(
             return
         if by_name.get(schema_names[0], {}).get("annotation_type") in TEXT_SOURCE_TYPES:
             return
-        source_field = by_name.get(schema_names[0], {}).get("source_field")
+        source_field = _media_field(config, by_name.get(schema_names[0], {}))
         reference = _media_reference(item_data, source_field)
         if reference:
             linked = _link_media(reference, task_dir, media_dir, stats,
@@ -866,6 +1008,81 @@ def build_bundle(
             from potato.igt import initial_answer
             row["gloss_input"] = initial_answer(item_data, primary)
 
+    def attach_steps(row, item_data):
+        # A GUI trace's input is its steps, each with its own screenshot.
+        if kinds.get(schema_names[0]) != "gui_click":
+            return
+        from potato.training.vision import gui_steps
+        pixels = primary.get("coord_space", "normalized") == "pixels"
+        steps = []
+        for step in gui_steps(primary, item_data):
+            shot = step.pop("screenshot")
+            if shot and include_media:
+                linked = _link_media(shot, task_dir, media_dir, stats,
+                                     media_directory)
+                if linked:
+                    step["media"] = linked
+                else:
+                    step["media_missing"] = shot[:200]
+            if pixels and step.get("point"):
+                # Clicks travel normalized, as the page draws them; a pixel
+                # click needs its screenshot's size, and without the file it
+                # cannot be placed at all.
+                size = _image_size(os.path.join(media_dir, step["media"])) \
+                    if step.get("media") else None
+                step["point"] = ({"x": step["point"]["x"] / size[0],
+                                  "y": step["point"]["y"] / size[1]}
+                                 if size else None)
+            steps.append(step)
+        row["steps"] = steps
+
+    prediction_field = ((config.get("model_training") or {}).get("writeback") or {}
+                        ).get("field") or "predictions"
+
+    def attach_basemap(row, item_data):
+        # A geo answer is drawn over the item's raster basemap.
+        if kinds.get(schema_names[0]) == "geo":
+            basemap = rasters.item_basemap(primary, item_data)
+            if basemap:
+                row["basemap"] = basemap
+
+    def attach_expressions(row, item_data):
+        # The phrases a grounding scheme asks about, so an item nobody has
+        # answered yet can still be predicted on.
+        if kinds.get(schema_names[0]) == "grounding" and (
+                primary.get("expression_source") or "field") == "field":
+            from potato.grounding.routes import normalize_expressions
+            expressions = normalize_expressions(
+                item_data.get(primary.get("expressions_field", "expressions")))
+            if expressions:
+                row["expressions"] = [{"id": e["id"], "text": e["text"]}
+                                      for e in expressions]
+                row["region_type"] = primary.get("region_type", "box")
+
+    def attach_words(row, item_data):
+        # A page's words with their boxes, what a layout model reads; Potato
+        # runs no OCR, so they come from the item (a PDF text layer, a
+        # PAGE-XML transcription).
+        words = item_data.get("words")
+        if kinds.get(schema_names[0]) == "geometry" and isinstance(words, list) and words:
+            row["words"] = [w for w in words if isinstance(w, dict)]
+
+    def attach_prior(row, item_data):
+        # The shapes an earlier run already put on the item (a detector's
+        # boxes), which a refining trainer such as sam-finetune starts from.
+        if kinds.get(schema_names[0]) != "geometry":
+            return
+        prior = (item_data.get(prediction_field) or {}) if isinstance(
+            item_data.get(prediction_field), dict) else {}
+        objects = prior.get(schema_names[0])
+        if isinstance(objects, str):
+            try:
+                objects = json.loads(objects)
+            except ValueError:
+                objects = None
+        if isinstance(objects, list) and objects:
+            row["prior"] = [o for o in objects if isinstance(o, dict)]
+
     def unlabeled(iid, item_data):
         if include_unlabeled:
             row = {"instance_id": iid,
@@ -873,6 +1090,11 @@ def build_bundle(
             attach_media(row, item_data)
             attach_trace(row, item_data)
             attach_tree(row, item_data)
+            attach_steps(row, item_data)
+            attach_prior(row, item_data)
+            attach_basemap(row, item_data)
+            attach_words(row, item_data)
+            attach_expressions(row, item_data)
             if not trace_inputs:
                 attach_candidates(row, item_data)
             unlabeled_rows.append(row)
@@ -899,6 +1121,9 @@ def build_bundle(
             if spec_kind in TRACE_KINDS:
                 target = _agent_trace_target(spec_kind, by_name.get(name, {}),
                                              resolved[name], item_data)
+            elif spec_kind in VISION_KINDS:
+                target = _vision_target(spec_kind, by_name.get(name, {}),
+                                        resolved[name], item_data)
             else:
                 target = _target_for(fake_spec, resolved[name], by_name.get(name))
             if target is None or target == [] or target == "":
@@ -935,6 +1160,11 @@ def build_bundle(
                     item for tier in rank_tiers(target) for item in tier)
             elif spec_kind == "distribution":
                 seen_labels[name].update(str(t) for t in target)
+            elif spec_kind == "geo":
+                seen_labels[name].update(
+                    str(f["properties"]["label"]) for f in target)
+            elif spec_kind == "gui_click":
+                seen_labels[name].update(str(s["verdict"]) for s in target)
             elif spec_kind in ("relation", "event", "coreference"):
                 # The link, event or entity types: what the pair classifier
                 # predicts. Mention labels are in each target's spans.
@@ -960,6 +1190,11 @@ def build_bundle(
         attach_media(row, item_data)
         attach_trace(row, item_data)
         attach_tree(row, item_data)
+        attach_steps(row, item_data)
+        attach_prior(row, item_data)
+        attach_basemap(row, item_data)
+        attach_words(row, item_data)
+        attach_expressions(row, item_data)
         trajectory = targets.get(schema_names[0]) \
             if kinds.get(schema_names[0]) == "trajectory" else None
         # The corrected steps first, so a preference model's "A" means it
@@ -992,8 +1227,81 @@ def build_bundle(
         _force_into_train(partitioned, rows, force_train, stats)
 
     split_files: Dict[str, Dict[str, Any]] = {}
-    split_ids: Dict[str, List[str]] = {}
+    split_ids: Dict[str, List[str]] = {
+        name: [r["instance_id"] for r in split_rows]
+        for name, split_rows in partitioned.items()}
     written_paths: List[str] = []
+
+    # A geo answer becomes shapes on its raster, written as an image.
+    if include_media and kinds.get(schema_names[0]) == "geo":
+        problems = []
+        for split_name in list(partitioned):
+            partitioned[split_name] = rasters.geo_rasters(
+                partitioned[split_name], media_dir, schema_names[0], task_dir,
+                media_directory, problems)
+        if unlabeled_rows:
+            unlabeled_rows = rasters.geo_rasters(
+                unlabeled_rows, media_dir, schema_names[0], task_dir,
+                media_directory, problems)
+        for problem in problems[:20]:
+            stats.warnings.append("Left out %s." % problem)
+
+    # Multichannel microscopy becomes one rendered image per annotated plane.
+    if include_media and primary.get("annotation_type") in rasters.PLANE_TYPES:
+        problems: List[str] = []
+        for split_name in list(partitioned):
+            partitioned[split_name] = rasters.render_planes(
+                partitioned[split_name], split_name, media_dir, schema_names[0],
+                primary, task_dir, media_directory, problems)
+        if unlabeled_rows:
+            unlabeled_rows = rasters.render_planes(
+                unlabeled_rows, "unlabeled", media_dir, schema_names[0], primary,
+                task_dir, media_directory, problems)
+        for problem in problems:
+            stats.warnings.append("Could not render %s; left out." % problem)
+
+    # Large images become tiles, after the split so that one slide's tiles
+    # stay in one split. The ids above stay the images' own: the run ledger
+    # and write-back see images, not tiles.
+    tiling_manifest = None
+    if include_media and kinds.get(schema_names[0]) in tiling.TILED_KINDS:
+        tiling_opts = tiling.settings(config)
+        if tiling_opts["enabled"] is not False:
+            parents: List[Dict[str, Any]] = []
+            summary: Dict[str, Any] = {}
+            for split_name in list(partitioned):
+                partitioned[split_name], cut = tiling.tile_rows(
+                    partitioned[split_name], split_name, dest, media_dir,
+                    schema_names, tiling_opts, split_seed, summary)
+                parents.extend(cut)
+            if unlabeled_rows:
+                unlabeled_rows, cut = tiling.tile_rows(
+                    unlabeled_rows, "unlabeled", dest, media_dir, schema_names,
+                    tiling_opts, split_seed, summary)
+                parents.extend(cut)
+            for problem in summary.get("unreadable", []):
+                stats.warnings.append("Could not tile %s; trained on it whole." % problem)
+            if summary.get("capped"):
+                stats.warnings.append(
+                    "%d image(s) had more than %d tissue tiles; predicted on the "
+                    "%d with the most tissue. Raise model_training.tiling."
+                    "max_predict_tiles or downsample to cover them."
+                    % (len(summary["capped"]), tiling_opts["max_predict_tiles"],
+                       tiling_opts["max_predict_tiles"]))
+            if parents:
+                path = os.path.join(dest, tiling.PARENTS_FILE)
+                with open(path, "w") as fh:
+                    for parent in parents:
+                        fh.write(json.dumps(parent, ensure_ascii=False) + "\n")
+                written_paths.append(path)
+                stats.tiles = {"n_items": summary.get("n_items", 0),
+                               "n_tiles": summary.get("n_tiles", 0)}
+                tiling_manifest = dict(tiling_opts, parents=tiling.PARENTS_FILE)
+
+    if include_media and (tiling_manifest or kinds.get(schema_names[0]) == "geo"
+                          or primary.get("annotation_type") in rasters.PLANE_TYPES):
+        _prune_media(media_dir, [r for rows_ in partitioned.values() for r in rows_]
+                     + unlabeled_rows)
 
     for split_name, split_rows in partitioned.items():
         filename = "%s.jsonl" % split_name
@@ -1003,8 +1311,7 @@ def build_bundle(
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         split_files[split_name] = {"path": filename, "format": "jsonl",
                                    "n": len(split_rows)}
-        split_ids[split_name] = [r["instance_id"] for r in split_rows]
-        stats.splits[split_name] = len(split_rows)
+        stats.splits[split_name] = len(split_ids[split_name])
         written_paths.append(path)
 
     if unlabeled_rows:
@@ -1017,6 +1324,12 @@ def build_bundle(
         split_files["unlabeled"] = {"path": "unlabeled.jsonl", "format": "jsonl",
                                     "n": len(unlabeled_rows), "predict_only": True}
         written_paths.append(path)
+
+    if stats.n_media_outside:
+        stats.warnings.append(
+            "%d media file(s) are outside the task directory and media_directory "
+            "and were left out. Move them into media_directory to train on them."
+            % stats.n_media_outside)
 
     if not stats.splits.get("train"):
         stats.warnings.append(
@@ -1038,6 +1351,8 @@ def build_bundle(
         "stats": stats.to_dict(),
         "digest": _digest_of(written_paths),
     }
+    if tiling_manifest:
+        manifest["tiling"] = tiling_manifest
 
     with open(os.path.join(dest, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=2)

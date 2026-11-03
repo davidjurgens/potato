@@ -30,6 +30,24 @@
 (function (global) {
     'use strict';
 
+    /** Mark an image_annotation scheme's input as a companion canvas. */
+    function markCompanionCanvas(container) {
+        const schema = container.getAttribute('data-schema');
+        const input = schema && document.querySelector(
+            'input.annotation-data-input[name="' + CSS.escape(schema) + '"]');
+        if (input) input.dataset.companionCanvas = 'true';
+    }
+
+    /** Same shapes: type, label and coordinates to 1e-4, in order. */
+    function sameRegions(a, b) {
+        if (a.length !== b.length) return false;
+        const key = (region) => JSON.stringify(
+            [region.type, region.label, region.coordinates],
+            (k, v) => (typeof v === 'number' ? Math.round(v * 1e4) / 1e4 : v));
+        return a.every((region, n) => key(region) === key(b[n]));
+    }
+
+
     class GroundingEvalManager {
         constructor(container, config) {
             this.container = container;
@@ -105,6 +123,10 @@
             for (const element of containers) {
                 if (element.annotationManager) {
                     this.imageManager = element.annotationManager;
+                    // The canvas now mirrors this scheme's answer: what it
+                    // shows is this scheme's work, so annotation.js's autosave
+                    // check reads the change from this scheme's input.
+                    markCompanionCanvas(element);
                     if (this.config.tool) {
                         this.imageManager.setTool(this.config.tool);
                     }
@@ -289,6 +311,11 @@
                 }
             }
             const answer = this.answers[this.activeId] || {};
+            // The canvas reports a change after the regions it was given are
+            // drawn (when its image loads, for one), and reads them back with
+            // fields of its own added. The same shapes are not an edit:
+            // saving them stored an untouched prelabel as the answer.
+            if (sameRegions(regions, answer.regions || [])) return;
             // Drawing a region withdraws an "absent" claim: they are mutually
             // exclusive answers and leaving both set would make the stored
             // value contradict itself.
@@ -416,16 +443,28 @@
                 }
                 if (answer.verdict) verdicts[id] = answer.verdict;
             }
-            const payload = { regions, absent, verdicts,
-                              region_type: this.config.regionType };
+            const payload = { regions, absent, verdicts };
+            let spans = [];
             if (this.config.expressionSource === 'spans') {
-                payload.spans = this.expressions
+                spans = this.expressions
                     .filter((expression) => expression.start != null)
                     .map((expression) => ({ id: expression.id,
                                             start: expression.start,
                                             end: expression.end,
                                             text: expression.text }));
-                payload.coverage = this.captionCoverage();
+            }
+            // Only an answer carries the region type and the caption
+            // coverage. With them, the blank answer the widget writes as it
+            // loads was not empty, the page saved it, and an item nobody had
+            // touched counted as done (a one-item study ended on arrival).
+            const answered = Object.keys(regions).length || absent.length
+                || Object.keys(verdicts).length || spans.length;
+            if (answered) {
+                payload.region_type = this.config.regionType;
+                if (this.config.expressionSource === 'spans') {
+                    payload.spans = spans;
+                    payload.coverage = this.captionCoverage();
+                }
             }
             return payload;
         }

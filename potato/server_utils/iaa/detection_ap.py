@@ -80,10 +80,122 @@ def _iou(a: Dict[str, Any], b: Dict[str, Any]) -> float:
         return 0.0
 
 
+#: Types whose similarity is an area overlap, which is 0 when the two
+#: shapes' extents do not intersect. Only these are skipped by the spatial
+#: index; an open path, a point or a mask is always compared.
+_AREA_TYPES = ("bbox", "polygon", "ellipse")
+
+
+class _Matcher:
+    """Canonical forms, extents and IoUs, computed once per object and pair.
+
+    A whole-slide image has thousands of annotated objects and as many
+    predictions. Compared all against all, and again at each of the ten COCO
+    thresholds, with both shapes re-canonicalized every time, scoring one
+    slide took longer than training on it. The index only skips pairs whose
+    IoU is exactly 0 (area shapes with disjoint extents, or different
+    types), and candidates are visited in their original order, so every
+    match, and so every AP, is what the full scan gives.
+    """
+
+    def __init__(self):
+        self._prepared: Dict[int, Tuple[Any, Optional[Tuple[float, ...]]]] = {}
+        self._iou: Dict[Tuple[int, int], float] = {}
+        self._index: Dict[int, Tuple[Dict[Tuple[int, int], List[int]], List[int], float]] = {}
+
+    def prepared(self, obj):
+        key = id(obj)
+        if key not in self._prepared:
+            from potato.server_utils.iaa.geometry_agreement import canonical_object
+            try:
+                canon = canonical_object(obj)
+            except Exception:
+                canon = None
+            self._prepared[key] = (canon, self._extent(canon))
+        return self._prepared[key]
+
+    @staticmethod
+    def _extent(canon) -> Optional[Tuple[float, ...]]:
+        if not canon or canon.get("type") not in _AREA_TYPES:
+            return None
+        try:
+            if canon.get("type") == "bbox" and canon.get("bbox"):
+                x, y, w, h = (float(v) for v in canon["bbox"][:4])
+                return x, y, x + w, y + h
+            points = canon.get("points") or []
+            if points:
+                xs = [float(p[0]) for p in points]
+                ys = [float(p[1]) for p in points]
+                return min(xs), min(ys), max(xs), max(ys)
+        except (TypeError, ValueError):
+            return None
+        return None
+
+    def iou(self, prediction, truth) -> float:
+        key = (id(prediction), id(truth))
+        if key not in self._iou:
+            from potato.server_utils.iaa.geometry import similarity
+            canon_p, _ = self.prepared(prediction)
+            canon_t, _ = self.prepared(truth)
+            try:
+                value = 0.0 if canon_p is None or canon_t is None else float(
+                    similarity(canon_p, canon_t, reference="b"))
+            except Exception:
+                value = 0.0
+            self._iou[key] = value
+        return self._iou[key]
+
+    def candidates(self, prediction, truths: List[Dict[str, Any]]) -> List[int]:
+        """Indexes of *truths* the prediction could overlap, in order."""
+        key = id(truths)
+        if key not in self._index:
+            extents = [self.prepared(t)[1] for t in truths]
+            sizes = sorted(max(e[2] - e[0], e[3] - e[1]) for e in extents if e)
+            boxes = [e for e in extents if e]
+            # The cell is twice the typical object, but never finer than
+            # 1/256 of the span the objects cover: with zero-area boxes the
+            # median was 0, the cell 1e-9, and one large box walked 1e11 cells.
+            span = max((max(e[2] for e in boxes) - min(e[0] for e in boxes),
+                        max(e[3] for e in boxes) - min(e[1] for e in boxes))) if boxes else 0.0
+            cell = max(sizes[len(sizes) // 2] * 2 if sizes else 0.0, span / 256.0)
+            cell = cell if cell > 0 else 1.0
+            grid: Dict[Tuple[int, int], List[int]] = {}
+            always: List[int] = []
+            limit = 4 * len(truths) + 16
+            for index, extent in enumerate(extents):
+                if extent is None or (
+                        (int(extent[2] // cell) - int(extent[0] // cell) + 1)
+                        * (int(extent[3] // cell) - int(extent[1] // cell) + 1) > limit):
+                    # No extent, or one too large to index: always compared.
+                    always.append(index)
+                    continue
+                for gx in range(int(extent[0] // cell), int(extent[2] // cell) + 1):
+                    for gy in range(int(extent[1] // cell), int(extent[3] // cell) + 1):
+                        grid.setdefault((gx, gy), []).append(index)
+            self._index[key] = (grid, always, cell)
+        grid, always, cell = self._index[key]
+        canon, extent = self.prepared(prediction)
+        if extent is None:
+            return list(range(len(truths)))
+        found = set(always)
+        cells_wide = int(extent[2] // cell) - int(extent[0] // cell) + 1
+        cells_high = int(extent[3] // cell) - int(extent[1] // cell) + 1
+        if cells_wide * cells_high > 4 * len(truths) + 16:
+            return list(range(len(truths)))
+        for gx in range(int(extent[0] // cell), int(extent[2] // cell) + 1):
+            for gy in range(int(extent[1] // cell), int(extent[3] // cell) + 1):
+                found.update(grid.get((gx, gy), ()))
+        kind = canon.get("type")
+        return sorted(i for i in found
+                      if self.prepared(truths[i])[0] is not None
+                      and self.prepared(truths[i])[0].get("type") == kind)
+
+
 def detection_pr_curve(
     predictions: Sequence[Tuple[str, Dict[str, Any]]],
     ground_truth: Dict[str, List[Dict[str, Any]]],
     threshold: float = 0.5,
+    _matcher: Optional[_Matcher] = None,
 ) -> Tuple[List[float], List[float]]:
     """Precision and recall arrays for one class at one IoU threshold.
 
@@ -113,13 +225,14 @@ def detection_pr_curve(
     precisions: List[float] = []
     recalls: List[float] = []
 
+    matcher = _matcher or _Matcher()
     for instance_id, prediction in ranked:
         candidates = ground_truth.get(instance_id, [])
         best_index, best_iou = -1, 0.0
-        for index, truth in enumerate(candidates):
+        for index in (matcher.candidates(prediction, candidates) if candidates else ()):
             if index in claimed.get(instance_id, ()):
                 continue
-            score = _iou(prediction, truth)
+            score = matcher.iou(prediction, candidates[index])
             if score > best_iou:
                 best_index, best_iou = index, score
 
@@ -165,10 +278,11 @@ def average_precision(
     predictions: Sequence[Tuple[str, Dict[str, Any]]],
     ground_truth: Dict[str, List[Dict[str, Any]]],
     threshold: float = 0.5,
+    _matcher: Optional[_Matcher] = None,
 ) -> float:
     """AP for one class at one IoU threshold."""
     precisions, recalls = detection_pr_curve(predictions, ground_truth,
-                                             threshold)
+                                             threshold, _matcher)
     return _interpolated_ap(precisions, recalls)
 
 
@@ -225,8 +339,10 @@ def mean_average_precision(
             per_class[label] = {t: 0.0 for t in thresholds}
             continue
 
+        # One matcher for every threshold: the IoUs do not change with it.
+        matcher = _Matcher()
         per_class[label] = {
-            t: average_precision(class_predictions, class_truth, t)
+            t: average_precision(class_predictions, class_truth, t, matcher)
             for t in thresholds}
 
     def mean_at(threshold: float) -> Optional[float]:
