@@ -77,6 +77,9 @@ _INLINE_AUTH_CALLS = {
     "check_admin_access": "inline:admin_access",
     "verify_token": "inline:agent_token",
     "_check_adjudicator_auth": "inline:adjudicator",
+    # potato/training/protocol.py: a registered agent's token, looked up by
+    # _identity() before every job route.
+    "backend_for_token": "inline:agent_token",
 }
 
 # Blueprints create_app() registers conditionally, with the config that enables
@@ -103,6 +106,8 @@ OPTIONAL_BLUEPRINTS: List[Tuple[str, str, str]] = [
      "instance_display field of type live_coding_agent"),
     ("potato.routes_trace_ingestion", "trace_ingestion_bp",
      "trace_ingestion configured"),
+    ("potato.training.routes", "training_bp", "model_training.enabled: true"),
+    ("potato.training.protocol", "training_api_bp", "model_training.enabled: true"),
     ("potato.mcp_server.routes", "mcp_bp",
      "mcp.enabled: true, and every tool named in mcp.tools"),
 ]

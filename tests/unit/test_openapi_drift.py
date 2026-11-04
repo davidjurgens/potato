@@ -163,6 +163,43 @@ class TestOptionalBlueprintsStillImport:
             "silently missing from the published API spec:\n  " + "\n  ".join(broken)
         )
 
+    def test_every_blueprint_the_server_registers_is_in_the_spec(self, checked_in):
+        """
+        A blueprint create_app() registers behind a config flag reaches the
+        spec only if it is listed in OPTIONAL_BLUEPRINTS. The model-training
+        routes were left off that list and no test failed. This finds every
+        `*_bp` the server modules import and checks each rule.
+        """
+        import ast
+
+        from flask import Flask
+
+        from potato.server_utils.openapi_spec import _flask_path_to_openapi
+
+        imported = set()
+        for source in ("potato/flask_server.py", "potato/routes.py"):
+            tree = ast.parse((REPO_ROOT / source).read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    imported.update((node.module, a.name) for a in node.names
+                                    if a.name.endswith("_bp"))
+        assert len(imported) > 20, imported
+
+        missing = []
+        for module_path, attr in sorted(imported):
+            scratch = Flask("openapi_drift_probe")
+            scratch.register_blueprint(getattr(importlib.import_module(module_path), attr))
+            for rule in scratch.url_map.iter_rules():
+                if rule.endpoint == "static":
+                    continue
+                if _flask_path_to_openapi(rule.rule)[0] not in checked_in["paths"]:
+                    missing.append(f"{module_path}.{attr}: {rule.rule}")
+        assert not missing, (
+            "Registered by the server but absent from the spec; add the blueprint "
+            "to OPTIONAL_BLUEPRINTS in potato/server_utils/openapi_spec.py:\n  "
+            + "\n  ".join(missing[:15])
+        )
+
     def test_spec_records_no_unavailable_blueprints(self, checked_in):
         unavailable = checked_in["info"].get("x-potato-unavailable-blueprints")
         assert not unavailable, (
@@ -206,6 +243,15 @@ class TestAuthAnnotations:
                     f"Unknown auth decorator {decorator!r} in the spec; add it to "
                     f"AUTH_DECORATORS so its meaning is documented."
                 )
+
+    def test_training_agent_routes_record_their_token_check(self, checked_in):
+        """The agent protocol checks its bearer token in a helper,
+        protocol._identity(), so the scan finds it only through the
+        backend_for_token call. Without it these read as open endpoints."""
+        unmarked = [f"{method.upper()} {path}"
+                    for path, method, op in _operations(checked_in)
+                    if path.startswith("/api/training/") and not op.get("x-potato-auth")]
+        assert not unmarked, unmarked
 
     def test_authenticated_operations_document_401(self, checked_in):
         from potato.server_utils.openapi_spec import AUTH_DECORATORS

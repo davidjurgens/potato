@@ -2446,7 +2446,10 @@ agent.
 | `POST /api/training/jobs/<run_id>/predictions` | `predictions.jsonl`. `413` above `max_predictions_mb`. |
 | `POST /api/training/jobs/<run_id>/complete` | Exit code and final events. |
 
-A missing or invalid token is `401`.
+A missing or invalid token is `401`. These routes, and the admin page's
+JSON routes under `/admin/training/api/`, are in the
+[OpenAPI spec](../api-reference/openapi.json), marked
+`x-potato-requires-config: model_training.enabled: true`.
 
 ---
 
@@ -2455,9 +2458,11 @@ A missing or invalid token is `401`.
 `llm-sft`, `llm-dpo`, `hf-text-classification` and `vlm-sft` take
 `lora: {quantize: 4bit}`. The base model is loaded with its weights in 4 bits
 (NF4 with double quantization, the QLoRA setup), and a LoRA adapter is trained
-on top of it in bf16 where the GPU supports bf16. A model needs about a
-quarter of the GPU memory it needs in bf16, so an 8B model fits on a 24 GB card.
-`quantize: 8bit` is the halfway option. Predictions load the base model the
+on top of it in bf16 where the GPU supports bf16. In 4 bits the base weights
+take a quarter of the memory they take in bf16; activations, the adapter and
+its optimizer state come on top. A QLoRA run's memory has not been measured
+on a GPU yet, so check the run's "Peak GPU memory" line rather than plan
+from the arithmetic. `quantize: 8bit` is the halfway option. Predictions load the base model the
 same way.
 
 ```yaml

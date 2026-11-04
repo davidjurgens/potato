@@ -3907,6 +3907,503 @@
         ]
       }
     },
+    "/admin/training": {
+      "get": {
+        "operationId": "get_training_training_page",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/backends": {
+      "get": {
+        "operationId": "get_training_api_backends",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/backends/{name}/check": {
+      "post": {
+        "operationId": "post_training_api_check_backend",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Connect to a backend and report its Python, GPUs and gaps.",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/pinned": {
+      "delete": {
+        "operationId": "delete_training_api_unpin",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Unpin ``instance_ids``, or every pinned item when the body has none",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      },
+      "get": {
+        "operationId": "get_training_api_pinned",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      },
+      "post": {
+        "operationId": "post_training_api_pin",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Pin items to the train split of every later run.",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required",
+          "inline:session_username"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs": {
+      "get": {
+        "operationId": "get_training_api_runs",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      },
+      "post": {
+        "operationId": "post_training_api_start_run",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs/{run_id}": {
+      "get": {
+        "operationId": "get_training_api_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "post_training_api_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs/{run_id}/events": {
+      "get": {
+        "operationId": "get_training_api_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs/{run_id}/pin-split": {
+      "post": {
+        "operationId": "post_training_api_pin_split",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Save one of a run's splits as a dataset version.",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs/{run_id}/predictions": {
+      "delete": {
+        "operationId": "delete_training_api_retract",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Withdraw a run's prelabels.",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/runs/{run_id}/push-to-hub": {
+      "post": {
+        "operationId": "post_training_api_push_to_hub",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Publish a run's model to the Hugging Face Hub.",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required",
+          "inline:session_username"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/schemas": {
+      "get": {
+        "operationId": "get_training_api_schemas",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/status": {
+      "get": {
+        "operationId": "get_training_api_status",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/api/trainers": {
+      "get": {
+        "operationId": "get_training_api_trainers",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Every trainer and what it can handle. Imports none of them.",
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/admin/training/runs/{run_id}": {
+      "get": {
+        "operationId": "get_training_run_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "tags": [
+          "training"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
     "/admin/triage-queue": {
       "get": {
         "operationId": "get_admin_triage_queue",
@@ -7834,6 +8331,231 @@
         "x-potato-auth": [
           "inline:session_username"
         ]
+      }
+    },
+    "/api/training/backends/register": {
+      "post": {
+        "operationId": "post_training_api_register_backend",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Issue a token for a manually started agent.",
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/backends/{name}/heartbeat": {
+      "post": {
+        "operationId": "post_training_api_heartbeat",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/jobs/next": {
+      "get": {
+        "operationId": "get_training_api_next_job",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/jobs/{run_id}": {
+      "get": {
+        "operationId": "get_training_api_get_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/jobs/{run_id}/bundle": {
+      "get": {
+        "operationId": "get_training_api_get_bundle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/jobs/{run_id}/complete": {
+      "post": {
+        "operationId": "post_training_api_post_complete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/jobs/{run_id}/predictions": {
+      "post": {
+        "operationId": "post_training_api_post_predictions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Receive predictions.jsonl. Replaces any earlier upload for the job.",
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
+      }
+    },
+    "/api/training/jobs/{run_id}/progress": {
+      "post": {
+        "operationId": "post_training_api_post_progress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "training_api"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "model_training.enabled: true"
       }
     },
     "/api/typing_summary/{instance_id}": {

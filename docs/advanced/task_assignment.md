@@ -7,10 +7,10 @@ Assignment strategies decide which instances each annotator sees and in what ord
 1. [Overview](#overview)
 2. [Assignment Strategies](#assignment-strategies)
 3. [Configuration](#configuration)
-4. [Legacy Configuration](#legacy-configuration)
-5. [Test Questions](#test-questions)
-6. [Examples](#examples)
-7. [Surplus annotators](#surplus-annotators)
+4. [Moving from `automatic_assignment`](#moving-from-automatic_assignment)
+5. [Examples](#examples)
+6. [Surplus annotators](#surplus-annotators)
+7. [Admin Dashboard Integration](#admin-dashboard-integration)
 
 ---
 

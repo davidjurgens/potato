@@ -29,7 +29,8 @@ All notable changes to the Potato annotation platform are documented in this fil
   `"queue": false` keeps the old refusal. Automatic runs do not queue.
 - **QLoRA.** `lora: {quantize: 4bit}` (or `8bit`) loads the base model of
   `llm-sft`, `llm-dpo` or `hf-text-classification` in 4 bits and trains a
-  LoRA adapter on it, about a quarter of the GPU memory. The run checks for
+  LoRA adapter on it; the base weights take a quarter of their bf16 memory
+  (not yet measured on a GPU end to end). The run checks for
   a CUDA GPU and a working bitsandbytes first. Transformer runs now log
   their peak GPU memory.
 - **Publish a model to the Hugging Face Hub** from its run page. The run's
@@ -224,6 +225,10 @@ All notable changes to the Potato annotation platform are documented in this fil
   is in `all`.
 - New example: `examples/ai-assisted/model-training/`, 160 reviews with gold
   labels the simulator can annotate from, trained with `sklearn-text`.
+- The OpenAPI spec lists the 26 training operations under
+  `/admin/training` and `/api/training`, marked
+  `model_training.enabled: true`, with the agent routes recorded as
+  token-authenticated.
 
 ### Transcripts
 
