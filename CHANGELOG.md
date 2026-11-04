@@ -264,6 +264,33 @@ All notable changes to the Potato annotation platform are documented in this fil
   the exported spans (head first), with a span that has no head as `root`.
   They were always `_`.
 
+### Security
+
+- **Generated templates no longer go to a directory other local users can
+  control.** When the package directory is read-only (an ordinary `pip
+  install`, or a container), Potato writes the templates it builds at startup
+  to the system temp dir, under a name anyone could compute. It used the
+  directory if it already existed, so another user on the same machine could
+  create it first, plant a template, and have it run as the Potato user. The
+  directory is now named for the user, created mode 0700, and used only if it
+  is a real directory owned by that user that nobody else can write to.
+  Otherwise Potato uses a fresh private directory and logs why. Potato now
+  refuses to start when the temp dir is writable by every user and lacks the
+  sticky bit, because another user could then swap the directory after it is
+  checked; set `POTATO_GENERATED_TEMPLATES_DIR` to a private directory in that
+  case. Affects 2.13.1 and earlier.
+- **The generated admin API key is never logged, and its file is private.**
+  When `{task_dir}/admin_api_key.txt` could not be written, the key was
+  logged in full. The log now says to set `admin_api_key` or
+  `POTATO_ADMIN_API_KEY` instead. The file is written mode 0600, and a file
+  an earlier version left readable by others is changed to 0600 when it is
+  read.
+- **`potato deploy` no longer uses fixed names in the host's `/tmp`.** The
+  project upload and the database snapshot taken by `potato deploy pull`
+  had fixed names, so another user on the host could create them first. Both
+  now have random names, and both are created readable only by the deploy
+  user.
+
 ### Fixed
 
 - With `ai_support.holdout`, a held-out annotator's item JSON still carried

@@ -20,7 +20,7 @@ The admin dashboard requires an API key for access. The API key can be configure
    export POTATO_ADMIN_API_KEY=your_secret_key_here
    ```
 
-3. **Auto-generated**: If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key is logged to the console on server startup.
+3. **Auto-generated**: If no key is configured, Potato generates a random key and saves it to `admin_api_key.txt` in your task directory, readable only by the user the server runs as. The key itself is never written to the log. If the task directory cannot be written, the generated key is not saved and cannot be used. Potato logs a warning, and you need to set the key in the config or the environment.
 
 **Access Methods:**
 1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted. The form says where this server's key comes from: the config file, the environment variable, or `admin_api_key.txt`
@@ -34,8 +34,8 @@ A request to `/admin` that carries a wrong key gets HTTP 403, and the form shows
 ### Finding Your Auto-Generated Key
 
 If you didn't configure an API key explicitly, find it in one of these ways:
-- Check the server console output for the message "Generated admin API key"
 - Read the file `{task_dir}/admin_api_key.txt`
+- The startup log line "Generated admin API key and saved to ..." gives the file's path. It does not contain the key
 
 ### Security Notes
 

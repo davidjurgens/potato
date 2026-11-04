@@ -50,7 +50,7 @@ vendored in the image.
 | `GUNICORN_TIMEOUT` | `120` | Worker timeout, seconds |
 | `POTATO_SECRET_KEY` | generated | Flask session signing key |
 | `POTATO_ADMIN_API_KEY` | generated | Admin API authentication |
-| `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go |
+| `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go. By default, the package directory, or a directory in the system temp dir that only the server's user can use when the package is read-only |
 | `POTATO_BUNDLE_URL` | unset | Download the project from this URL at start (see below) |
 | `POTATO_BUNDLE_SHA256` | unset | Refuse a downloaded project whose checksum differs |
 | `POTATO_BUNDLE_TOKEN` | unset | Sent as `Authorization: Bearer` when downloading |
@@ -65,6 +65,23 @@ the project, checks it against `POTATO_BUNDLE_SHA256`, and unpacks it into
 on a persistent disk a restart does not download it again. Collected data (the
 output directory and the SQLite databases) is never replaced by a new version
 of the project. `potato deploy up` sets all three variables for you.
+
+### Debug mode in a container
+
+Keep `debug: false` in a deployed container. With `debug: true`:
+
+- The admin dashboard and admin API skip the key for requests from a loopback
+  address with no proxy forwarding header. On Docker's default bridge network,
+  requests to the published port arrive from the bridge address, so they still
+  need the admin API key. With `--network host`, a request from the host
+  machine itself is a loopback request. A reverse proxy in the same network
+  namespace that adds no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header
+  makes every request look local.
+- `debug_phase` signs every visitor in as one shared account, `debug_user`, and
+  skips them to that phase. That account is not an admin, but every visitor
+  shares its answers.
+
+The server logs a warning at startup when `debug` is on.
 
 ### Started as root
 

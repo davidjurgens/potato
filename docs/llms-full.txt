@@ -60335,7 +60335,7 @@ The admin dashboard requires an API key for access. The API key can be configure
    export POTATO_ADMIN_API_KEY=your_secret_key_here
    ```
 
-3. **Auto-generated**: If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key is logged to the console on server startup.
+3. **Auto-generated**: If no key is configured, Potato generates a random key and saves it to `admin_api_key.txt` in your task directory, readable only by the user the server runs as. The key itself is never written to the log. If the task directory cannot be written, the generated key is not saved and cannot be used. Potato logs a warning, and you need to set the key in the config or the environment.
 
 **Access Methods:**
 1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted. The form says where this server's key comes from: the config file, the environment variable, or `admin_api_key.txt`
@@ -60349,8 +60349,8 @@ A request to `/admin` that carries a wrong key gets HTTP 403, and the form shows
 ### Finding Your Auto-Generated Key
 
 If you didn't configure an API key explicitly, find it in one of these ways:
-- Check the server console output for the message "Generated admin API key"
 - Read the file `{task_dir}/admin_api_key.txt`
+- The startup log line "Generated admin API key and saved to ..." gives the file's path. It does not contain the key
 
 ### Security Notes
 
@@ -71941,7 +71941,7 @@ vendored in the image.
 | `GUNICORN_TIMEOUT` | `120` | Worker timeout, seconds |
 | `POTATO_SECRET_KEY` | generated | Flask session signing key |
 | `POTATO_ADMIN_API_KEY` | generated | Admin API authentication |
-| `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go |
+| `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go. By default, the package directory, or a directory in the system temp dir that only the server's user can use when the package is read-only |
 | `POTATO_BUNDLE_URL` | unset | Download the project from this URL at start (see below) |
 | `POTATO_BUNDLE_SHA256` | unset | Refuse a downloaded project whose checksum differs |
 | `POTATO_BUNDLE_TOKEN` | unset | Sent as `Authorization: Bearer` when downloading |
@@ -71956,6 +71956,23 @@ the project, checks it against `POTATO_BUNDLE_SHA256`, and unpacks it into
 on a persistent disk a restart does not download it again. Collected data (the
 output directory and the SQLite databases) is never replaced by a new version
 of the project. `potato deploy up` sets all three variables for you.
+
+### Debug mode in a container
+
+Keep `debug: false` in a deployed container. With `debug: true`:
+
+- The admin dashboard and admin API skip the key for requests from a loopback
+  address with no proxy forwarding header. On Docker's default bridge network,
+  requests to the published port arrive from the bridge address, so they still
+  need the admin API key. With `--network host`, a request from the host
+  machine itself is a loopback request. A reverse proxy in the same network
+  namespace that adds no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header
+  makes every request look local.
+- `debug_phase` signs every visitor in as one shared account, `debug_user`, and
+  skips them to that phase. That account is not an admin, but every visitor
+  shares its answers.
+
+The server logs a warning at startup when `debug` is on.
 
 ### Started as root
 

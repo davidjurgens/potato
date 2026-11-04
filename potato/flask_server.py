@@ -6195,6 +6195,15 @@ def create_app(config_file=None):
     # This is the code path used by gunicorn / WSGI factory calls.
     if config_file is not None:
         _initialize_from_config(config_file)
+        if config.get("debug"):
+            # run_server() says this at boot; the factory (gunicorn, every
+            # container) said nothing, though it serves other machines.
+            logger.warning(
+                "debug is on. Debug phases (and the shared debug_user they "
+                "sign in) apply to anyone who can connect. Admin pages open "
+                "without a key only for requests from this machine with no "
+                "proxy forwarding header; other machines need the admin API "
+                "key. Turn debug off for a deployed server.")
 
     # Initialize the app with explicit static folder configuration
     static_folder = os.path.join(cur_program_dir, 'static')

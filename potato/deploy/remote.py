@@ -21,6 +21,7 @@ import os
 import posixpath
 import shlex
 import stat
+import shutil
 import tarfile
 import tempfile
 import time
@@ -264,11 +265,21 @@ class SSHSession:
             size = os.path.getsize(archive_path)
 
             self.run(f"mkdir -p {remote_dir}", check=True)
-            remote_archive = posixpath.join("/tmp", "potato-bundle.tar.gz")
+            # A fixed name in the host's shared /tmp could be pre-created or
+            # swapped by another user there before tar unpacks it into the app.
+            remote_archive = posixpath.join(
+                "/tmp", f"potato-bundle-{os.urandom(8).hex()}.tar.gz")
             client = self.connect()
             sftp = client.open_sftp()
             try:
-                sftp.put(archive_path, remote_archive)
+                # Mode first, as in put_text: the bundle carries the task's
+                # config, and a world-readable moment is still a disclosure.
+                # "x": O_EXCL, so a file already at that name is an error
+                # rather than written through.
+                with sftp.file(remote_archive, "wx") as handle, \
+                        open(archive_path, "rb") as source:
+                    handle.chmod(0o600)
+                    shutil.copyfileobj(source, handle)
             finally:
                 sftp.close()
             self.run(f"tar -xzf {remote_archive} -C {remote_dir} && "
@@ -383,9 +394,12 @@ class SSHSession:
         if not probe.ok:
             return False
 
-        snapshot = f"/tmp/potato-snapshot-{os.path.basename(remote_path)}"
+        # Random, for the same reason as the bundle: a snapshot file another
+        # user on the host created first would receive the whole database.
+        snapshot = (f"/tmp/potato-snapshot-{os.urandom(8).hex()}-"
+                    f"{os.path.basename(remote_path)}")
         result = self.run(
-            f"sqlite3 {remote_path} \".backup '{snapshot}'\"", timeout=300)
+            f"umask 077 && sqlite3 {remote_path} \".backup '{snapshot}'\"", timeout=300)
         if not result.ok:
             raise ProviderError(
                 f"Could not snapshot {remote_path} on the host: {result.output()}\n"
