@@ -28,7 +28,7 @@ __all__ = ["PRELABEL_TYPES", "prelabel_values", "valid_shape", "client_shapes",
 PRELABEL_TYPES = ("ranking", "bws", "soft_label", "interlinear_gloss",
                   "tree_annotation", "microscopy", "gui_trajectory",
                   "grounding_eval", "region_caption", "speech_transcript",
-                  "volume_annotation", "video_annotation")
+                  "volume_annotation", "video_annotation", "episode_annotation")
 
 
 def _label_names(scheme: Dict[str, Any]) -> List[str]:
@@ -192,6 +192,53 @@ def client_spatial(objects: List[Any], labels: Optional[List[str]] = None
     return kept, dropped
 
 
+def _finite(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) \
+        and math.isfinite(value)
+
+
+def _episode_prelabel(scheme: Dict[str, Any], payload: Any) -> Optional[Dict[str, str]]:
+    """An episode model's answer in the stored shape, keeping only the layers
+    the scheme shows, phases of its taxonomy, an outcome it offers, and reward
+    points inside its range. None when nothing is left."""
+    from potato.server_utils.schemas.episode_annotation import (DEFAULT_OUTCOMES,
+                                                                DEFAULT_PHASES)
+    if not isinstance(payload, dict):
+        return None
+    layers = set(scheme.get("layers") or ("phases", "outcome", "reward"))
+    phases_known = {str(p.get("name") if isinstance(p, dict) else p)
+                    for p in scheme.get("phases", DEFAULT_PHASES) or []}
+    phases = []
+    for p in payload.get("phases") or [] if "phases" in layers else []:
+        if isinstance(p, dict) and str(p.get("label")) in phases_known and \
+                _finite(p.get("start")) and _finite(p.get("end")) and p["end"] > p["start"] >= 0:
+            phases.append({"start": float(p["start"]), "end": float(p["end"]),
+                           "label": str(p["label"])})
+    outcome = {"result": "", "cause": ""}
+    given = payload.get("outcome")
+    result = given.get("result") if isinstance(given, dict) else given
+    if "outcome" in layers and str(result or "") in [
+            str(o) for o in scheme.get("outcomes", DEFAULT_OUTCOMES) or []]:
+        outcome["result"] = str(result)
+    try:
+        low, high = (float(v) for v in scheme.get("reward_range", [0.0, 1.0]))
+    except (TypeError, ValueError):
+        low, high = 0.0, 1.0
+    reward = []
+    for point in payload.get("reward") or [] if "reward" in layers else []:
+        if isinstance(point, dict) and _finite(point.get("t")) and _finite(
+                point.get("value")) and point["t"] >= 0 and low <= point["value"] <= high:
+            reward.append({"t": float(point["t"]), "value": float(point["value"])})
+    reward.sort(key=lambda r: r["t"])
+    if len(reward) < 2:
+        reward = []
+    if not phases and not outcome["result"] and not reward:
+        return None
+    return {"_data": json.dumps({"phases": sorted(phases, key=lambda p: p["start"]),
+                                 "reward": reward, "outcome": outcome,
+                                 "instructions": []})}
+
+
 def prelabel_values(scheme: Dict[str, Any], payload: Any,
                     item: Optional[Dict[str, Any]] = None,
                     config: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
@@ -266,6 +313,8 @@ def prelabel_values(scheme: Dict[str, Any], payload: Any,
         if isinstance(payload.get("image"), dict):
             answer["image"] = payload["image"]
         return {name: json.dumps(answer, ensure_ascii=False)} if answer["rois"] else None
+    if atype == "episode_annotation":
+        return _episode_prelabel(scheme, payload)
     if atype == "gui_trajectory":
         # A suggested verdict per step, keyed by index like the stored list.
         options = [str(o) for o in scheme.get("verdict_options") or

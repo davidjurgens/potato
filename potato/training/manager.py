@@ -882,12 +882,19 @@ class TrainingManager:
 
         merged = dict(metrics)
         merged.update(result_event.get("metrics") or {})
-        self._finish(run, "success",
+        # Recorded as a success, but not announced as one until its
+        # predictions are written back: a caller that waits for the run to
+        # stop running read the status in between and found no write-back.
+        self._finish(run, "success", announce=False,
                      model_version=result_event.get("model_version", ""),
                      metrics=merged,
                      artifact_dir=os.path.join(self.run_dir(run.run_id),
                                                "artifacts"))
-        self._after_success(run, result_event)
+        self._set(step="writing back predictions")
+        try:
+            self._after_success(run, result_event)
+        finally:
+            self._announce("success", metrics=merged, error=run.error or None)
 
     def _after_success(self, run: store.TrainingRun,
                        result_event: Dict[str, Any]) -> None:
@@ -900,16 +907,28 @@ class TrainingManager:
                 from potato.training.writeback import ingest_predictions
                 report = ingest_predictions(run, path, self.config)
                 self._set(writeback=report.to_dict())
-            except Exception:
+            except Exception as exc:
                 self.logger.exception("Write-back failed for run %s",
                                       run.run_id)
+                # The run trained and is a success; its predictions are not
+                # published. Recorded on the run, so its page says why after
+                # a restart, and not only in the live status.
+                message = "Write-back failed: %s" % exc
+                self._set(writeback={"run_id": run.run_id, "n_read": 0, "n_written": 0,
+                                     "error": message})
+                run.error, run.error_code = message, "writeback_failed"
+                try:
+                    store.record_run(self.config, run)
+                except Exception:
+                    self.logger.exception("Could not record run %s", run.run_id)
 
         try:
             store.prune_runs(self.config, self.retain_runs)
         except Exception:
             self.logger.debug("Pruning failed", exc_info=True)
 
-    def _finish(self, run: store.TrainingRun, status: str, **fields) -> None:
+    def _finish(self, run: store.TrainingRun, status: str, announce: bool = True,
+                **fields) -> None:
         run.status = status
         run.finished_at = time.time()
         for key, value in fields.items():
@@ -920,6 +939,10 @@ class TrainingManager:
             self.logger.exception("Could not record run %s", run.run_id)
 
         self._last_finished_at = run.finished_at
+        if announce:
+            self._announce(status, **fields)
+
+    def _announce(self, status: str, **fields) -> None:
         # "a run is already in progress" is not true any more.
         self._set(state=status, step="", skip_reason="",
                   metrics=fields.get("metrics", {}) or {},

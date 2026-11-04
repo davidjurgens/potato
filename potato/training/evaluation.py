@@ -39,6 +39,10 @@ grounding      accuracy at IoU 0.5 (point-in-region for points), mean IoU,
                and how often an absent referent was declined
 gui_click      verdict accuracy and macro-F1 over judged steps; click
                accuracy within 5% of the screenshot on approved steps
+peaks          peak precision, recall and F1 within a tolerance
+intervals      epoch accuracy and macro-F1, or interval F1 at IoU 0.5
+episode        phase accuracy, macro-F1 and segment F1, outcome accuracy,
+               reward Pearson's r
 =============  ==========================================================
 
 A classifier trained on soft targets (several annotators' votes as a
@@ -64,7 +68,8 @@ import string
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__all__ = ["HEADLINE", "score_predictions", "score_split", "read_predictions"]
+__all__ = ["HEADLINE", "headline_of", "score_predictions", "score_split",
+           "read_predictions"]
 
 #: The headline metric per kind, in the order a page should prefer them.
 HEADLINE = {
@@ -116,7 +121,27 @@ HEADLINE = {
     # Identity over the video, not per-frame boxes: a model that swaps two
     # people's ids where they cross loses IDF1 though every frame matches.
     "track": "idf1",
+    "peaks": "f1",
+    # Epoch mode; a free-mode scheme's headline is interval_f1 (below).
+    "intervals": "macro_f1",
+    "episode": "phase_macro_f1",
 }
+
+#: Headlines to fall back on, in order, when a kind's own is not among the
+#: metrics: a free-mode interval scheme has no epochs, and an episode scheme
+#: without a phases layer is scored on its outcome or reward.
+HEADLINE_FALLBACKS = {
+    "intervals": ("interval_f1",),
+    "episode": ("outcome_accuracy", "reward_pearson"),
+}
+
+
+def headline_of(kind: str, metrics: Dict[str, float]) -> Optional[str]:
+    """The headline metric present in *metrics* for *kind*, or None."""
+    for name in (HEADLINE.get(kind),) + tuple(HEADLINE_FALLBACKS.get(kind, ())):
+        if name and name in metrics:
+            return name
+    return None
 
 #: Kind to the ``structured_metrics`` function that scores it.
 _STRUCTURED_SCORERS = {
@@ -636,6 +661,14 @@ def score_split(rows: Iterable[Dict[str, Any]],
             metrics = vision_metrics.score_gui_clicks(gold_raw, pred_raw, steps)
         if not metrics:
             return {}, n
+    elif kind in ("peaks", "intervals", "episode"):
+        from potato.training import science_metrics
+        scorer = {"peaks": science_metrics.score_peaks,
+                  "intervals": science_metrics.score_intervals,
+                  "episode": science_metrics.score_episodes}[kind]
+        metrics = scorer(gold_raw, pred_raw)
+        if not metrics:
+            return {}, n
     elif kind == "temporal":
         metrics = _score_segments(gold_raw, pred_raw)
     elif kind == "trajectory":
@@ -699,7 +732,7 @@ def score_predictions(bundle, predictions: Dict[Tuple[str, str], Any],
                                      name, kind, trees=trees)
             for metric, value in metrics.items():
                 out["%s_%s%s" % (split, prefix_extra, metric)] = round(value, 4)
-            headline = HEADLINE.get(kind)
+            headline = headline_of(kind, metrics)
             if position == 0 and headline in metrics \
                     and "heldout_score" not in out:
                 out["heldout_score"] = round(metrics[headline], 4)

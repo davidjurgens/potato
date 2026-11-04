@@ -89,7 +89,8 @@
 .interval-label .il-actions { white-space: nowrap; text-align: right; }
 .interval-label .il-actions button + button { margin-left: 0.25rem; }
 .interval-label .il-row.il-selected td { background: var(--accent, rgba(110, 86, 207, 0.1)); }
-.interval-label .il-row.il-from-file td { color: var(--muted-foreground); }
+.interval-label .il-row.il-from-file td,
+.interval-label .il-row.il-from-model td { color: var(--muted-foreground); }
 .interval-label .il-empty { margin: 0; padding: 0.5rem; font-size: var(--text-sm, 0.8125rem);
     color: var(--muted-foreground); }
 .interval-label .il-empty[hidden] { display: none; }

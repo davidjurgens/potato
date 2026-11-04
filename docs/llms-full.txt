@@ -5984,6 +5984,15 @@ python -m potato.export --config config.yaml --format chemistry --output ./expor
 
 Compare structures between annotators by `inchikey` (or `idcode` when RDKit was not available anywhere). The SMILES columns are canonical within one toolkit only. The SD file reads with RDKit's `SDMolSupplier` (and other SD readers), with each row's fields as properties.
 
+## Training a property model
+
+A `radio`, `select`, `likert` or `slider` question about the molecule an item
+shows (a `molecule` display field) or the one annotators drew (a
+`chemical_structure` scheme) can train
+[`rdkit-property`](../ai-intelligence/model_training.md#rdkit-property): Morgan
+fingerprints and RDKit descriptors with a scikit-learn classifier or
+regressor. Its predictions come back as prelabels on the question.
+
 ## Related
 
 - [Chemical structures](../annotation-types/science/chemical_structures.md): every option, the data format and the browser API
@@ -24143,6 +24152,14 @@ python -m potato.export --config config.yaml --format chemistry --output ./expor
 
 writes `chemical_structures.csv` (one row per answer, with the answer-key result when the scheme has an `answer_field`), `chemical_structures.sdf` (each molfile with the row's fields as SD properties) and `molecule_atoms.csv` (one row per selected atom). The `identifiers_from` column says whether InChI and InChIKey came from the browser, from the server's `rdkit` package, or are missing. See [Export formats](../../data-export/export_formats.md).
 
+## Training
+
+A question about the molecule (a `radio`, `select`, `likert` or `slider`
+scheme beside a `molecule` field or a `chemical_structure` scheme) trains
+[`rdkit-property`](../../ai-intelligence/model_training.md#rdkit-property).
+The structure it learns from is the display field's, or the one annotators
+drew (the most common drawing), or the `prefill_field` one when nobody drew.
+
 ## Browser API
 
 Each molecule display registers `window.potatoViewers[field]` with the shared viewer API (`getSelection()`, `setSelection(sel)`, `onSelectionChange(cb)`, `describe(sel)`) and three more calls, for a display linked to atoms (such as a spectrum whose peaks are assigned to atoms):
@@ -24268,7 +24285,7 @@ annotation_schemes:
 
 | Key | Default | Description |
 |---|---|---|
-| `method` | `auto` | `detect` runs peak detection. `file` uses the JCAMP-DX `PEAK TABLE`. `item` uses the item's own `peaks` list. `auto` picks `item`, then `file`, then `detect`, using the first that is available. |
+| `method` | `auto` | `detect` runs peak detection. `file` uses the JCAMP-DX `PEAK TABLE`. `item` uses the item's own `peaks` list. `model` uses a trained [`peak-cnn`](../../ai-intelligence/model_training.md#peak-cnn) model's peaks for the item, listed with "· model". `auto` picks `item`, then `model`, then `file`, then `detect`, using the first that is available. |
 | `prominence` | `0.05` | For `detect`: how far a peak must stand above its surroundings, as a fraction of the y range. For sticks it is the minimum height as a fraction of the tallest. |
 | `max_peaks` | `40` | At most this many suggestions, keeping the most prominent. |
 | `min_distance` | none | For `detect`: minimum spacing between suggestions, in x units. |
@@ -24342,7 +24359,7 @@ The scheme stores the display's selection as JSON in one hidden input:
  "rejected": [4.1464]}
 ```
 
-`source` is `auto` for an accepted suggestion and `manual` for a peak the annotator added. `width` is the full width at half prominence of a detected peak, in x units. `rejected` lists the positions of suggestions the annotator turned down, so an unreviewed suggestion can be told apart from a rejected one. `integral` is a trapezoid integral over every original point between `from` and `to`, with no baseline correction.
+`source` is `auto` for an accepted suggestion, `model` for an accepted suggestion from a trained peak model, and `manual` for a peak the annotator added. `width` is the full width at half prominence of a detected peak, in x units. `rejected` lists the positions of suggestions the annotator turned down, so an unreviewed suggestion can be told apart from a rejected one. `integral` is a trapezoid integral over every original point between `from` and `to`, with no baseline correction.
 
 ## Export
 
@@ -24635,6 +24652,12 @@ annotator's first change, or by "Keep these"; "Discard them" clears them. In
 epoch mode, an all-channel interval from the file (a hypnogram stretch) is
 cut into the epochs it covers by at least half. Entries that came from the
 file and were not changed keep `"source": "file"`.
+
+A trained [`signal-cnn`](../../ai-intelligence/model_training.md#signal-cnn)
+model's intervals are pre-annotations the same way, listed with "· from the
+model" and kept as `"source": "model"`. They are used only when the file and
+`preannotation_field` give no intervals, and `pre_annotations: false` turns
+them off too.
 
 ### Stored value
 
@@ -25828,6 +25851,14 @@ not evidence about the other 95%.
 Outside the drawn range the curve is **nothing**, not zero. "Did not say" and
 "said zero" are different, and a reward model trained on the second when the
 first was true learns that unlabelled regions are bad.
+
+## Model prelabels
+
+[`episode-model`](../../ai-intelligence/model_training.md#episode-model)
+learns phases, the outcome and the reward curve from these answers, from the
+episode's recorded series. Its prediction pre-fills the timeline in the
+stored shape, only for the layers the scheme shows, and is stored once the
+annotator edits it.
 
 ## Export
 
@@ -47426,14 +47457,23 @@ other key.
 | `volume-unet` | `volume_annotation` (painted masks) | NIfTI volumes, DICOM series | `potato-annotation[train-vision,volumes]`; a GPU in practice |
 | `external-3d` | `spatial_annotation` (cuboids) | point clouds | your own detector (OpenPCDet, MMDetection3D) on the training host |
 | `video-track` | `video_annotation` in `tracking` or `combined` mode | video | `potato-annotation[train-vision]` and `opencv-python` |
+| `rdkit-property` | `radio`, `select`, `likert`, `slider` about a molecule | a `molecule` display field, or a `chemical_structure` answer | `potato-annotation[chemistry]` |
+| `peak-cnn` | `peak_picking` | spectra (JCAMP-DX, mzML, CSV, inline) | `potato-annotation[train-vision]` |
+| `signal-cnn` | `interval_label` (epoch or free mode) | signals (EDF, BDF, WFDB, CSV, Parquet, inline) | `potato-annotation[train-vision]`; WFDB and Parquet need `[signals]` |
+| `episode-model` | `episode_annotation` (phases, outcome, reward) | robot episodes (LeRobot, HDF5, episode manifests) | `potato-annotation[train-vision]` |
 | `decision-calibrate` | `radio`, `select`, `likert`, `slider` | text | nothing; a configured decision model |
 | `laya-finetune` | `radio`, `select`, `likert`, `slider` | text | `potato-annotation[decision]` |
 | `openjev-finetune` | `radio`, `select`, `likert`, `slider` | text | `pip install wev-ai`; a GPU with about 16 GB free |
 | `label-studio-ml` | `radio`, `select`, `multiselect`, `span`, `image_annotation` | text, images | nothing; a running Label Studio ML backend |
+| `openai-vlm-boxes` | `image_annotation` | images | nothing; a vision model behind an OpenAI-compatible API |
+| `hf-inference` | `radio`, `select`, `multiselect`, `span`, `image_annotation` | text, images | nothing; a Hugging Face Inference Endpoint or serverless model |
+| `roboflow` | `image_annotation` | images | nothing; a Roboflow model and API key |
+| `cvat-nuclio` | `image_annotation` | images | nothing; a CVAT serverless (Nuclio) function |
 
 `pip install "potato-annotation[train]"` installs what the text, image,
-audio and LLM trainers need. Laya (`[decision]`), `wev-ai`, `ultralytics`
-and `cellpose` are separate installs. None of these is part of `potato-annotation[all]`,
+audio and LLM trainers need. Laya (`[decision]`), `wev-ai`, `ultralytics`,
+`cellpose`, RDKit (`[chemistry]`) and Opacus (for [`dp`](#differential-privacy-dp))
+are separate installs. None of these is part of `potato-annotation[all]`,
 because torch is a multi-gigabyte install. A trainer that is not installed is
 listed on the Training page as "not installed", with the command that
 installs it.
@@ -47619,6 +47659,40 @@ needed for the unlabelled items to get a prediction and a score at all.
 ```json
 {"acquisition": "bald", "mc_samples": 10}
 ```
+
+#### Differential privacy (`dp`)
+
+`dp` trains with DP-SGD (Opacus), so the released model reveals little about
+any one annotated item. `hf-image-classification` takes it too.
+
+```json
+{"dp": {"epsilon": 8, "delta": 1e-5, "max_grad_norm": 1.0}}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `epsilon` | required | The privacy budget for the whole run. Smaller is more private and noisier; 1 to 10 is usual. |
+| `delta` | 1 / (10 × train items) | The chance the guarantee does not hold. It must be below 1 / train items. |
+| `max_grad_norm` | 1.0 | Each item's gradient is clipped to this norm before noise is added. |
+
+Each step draws its batch by Poisson sampling: every train item is in it
+independently, with probability 1 / batches per epoch (about `batch_size` /
+train items; the run log gives the exact rate). Each item's
+gradient is clipped, and Gaussian noise is added. Opacus sizes the noise so
+that the planned `epochs` spend at most `epsilon`. The run reports the epsilon
+spent after each epoch (`dp_epsilon`, from the RDP accountant), and the model
+card's `dp` entry records the target, the epsilon spent, delta, the noise
+multiplier and the clip. Stopping early on `patience` spends less.
+
+The guarantee covers the train split. It does not cover the val split, whose
+score picks the epoch kept, or the label list, which is read from the data.
+Under DP, mixed precision and gradient accumulation are off, and a quantized
+base model (`lora.quantize`) is refused. A text transformer's position and
+token-type embedding tables are frozen: their input is one row shared by the
+whole batch, which Opacus cannot take per-item gradients through. A layer
+Opacus does not support, such as BatchNorm, fails the run at its start with the
+layer named. Without Opacus installed (`pip install opacus`), a run with `dp`
+is refused before it starts.
 
 ### `setfit`
 
@@ -48207,6 +48281,127 @@ coordinates become the image widget's. A prediction's `score` is its
 confidence. The backend's own training (its `/webhook` handler) is not
 triggered: Potato does not send it annotation events.
 
+### Inference bridges
+
+Four more trainers use a model that runs somewhere else, as
+`label-studio-ml` does. Each trains nothing. `fit` checks that the service
+answers, and the run sends the held-out items (and, with
+`writeback.include_unlabeled`, the unlabelled ones) for predictions. The
+predictions get a held-out score against this project's annotators,
+write-back and review, like a trained model's. A key is never put in the
+config: a parameter names the environment variable that holds it, on the
+server, and a value that is not a variable name is refused without being
+echoed. When a service's error body repeats the key (an echoed URL or
+header), the key is replaced by `[redacted]` before the error is shown. A class name the service uses is mapped to the scheme's labels
+through `label_map` (a name mapped to `null` is dropped), then matched exactly
+or ignoring case. Shapes come back as the image widget's boxes and polygons,
+clipped to the image. Shapes under other labels, and shapes with nothing on
+the image, are left out and counted in the run log.
+
+#### `openai-vlm-boxes`
+
+Asks a vision-language model behind an OpenAI-compatible chat API (vLLM,
+Ollama, LM Studio, llama.cpp's server, OpenAI) for boxes around the scheme's
+labels. Each image is sent as a data URL with a prompt naming the labels, and
+the reply is read as JSON `{"objects": [{"label", "box"}]}`. A bare list, a
+code fence, and `bbox` or `box_2d` keys are read too.
+
+```yaml
+model_training:
+  trainer_params:
+    openai-vlm-boxes:
+      url: http://localhost:8000/v1
+      model: Qwen/Qwen2.5-VL-7B-Instruct
+      coordinate_format: pixels
+```
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `url` | required | The API's base URL, ending in `/v1`. |
+| `model` | the first the server lists | The model to ask. |
+| `api_key_env` | none | Environment variable holding the key, sent as a Bearer token. |
+| `prompt` | asks for fractional boxes | The instructions; `{labels}` becomes the scheme's labels. |
+| `coordinate_format` | `auto` | `fraction` (0–1), `per_mille` (0–1000) or `pixels` of the image as sent. |
+| `box_order` | `auto` | `xyxy` (x0, y0, x1, y1) or `yxyx` (y0, x0, y1, x1). |
+| `json_mode` | `schema` | `schema` sends `response_format: json_schema` with the labels as an enum (vLLM and OpenAI honour it), `object` sends `json_object`, `none` sends neither. |
+| `max_image_side` | 1280 | The image is shrunk to this longest side before sending; boxes are scaled back. |
+| `max_tokens`, `temperature`, `timeout_s` | 1024, 0, 120 | |
+
+Most models answer in their own coordinate convention whatever the prompt
+says. Gemma and Gemini give per-mille boxes y first (`[ymin, xmin, ymax,
+xmax]`), so with both settings on `auto`, a model whose name contains
+`gemma` or `gemini` is read that way. On Gemma 4 12B, a test project of
+red and blue squares scored mAP50 0.0 read x first and 1.0 read y first. For other models, `auto` decides once per reply, from all its
+boxes: values up to 1.05 (a box drawn to the edge, rounded up) are fractions,
+values past the sent image's size are per-mille, and anything else is pixels,
+x first.
+Qwen2.5-VL answers in pixels: set `coordinate_format: pixels`. The model gives
+no score, so its boxes have no confidence. A run in which no reply was JSON
+fails.
+
+#### `hf-inference`
+
+Uses a model deployed on Hugging Face: a dedicated Inference Endpoint
+(`endpoint_url`) or a model id on the serverless Inference API (`model`). The
+task follows the scheme: text classification for `radio`, `select` and
+`multiselect` (the top label, or every label scoring at least `threshold`),
+token classification for `span` (entities grouped by
+`aggregation_strategy`, with character offsets; a `B-`/`I-` tag prefix is
+dropped when the full name matches no label), and object detection for
+`image_annotation` (boxes scoring at least `threshold`). For a single-choice
+scheme the model's top label is the answer: when it is a label the scheme
+does not have (after `label_map`), the item gets no prediction rather than
+the runner-up.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `endpoint_url` | none | An Inference Endpoint's `https://` URL. Give this or `model`, not both. |
+| `model` | none | A model id on the serverless API, such as `dslim/bert-base-NER`. |
+| `token_env` | `HF_TOKEN` | Environment variable holding the token. |
+| `threshold` | 0.5 | Lowest score kept for a `multiselect` label or a box. |
+| `aggregation_strategy` | `simple` | `simple`, `first`, `average` or `max`. |
+| `label_map` | none | The model's label to the scheme's, as `{"LABEL_1": "positive"}`. |
+| `batch_size`, `timeout_s`, `wait_for_model` | 8, 60, true | `wait_for_model` waits while a serverless model loads instead of failing with 503. |
+
+The health check is one real request (a short sentence, or an 8 × 8 image).
+The token is read on the server, so these runs are local only.
+
+#### `roboflow`
+
+Uses a Roboflow detection or instance-segmentation model, hosted
+(`https://detect.roboflow.com`, or `https://outline.roboflow.com` for
+segmentation) or on a self-hosted Roboflow Inference server
+(`http://localhost:9001`). Each image is posted to `<url>/<model_id>`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model_id` | required | The model as `project/version`, such as `hard-hats/3`. |
+| `url` | `https://detect.roboflow.com` | The API or the self-hosted server. |
+| `api_key_env` | `ROBOFLOW_API_KEY` | Environment variable holding the API key. Required. |
+| `confidence`, `overlap` | 0.4, 0.3 | Sent to the API as percentages: the lowest confidence returned, and the overlap at which it merges boxes. |
+| `shapes` | `auto` | `box`, `polygon`, or `auto`: an outline where the model gives one and the scheme has a polygon tool, else a box. |
+| `label_map`, `timeout_s` | none, 60 | |
+
+Roboflow's API takes the key in the query string. Potato does not write
+that URL to the run log or an error message, and scrubs the key from an
+error body that echoes the request. The health check posts an 8 × 8 white
+image, which counts against the account's usage. These runs are local only.
+
+#### `cvat-nuclio`
+
+Uses a CVAT serverless detector, a Nuclio function from `cvat/serverless`
+(YOLO, Detectron2 and others), by its URL (`nuctl get functions` lists its
+port). Each image is posted as `{"image": <base64>, "threshold": t}`.
+`rectangle` shapes become boxes, and `polygon` shapes become polygons, or
+their bounding boxes on a scheme with no polygon tool. `mask` shapes are left
+out and counted.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `url` | required | The function's address, such as `http://localhost:32768`. |
+| `threshold` | 0.5 | Sent to the function, which drops shapes scoring lower. |
+| `label_map`, `timeout_s` | none, 120 | |
+
 ### `torchvision-detect`
 
 `torchvision-detect` fine-tunes a torchvision Faster R-CNN on the shapes of an
@@ -48684,6 +48879,152 @@ canvas pixels when it draws them.
 The other parameters are `torchvision-detect`'s. OpenCV reads the videos
 (`pip install opencv-python`); a codec it cannot read leaves the item out.
 
+### `rdkit-property`
+
+`rdkit-property` answers a question about a molecule: a `radio`, `select`,
+`likert` or `slider` scheme over items that show one. The structure is the
+input, not the item's text. It comes from the item's `molecule` display field
+(SMILES, a molfile, or a `.mol`, `.sdf` or `.smi` file in the task or media
+directory), or from a `chemical_structure` scheme on the same item: the
+structure annotators drew (the most common drawing when they differ), or the
+one the scheme starts from (`prefill_field`) when nobody drew. The bundle
+writes each item's structure into its row, and the build warns how many items
+have none.
+
+Each molecule becomes a Morgan fingerprint (radius 2 and 2048 bits by default,
+the ECFP4 most property models start from) followed by RDKit's 2D descriptors
+(weight, logP, TPSA, ring and atom counts and the rest of `Descriptors`),
+scaled. A choice or Likert question is fitted with logistic regression or a
+random forest. A slider is fitted with ridge regression or a random forest,
+and the prediction is rounded to the slider's `step` (1 when the scheme sets
+none) and kept inside its range; when the maximum is off the step grid, the
+top is the last step under it. A structure RDKit cannot parse is left out of training and gets no
+prediction; the run counts them (`n_unparseable`). The text trainers are
+offered for these schemes too, because the items' text is still there.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model` | `logistic` (choices), `ridge` (sliders) | `logistic`, `random_forest` or `ridge`. |
+| `radius`, `bits` | 2, 2048 | The Morgan fingerprint. |
+| `descriptors` | true | Add the 2D descriptors. |
+| `C`, `alpha`, `n_estimators` | 1.0, 1.0, 300 | Logistic regression's inverse regularization, ridge's regularization, trees in a forest. |
+| `class_weight` | none | `balanced` weights rare answers up. |
+| `min_instances` | 10 | Labelled molecules needed in the train split. |
+
+It needs RDKit (`pip install "potato-annotation[chemistry]"`).
+
+### `peak-cnn`
+
+`peak-cnn` picks peaks on NMR, IR, Raman, UV-Vis and mass spectra, from
+`peak_picking` answers. Its input is the spectrum the scheme's
+`viewer_field` shows, read by the same readers as the
+[spectrum display](../annotation-types/science/spectra.md), with the
+item's or the display's `scan`, `index` or `block`. Its target is the peaks
+the annotator kept: accepted suggestions and added peaks alike. A rejected
+suggestion is a place with no peak, which the target says by having none
+there.
+
+Each spectrum is resampled to `length` evenly spaced points and scaled to 0–1
+with peaks pointing up (a transmittance spectrum is flipped, as the display
+flips it; `peak_direction` is followed). A stick spectrum keeps each line on
+its nearest point. A 1D CNN of dilated residual convolutions predicts each
+point's chance of being a peak, trained against a Gaussian bump of width
+`sigma` at each kept peak. To predict, it keeps points above `threshold` that
+are the highest within `min_separation` points, moves each to the spectrum's
+own maximum within `snap` points, and maps it back to x. Peak labels and
+assignments are not predicted.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `length` | 4096 | Points per resampled spectrum. Raise it when peaks are narrower than 1/`length` of the x range. |
+| `width`, `depth` | 32, 10 | Filters per layer, and layers. |
+| `sigma` | 2.0 | Width of the target bump, in points. |
+| `threshold` | 0.5 | Probability a point needs to be a peak. |
+| `min_separation`, `snap` | 4, 3 | In points. |
+| `max_peaks` | 80 | Most peaks per spectrum. |
+| `tolerance` | 0.5% of the x range | How far, in x units, a predicted peak may be from an annotated one and still match when scored. |
+| `epochs`, `batch_size`, `learning_rate`, `patience` | 60, 8, 1e-3, 10 | |
+| `min_instances` | 5 | Annotated spectra needed in the train split. |
+
+The predicted peaks show as review suggestions on the spectrum, marked
+"model" (see [Write-back](#write-back)).
+
+### `signal-cnn`
+
+`signal-cnn` labels physiological and sensor signals (EEG, ECG, EMG,
+accelerometers) from `interval_label` answers. Each recording is read by the
+same readers as the [time-series display](../annotation-types/science/time_series.md).
+The display's `channels` are used (every channel when it names none, up to
+`max_channels`), resampled to `rate` Hz, and each channel is standardized.
+Every recording is read with the first training recording's channels, in
+that order; a channel a recording lacks is a flat zero.
+
+The scheme's mode sets the task:
+
+- **epoch**: each annotated epoch is one example, classified whole, as sleep
+  staging does. Prediction labels every epoch of the recording that is at
+  least half there.
+- **free**: the recording is labelled sample by sample, with "no label"
+  where no interval is, and trained on random `window_s`-second crops.
+  Prediction slides over the recording, takes the most likely label for each
+  `frame_s` frame, merges runs of one label into intervals, and drops those
+  shorter than `min_duration`.
+
+Point events are neither trained nor predicted. The network is a small
+InceptionTime: parallel convolutions of three widths and a max-pool branch,
+with a residual every three blocks. With `balanced`, the loss is weighted by
+inverse label frequency, which rare sleep stages need.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `rate` | 100 | Hz every channel is resampled to. |
+| `max_channels` | 16 | Most channels read when the display names none. |
+| `width`, `depth` | 16, 6 | Filters per branch, and blocks. |
+| `balanced` | true | Weight the loss by inverse label frequency. |
+| `window_s`, `windows_per_epoch` | 30, 400 | Free mode: seconds per crop, and crops per epoch. |
+| `frame_s`, `min_duration` | 1.0, one frame | Free mode: seconds per predicted frame, and the shortest interval kept. |
+| `epochs`, `batch_size`, `learning_rate`, `patience` | 30, 32, 1e-3, 5 | |
+| `min_instances` | 3 | Annotated recordings needed in the train split. |
+
+A WFDB record is linked into the bundle with its `.dat` and annotation
+files. The predicted intervals cover every channel (`channel: null`) and
+show as pre-annotations on the recording (see [Write-back](#write-back)).
+
+### `episode-model`
+
+`episode-model` learns the three layers of an `episode_annotation` answer:
+the phases, the outcome and the reward curve. Its input is the episode's
+numeric series (joint positions, gripper state, forces: whatever the LeRobot
+dataset, HDF5 demo or episode manifest records), one row per frame, each
+series standardized. Video is not read. A phase that only looks different
+on camera, and is not different in what the robot measured, is not one it
+can find.
+
+A convolution over the series feeds a bidirectional GRU and three heads: a
+phase per frame (with "no phase" between phases), an outcome per episode
+(from the mean of the GRU's states), and a reward per frame. The reward head
+is trained only where the annotator drew the curve, because outside it they
+said nothing. A layer an answer leaves empty is left out of that episode's
+loss, so an episode marked only with an outcome still trains the outcome.
+The outcome head trains when the training episodes have at least two
+outcomes. Episodes longer than `max_frames` are trained on random crops.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `hidden` | 64 | GRU state size. |
+| `max_frames` | 2000 | Longest stretch trained on at once. |
+| `phase_weight`, `outcome_weight`, `reward_weight` | 1.0 each | Each head's share of the loss. |
+| `reward_points` | 50 | Points in a predicted reward curve. |
+| `epochs`, `batch_size`, `learning_rate`, `patience` | 40, 4, 1e-3, 8 | `batch_size` is episodes per step. |
+| `min_instances` | 5 | Annotated episodes needed in the train split. |
+
+The prediction is the stored answer's shape: phases in the scheme's taxonomy,
+an outcome it offers, and a reward curve inside `reward_range`, only for the
+`layers` the scheme shows. It pre-fills the timeline (see
+[Write-back](#write-back)). LeRobot datasets need pyarrow and HDF5 demos need
+h5py. Rollout evaluation (`rollout_evaluation`) is not trained here: its
+preference is between videos, which this model does not read.
+
 ### Decision models
 
 A decision model (hosted Jev, OpenJev, `laya-serve`, or Laya in this process)
@@ -48844,6 +49185,10 @@ scheme's kind:
 | `volume_annotation` | Dice per label per volume (`dice_<label>`) and their mean over every volume and label pair; a label the model left out of a volume that has it scores 0 | `mean_dice` |
 | `spatial_annotation` | 3D average precision per label at volumetric IoU 0.5 (`ap_3d_50_<label>`), mean over labels at 0.25 and 0.5, and precision, recall and F1 at 0.5, matching oriented cuboids exactly | `map_3d_50` |
 | `video_annotation` (tracking) | MOTA, IDF1, ID switches, misses and false positives at IoU 0.5, on frames sampled at 2 per second across each annotated video | `idf1` |
+| `peak_picking` | precision, recall and F1 of peaks matched one to one, nearest first, within the run's `tolerance` (else 0.5% of the spectrum's x range), and the mean offset of the matched ones. A peak predicted on a spectrum the annotator said has none is a false alarm. | F1 |
+| `interval_label`, epoch mode | accuracy and macro-F1 over the annotated epochs, each read at its centre | macro-F1 |
+| `interval_label`, free mode | precision, recall and F1 over intervals with the same label at IoU 0.5 | `interval_f1` |
+| `episode_annotation` | phase accuracy and macro-F1 on a 0.1 s grid (a phase predicted where the annotator marked none is a false alarm), phase segment F1 at IoU 0.5, outcome accuracy, and Pearson's r of the reward curve where it was drawn | `phase_macro_f1`; with no phases, `outcome_accuracy`, then `reward_pearson` |
 
 A classifier trained with `soft_targets` also reports `soft_jsd`,
 `soft_cross_entropy` and `ece`; see
@@ -48909,6 +49254,27 @@ slider position, a ranking as the list's order, a BWS pick as the selected
 best and worst, a soft label as slider positions, a gloss in the gloss grid,
 and a conversation tree's node answers and path. No `pre_annotation` block is
 needed.
+
+Three types show a prediction as something to review rather than as the
+answer:
+
+- **Peaks** (`peak-cnn`) are suggestions on the spectrum, listed with
+  "· model". Under the display's `prepick` (`method: auto`, or `true`), the
+  item's own `peaks` come first, then the model's, then the file's peak
+  table, then the detector. `method: model` shows the model's only. An
+  accepted model peak is stored with `source: model`.
+- **Intervals** (`signal-cnn`) are pre-annotations on the recording, shown
+  dashed and listed with "· from the model". They are used only when the
+  file and the item give no intervals of their own: a recording's own
+  annotations are someone's labelling, and come first. The file's point
+  events stay alongside the model's intervals, since they do not overlap. As with the file's,
+  they are saved with the annotator's first change, and `pre_annotations:
+  false` on the scheme turns them off.
+- **An episode answer** (`episode-model`) pre-fills the timeline's phases,
+  outcome and reward curve. It is stored once the annotator edits it.
+
+An annotator held out from machine help (`ai_support.holdout`), or answering
+a blind labeling-engine request, sees none of these.
 
 Shapes a widget could not show as they are, which it would repair as it drew
 them, are left out of the prelabel: a box with no width, a shape off the

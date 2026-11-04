@@ -233,6 +233,12 @@ epoch mode, an all-channel interval from the file (a hypnogram stretch) is
 cut into the epochs it covers by at least half. Entries that came from the
 file and were not changed keep `"source": "file"`.
 
+A trained [`signal-cnn`](../../ai-intelligence/model_training.md#signal-cnn)
+model's intervals are pre-annotations the same way, listed with "· from the
+model" and kept as `"source": "model"`. They are used only when the file and
+`preannotation_field` give no intervals, and `pre_annotations: false` turns
+them off too.
+
 ### Stored value
 
 One JSON object per item:

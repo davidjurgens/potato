@@ -451,7 +451,7 @@ class TestSpectrumDisplay:
                          {"kind": "blob"},
                          {"kind": "peak", "x": 1, "source": "manual", "fields": {"a": 1}}]}
         errors = validate_selection("spectrum", bad)
-        for fragment in ("items[0].x must be a number", "items[0].source must be auto or manual",
+        for fragment in ("items[0].x must be a number", "items[0].source must be auto, manual or model",
                          "items[1].to must be above .from", "items[2].kind must be peak or region",
                          "items[3].fields must map", "rejected must be a list"):
             assert any(fragment in e for e in errors), (fragment, errors)
@@ -570,6 +570,18 @@ class TestPeakExporter:
             table = list(csv.DictReader(f))
         assert [r["kind"] for r in table] == ["peak", "peak", "region", "region", "rejected"]
         assert table[0]["field_x"] == "clash" and table[1]["width"] == ""
+
+    def test_an_accepted_model_peak_keeps_its_source(self):
+        from potato.export.peak_exporter import PeakTableExporter
+        answer = {"viewer": "spectrum", "rejected": [],
+                  "items": [{"kind": "peak", "x": 2.0, "source": "model"},
+                            {"kind": "peak", "x": 3.0, "source": "auto"}]}
+        ctx = _context([("ann1", "item1", answer)])
+        out = os.path.join(ctx.output_dir, "model_peaks")
+        result = PeakTableExporter().export(ctx, out)
+        rows = [json.loads(line) for line in open(os.path.join(out, "peaks.jsonl"))]
+        assert [r["source"] for r in rows] == ["model", "auto"]
+        assert result.stats["accepted_suggestions"] == 2
 
     def test_nothing_to_export(self):
         from potato.export.peak_exporter import PeakTableExporter

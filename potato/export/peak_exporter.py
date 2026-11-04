@@ -6,10 +6,11 @@ picked peak, integrated region and rejected suggestion:
 
     peaks.csv / peaks.jsonl
         user_id, instance_id, schema, kind (peak | region | rejected),
-        x, y, width, from, to, integral, relative, source (auto | manual),
+        x, y, width, from, to, integral, relative, source (auto | model | manual),
         label, then one column per configured peak/region field
 
-``source`` is ``auto`` for a suggested peak the annotator accepted and
+``source`` is ``auto`` for a suggested peak the annotator accepted,
+``model`` for an accepted suggestion a trained peak model made, and
 ``manual`` for one they added; ``rejected`` rows are suggestions they turned
 down (x only). ``relative`` is a region's integral over the first region's
 in the same answer. ``label`` is the item's ``label`` (set by a
@@ -66,7 +67,8 @@ def rows_for_answer(answer: Dict[str, Any], base: Dict[str, Any],
         if it["kind"] == "peak":
             row.update({"x": _num(it.get("x")), "y": _num(it.get("y")),
                         "width": _num(it.get("width")),
-                        "source": it.get("source") if it.get("source") in ("auto", "manual") else "manual"})
+                        "source": it.get("source") if it.get("source") in ("auto", "model", "manual")
+                        else "manual"})
         else:
             integral = _num(it.get("integral"))
             row.update({"from": _num(it.get("from")), "to": _num(it.get("to")), "integral": integral,
@@ -147,4 +149,4 @@ class PeakTableExporter(BaseExporter):
                             stats={"peaks": kinds.count("peak"), "regions": kinds.count("region"),
                                    "rejected": kinds.count("rejected"),
                                    "accepted_suggestions": sum(1 for r in rows if r["kind"] == "peak"
-                                                               and r.get("source") == "auto")})
+                                                               and r.get("source") in ("auto", "model"))})

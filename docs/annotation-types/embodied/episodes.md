@@ -123,6 +123,14 @@ Outside the drawn range the curve is **nothing**, not zero. "Did not say" and
 "said zero" are different, and a reward model trained on the second when the
 first was true learns that unlabelled regions are bad.
 
+## Model prelabels
+
+[`episode-model`](../../ai-intelligence/model_training.md#episode-model)
+learns phases, the outcome and the reward curve from these answers, from the
+episode's recorded series. Its prediction pre-fills the timeline in the
+stored shape, only for the layers the scheme shows, and is stored once the
+annotator edits it.
+
 ## Export
 
 `episode_jsonl` writes one row per frame:

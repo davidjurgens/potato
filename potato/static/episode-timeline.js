@@ -246,6 +246,11 @@
             this._bindInstruction();
             this._restoreFromInput();
             this._loadEpisode();
+            // annotation.js unchecks every radio on the page before it
+            // restores the item's answers, and the outcome radios are this
+            // widget's, not an answer it knows: put them back once it is done.
+            this._onInstanceReady = () => this._applyOutcomeToInputs();
+            document.addEventListener('potato:instance-ready', this._onInstanceReady);
 
             if (typeof ResizeObserver !== 'undefined' && holder) {
                 this._resizeObserver = new ResizeObserver(() => this.draw());
@@ -254,6 +259,10 @@
         }
 
         destroy() {
+            if (this._onInstanceReady) {
+                document.removeEventListener('potato:instance-ready', this._onInstanceReady);
+                this._onInstanceReady = null;
+            }
             if (this._resizeObserver) {
                 this._resizeObserver.disconnect();
                 this._resizeObserver = null;

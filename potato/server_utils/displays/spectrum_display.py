@@ -30,8 +30,9 @@ scheme or a ``viewer_selection`` scheme::
                {"kind": "region", "from": 1.19, "to": 1.33, "integral": 37.9}],
      "rejected": [0.92]}
 
-``source`` is ``auto`` for an accepted suggestion and ``manual`` for a peak
-the annotator added; ``rejected`` lists the x of suggestions turned down.
+``source`` is ``auto`` for an accepted suggestion, ``model`` for an accepted
+suggestion a trained peak model made, and ``manual`` for a peak the annotator
+added; ``rejected`` lists the x of suggestions turned down.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from .viewer_display import (ViewerAsset, ViewerDataError, ViewerDisplay,
 logger = logging.getLogger(__name__)
 
 SPECTRUM_TYPES = ("auto", "nmr", "ir", "raman", "uv", "ms", "other")
-PREPICK_METHODS = ("auto", "detect", "file", "item")
+PREPICK_METHODS = ("auto", "detect", "file", "item", "model")
 PREPICK_KEYS = {"method", "prominence", "max_peaks", "min_distance"}
 PREPICK_DEFAULTS = {"method": "auto", "prominence": 0.05, "max_peaks": 40, "min_distance": None}
 ITEM_KEYS = {"file", "path", "scan", "index", "block", "peaks", "kind",
@@ -137,9 +138,42 @@ def resolved_conventions(spectrum, options: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def suggestions_for(spectrum, item_peaks, options: Dict[str, Any], direction: str
+def model_peaks_by_field(config: Dict[str, Any], pre_annotations: Optional[Dict[str, Any]]
+                         ) -> Dict[str, List[Dict[str, Any]]]:
+    """``{spectrum field: [{x, confidence}]}`` from the visible prelabels of
+    ``peak_picking`` schemes (a ``peak-cnn`` prediction is
+    ``{"peaks": [{"x": ...}], ...}``, or that as JSON)."""
+    import json
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for scheme in (config or {}).get("annotation_schemes") or []:
+        if not isinstance(scheme, dict) or scheme.get("annotation_type") != "peak_picking":
+            continue
+        payload = (pre_annotations or {}).get(scheme.get("name"))
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError:
+                payload = None
+        peaks = payload.get("peaks") if isinstance(payload, dict) else payload
+        kept = []
+        for p in peaks if isinstance(peaks, list) else []:
+            x = p.get("x") if isinstance(p, dict) else p
+            if _is_number(x) and x == x and abs(x) != float("inf"):
+                entry = {"x": float(x)}
+                if isinstance(p, dict) and _is_number(p.get("confidence")):
+                    entry["confidence"] = float(p["confidence"])
+                kept.append(entry)
+        if kept and scheme.get("viewer_field"):
+            out.setdefault(str(scheme["viewer_field"]), []).extend(kept)
+    return out
+
+
+def suggestions_for(spectrum, item_peaks, options: Dict[str, Any], direction: str,
+                    model_peaks: Optional[List[Dict[str, Any]]] = None
                     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """Pre-picked peaks and where they came from (detect, file, item)."""
+    """Pre-picked peaks and where they came from (detect, file, item, model).
+    Under ``auto`` the item's own peaks come first, then a trained model's,
+    then the file's peak table, then the detector."""
     import numpy as np
     from potato.science.spectra import detect_peaks, file_peaks
     settings = prepick_settings(options.get("prepick"))
@@ -147,8 +181,23 @@ def suggestions_for(spectrum, item_peaks, options: Dict[str, Any], direction: st
         return [], None
     method = settings["method"]
     if method == "auto":
-        method = "item" if item_peaks else ("file" if spectrum.peaks else "detect")
+        method = "item" if item_peaks else (
+            "model" if model_peaks else ("file" if spectrum.peaks else "detect"))
     max_peaks = int(settings["max_peaks"])
+    if method == "model":
+        lo, hi = float(spectrum.x[0]), float(spectrum.x[-1])
+        # The most confident first, so max_peaks keeps those, not the lowest x.
+        ranked = sorted((p for p in model_peaks or [] if lo <= float(p["x"]) <= hi),
+                        key=lambda p: -float(p.get("confidence", 0.0)))
+        out = []
+        for p in ranked[:max_peaks]:
+            x = float(p["x"])
+            entry = {"x": x, "y": float(np.interp(x, spectrum.x, spectrum.y)),
+                     "source": "model"}
+            if "confidence" in p:
+                entry["confidence"] = round(float(p["confidence"]), 4)
+            out.append(entry)
+        return sorted(out, key=lambda e: e["x"]), "model"
     if method == "item":
         out = []
         for p in (item_peaks or [])[:max_peaks]:
@@ -272,7 +321,8 @@ class SpectrumDisplay(ViewerDisplay):
         spectrum, item_peaks, source = load_spectrum(data, options)
         conv = resolved_conventions(spectrum, options)
         try:
-            suggestions, method = suggestions_for(spectrum, item_peaks, options, conv["direction"])
+            suggestions, method = suggestions_for(spectrum, item_peaks, options, conv["direction"],
+                                                  field_config.get("_model_peaks"))
         except Exception as e:      # a detector failure must not hide the spectrum
             logger.warning("peak suggestions failed for %s: %s", source, e)
             suggestions, method = [], None
@@ -314,8 +364,8 @@ class SpectrumDisplay(ViewerDisplay):
                 errors.append(f"{where}.y must be a number")
             if "width" in item and (not _is_number(item["width"]) or item["width"] < 0):
                 errors.append(f"{where}.width must be a number (0 or more)")
-            if item.get("source") not in ("auto", "manual"):
-                errors.append(f"{where}.source must be auto or manual")
+            if item.get("source") not in ("auto", "manual", "model"):
+                errors.append(f"{where}.source must be auto, manual or model")
         elif kind == "region":
             allowed = {"kind", "from", "to", "integral", "label", "fields"}
             a, b = item.get("from"), item.get("to")

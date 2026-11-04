@@ -345,6 +345,7 @@ class InstanceDisplayRenderer:
 
         field = self._with_turn_schemes(field)
         field = self._with_run_tree(field, instance_data)
+        field = self._with_model_peaks(field, instance_data)
 
         try:
             rendered = display_registry.render(field_type, field, data)
@@ -395,6 +396,20 @@ class InstanceDisplayRenderer:
             return field
         field = dict(field)
         field["_run_tree"] = run_tree
+        return field
+
+    def _with_model_peaks(self, field: Dict[str, Any], instance_data: Dict[str, Any]
+                          ) -> Dict[str, Any]:
+        """Return a spectrum field config copy carrying a peak model's peaks
+        for it (internal "_model_peaks", set by the page from the item's
+        visible prelabels), for the display to offer as suggestions."""
+        if field.get("type") != "spectrum":
+            return field
+        peaks = (instance_data.get("_model_peaks") or {}).get(field.get("key"))
+        if not isinstance(peaks, list) or not peaks:
+            return field
+        field = dict(field)
+        field["_model_peaks"] = peaks
         return field
 
     def _wrap_resizable(self, inner_html: str, field: Dict[str, Any]) -> str:
@@ -588,8 +603,8 @@ class InstanceDisplayRenderer:
             try:
                 result["display_fields"][key] = display_registry.render(
                     field_type,
-                    self._with_run_tree(self._with_turn_schemes(field),
-                                        instance_data),
+                    self._with_model_peaks(self._with_run_tree(
+                        self._with_turn_schemes(field), instance_data), instance_data),
                     data)
             except ValueError as e:
                 logger.error(f"Error rendering field '{key}': {e}")

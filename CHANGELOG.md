@@ -183,6 +183,40 @@ All notable changes to the Potato annotation platform are documented in this fil
 - **Video object tracking** (`video-track`): a Faster R-CNN on frames sampled
   from the annotated tracks, its detections linked into tracks, scored by
   MOTA and IDF1, and prefilled as tracks the widget draws in its own pixels.
+- **Molecular property models** (`rdkit-property`): a `radio`, `select`,
+  `likert` or `slider` question about a molecule trains on Morgan
+  fingerprints and RDKit descriptors with logistic regression, ridge or a
+  random forest. The structure comes from the item's `molecule` field, or
+  from what annotators drew in a `chemical_structure` scheme. A slider's
+  prediction is rounded to its step. Needs the `chemistry` extra.
+- **Peak picking on spectra** (`peak-cnn`): a 1D CNN on the peaks annotators
+  kept in a `peak_picking` scheme, scored by matched-peak F1 within a
+  tolerance. Its peaks show as review suggestions marked "model"
+  (`prepick.method: model`, or `auto`), and an accepted one is stored and
+  exported with `source: model`.
+- **Signals** (`signal-cnn`): an InceptionTime CNN on `interval_label`
+  answers: whole epochs in epoch mode (sleep staging, scored by macro-F1),
+  labelled intervals in free mode (interval F1 at IoU 0.5). Its intervals
+  show as pre-annotations "from the model" when the file has none of its
+  own. A WFDB record goes into the bundle with its sample and annotation files.
+- **Robot episodes** (`episode-model`): a GRU over an episode's recorded
+  series with three heads (phase per frame, outcome, reward curve), from
+  `episode_annotation` answers; a layer an answer leaves empty is left out
+  of its loss. Scored by phase macro-F1, outcome accuracy and reward
+  Pearson's r. Its answer pre-fills the episode timeline.
+- **Four inference bridges** that train nothing and score, write back and
+  review a model running elsewhere, as `label-studio-ml` does:
+  `openai-vlm-boxes` (a vision-language model behind an OpenAI-compatible
+  API, with `coordinate_format` and `box_order` for its box convention;
+  Gemma and Gemini are read y first and per-mille), `hf-inference` (a
+  Hugging Face Inference Endpoint or serverless model, for text
+  classification, spans or object detection), `roboflow` (hosted or
+  self-hosted) and `cvat-nuclio` (a CVAT serverless function). Keys are
+  named by environment variable, and Roboflow's is kept out of run logs and error messages.
+- **Differentially private fine-tuning**: `dp: {epsilon, delta,
+  max_grad_norm}` on `hf-text-classification` and `hf-image-classification`
+  trains with DP-SGD (Opacus, installed separately), and reports the epsilon
+  spent per epoch and on the model card.
 - New settings: `model_training.trainer_params` (per-trainer defaults) and
   `model_training.auto_retrain.accept_licence`.
 - New extras: `embeddings` (`sentence-transformers`), `train-text`,
@@ -222,6 +256,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- A training run reported success before its predictions were written
+  back, so the Training page (or a script waiting on the run) could read a
+  finished run with no write-back report. The run now shows "writing back
+  predictions" until that is done.
+- An episode's outcome came back unselected on the timeline after
+  navigating away and back, though the answer held it: the page unchecked
+  every radio button before restoring the item's answers.
 - Codebook merge and split re-pointed no codings: nothing linked saved
   annotations to code ids. Saves now link them per coder, merge, split and
   rename rewrite the saved labels, a split archives the source only when no

@@ -70,7 +70,10 @@ _MODALITY_BY_TYPE = {
     "spectrogram_annotation": "image",
     "volume_annotation": "volume",
     "spatial_annotation": "point_cloud",
-    "episode_annotation": "video",
+    # A robot episode trains on its numeric series, not its video.
+    "episode_annotation": "episode",
+    "peak_picking": "spectrum",
+    "interval_label": "signal",
 }
 
 
@@ -125,6 +128,9 @@ def detect_modality(schemes: Sequence[Dict[str, Any]],
         modality = _MODALITY_BY_TYPE.get(scheme.get("annotation_type", ""))
         if modality:
             return modality
+    if rows and sum(1 for r in rows if r.get("molecule")) >= 0.8 * len(rows):
+        # A question about a molecule: the structure is the input.
+        return "molecule"
     if rows:
         def image_ref(row):
             ref = str(row.get("media") or row.get("media_missing") or "")
@@ -151,6 +157,15 @@ def guess_modality(config: Dict[str, Any], scheme: Dict[str, Any],
     and text trainers for a text one.
     """
     text_key = (config.get("item_properties", {}) or {}).get("text_key", "text")
+    from potato.training.science import molecule_source
+    source = molecule_source(config, scheme)
+    if source is not None:
+        # A drawn structure exists only once someone draws it; a displayed
+        # one is in the items, or the display has nothing to show.
+        if source[0] == "answer" or sum(
+                1 for d in items if isinstance(d, dict) and d.get(source[1])
+        ) >= 0.8 * max(1, len(items)):
+            return "molecule"
     rows = []
     for data in items:
         if not isinstance(data, dict):
@@ -390,6 +405,15 @@ def _target_for(spec: SchemaSpec, value_map: Any,
     if spec.kind == "spatial":
         from potato.training.spatial import spatial_target
         return spatial_target(value_map)
+    if spec.kind == "peaks":
+        from potato.training.science import peaks_target
+        return peaks_target(value_map)
+    if spec.kind == "intervals":
+        from potato.training.science import intervals_target
+        return intervals_target(scheme, value_map)
+    if spec.kind == "episode":
+        from potato.training.science import episode_target
+        return episode_target(scheme, value_map)
     if spec.kind == "track":
         from potato.training.tracking import track_target
         try:
@@ -449,6 +473,9 @@ TRACE_KINDS = ("trajectory", "trace")
 
 from potato.training.vision import VISION_KINDS  # noqa: E402
 from potato.training.audio import AUDIO_KINDS  # noqa: E402
+from potato.training.science import (SCIENCE_TYPES, answer_structure,  # noqa: E402
+                                     chemical_prefill_field, molecule_source,
+                                     molecule_text, science_input, wfdb_siblings)
 
 
 def _audio_target(kind: str, scheme: Dict[str, Any], value_map: Any,
@@ -761,7 +788,9 @@ def _link_media(reference: str, task_dir: str, media_dir: str,
     if reference.startswith("data:"):
         return _write_data_uri(reference, media_dir, stats)
 
-    source = _media_file(reference, task_dir, media_directory)
+    # A trailing slash on a folder (a LeRobot dataset, an OME-Zarr image)
+    # named nothing for its link, which landed as the hashed folder itself.
+    source = os.path.normpath(_media_file(reference, task_dir, media_directory))
     # A directory is an OME-Zarr image, rendered to planes later.
     if not os.path.exists(source):
         stats.n_media_missing += 1
@@ -1015,6 +1044,10 @@ def build_bundle(
             return
         if by_name.get(schema_names[0], {}).get("annotation_type") in TEXT_SOURCE_TYPES:
             return
+        if by_name.get(schema_names[0], {}).get("annotation_type") in SCIENCE_TYPES:
+            # The bound field, linked by attach_science; the image-key scan
+            # would link whatever "url" or "path" the item also has.
+            return
         source_field = _media_field(config, by_name.get(schema_names[0], {}))
         reference = _media_reference(item_data, source_field)
         if reference:
@@ -1161,11 +1194,86 @@ def build_bundle(
             else:
                 row["media_missing"] = str(normalized["audio"])[:200]
 
+    def attach_science(row, item_data):
+        # A spectrum, signal or episode: the file the scheme's field names,
+        # linked like an image, and the options a reader needs to open it.
+        if primary.get("annotation_type") not in SCIENCE_TYPES:
+            return
+        found = science_input(config, primary, item_data)
+        if not found:
+            return
+        row["science"] = {"options": found["options"]}
+        if "inline" in found:
+            row["science"]["inline"] = found["inline"]
+            return
+        reference = found["ref"]
+        if not include_media or reference.startswith(("http://", "https://", "data:")):
+            # A signal or spectrum is read from disk; a URL is not one.
+            row["media_missing"] = reference[:200]
+            return
+        linked = _link_media(reference, task_dir, media_dir, stats, media_directory)
+        if not linked:
+            row["media_missing"] = reference[:200]
+            return
+        row["media"] = linked
+        source = _media_file(reference, task_dir, media_directory)
+        row["media_source"] = _source_path(source, task_dir)
+        if source.lower().endswith(".hea"):
+            # A WFDB header names its samples and annotations beside it. A
+            # sibling may be a link to elsewhere in the project, as the
+            # header may; one that leads outside it is left out, as any
+            # media file would be.
+            folder = os.path.join(media_dir, os.path.dirname(linked))
+            base = (media_directory if os.path.isabs(media_directory)
+                    else os.path.join(task_dir, media_directory))
+            roots = [os.path.realpath(task_dir), os.path.realpath(base)]
+            for sibling in wfdb_siblings(source):
+                dest = os.path.join(folder, os.path.basename(sibling))
+                real = os.path.realpath(sibling)
+                if os.path.lexists(dest) or not os.path.isfile(real) or not any(
+                        real.startswith(root + os.sep) for root in roots):
+                    continue
+                try:
+                    os.symlink(real, dest)
+                except (OSError, NotImplementedError):
+                    shutil.copy2(real, dest)
+
+    molecule_from = molecule_source(config, primary) if primary else None
+    prefill_field = (chemical_prefill_field(config, molecule_from[1])
+                     if molecule_from and molecule_from[0] == "answer" else None)
+    missing_molecules: List[str] = []
+
+    def attach_molecule(row, iid, item_data):
+        # The structure a question is about: the molecule display's field,
+        # else the structure annotators drew (the most common one), else the
+        # one the drawing scheme starts from.
+        if molecule_from is None:
+            return
+        text = None
+        if molecule_from[0] == "display":
+            text = molecule_text(item_data.get(molecule_from[1]), task_dir,
+                                 media_directory)
+        else:
+            drawn = [answer_structure(v) for v in
+                     answers_by_item.get(iid, {}).get(molecule_from[1]) or []]
+            drawn = [d for d in drawn if d]
+            if drawn:
+                text = max(set(drawn), key=drawn.count)
+            elif prefill_field:
+                text = molecule_text(item_data.get(prefill_field), task_dir,
+                                     media_directory)
+        if text:
+            row["molecule"] = text
+        else:
+            missing_molecules.append(iid)
+
     def unlabeled(iid, item_data):
         if include_unlabeled:
             row = {"instance_id": iid,
                    "text": _item_text(item_data, text_key)}
             attach_media(row, item_data)
+            attach_science(row, item_data)
+            attach_molecule(row, iid, item_data)
             attach_turns(row, item_data)
             attach_trace(row, item_data)
             attach_tree(row, item_data)
@@ -1254,6 +1362,15 @@ def build_bundle(
                 seen_labels[name].update(str(l) for l in target["masks"])
             elif spec_kind == "spatial":
                 seen_labels[name].update(str(c["label"]) for c in target)
+            elif spec_kind == "peaks":
+                # Labels are optional on a peak; most spectra carry none.
+                seen_labels[name].update(str(p["label"]) for p in target["peaks"]
+                                         if p.get("label"))
+            elif spec_kind == "intervals":
+                seen_labels[name].update(str(i["label"]) for i in target["intervals"])
+            elif spec_kind == "episode":
+                # The phase taxonomy; outcomes are in each target.
+                seen_labels[name].update(str(p["label"]) for p in target["phases"])
             elif spec_kind == "track":
                 seen_labels[name].update(str(t["label"]) for t in target["tracks"])
             elif spec_kind == "acoustic":
@@ -1281,6 +1398,8 @@ def build_bundle(
             row["soft_targets"] = soft_targets
 
         attach_media(row, item_data)
+        attach_science(row, item_data)
+        attach_molecule(row, iid, item_data)
         attach_turns(row, item_data)
         attach_trace(row, item_data)
         attach_tree(row, item_data)
@@ -1302,6 +1421,14 @@ def build_bundle(
             attach_candidates(row, item_data)
 
         rows.append(row)
+
+    if missing_molecules:
+        stats.warnings.append(
+            "%d item(s) have no structure in %s %r; a molecule model cannot "
+            "train or predict on them." % (
+                len(missing_molecules),
+                "field" if molecule_from[0] == "display" else "scheme",
+                molecule_from[1]))
 
     if audio_problems:
         # One reason, usually, for every item: the tiers are named alike.
@@ -1458,7 +1585,9 @@ def build_bundle(
         "splits": split_files,
         "labels": label_index,
         "media_dir": "media",
-        "modality": detect_modality(schemes, rows),
+        "modality": ("molecule" if molecule_from and molecule_from[0] == "answer"
+                     and any(r.get("molecule") for r in rows)
+                     else detect_modality(schemes, rows)),
         "text_key": text_key,
         "split_seed": split_seed,
         "aggregation": aggregation,

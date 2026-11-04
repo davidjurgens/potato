@@ -40,6 +40,7 @@ from typing import Any, ClassVar, Dict, Iterable, Iterator, List, Optional, Tupl
 from potato.training.base import (BundleRef, FitResult, PredictItem,
                                   PredictionRecord, ProgressReporter, Trainer,
                                   TrainerError, TrainingSpec)
+from potato.training.trainers import _dp
 from potato.training.trainers import _hf_common as hf
 
 INSTALL_HINT = "pip install 'potato-annotation[train-text]'"
@@ -71,7 +72,7 @@ class HFTextClassificationTrainer(Trainer):
                 "precision": "auto", "lora": None, "max_length": 256,
                 "threshold": 0.5, "soft_targets": False,
                 "acquisition": "least_confident", "mc_samples": 10,
-                "min_instances": 20}
+                "dp": None, "min_instances": 20}
 
     @classmethod
     def params_schema(cls) -> Dict[str, Any]:
@@ -109,6 +110,7 @@ class HFTextClassificationTrainer(Trainer):
                                             "label. Always on for "
                                             "soft_label schemes."},
         })
+        props["dp"] = _dp.PARAM
         return {"type": "object", "properties": props,
                 "additionalProperties": False}
 
@@ -135,6 +137,8 @@ class HFTextClassificationTrainer(Trainer):
             problems.append("acquisition: %s needs a single-label scheme; %r is %s."
                             % (params["acquisition"], schema.name, schema.kind))
         problems.extend(hf.quantize_problems(params, spec))
+        problems.extend(_dp.problems(params, len(hf.rows_with_target(
+            bundle.read_split("train"), schema.name))))
         return problems
 
     # ----------------------------------------------------------------- fit
@@ -242,9 +246,15 @@ class HFTextClassificationTrainer(Trainer):
             return score
 
         report.status("running", "fine-tuning")
-        summary = hf.train_loop(model, train, params, loss_of, report,
-                                device=device, seed=spec.seed,
-                                on_epoch_end=on_epoch_end)
+        dp = _dp.settings(params, len(train))
+        if dp:
+            summary = _dp.train_loop(model, train, params, loss_of, dp, report,
+                                     device=device, seed=spec.seed,
+                                     on_epoch_end=on_epoch_end)
+        else:
+            summary = hf.train_loop(model, train, params, loss_of, report,
+                                    device=device, seed=spec.seed,
+                                    on_epoch_end=on_epoch_end)
         if not selected["saved"]:
             hf.save_model(model, tokenizer, spec.workdir)
 
@@ -258,6 +268,8 @@ class HFTextClassificationTrainer(Trainer):
                 "max_length": int(params["max_length"]), "device": device,
                 "n_train": len(train), "bundle_digest": bundle.digest,
                 "selected_epoch": summary["best_epoch"]}
+        if dp:
+            card["dp"] = _dp.card_entry(summary, dp)
         hf.write_card(spec.workdir, card)
 
         metrics = {"n_train": float(len(train)),
@@ -265,6 +277,8 @@ class HFTextClassificationTrainer(Trainer):
                    "epochs_run": float(summary["epochs_run"])}
         if summary["final_loss"] is not None:
             metrics["train_loss"] = round(summary["final_loss"], 4)
+        if dp:
+            metrics["dp_epsilon"] = summary["epsilon"]
         return FitResult(
             model_version="%s-%s-%s" % (self.name, schema.name, spec.run_id),
             artifact_paths=hf.artifact_files(spec.workdir), metrics=metrics,

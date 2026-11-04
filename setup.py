@@ -92,8 +92,9 @@ _SAML_DEPS = ["python3-saml>=1.16"]
 # DICOM series and NIfTI volumes (volume_annotation): reading, NIfTI label
 # export, and DICOM SEG export.
 _VOLUME_DEPS = ["pydicom>=2.4", "nibabel>=5.0", "highdicom>=0.22"]
-# Chemistry: RDKit (BSD-3-Clause) grades chemical_structure answer keys and
-# fills InChI/InChIKey into the export. The browser side needs none of it.
+# Chemistry: RDKit (BSD-3-Clause) grades chemical_structure answer keys,
+# fills InChI/InChIKey into the export, and featurizes molecules for the
+# rdkit-property trainer. The browser side needs none of it.
 _CHEMISTRY_DEPS = ["rdkit>=2024.3"]
 # FITS images for the fits_cutout display (astronomy): astropy, BSD-3-Clause.
 _ASTRO_DEPS = ["astropy>=5.3"]

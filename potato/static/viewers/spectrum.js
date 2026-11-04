@@ -13,7 +13,7 @@
  *
  * Selection (window.potatoViewers[field]):
  *   {viewer: 'spectrum',
- *    items: [{kind: 'peak', x, y, source: 'auto'|'manual', width?, fields?},
+ *    items: [{kind: 'peak', x, y, source: 'auto'|'model'|'manual', width?, fields?},
  *            {kind: 'region', from, to, integral, fields?}],
  *    rejected: [x, ...]}
  *
@@ -61,7 +61,7 @@
             out = {kind: 'peak', x: x};
             var y = num(item.y);
             if (y !== null) { out.y = y; }
-            out.source = item.source === 'auto' ? 'auto' : 'manual';
+            out.source = item.source === 'auto' || item.source === 'model' ? item.source : 'manual';
             var w = num(item.width);
             if (w !== null && w >= 0) { out.width = w; }
         }
@@ -80,7 +80,8 @@
         var fields = item.fields ? Object.keys(item.fields).map(function (k) { return item.fields[k]; }) : [];
         var extra = fields.length ? ' (' + fields.join(', ') + ')' : '';
         if (item.kind === 'region') { return 'region ' + trim(item.from) + '–' + trim(item.to) + extra; }
-        return 'peak at ' + trim(item.x) + (item.source === 'auto' ? ', suggested' : '') + extra;
+        return 'peak at ' + trim(item.x) + (item.source === 'auto' ? ', suggested'
+            : item.source === 'model' ? ', suggested by the model' : '') + extra;
     }
 
     function describeContext(sel) {
@@ -263,7 +264,8 @@
     };
 
     function suggestionItem(s) {
-        var item = {kind: 'peak', x: s.x, y: s.y, source: 'auto'};
+        // A trained model's suggestion stays marked as one once accepted.
+        var item = {kind: 'peak', x: s.x, y: s.y, source: s.source === 'model' ? 'model' : 'auto'};
         if (typeof s.width === 'number') { item.width = s.width; }
         if (s.label) { item.fields = {label: String(s.label)}; }
         return item;

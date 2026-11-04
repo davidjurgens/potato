@@ -211,7 +211,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='viewers/viewer-framework.css') }}?v=1">
     {% endif %}
     {% if frontend_assets.time_series | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='time-series.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='time-series.css') }}?v=2">
     {% endif %}
 
     <!-- chemical_structure scheme and molecule display -->
@@ -221,7 +221,7 @@
 
     <!-- Spectrum display and peak_picking scheme -->
     {% if frontend_assets.spectrum | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='viewers/spectrum.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='viewers/spectrum.css') }}?v=2">
     {% endif %}
 
     <!-- FITS cutouts (astronomy) -->
@@ -1027,7 +1027,7 @@
 
     <!-- Embodied episode timeline -->
     {% if frontend_assets.episode_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=3"></script>
     {% endif %}
 
     <!-- World-model rollout evaluation -->
@@ -1156,7 +1156,7 @@
     <!-- time_series display (uPlot adapter) and the interval_label scheme -->
     {% if frontend_assets.time_series | default(false) %}
     <script src="{{ url_for('static', filename='viewers/time-series.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='interval-label.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='interval-label.js') }}?v=2"></script>
     {% endif %}
 
     <!-- chemical_structure scheme and molecule display. After the viewer
@@ -1174,8 +1174,8 @@
          adapter registers with it, and a spectrum display always turns
          frontend_assets.viewer_display on too. -->
     {% if frontend_assets.spectrum | default(false) %}
-    <script src="{{ url_for('static', filename='viewers/spectrum.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='viewers/peak-picking.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='viewers/spectrum.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='viewers/peak-picking.js') }}?v=2"></script>
     {% endif %}
 
     <!-- FITS cutouts (astronomy): after the viewer framework, which a

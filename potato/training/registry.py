@@ -188,7 +188,16 @@ TRAINING_KINDS = {
     # are trained as image boxes on the rendered spectrogram.
     "speech_transcript": "transcript",
     "spectrogram_annotation": "acoustic",
+    # Peaks picked on a spectrum, intervals labelled on a signal, and a robot
+    # episode's phases, outcome and reward: none is compared by agreement.
+    "peak_picking": "peaks",
+    "interval_label": "intervals",
+    "episode_annotation": "episode",
 }
+
+#: Modalities whose items also have text a text trainer can read: a question
+#: about a molecule is still a question, and the item's text is still there.
+ALSO_TEXT = ("molecule",)
 
 
 def kind_of_schema(scheme: Dict[str, Any]) -> str:
@@ -251,7 +260,8 @@ def trainers_for_schema(scheme: Dict[str, Any],
         if info.annotation_types and (scheme.get("annotation_type") or "") \
                 not in info.annotation_types:
             continue
-        if modality and modality not in info.modalities:
+        if modality and modality not in info.modalities and not (
+                modality in ALSO_TEXT and "text" in info.modalities):
             continue
         if available_only:
             try:
@@ -643,6 +653,74 @@ def _register_builtins() -> None:
                     "scored, written back and reviewed like a trained "
                     "model's.",
         licence="Apache-2.0", commercial_use=True)
+    register_lazy(
+        "rdkit-property", "potato.training.trainers.rdkit_property",
+        "RDKitPropertyTrainer", hint="pip install 'potato-annotation[chemistry]'",
+        kinds=("nominal", "ordinal", "continuous"), modalities=("molecule",),
+        annotation_types=("radio", "select", "likert", "slider"),
+        description="Molecular property models: Morgan fingerprints and RDKit "
+                    "descriptors with a scikit-learn classifier or regressor, "
+                    "for questions about the molecule an item shows or an "
+                    "annotator drew.",
+        licence="BSD-3-Clause", commercial_use=True)
+    register_lazy(
+        "peak-cnn", "potato.training.trainers.peak_cnn", "PeakCNNTrainer",
+        hint="pip install 'potato-annotation[train-vision]'",
+        kinds=("peaks",), modalities=("spectrum",),
+        description="Peak picking on NMR, IR, Raman, UV-Vis and mass spectra: "
+                    "a 1D CNN trained on the peaks annotators kept, suggesting "
+                    "peaks on the rest.",
+        licence="BSD-3-Clause", commercial_use=True)
+    register_lazy(
+        "signal-cnn", "potato.training.trainers.signal_cnn", "SignalCNNTrainer",
+        hint="pip install 'potato-annotation[train-vision,signals]'",
+        kinds=("intervals",), modalities=("signal",),
+        description="Labels EEG, ECG and other signals: an InceptionTime CNN "
+                    "that stages epochs or finds labelled intervals, trained on "
+                    "interval_label answers.",
+        licence="BSD-3-Clause", commercial_use=True)
+    register_lazy(
+        "episode-model", "potato.training.trainers.episode_model",
+        "EpisodeModelTrainer", hint="pip install 'potato-annotation[train-vision]'",
+        kinds=("episode",), modalities=("episode",),
+        description="Robot episodes: a GRU over the recorded joint and sensor "
+                    "series that marks phases, predicts the outcome and draws "
+                    "the reward curve, from episode_annotation answers.",
+        licence="BSD-3-Clause", commercial_use=True)
+    register_lazy(
+        "openai-vlm-boxes", "potato.training.trainers.openai_vlm_boxes",
+        "OpenAIVLMBoxesTrainer", hint="",
+        kinds=("geometry",), modalities=("image",), annotation_types=("image_annotation",),
+        description="Asks a vision-language model behind an OpenAI-compatible "
+                    "API (vLLM, Ollama, OpenAI) for boxes around the scheme's "
+                    "labels: nothing is trained, but its boxes are scored, "
+                    "written back and reviewed like a detector's.",
+        licence="depends on the model", commercial_use=None)
+    register_lazy(
+        "hf-inference", "potato.training.trainers.hf_inference", "HFInferenceTrainer",
+        hint="", kinds=("nominal", "multilabel", "span", "geometry"),
+        modalities=("text", "image"),
+        description="Uses a model deployed on Hugging Face (an Inference "
+                    "Endpoint or the serverless API) for text classification, "
+                    "entity spans or object detection: nothing is trained, but "
+                    "its answers are scored, written back and reviewed.",
+        licence="depends on the model", commercial_use=None)
+    register_lazy(
+        "roboflow", "potato.training.trainers.roboflow_bridge", "RoboflowTrainer",
+        hint="", kinds=("geometry",), modalities=("image",),
+        annotation_types=("image_annotation",),
+        description="Uses a Roboflow detection or segmentation model, hosted or "
+                    "self-hosted: nothing is trained, but its boxes and outlines "
+                    "are scored, written back and reviewed.",
+        licence="depends on the model", commercial_use=None)
+    register_lazy(
+        "cvat-nuclio", "potato.training.trainers.cvat_nuclio", "CVATNuclioTrainer",
+        hint="", kinds=("geometry",), modalities=("image",),
+        annotation_types=("image_annotation",),
+        description="Uses a CVAT serverless (Nuclio) detector: nothing is "
+                    "trained, but its boxes and outlines are scored, written "
+                    "back and reviewed.",
+        licence="depends on the model", commercial_use=None)
     register_lazy(
         "prm-reward", "potato.training.trainers.prm_reward", "PRMRewardTrainer",
         hint="pip install 'potato-annotation[train-text]'",

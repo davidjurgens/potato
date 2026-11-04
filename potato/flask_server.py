@@ -4256,6 +4256,13 @@ def render_page_with_annotations(username: str):
         from potato.agent_chat_store import with_user_transcript
         user_item_data = with_user_transcript(config, user_item_data,
                                               username, instance_id)
+        # A peak model's peaks are suggestions on the spectrum the scheme
+        # binds, beside the detector's; the display sees only its own field,
+        # so they travel under an internal key, on the terms prelabels do.
+        from potato.server_utils.displays.spectrum_display import model_peaks_by_field
+        _model_peaks = model_peaks_by_field(config, pre_annotation_data)
+        if _model_peaks:
+            user_item_data = dict(user_item_data, _model_peaks=_model_peaks)
 
     if has_instance_display:
         try:

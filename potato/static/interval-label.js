@@ -409,9 +409,13 @@
         var pre = state.form.querySelector('.il-pre');
         if (pre) {
             var n = state.value.intervals.length + state.value.events.length;
+            var fromModel = state.value.intervals.concat(state.value.events)
+                .filter(function (x) { return x.source === 'model'; }).length;
+            var origin = fromModel === n ? ' from the model ' : fromModel ? ' from the file and the model '
+                                                                         : ' from the file ';
             pre.hidden = !state.pending || !n;
             pre.querySelector('.il-pre-text').textContent = n + ' annotation' + (n === 1 ? '' : 's') +
-                ' from the file ' + (n === 1 ? 'is' : 'are') + ' shown (dashed). They are saved with your first change.';
+                origin + (n === 1 ? 'is' : 'are') + ' shown (dashed). They are saved with your first change.';
         }
         state.form.setAttribute('data-il-count', String(state.value.intervals.length + state.value.events.length));
         declare(state);
@@ -444,12 +448,14 @@
             var when = r.kind === 'events' ? timeText(state, x.time)
                                            : timeText(state, x.start) + '–' + timeText(state, x.end);
             var isSel = state.selected && state.selected.item === x;
-            var tr = el('tr', {className: 'il-row' + (isSel ? ' il-selected' : '') + (x.source ? ' il-from-file' : '')}, [
+            var fromModel = x.source === 'model';
+            var tr = el('tr', {className: 'il-row' + (isSel ? ' il-selected' : '') +
+                                          (x.source ? (fromModel ? ' il-from-model' : ' il-from-file') : '')}, [
                 el('td', {className: 'il-when', text: when}),
                 el('td', {}, [el('span', {className: 'il-swatch', style: 'background:' + colorOf(state, x.label),
                                           'aria-hidden': 'true'}),
                               document.createTextNode(' ' + x.label + (r.kind === 'events' ? ' (event)' : '') +
-                                                      (x.source ? ' · from file' : ''))]),
+                                                      (x.source ? (fromModel ? ' · from the model' : ' · from file') : ''))]),
                 el('td', {text: x.channel || 'all'}),
                 el('td', {className: 'il-actions'}, [
                     el('button', {type: 'button', className: 'il-go', text: 'Show',

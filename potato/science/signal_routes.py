@@ -137,9 +137,32 @@ def signal_preannotations():
         out = preannotations(_config, scheme, data, rec)
     except SignalError as e:
         abort(_error(422, str(e)))
+    if scheme.get("pre_annotations", True) and not out["intervals"]:
+        # A trained model's intervals, where the file and the item give none:
+        # a recording's own annotations are someone's labelling, and a model
+        # trained on this project's answers comes after them.
+        out["intervals"] = _model_intervals(scheme, rec)
     response = jsonify(out)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def _model_intervals(scheme, rec) -> list:
+    """The model's intervals this annotator may see (none for a held-out
+    annotator or a blind labeling-engine request)."""
+    from flask import request, session
+    from potato.item_state_management import get_item_state_manager
+    from potato.science.signal_store import model_intervals
+    try:
+        from potato.flask_server import visible_pre_annotations  # noqa: cross-import
+        instance_id = request.args.get("instance_id", "")
+        item = get_item_state_manager().get_item(instance_id)
+        pre, _, _ = visible_pre_annotations(session.get("username"), instance_id, item)
+    except Exception:  # noqa: BLE001 - a prelabel must not break the page
+        logger.debug("Could not read model intervals", exc_info=True)
+        return []
+    payload = (pre or {}).get(scheme.get("name"))
+    return model_intervals(scheme, payload, rec) if payload else []
 
 
 def register_signal_routes(app, config) -> None:

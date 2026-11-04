@@ -51,7 +51,7 @@ __all__ = [
 #: which of these it can consume; the bundle manifest declares which one the
 #: project actually is.
 MODALITIES = ("text", "image", "audio", "video", "trace", "point_cloud",
-              "tabular")
+              "tabular", "volume", "molecule", "spectrum", "signal", "episode")
 
 
 class TrainerError(RuntimeError):

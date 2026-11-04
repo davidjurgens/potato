@@ -339,6 +339,30 @@ class TestProtocolAuth:
 # ------------------------------------------------------------ end to end
 
 class TestSshLauncherEndToEnd:
+    def test_a_run_is_not_finished_until_its_predictions_are_written_back(
+            self, project, monkeypatch):
+        """The run was announced as a success before its predictions were
+        ingested, so a caller that waited for it to stop running could read a
+        status with no write-back (it failed the test below under load)."""
+        from potato.training import writeback
+        seen = []
+        original = writeback.ingest_predictions
+
+        def slow_ingest(*args, **kwargs):
+            seen.append((project.manager.is_running(), project.manager.status()["step"]))
+            time.sleep(1.0)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(writeback, "ingest_predictions", slow_ingest)
+        manager = project.manager
+        outcome = manager.start_run("sklearn-text", ["sentiment"],
+                                    params={"min_instances": 4}, backend="here")
+        assert outcome["started"], outcome
+        status = _wait(manager)
+        assert seen == [(True, "writing back predictions")], seen
+        assert status["state"] == "success", status
+        assert status["writeback"]["n_read"] > 0
+
     def test_a_run_on_an_ssh_backend_succeeds_and_writes_back(self, project):
         manager = project.manager
         outcome = manager.start_run("sklearn-text", ["sentiment"],

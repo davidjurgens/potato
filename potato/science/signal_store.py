@@ -244,3 +244,32 @@ def preannotations(config: Dict[str, Any], scheme: Dict[str, Any], item: Dict[st
         out[kind] = kept
     out = normalize_annotations(out, strict=False)
     return out
+
+
+def model_intervals(scheme: Dict[str, Any], payload: Any, rec: SignalRecording) -> list:
+    """A trained model's intervals for this scheme (``signal-cnn``'s
+    prediction), tagged ``source: model``: only the scheme's interval labels,
+    with a start before the end, on a channel the recording has (else all)."""
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except ValueError:
+            return []
+    intervals = payload.get("intervals") if isinstance(payload, dict) else payload
+    from potato.server_utils.schemas.interval_label import labels_of
+    declared = {lab["name"] for lab in labels_of(scheme) if lab["kind"] != "event"}
+    names = {c.name for c in rec.channels}
+    out = []
+    for iv in intervals if isinstance(intervals, list) else []:
+        if not isinstance(iv, dict) or str(iv.get("label")) not in declared:
+            continue
+        try:
+            start, end = float(iv["start"]), float(iv["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (start < end) or start != start or end != end:
+            continue
+        channel = iv.get("channel")
+        out.append({"start": start, "end": end, "label": str(iv["label"]),
+                    "channel": channel if channel in names else None, "source": "model"})
+    return out

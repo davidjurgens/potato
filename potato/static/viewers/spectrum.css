@@ -86,7 +86,8 @@ form.peak-picking:focus { outline: none; }
     color: var(--foreground); font: inherit; }
 .peak-picking .pp-source { display: inline-block; padding: 0.05rem 0.45rem; border-radius: 999px;
     font-size: var(--text-xs, 0.75rem); border: 1px solid var(--border); color: var(--muted-foreground); white-space: nowrap; }
-.peak-picking .pp-source-auto { border-color: var(--sp-suggest); color: var(--sp-suggest); }
+.peak-picking .pp-source-auto,
+.peak-picking .pp-source-model { border-color: var(--sp-suggest); color: var(--sp-suggest); }
 
 .peak-picking .pp-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.25rem 0; }
 .peak-picking .pp-add-label { font-size: var(--text-sm, 0.8125rem); color: var(--card-foreground, var(--foreground)); }

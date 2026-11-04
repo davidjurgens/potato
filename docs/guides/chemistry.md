@@ -137,6 +137,15 @@ python -m potato.export --config config.yaml --format chemistry --output ./expor
 
 Compare structures between annotators by `inchikey` (or `idcode` when RDKit was not available anywhere). The SMILES columns are canonical within one toolkit only. The SD file reads with RDKit's `SDMolSupplier` (and other SD readers), with each row's fields as properties.
 
+## Training a property model
+
+A `radio`, `select`, `likert` or `slider` question about the molecule an item
+shows (a `molecule` display field) or the one annotators drew (a
+`chemical_structure` scheme) can train
+[`rdkit-property`](../ai-intelligence/model_training.md#rdkit-property): Morgan
+fingerprints and RDKit descriptors with a scikit-learn classifier or
+regressor. Its predictions come back as prelabels on the question.
+
 ## Related
 
 - [Chemical structures](../annotation-types/science/chemical_structures.md): every option, the data format and the browser API

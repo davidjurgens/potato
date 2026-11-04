@@ -223,9 +223,9 @@ class TestRegistry:
     def test_span_and_image_schemes_find_their_trainers(self):
         span = [t.name for t in registry.trainers_for_schema(
             {"annotation_type": "span", "name": "n"})]
-        # label-studio-ml trains nothing; it reads a Label Studio backend's
-        # span predictions.
-        assert span == ["hf-token-classification", "label-studio-ml"]
+        # label-studio-ml and hf-inference train nothing; they read a Label
+        # Studio backend's or a Hugging Face endpoint's span predictions.
+        assert span == ["hf-inference", "hf-token-classification", "label-studio-ml"]
         image = [t.name for t in registry.trainers_for_schema(
             {"annotation_type": "radio", "name": "n"}, modality="image")]
         assert "hf-image-classification" in image

@@ -93,7 +93,7 @@ annotation_schemes:
 
 | Key | Default | Description |
 |---|---|---|
-| `method` | `auto` | `detect` runs peak detection. `file` uses the JCAMP-DX `PEAK TABLE`. `item` uses the item's own `peaks` list. `auto` picks `item`, then `file`, then `detect`, using the first that is available. |
+| `method` | `auto` | `detect` runs peak detection. `file` uses the JCAMP-DX `PEAK TABLE`. `item` uses the item's own `peaks` list. `model` uses a trained [`peak-cnn`](../../ai-intelligence/model_training.md#peak-cnn) model's peaks for the item, listed with "· model". `auto` picks `item`, then `model`, then `file`, then `detect`, using the first that is available. |
 | `prominence` | `0.05` | For `detect`: how far a peak must stand above its surroundings, as a fraction of the y range. For sticks it is the minimum height as a fraction of the tallest. |
 | `max_peaks` | `40` | At most this many suggestions, keeping the most prominent. |
 | `min_distance` | none | For `detect`: minimum spacing between suggestions, in x units. |
@@ -167,7 +167,7 @@ The scheme stores the display's selection as JSON in one hidden input:
  "rejected": [4.1464]}
 ```
 
-`source` is `auto` for an accepted suggestion and `manual` for a peak the annotator added. `width` is the full width at half prominence of a detected peak, in x units. `rejected` lists the positions of suggestions the annotator turned down, so an unreviewed suggestion can be told apart from a rejected one. `integral` is a trapezoid integral over every original point between `from` and `to`, with no baseline correction.
+`source` is `auto` for an accepted suggestion, `model` for an accepted suggestion from a trained peak model, and `manual` for a peak the annotator added. `width` is the full width at half prominence of a detected peak, in x units. `rejected` lists the positions of suggestions the annotator turned down, so an unreviewed suggestion can be told apart from a rejected one. `integral` is a trapezoid integral over every original point between `from` and `to`, with no baseline correction.
 
 ## Export
 

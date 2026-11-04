@@ -195,10 +195,12 @@
         state.rejectAll.disabled = !pending.length;
         state.suggList.innerHTML = '';
         sortedForDisplay(state, pending, function (x) { return x.x; }).forEach(function (sg) {
-            var what = 'suggested peak at ' + where(state, sg.x);
-            var li = el('li', {'class': 'pp-sugg'});
+            var fromModel = sg.source === 'model';
+            var what = (fromModel ? 'model-suggested peak at ' : 'suggested peak at ') + where(state, sg.x);
+            var li = el('li', {'class': 'pp-sugg' + (fromModel ? ' pp-sugg-model' : '')});
             li.appendChild(el('span', {'class': 'pp-sugg-mark', 'aria-hidden': 'true'}));
-            li.appendChild(el('span', {'class': 'pp-pos'}, where(state, sg.x) + (sg.label ? ' · ' + sg.label : '')));
+            li.appendChild(el('span', {'class': 'pp-pos'}, where(state, sg.x) + (sg.label ? ' · ' + sg.label : '') +
+                                                            (fromModel ? ' · model' : '')));
             var acc = el('button', {type: 'button', 'class': 'pp-btn pp-accept', 'aria-label': 'Accept ' + what}, 'Accept');
             var rej = el('button', {type: 'button', 'class': 'pp-btn pp-reject', 'aria-label': 'Reject ' + what}, 'Reject');
             var refocus = function () {
@@ -250,7 +252,8 @@
             tr.appendChild(el('td', {'class': 'pp-num'}, fmtY(it.y)));
             var src = el('td');
             src.appendChild(el('span', {'class': 'pp-source pp-source-' + it.source},
-                               it.source === 'auto' ? 'suggested' : 'added'));
+                               it.source === 'auto' ? 'suggested'
+                                   : it.source === 'model' ? 'model' : 'added'));
             tr.appendChild(src);
             (cfg.peakFields || []).forEach(function (f) {
                 var td = el('td');
@@ -347,7 +350,9 @@
         var added = sel.items.filter(function (it) { return !before[itemKey(it)]; })[0];
         var gone = prev.items.filter(function (it) { return !after[itemKey(it)]; })[0];
         if (added && added.kind === 'peak') {
-            say(state, (added.source === 'auto' ? 'Accepted the suggested peak at ' : 'Picked a peak at ') +
+            say(state, (added.source === 'auto' ? 'Accepted the suggested peak at '
+                        : added.source === 'model' ? 'Accepted the model\'s peak at '
+                        : 'Picked a peak at ') +
                 where(state, added.x) + '.');
         } else if (added && added.kind === 'region') {
             say(state, 'Integrated ' + fmtX(state, added.from) + '–' + fmtX(state, added.to) + '.');

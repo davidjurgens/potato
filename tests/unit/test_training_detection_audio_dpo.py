@@ -178,7 +178,8 @@ class TestRegistry:
         assert names({"annotation_type": "pairwise", "name": "p",
                       "mode": "scale"}) == ["reward-model"]
         assert names({"annotation_type": "image_annotation", "name": "b"},
-                     "image") == ["cellpose", "label-studio-ml", "layoutlmv3", "sam-finetune",
+                     "image") == ["cellpose", "cvat-nuclio", "hf-inference", "label-studio-ml",
+                                  "layoutlmv3", "openai-vlm-boxes", "roboflow", "sam-finetune",
                                   "torchvision-detect", "torchvision-segment",
                                   "ultralytics-detect", "ultralytics-segment"]
         # Labelled audio segments: tagged, or read as speakers.

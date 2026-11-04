@@ -175,6 +175,14 @@ python -m potato.export --config config.yaml --format chemistry --output ./expor
 
 writes `chemical_structures.csv` (one row per answer, with the answer-key result when the scheme has an `answer_field`), `chemical_structures.sdf` (each molfile with the row's fields as SD properties) and `molecule_atoms.csv` (one row per selected atom). The `identifiers_from` column says whether InChI and InChIKey came from the browser, from the server's `rdkit` package, or are missing. See [Export formats](../../data-export/export_formats.md).
 
+## Training
+
+A question about the molecule (a `radio`, `select`, `likert` or `slider`
+scheme beside a `molecule` field or a `chemical_structure` scheme) trains
+[`rdkit-property`](../../ai-intelligence/model_training.md#rdkit-property).
+The structure it learns from is the display field's, or the one annotators
+drew (the most common drawing), or the `prefill_field` one when nobody drew.
+
 ## Browser API
 
 Each molecule display registers `window.potatoViewers[field]` with the shared viewer API (`getSelection()`, `setSelection(sel)`, `onSelectionChange(cb)`, `describe(sel)`) and three more calls, for a display linked to atoms (such as a spectrum whose peaks are assigned to atoms):

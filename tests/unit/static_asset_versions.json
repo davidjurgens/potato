@@ -192,8 +192,8 @@
     "version": "3"
   },
   "episode-timeline.js": {
-    "sha256": "70d13db0f4220f4a",
-    "version": "2"
+    "sha256": "5f959def79c81372",
+    "version": "3"
   },
   "event-annotation.css": {
     "sha256": "72e6096527ab3ad2",
@@ -268,8 +268,8 @@
     "version": "1"
   },
   "interval-label.js": {
-    "sha256": "f773b81bc0ecd3e6",
-    "version": "1"
+    "sha256": "7a300acdb20ffb54",
+    "version": "2"
   },
   "js/pdf-viewer.js": {
     "sha256": "64b0d86af915fb89",
@@ -512,8 +512,8 @@
     "version": "7"
   },
   "time-series.css": {
-    "sha256": "e0fa878084933d38",
-    "version": "1"
+    "sha256": "9388df58cfa8a1ed",
+    "version": "2"
   },
   "tracking-interpolation.js": {
     "sha256": "da8bd01cf9b79b92",
@@ -580,20 +580,20 @@
     "version": "3"
   },
   "viewers/peak-picking.js": {
-    "sha256": "33551bd32c1f7944",
-    "version": "1"
+    "sha256": "a12dbba745defd5d",
+    "version": "2"
   },
   "viewers/protein-structure.js": {
     "sha256": "136fef029f936ee7",
     "version": "1"
   },
   "viewers/spectrum.css": {
-    "sha256": "3a52bbef6e093da5",
-    "version": "1"
+    "sha256": "ec6c01c063d27646",
+    "version": "2"
   },
   "viewers/spectrum.js": {
-    "sha256": "7dd135c7156f1cfa",
-    "version": "1"
+    "sha256": "cf168886d58fc841",
+    "version": "2"
   },
   "viewers/time-series.js": {
     "sha256": "e0afaec7619d0f31",
