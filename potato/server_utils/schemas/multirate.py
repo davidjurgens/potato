@@ -29,11 +29,11 @@ MULTIRATE_TEMPLATE = """
 <form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="javascript:void(0)" data-annotation-id="{{ annotation_id }}" data-annotation-type="multirate" data-schema-name="{{ schema_name }}" {{ layout_attrs }}>
     <fieldset schema="{{ schema_name }}">
         <legend class="shadcn-multirate-title">{{ description }}</legend>
-        <table class="shadcn-multirate-table">
+        <table class="shadcn-multirate-table" data-arrangement="{{ arrangement }}" data-cells-per-item="{{ ratings|length + 1 }}">
             <thead>
                 <tr>
                     {% for col in range(num_headers) %}
-                        <th>&nbsp;</th>
+                        <th class="shadcn-multirate-item-head">&nbsp;</th>
                         {% for rating in ratings %}
                             <th>{{ rating }}</th>
                         {% endfor %}
@@ -45,7 +45,7 @@ MULTIRATE_TEMPLATE = """
                     <tr schema="multirate">
                         {% for item in row %}
                             {% if item %}
-                                <td {{ item.tooltip|safe }}>{{ item.label }}</td>
+                                <td class="shadcn-multirate-item" {{ item.tooltip|safe }}>{{ item.label }}</td>
                                 {% for rating in ratings %}
                                     <td class="shadcn-radio-cell">
                                         {#- The label makes the whole choice tappable and carries the
@@ -166,7 +166,10 @@ def _generate_multirate_layout_internal(annotation_scheme):
         'rows': arranged_items,
         'validation': validation,
         'annotation_id': annotation_scheme.get('annotation_id', ''),
-        'layout_attrs': layout_attrs
+        'layout_attrs': layout_attrs,
+        # How items fill the grid, read back by flask_server.randomize_options
+        # to put a shuffled item in the slot the configured one held.
+        'arrangement': 'vertical' if annotation_scheme.get('arrangement') == 'vertical' else 'horizontal',
     }
 
     # Render template

@@ -293,6 +293,42 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- `multirate` with `randomize_order` (or `option_randomization`) showed every
+  annotator the rows in configured order. The shuffle ran over the rating
+  scale, and the page then looked for rows with those names and found none,
+  so it recorded the scale as the order shown. The rows are shuffled and
+  recorded now; the scale keeps its order. With `display_config.num_columns`
+  above 1, the items inside each row move too, so the grid reads in the
+  recorded order. A `multirate` with `options_from_data` and a `select` with
+  `use_predefined_labels` have no list to reorder; asking to randomise one now
+  logs a warning, and no order is recorded for it.
+- With `display_config.num_columns` above 1, only the first item in each
+  `multirate` row was styled as an item label. The others were centred and
+  not bold, on desktop and in the stacked phone layout.
+- A `select` scheme with `use_predefined_labels` (`country`, `ethnicity` or
+  `religion`) and no `labels` failed validation with "labels cannot be
+  empty", so the documented survey examples could not load. It is accepted
+  now, and an unknown list name is refused with the three valid ones.
+  Setting `labels` beside it logs a warning that the page shows the
+  built-in list.
+- Six countries in the built-in `country` list stored a misspelled value
+  while showing the right name. They now store the name shown: `Afganistan`
+  is `Afghanistan`, `Curaco` is `Curacao`, `Korea Sout` is `Korea South`,
+  `Phillipines` is `Philippines`, `United Arab Erimates` is
+  `United Arab Emirates` and `Uraguay` is `Uruguay`. Answers saved earlier
+  keep the old spelling, so map them before comparing with new ones. An old
+  answer does not show as selected when its page is reopened.
+- A `select` can take its options from a text file, one per line:
+  `labels: options/languages.txt`. The code read a path there before, from the
+  working directory and without a path check, but validation refused any
+  string first. The file is now read when the config loads. The path is
+  relative to `task_dir` and must stay inside it. An empty file, or one that
+  lists an option twice, is refused.
+- The Docker image and its docs said to keep annotation output on the
+  image's `/data` volume, which the path check refuses: `output_annotation_dir`
+  must be inside the project. The Dockerfile comment, the entrypoint's
+  read-only message and the Docker guide now say so.
+
 - With `ai_support.holdout`, a held-out annotator's item JSON still carried
   the model's prelabels when `model_training.writeback.field` named a field
   other than `pre_annotation.field` (or there was no `pre_annotation`

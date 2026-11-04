@@ -123,6 +123,30 @@ def label_names(scheme: Dict[str, Any]) -> List[str]:
     return names
 
 
+def shown_names(scheme: Dict[str, Any]) -> List[str]:
+    """The names of what a scheme's randomization reorders, in configured order.
+
+    The ``labels`` for most schemes. A ``multirate`` lists its rating scale
+    in ``labels`` and the items being rated in ``options``, and the rows are
+    what move: ordering the scale columns gave the page nothing to match, so
+    the rows stayed in configured order while the scale was recorded as the
+    order shown. A ``select`` naming a built-in list has nothing here: the
+    page shows that list, not ``labels``.
+    """
+    atype = scheme.get("annotation_type") or ""
+    if atype == "select" and scheme.get("use_predefined_labels"):
+        # The page shows the built-in list and ignores any `labels` beside it.
+        return []
+    if atype != "multirate":
+        return label_names(scheme)
+    names = []
+    for option in scheme.get("options") or []:
+        name = option.get("name") if isinstance(option, dict) else option
+        if name is not None:
+            names.append(str(name))
+    return names
+
+
 def is_order_sensitive(scheme: Dict[str, Any]) -> bool:
     return (scheme.get("annotation_type") or "") in ORDER_SENSITIVE_TYPES
 
@@ -228,6 +252,36 @@ def conjoint_profiles(scheme: Dict[str, Any], user_id: str,
     return profiles
 
 
+#: Schemes already warned about by `_warn_unorderable`, so a render loop logs
+#: each once.
+_warned_unorderable: set = set()
+
+
+def _unorderable_reason(scheme: Dict[str, Any]) -> Optional[str]:
+    """Why a scheme that asks for randomization has no option list to reorder."""
+    atype = scheme.get("annotation_type") or ""
+    if atype == "multirate" and scheme.get("options_from_data") and "options" not in scheme:
+        return ("its rows come from each item's '%s' field and are laid out in the "
+                "browser" % scheme.get("options_from_data"))
+    if atype == "select" and scheme.get("use_predefined_labels"):
+        return "it shows the built-in '%s' list" % scheme.get("use_predefined_labels")
+    return None
+
+
+def _warn_unorderable(scheme: Dict[str, Any]) -> None:
+    if not (scheme.get("randomize_order") or scheme.get("option_randomization")):
+        return
+    reason = _unorderable_reason(scheme)
+    key = (scheme.get("name"), reason)
+    if reason is None or key in _warned_unorderable:
+        return
+    _warned_unorderable.add(key)
+    logger.warning(
+        "Scheme '%s' asks for randomize_order, but %s, which is not reordered: "
+        "it is shown in its own order and NOT randomized, and no order is recorded.",
+        scheme.get("name"), reason)
+
+
 def presentation_order(scheme: Dict[str, Any], user_id: str,
                        instance_id: str) -> Optional[List[str]]:
     """
@@ -248,7 +302,9 @@ def presentation_order(scheme: Dict[str, Any], user_id: str,
         # Two meanings under one scheme name would make the record
         # uninterpretable without knowing the config that produced it.
         return None
-    names = label_names(scheme)
+    names = shown_names(scheme)
+    if not names:
+        _warn_unorderable(scheme)
     if len(names) < 2:
         # One option cannot be presented in a biased order.
         return None

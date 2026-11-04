@@ -52,6 +52,20 @@ def load_config(config_path: str) -> Dict[str, Any]:
     if not isinstance(config, dict):
         raise ValueError("Configuration must be a YAML object (dictionary)")
 
+    # A select's `labels` may name a file; the server reads it into a list at
+    # load, so the preview does too. A file that cannot be read is left as
+    # the string, and validation reports why.
+    from potato.server_utils.select_label_files import (
+        config_schemes, resolve_select_label_files)
+    config_dir = os.path.dirname(os.path.abspath(config_path))
+    task_dir = config.get('task_dir') if isinstance(config.get('task_dir'), str) else '.'
+    try:
+        resolve_select_label_files(config_schemes(config),
+                                   os.path.normpath(os.path.join(config_dir, task_dir)),
+                                   config_dir)
+    except Exception:
+        pass
+
     return config
 
 

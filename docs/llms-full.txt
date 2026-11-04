@@ -11862,10 +11862,10 @@ See [Coding Agent Annotation](../agent-evaluation/coding_agent_annotation.md) fo
 A dropdown menu for selecting a single option from a predefined list. Supports predefined datasets (country, ethnicity, religion).
 
 **Required Fields:**
-- `labels` (list): Array of option labels
+- `labels` (list or string): the options, as a list or as the path of a text file with one option per line. `use_predefined_labels` can stand in for it.
 
 **Optional Fields:**
-- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion"
+- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion". With `labels` also set, the page shows the built-in list and a warning says `labels` is ignored.
 
 **Example:**
 ```yaml
@@ -11875,6 +11875,21 @@ annotation_schemes:
     description: "Select the genre of this text"
     labels: ["news", "opinion", "review", "social_media"]
 ```
+
+A long list can live in a file:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "select"
+    name: "language"
+    description: "Which language is this text in?"
+    labels: "options/languages.txt"
+```
+
+The path is relative to `task_dir`, then to the config file's directory, and
+must stay inside `task_dir`. Blank lines are skipped, and an empty file or an
+option listed twice is refused. The file is read when the server starts, so an
+edit to it takes a restart. This works in survey phase files too.
 
 ### 26. Span Linking (`span_link`)
 
@@ -52726,6 +52741,18 @@ given under a different arrangement.
 | `conjoint` built from `attributes` | ✅ (the profiles shown) | always random |
 | `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval` | ✅ | ❌ not yet |
 
+For `multirate`, the rows (the `options` being rated) are shuffled and
+recorded; the rating scale in `labels` keeps its configured order. With
+`display_config.num_columns` above 1, the shuffled items fill the grid in the
+same reading order as the configured ones: row by row, or column by column with
+`arrangement: vertical`.
+
+Two setups of the first row's types have no option list for Potato to
+reorder: a `multirate` that takes its rows from the item (`options_from_data`),
+and a `select` that shows a built-in list (`use_predefined_labels`). Both
+show options in their own order and record no order. Asking to randomise one
+of them logs a warning when the scheme is first shown.
+
 Asking to randomise a scheme in the bottom row logs a warning rather than
 silently pretending to. The order is still recorded, so the data stays
 correctable, and a researcher who believed their study was de-biased when it
@@ -72031,8 +72058,11 @@ Docker Desktop on macOS and Windows ignores ownership on bind mounts, so the
 problem never appears there. A setup that works on a Mac can still fail on a
 Linux server.
 
-If the project is deliberately read-only and the config writes everything under
-`/data`, set `POTATO_ALLOW_READONLY_APP=1` to skip the check.
+`POTATO_ALLOW_READONLY_APP=1` skips the check. Potato still writes annotation
+output, `potato.log` and its SQLite databases inside the project, so use it
+only when those paths are writable some other way, such as separate mounts.
+`output_annotation_dir` must be inside the project: a path under the image's
+`/data` volume, or anywhere else outside `/app`, is refused at startup.
 
 `potato deploy` handles ownership on every target it provisions.
 

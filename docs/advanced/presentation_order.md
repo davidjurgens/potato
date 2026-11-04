@@ -65,6 +65,18 @@ given under a different arrangement.
 | `conjoint` built from `attributes` | ✅ (the profiles shown) | always random |
 | `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval` | ✅ | ❌ not yet |
 
+For `multirate`, the rows (the `options` being rated) are shuffled and
+recorded; the rating scale in `labels` keeps its configured order. With
+`display_config.num_columns` above 1, the shuffled items fill the grid in the
+same reading order as the configured ones: row by row, or column by column with
+`arrangement: vertical`.
+
+Two setups of the first row's types have no option list for Potato to
+reorder: a `multirate` that takes its rows from the item (`options_from_data`),
+and a `select` that shows a built-in list (`use_predefined_labels`). Both
+show options in their own order and record no order. Asking to randomise one
+of them logs a warning when the scheme is first shown.
+
 Asking to randomise a scheme in the bottom row logs a warning rather than
 silently pretending to. The order is still recorded, so the data stays
 correctable, and a researcher who believed their study was de-biased when it

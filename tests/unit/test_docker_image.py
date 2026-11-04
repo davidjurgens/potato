@@ -153,10 +153,16 @@ class TestEntrypointWriteProbe:
 
     def test_the_override_exists_for_a_deliberate_read_only_mount(
             self, unwritable_project):
-        """A config writing everything under /data is a legitimate setup."""
+        """For a project whose writable paths are mounted separately."""
         result = run_entrypoint(env={"POTATO_ALLOW_READONLY_APP": "1"},
                                 cwd=unwritable_project)
         assert "not writable by uid" not in result.stderr
+
+    def test_the_refusal_does_not_point_at_data(self, unwritable_project):
+        """It said to write everything under /data, which the path check
+        refuses: output_annotation_dir must be inside the project."""
+        stderr = run_entrypoint(cwd=unwritable_project).stderr
+        assert "/data" not in stderr and "POTATO_ALLOW_READONLY_APP" in stderr
 
     def test_a_writable_project_passes_the_probe(self, tmp_path):
         (tmp_path / "config.yaml").write_text("task_dir: .\n")

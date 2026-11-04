@@ -143,8 +143,9 @@ if [ "${POTATO_ALLOW_READONLY_APP}" != "1" ]; then
         echo "       or run the container as yourself:" >&2
         echo '           docker run --user "$(id -u):$(id -g)" ...' >&2
         echo "" >&2
-        echo "       Set POTATO_ALLOW_READONLY_APP=1 if the config writes" >&2
-        echo "       everything under /data and /app is deliberately read-only." >&2
+        echo "       POTATO_ALLOW_READONLY_APP=1 skips this check, for a project" >&2
+        echo "       whose writable paths are mounted separately. Potato still" >&2
+        echo "       writes its output, log and databases inside the project." >&2
         exit 1
     fi
     rm -f "${probe}"

@@ -2585,6 +2585,13 @@ def load_phase_data(config: dict) -> None:
                         file_schemes = get_phase_annotation_schemes(phase_scheme_fname)
                         _check_phase_schemes(file_schemes, phase_scheme_fname,
                                              phase_name)
+                        from potato.server_utils import select_label_files
+                        config_dir = (os.path.dirname(config["__config_file__"])
+                                      if config.get("__config_file__") else None)
+                        select_label_files.resolve_select_label_files(
+                            select_label_files.file_schemes(file_schemes, phase['file']),
+                            config.get("task_dir") or config_dir or os.getcwd(),
+                            config_dir)
                         if phase_labeling_schemes:
                             # Append file schemes after instrument schemes
                             phase_labeling_schemes.extend(file_schemes)
@@ -5245,9 +5252,7 @@ def randomize_options(soup, orders):
             if not table:
                 logger.debug("Table not found within the fieldset.")
                 continue
-            rows = table.find_all('tr')[1:]
-            for row in reorder(rows, wanted, _row_label):
-                table.append(row)
+            _reorder_multirate_items(table, wanted, reorder)
 
         elif annotation_type == 'radio':
             container = (fieldset.find('div', class_='shadcn-radio-options')
@@ -5316,6 +5321,53 @@ def _option_label(node):
                 return value
     label = node.find('label')
     return label.get_text(strip=True) if label else None
+
+
+def _reorder_multirate_items(table, wanted, reorder):
+    """Put a multirate's items in `wanted` order, slot by slot.
+
+    With ``display_config.num_columns`` above 1 a row holds several items, so
+    moving whole rows left the items inside each row in configured order and
+    recorded an order the page did not show. Each item is its label cell plus
+    one cell per rating (``data-cells-per-item``). The i-th item of `wanted`
+    goes into the slot the i-th configured item held, read row by row, or
+    column by column for ``arrangement: vertical``, so the layout is kept and
+    the reading order is the recorded one.
+    """
+    rows = table.find_all('tr')[1:]
+    try:
+        size = int(table.get('data-cells-per-item') or 0)
+    except ValueError:
+        size = 0
+    grid = []
+    for row in rows:
+        cells = row.find_all('td', recursive=False)
+        if size <= 0 or len(cells) % size:
+            grid.append([cells])        # older markup: one item per row
+        else:
+            grid.append([cells[i:i + size] for i in range(0, len(cells), size)])
+
+    def item_name(group):
+        for cell in group:
+            field = cell.find('input')
+            if field is not None:
+                return field.get('label_name') or field.get('schema')
+        return None
+
+    slots = [(r, c) for r, groups in enumerate(grid) for c, group in enumerate(groups)
+             if item_name(group) is not None]
+    if table.get('data-arrangement') == 'vertical':
+        slots.sort(key=lambda rc: (rc[1], rc[0]))
+    ordered = reorder([grid[r][c] for r, c in slots], wanted, item_name)
+    for (r, c), group in zip(slots, ordered):
+        grid[r][c] = group
+    for row in rows:
+        for cell in row.find_all('td', recursive=False):
+            cell.extract()
+    for row, groups in zip(rows, grid):
+        for group in groups:
+            for cell in group:
+                row.append(cell)
 
 
 def _row_label(row):

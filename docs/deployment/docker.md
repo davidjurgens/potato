@@ -140,8 +140,11 @@ Docker Desktop on macOS and Windows ignores ownership on bind mounts, so the
 problem never appears there. A setup that works on a Mac can still fail on a
 Linux server.
 
-If the project is deliberately read-only and the config writes everything under
-`/data`, set `POTATO_ALLOW_READONLY_APP=1` to skip the check.
+`POTATO_ALLOW_READONLY_APP=1` skips the check. Potato still writes annotation
+output, `potato.log` and its SQLite databases inside the project, so use it
+only when those paths are writable some other way, such as separate mounts.
+`output_annotation_dir` must be inside the project: a path under the image's
+`/data` volume, or anywhere else outside `/app`, is refused at startup.
 
 `potato deploy` handles ownership on every target it provisions.
 

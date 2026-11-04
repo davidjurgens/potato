@@ -853,8 +853,21 @@
               ]
             },
             "then": {
-              "required": [
-                "labels"
+              "allOf": [
+                {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "labels"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "use_predefined_labels"
+                      ]
+                    }
+                  ]
+                }
               ]
             }
           },

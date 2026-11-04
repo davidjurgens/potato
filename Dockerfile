@@ -86,8 +86,11 @@ ENV PATH="/opt/venv/bin:$PATH" \
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# /app is the mount point for the project; /data is for anything the operator
-# wants to outlive the container (annotation output, the SQLite databases).
+# /app is the mount point for the project. Potato writes annotation output,
+# potato.log and the SQLite databases inside it: output_annotation_dir must be
+# inside the project, so a path under /data is refused at startup. /data is
+# kept so existing `docker run -v ...:/data` commands still start; Potato
+# writes nothing there.
 RUN mkdir -p /app /data && chown -R potato:potato /app /data
 VOLUME ["/data"]
 

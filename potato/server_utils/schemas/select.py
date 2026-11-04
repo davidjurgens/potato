@@ -28,7 +28,7 @@ def generate_select_layout(annotation_scheme):
         annotation_scheme (dict): Configuration including:
             - name: Schema identifier
             - description: Display description
-            - labels: List of options or path to file containing options
+            - labels: List of options (a file path is read into a list at config load)
             - use_predefined_labels: Use predefined label sets (country, ethnicity, religion)
             - label_requirement (dict): Optional validation settings
                 - required (bool): Whether selection is mandatory
@@ -78,12 +78,15 @@ def _generate_select_layout_internal(annotation_scheme):
             schematic += r.read()
 
     else:
-        # if annotation_scheme['labels'] is defined as a path
-        if type(annotation_scheme["labels"]) == str and os.path.exists(annotation_scheme["labels"]):
-            with open(annotation_scheme["labels"], "r", encoding="utf-8") as r:
-                labels = [it.strip() for it in r.readlines()]
-        else:
-            labels = annotation_scheme["labels"]
+        labels = annotation_scheme["labels"]
+        # A file path is read into a list when the config loads
+        # (select_label_files.py), inside task_dir. A string here missed that
+        # step; reading it from the working directory would skip the path check.
+        if isinstance(labels, str):
+            raise ValueError(
+                f"select '{annotation_scheme['name']}': labels is the path "
+                f"{labels!r}, which was not loaded. Load the config through "
+                f"load_and_validate_config, or give a list.")
 
         # An unanswered dropdown has to report an empty value, or every widget
         # the annotator never touched answers itself with its first option.

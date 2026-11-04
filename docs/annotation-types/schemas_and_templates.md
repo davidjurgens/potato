@@ -780,10 +780,10 @@ See [Coding Agent Annotation](../agent-evaluation/coding_agent_annotation.md) fo
 A dropdown menu for selecting a single option from a predefined list. Supports predefined datasets (country, ethnicity, religion).
 
 **Required Fields:**
-- `labels` (list): Array of option labels
+- `labels` (list or string): the options, as a list or as the path of a text file with one option per line. `use_predefined_labels` can stand in for it.
 
 **Optional Fields:**
-- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion"
+- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion". With `labels` also set, the page shows the built-in list and a warning says `labels` is ignored.
 
 **Example:**
 ```yaml
@@ -793,6 +793,21 @@ annotation_schemes:
     description: "Select the genre of this text"
     labels: ["news", "opinion", "review", "social_media"]
 ```
+
+A long list can live in a file:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "select"
+    name: "language"
+    description: "Which language is this text in?"
+    labels: "options/languages.txt"
+```
+
+The path is relative to `task_dir`, then to the config file's directory, and
+must stay inside `task_dir`. Blank lines are skipped, and an empty file or an
+option listed twice is refused. The file is read when the server starts, so an
+edit to it takes a restart. This works in survey phase files too.
 
 ### 26. Span Linking (`span_link`)
 

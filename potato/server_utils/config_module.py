@@ -860,6 +860,10 @@ def normalize_config_before_validation(
     _normalize_runtime_phases(config_data)
     from potato.server_utils.taxonomy_files import apply_taxonomy_files
     apply_taxonomy_files(config_data, config_file_dir)
+    from potato.server_utils.select_label_files import (
+        config_schemes, resolve_select_label_files)
+    resolve_select_label_files(config_schemes(config_data),
+                               config_data['task_dir'], config_file_dir)
 
     return config_data
 
@@ -3249,9 +3253,15 @@ def validate_phase_question_files(config_data: Dict[str, Any],
         if path is None:
             continue
         try:
-            check_phase_schemes(load_phase_schemes(path), filename, phase_name,
+            schemes = load_phase_schemes(path)
+            check_phase_schemes(schemes, filename, phase_name,
                                 config_data.get("plugins") or [])
-        except ConfigValidationError:
+            from potato.server_utils.select_label_files import (
+                file_schemes, resolve_select_label_files)
+            resolve_select_label_files(file_schemes(schemes, filename),
+                                       config_data.get("task_dir") or config_file_dir,
+                                       config_file_dir)
+        except (ConfigValidationError, ConfigSecurityError):
             raise
         except Exception as exc:
             raise ConfigValidationError(f"phases.{phase_name}.file: {exc}")
@@ -4810,6 +4820,11 @@ def _plugin_hint(type_name: Any) -> str:
             f"installed plugins: {', '.join(installed)}")
 
 
+#: The built-in option lists a `select` scheme can name with
+#: `use_predefined_labels` (schemas/select.py, predefined_labels_dict).
+PREDEFINED_SELECT_LABELS = ("country", "ethnicity", "religion")
+
+
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:
     """
     Validate a single annotation scheme.
@@ -5022,10 +5037,32 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     validate_label_list_elements(scheme, path)
 
     # Type-specific validation (deep structural checks beyond registry required_fields)
-    if annotation_type in ['radio', 'multiselect', 'select']:
+    if annotation_type == 'select' and 'use_predefined_labels' in scheme:
+        # A built-in list stands in for `labels` (schemas/select.py). Every
+        # documented example of it has no `labels`, and was refused here.
+        predefined = scheme['use_predefined_labels']
+        if predefined not in PREDEFINED_SELECT_LABELS:
+            raise ConfigValidationError(
+                f"{path}.use_predefined_labels must be one of "
+                f"{', '.join(PREDEFINED_SELECT_LABELS)}, not {predefined!r}")
+        if scheme.get('labels'):
+            # Configs written while `labels` was required carry both; the
+            # built-in list is what the page shows.
+            logger.warning(
+                "%s sets use_predefined_labels: %s and labels; the page shows the "
+                "built-in %s list and ignores labels.", path, predefined, predefined)
+
+    elif annotation_type in ['radio', 'multiselect', 'select']:
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for {annotation_type} annotation type")
         if not isinstance(scheme['labels'], list):
+            if annotation_type == 'select' and isinstance(scheme['labels'], str):
+                # normalize_config_before_validation reads a select's label
+                # file into a list (select_label_files.py).
+                raise ConfigValidationError(
+                    f"{path}.labels names the file {scheme['labels']!r}, but this scheme "
+                    f"was not reached when label files were read (see "
+                    f"select_label_files.config_schemes). Give the options as a list.")
             raise ConfigValidationError(f"{path}.labels must be a list")
         if not scheme['labels'] and not ('label_source' in scheme and annotation_type != 'select'):
             raise ConfigValidationError(f"{path}.labels cannot be empty")
