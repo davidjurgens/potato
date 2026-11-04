@@ -420,21 +420,40 @@ def generate_reference():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate docs/configuration/config_reference.md.")
+    parser.add_argument("--check", action="store_true",
+                        help="Verify the checked-in file is current; do not write.")
+    args = parser.parse_args()
+
     output_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "docs", "configuration"
     )
-    os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, "config_reference.md")
 
     content = generate_reference()
+    if args.check:
+        current = None
+        if os.path.exists(output_path):
+            with open(output_path, encoding="utf-8") as f:
+                current = f.read()
+        if current != content:
+            print("config_reference.md is out of date.")
+            print("Regenerate with: python scripts/generate_config_reference.py")
+            return 1
+        print("config_reference.md is up to date.")
+        return 0
+
+    os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     print(f"Generated config reference: {output_path}")
     print(f"  - {len(KNOWN_CONFIG_KEYS)} config keys documented")
     print(f"  - {len(schema_registry.list_schemas())} annotation types documented")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

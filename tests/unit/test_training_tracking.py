@@ -59,6 +59,26 @@ def test_association_follows_a_box_and_ends_a_lost_track():
     assert sorted(len(t["keyframes"]) for t in tracks) == [1, 10]
     # A weak detection nobody continues does not start a track.
     assert tracking.associate([(0, [{"label": "box", "box": [0, 0, .1, .1], "score": 0.2}])]) == []
+    # V10: the one-detection track after the gap is dropped at a minimum of 2.
+    kept = tracking.associate(moving, match_iou=0.3, max_age=2, new_track_score=0.5,
+                              min_keyframes=2)
+    assert [len(t["keyframes"]) for t in kept] == [10]
+
+
+def test_video_track_drops_one_detection_tracks_by_default():
+    """V10: the widget and the scorer hold a one-keyframe track at every
+    frame, so a single stray detection would be a box over the whole video."""
+    from potato.training.trainers.video_track import VideoTrackTrainer
+    assert VideoTrackTrainer.default_params()["min_track_keyframes"] == 2
+    assert VideoTrackTrainer.params_schema()["properties"]["min_track_keyframes"]["minimum"] == 1
+    stray = [(0, [{"label": "box", "box": [0.1, 0.1, 0.2, 0.2], "score": 0.9}])]
+    gold = tracking.track_target(stored({"a": track("a", "box", {
+        0: (0.6, 0.6, 0.2, 0.2), 40: (0.6, 0.6, 0.2, 0.2)})}))
+    held = tracking.track_payload(tracking.associate(stray), 10, 4.0, None, None)
+    dropped = tracking.track_payload(tracking.associate(stray, min_keyframes=2), 10, 4.0,
+                                     None, None)
+    assert tracking.score_tracks([gold], [held])["false_positives"] > 1
+    assert tracking.score_tracks([gold], [dropped])["false_positives"] == 0
 
 
 def test_mota_and_idf1_against_the_annotated_tracks():
@@ -202,6 +222,13 @@ def test_track_bounds_follow_the_widget():
     assert box_at(bounded, 24) == [0.4, 0.0, 0.2, 0.2]
     assert box_at(bounded, 4) is None and box_at(bounded, 26) is None
     assert box_at(dict(bounded, start=10, end=20), 9) is None
+    # V9: bounds inside the keyframes. The widget still draws each keyframe
+    # on its own frame, and nothing on the frames between it and the bound.
+    inside = dict(bounded, start=12, end=18)
+    drawn = {f: box_at(inside, f) for f in range(8, 23)}
+    assert sorted(f for f, box in drawn.items() if box) == [10] + list(range(12, 19)) + [20]
+    assert drawn[10] == [0.0, 0.0, 0.2, 0.2] and drawn[20] == [0.4, 0.0, 0.2, 0.2]
+    assert drawn[15][0] == pytest.approx(0.2)
     stored = {"tracks": {"t1": {"label": "car", "startFrame": 5, "endFrame": 25, "keyframes": {
         "10": {"frame": 10, "bboxNorm": {"x": 0, "y": 0, "width": 0.2, "height": 0.2}}}}}}
     track = track_target(json.dumps(stored))["tracks"][0]

@@ -187,6 +187,8 @@ All notable changes to the Potato annotation platform are documented in this fil
 - **Video object tracking** (`video-track`): a Faster R-CNN on frames sampled
   from the annotated tracks, its detections linked into tracks, scored by
   MOTA and IDF1, and prefilled as tracks the widget draws in its own pixels.
+  A predicted track needs at least `min_track_keyframes` detections (default
+  2), because the widget holds a one-keyframe track at every frame of the video.
 - **Molecular property models** (`rdkit-property`): a `radio`, `select`,
   `likert` or `slider` question about a molecule trains on Morgan
   fingerprints and RDKit descriptors with logistic regression, ridge or a

@@ -48890,10 +48890,13 @@ and links detections into tracks: each frame's detections are matched to the
 live tracks of the same label by box overlap with the track's last box (best
 one-to-one match, at least `match_iou`); an unmatched detection of at least
 `new_track_score` starts a track; a track missed for more than `max_age`
-sampled frames ends. Each detection is a keyframe, so the widget interpolates
-between them. The tracks prefill the widget, which puts the boxes in its own
-canvas pixels when it draws them. In `combined` mode the prelabel holds tracks
-only; its segments are left empty for the annotator.
+sampled frames ends. A track with fewer than `min_track_keyframes` detections
+is dropped. The widget holds a one-keyframe track at every frame of the video,
+and the held-out score counts it at every frame too, so one stray detection
+would put a box on the whole video. Each detection is a keyframe, so the widget
+interpolates between them. The tracks prefill the widget, which puts the boxes
+in its own canvas pixels when it draws them. In `combined` mode the prelabel
+holds tracks only; its segments are left empty for the annotator.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -48902,6 +48905,7 @@ only; its segments are left empty for the annotator.
 | `match_iou` | 0.3 | Box overlap at which a detection continues a track. |
 | `max_age` | 2 | Sampled frames a track may go undetected before it ends. |
 | `new_track_score` | 0.5 | Lowest score at which an unmatched detection starts a track. |
+| `min_track_keyframes` | 2 | Detections a predicted track needs to be kept. Set it to 1 to keep one-detection tracks. |
 | `min_instances` | 2 | Annotated videos needed in the train split. |
 
 The other parameters are `torchvision-detect`'s. OpenCV reads the videos

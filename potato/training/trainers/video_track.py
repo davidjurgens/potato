@@ -10,7 +10,8 @@ those frames and boxes.
 Prediction samples each video at ``predict_fps``, detects on every sampled
 frame, and links the detections into tracks by box overlap from frame to
 frame (``training.tracking.associate``: best one-to-one match on IoU within
-a label; a track missed for more than ``max_age`` sampled frames ends). Each
+a label; a track missed for more than ``max_age`` sampled frames ends; a
+track of fewer than ``min_track_keyframes`` detections is dropped). Each
 detection becomes a keyframe, so the widget interpolates between them as it
 does between an annotator's.
 
@@ -91,7 +92,8 @@ class VideoTrackTrainer(TorchvisionDetectTrainer):
     @classmethod
     def default_params(cls) -> Dict[str, Any]:
         return dict(super().default_params(), frame_fps=2.0, predict_fps=None,
-                    match_iou=0.3, max_age=2, new_track_score=0.5, min_instances=2)
+                    match_iou=0.3, max_age=2, new_track_score=0.5, min_track_keyframes=2,
+                    min_instances=2)
 
     @classmethod
     def params_schema(cls) -> Dict[str, Any]:
@@ -115,6 +117,10 @@ class VideoTrackTrainer(TorchvisionDetectTrainer):
             "new_track_score": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.5,
                                 "description": "Lowest score at which a detection no track "
                                                "takes starts a new one."},
+            "min_track_keyframes": {"type": "integer", "minimum": 1, "default": 2,
+                                    "description": "Detections a predicted track needs to be "
+                                                   "written back. The widget holds a "
+                                                   "one-keyframe track over the whole video."},
         })
         return dict(schema, properties=props)
 
@@ -254,6 +260,7 @@ class VideoTrackTrainer(TorchvisionDetectTrainer):
             "predict_fps": float(params.get("predict_fps") or params["frame_fps"]),
             "match_iou": float(params["match_iou"]), "max_age": int(params["max_age"]),
             "new_track_score": float(params["new_track_score"]),
+            "min_track_keyframes": int(params["min_track_keyframes"]),
             "model_version": version, "device": device, "n_train": len(train),
             "bundle_digest": bundle.digest, "selected_epoch": summary["best_epoch"]})
         metrics = {"n_train_frames": float(len(train)), "train_seconds": summary["train_seconds"],
@@ -305,7 +312,8 @@ class VideoTrackTrainer(TorchvisionDetectTrainer):
                 detections.append((int(round(t * scheme_fps)), found))
             report.progress("predict", n + 1, len(items))
             tracks = associate(detections, float(card["match_iou"]), int(card["max_age"]),
-                               float(card["new_track_score"]))
+                               float(card["new_track_score"]),
+                               int(card.get("min_track_keyframes", 2)))
             if not tracks:
                 continue
             scores = [k[5] for t in tracks for k in t["keyframes"] if k[5] is not None]

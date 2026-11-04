@@ -92,10 +92,14 @@ def _catmull_rom(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
 def box_at(track: Dict[str, Any], frame: int) -> Optional[List[float]]:
     """``[x, y, w, h]`` normalized at *frame*, interpolated between keyframes
     the way the widget draws the track (tracking-interpolation.js); None
-    outside the track. As there, a track with one keyframe holds it at every
-    frame, and between a track's ``startFrame``/``endFrame`` and its first
-    or last keyframe the nearest keyframe is held."""
+    outside the track. As there, a keyframe is drawn on its own frame even
+    outside ``startFrame``/``endFrame``, a track with one keyframe holds it at
+    every frame, and between a track's ``startFrame``/``endFrame`` and its
+    first or last keyframe the nearest keyframe is held."""
     keyframes = track["keyframes"]
+    for kf in keyframes:
+        if kf[0] == frame:
+            return list(kf[1:5])
     if len(keyframes) == 1:
         return list(keyframes[0][1:5])
     start = track.get("start", keyframes[0][0])
@@ -140,7 +144,8 @@ def _iou(a: Sequence[float], b: Sequence[float]) -> float:
 
 
 def associate(detections: Sequence[Tuple[int, List[Dict[str, Any]]]], match_iou: float = 0.3,
-              max_age: int = 2, new_track_score: float = 0.5) -> List[Dict[str, Any]]:
+              max_age: int = 2, new_track_score: float = 0.5,
+              min_keyframes: int = 1) -> List[Dict[str, Any]]:
     """Tracks from per-frame detections, in frame order.
 
     *detections* is ``[(frame, [{label, box: [x, y, w, h], score}])]``. Each
@@ -148,7 +153,10 @@ def associate(detections: Sequence[Tuple[int, List[Dict[str, Any]]]], match_iou:
     IoU with the track's last box (best one-to-one assignment, at least
     *match_iou*); an unmatched detection of at least *new_track_score*
     starts a track; a track unmatched for more than *max_age* sampled frames
-    ends. Returns ``[{label, keyframes: [[frame, x, y, w, h, score]]}]``.
+    ends; a track of fewer than *min_keyframes* detections is dropped (the
+    widget holds a one-keyframe track at every frame, so one stray detection
+    would cover the whole video). Returns
+    ``[{label, keyframes: [[frame, x, y, w, h, score]]}]``.
     """
     from potato.training.structured_metrics import hungarian
     live: List[Dict[str, Any]] = []
@@ -180,7 +188,8 @@ def associate(detections: Sequence[Tuple[int, List[Dict[str, Any]]]], match_iou:
             if d not in taken_dets and (det.get("score") or 0.0) >= new_track_score:
                 live.append({"label": det["label"], "age": 0,
                              "keyframes": [[frame] + list(det["box"]) + [det.get("score")]]})
-    return [{"label": t["label"], "keyframes": t["keyframes"]} for t in done + live]
+    return [{"label": t["label"], "keyframes": t["keyframes"]} for t in done + live
+            if len(t["keyframes"]) >= min_keyframes]
 
 
 def track_payload(tracks: List[Dict[str, Any]], fps: float, duration: float,

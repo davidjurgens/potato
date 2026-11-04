@@ -62,6 +62,9 @@ jobs:
       - name: Examples manifest is current
         run: python scripts/generate_examples_manifest.py --check
 
+      - name: Config reference is current
+        run: python scripts/generate_config_reference.py --check
+
       - name: Drift guards
         run: |
           pytest -q \
