@@ -100,7 +100,7 @@ CATEGORY_ORDER = [
         "psychometrics", "boundary_probing", "event_template", "corpus_map",
         "rooms", "truth_serum", "thinkaloud", "pocket",
         "analytics", "annotator_dashboard", "keystroke_logging",
-        "annotation_telemetry",
+        "annotation_telemetry", "authenticity", "interaction_tracking",
     ]),
     ("UI & Layout", [
         "ui", "ui_config", "layout", "instance_display", "format_handling",
@@ -117,6 +117,7 @@ CATEGORY_ORDER = [
         "auto_redirect_on_completion", "auto_redirect_delay",
         "allow_phase_back_navigation", "require_fully_annotated",
         "export_include_phase_data", "export_annotation_format",
+        "export_include_typing_dynamics", "export_include_authenticity",
         "auto_export_interval",
     ]),
     ("Media", [
@@ -394,6 +395,25 @@ def generate_reference():
     lines.append("| `key_value` | No | Single-key keyboard shortcut for this label |")
     lines.append("| `abbreviation` | No | Short text for compact display (span overlays) |")
     lines.append("| `color` | No | CSS color for label-specific styling |")
+    lines.append("")
+    lines.append("Not every type reads every field. The table lists the keys each type reads")
+    lines.append("on a structured label; `validate` warns about any other key, so")
+    lines.append("`validate --strict` fails on it. `name`, `description`, `tooltip` and `color`")
+    lines.append("are accepted everywhere because the codebook export and the labeling engine")
+    lines.append("read them for any scheme, even where the annotation page does not show them.")
+    lines.append("")
+    from potato.server_utils.schemas.registry import (
+        LABEL_BASE_FIELDS, LABEL_FIELDS, SELF_VALIDATED_LABEL_TYPES, STRING_LABEL_TYPES)
+    lines.append("| Type | Label keys read besides `" + "`, `".join(sorted(LABEL_BASE_FIELDS)) + "` |")
+    lines.append("|------|------|")
+    for type_name in sorted(LABEL_FIELDS):
+        extra = sorted(LABEL_FIELDS[type_name])
+        lines.append(f"| `{type_name}` | " + (", ".join(f"`{k}`" for k in extra) or "none") + " |")
+    lines.append("")
+    lines.append("Labels on " + ", ".join(f"`{t}`" for t in sorted(STRING_LABEL_TYPES))
+                 + " must be plain strings; a structured label there is refused.")
+    lines.append(", ".join(f"`{t}`" for t in sorted(SELF_VALIDATED_LABEL_TYPES))
+                 + " check their own label keys and refuse unknown ones.")
     lines.append("")
 
     return "\n".join(lines)
