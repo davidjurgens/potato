@@ -149,6 +149,29 @@ class TestSelectPredefinedLabels:
         validate_single_annotation_scheme(scheme, "annotation_schemes[0]")
 
 
+def _country_values():
+    import os
+    import re
+    import potato
+    path = os.path.join(os.path.dirname(potato.__file__), "static", "survey_assets",
+                        "country_dropdown_list.html")
+    with open(path, encoding="utf-8") as handle:
+        return re.findall(r'<option\s+value="([^"]+)"', handle.read())
+
+
+def test_the_country_list_has_current_names_and_no_misspellings():
+    """The list had Nambia, Futana, Zaire, Swaziland and Macedonia, and no
+    South Sudan, Guinea-Bissau, Micronesia or DR Congo."""
+    import html
+    values = {html.unescape(v) for v in _country_values()}
+    for name in ("Namibia", "Wallis & Futuna Is", "South Sudan", "Guinea-Bissau",
+                 "Micronesia", "Democratic Republic of the Congo", "Congo", "Eswatini",
+                 "North Macedonia", "Western Sahara", "Åland Islands", "St Martin"):
+        assert name in values, name
+    for gone in ("Nambia", "Wallis & Futana Is", "Zaire", "Swaziland", "Macedonia"):
+        assert gone not in values, gone
+
+
 def test_each_country_stores_its_name_as_shown():
     """Six values were misspelled ('Afganistan', 'Uraguay', ...) while the
     page showed the right name, so the stored answer differed from what was

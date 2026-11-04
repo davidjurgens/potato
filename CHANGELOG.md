@@ -311,18 +311,30 @@ All notable changes to the Potato annotation platform are documented in this fil
   now, and an unknown list name is refused with the three valid ones.
   Setting `labels` beside it logs a warning that the page shows the
   built-in list.
-- Six countries in the built-in `country` list stored a misspelled value
-  while showing the right name. They now store the name shown: `Afganistan`
-  is `Afghanistan`, `Curaco` is `Curacao`, `Korea Sout` is `Korea South`,
-  `Phillipines` is `Philippines`, `United Arab Erimates` is
-  `United Arab Emirates` and `Uraguay` is `Uruguay`. Answers saved earlier
-  keep the old spelling, so map them before comparing with new ones. An old
-  answer does not show as selected when its page is reopened.
+- The built-in `country` list had misspelled, outdated and missing entries.
+  - Six stored a misspelled value while showing the right name. They now
+    store the name shown: `Afganistan` is `Afghanistan`, `Curaco` is
+    `Curacao`, `Korea Sout` is `Korea South`, `Phillipines` is
+    `Philippines`, `United Arab Erimates` is `United Arab Emirates` and
+    `Uraguay` is `Uruguay`.
+  - Two were misspelled on the page too: `Nambia` is `Namibia`, and
+    `Wallis & Futana Is` is `Wallis & Futuna Is`.
+  - Three used former names: `Zaire` is `Democratic Republic of the Congo`,
+    `Swaziland` is `Eswatini` and `Macedonia` is `North Macedonia`. Each
+    shows its former name in parentheses, and `Congo` now reads
+    `Congo (Republic of the Congo)`; its value is unchanged.
+  - Added: Åland Islands, Guinea-Bissau, Micronesia, South Sudan, St Martin
+    (the French part; St Maarten was already listed) and Western Sahara.
+
+  Answers saved earlier keep the old values, so map them before comparing
+  with new ones. An old answer does not show as selected when its page is
+  reopened.
 - A `select` can take its options from a text file, one per line:
   `labels: options/languages.txt`. The code read a path there before, from the
   working directory and without a path check, but validation refused any
   string first. The file is now read when the config loads. The path is
-  relative to `task_dir` and must stay inside it. An empty file, or one that
+  relative to `task_dir`, then to the config file's directory, and must stay
+  inside `task_dir`. An empty file, or one that
   lists an option twice, is refused.
 - The Docker image and its docs said to keep annotation output on the
   image's `/data` volume, which the path check refuses: `output_annotation_dir`
