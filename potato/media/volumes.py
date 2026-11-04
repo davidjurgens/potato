@@ -157,8 +157,8 @@ def _require():
 
 def read_volume(path: str) -> Volume:
     """Read a NIfTI file or a directory holding one DICOM series. A NIfTI
-    file needs only nibabel: a training host with no pydicom (burger has
-    none) reads NIfTI volumes all the same."""
+    file needs only nibabel: a training host with no pydicom reads NIfTI
+    volumes all the same."""
     if os.path.isdir(path):
         _require()
         return _read_dicom_series(path)

@@ -160,3 +160,49 @@ def test_a_video_opencv_cannot_read_is_left_out_not_the_run(tmp_path):
     assert code == EXIT_OK, report.of_type("error")
     assert any("could not read" in e.get("msg", "") or "Left out v1" in e.get("msg", "")
                for e in report.of_type("log"))
+
+
+def test_a_track_is_read_with_its_own_interpolation():
+    """Audit 108: the trainer interpolated every track linearly, so a
+    constant or cubic track trained on boxes the annotator never saw."""
+    from potato.training.tracking import box_at
+    keyframes = [[0, 0.0, 0.0, 0.2, 0.2], [10, 0.4, 0.0, 0.2, 0.2],
+                 [20, 0.4, 0.4, 0.2, 0.2], [30, 0.0, 0.4, 0.2, 0.2]]
+    linear = {"keyframes": keyframes}
+    constant = dict(linear, interpolation="constant")
+    cubic = dict(linear, interpolation="cubic")
+    assert box_at(linear, 5)[0] == pytest.approx(0.2)
+    assert box_at(constant, 5) == [0.0, 0.0, 0.2, 0.2]
+    assert box_at(constant, 10) == [0.4, 0.0, 0.2, 0.2]
+    # Catmull-Rom through the keyframes either side, as tracking-interpolation.js.
+    def catmull(p0, p1, p2, p3, t):
+        return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t ** 2
+                      + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+    assert box_at(cubic, 15)[1] == pytest.approx(catmull(0.0, 0.0, 0.4, 0.4, 0.5))
+    assert box_at(cubic, 15)[0] == pytest.approx(catmull(0.0, 0.4, 0.4, 0.0, 0.5))
+    assert box_at(cubic, 15) != box_at(linear, 15)
+    assert box_at(cubic, 31) is None
+    import json
+    from potato.training.tracking import track_target
+    stored = {"tracks": {"t1": {"label": "car", "interpolation": "cubic", "keyframes": {
+        "0": {"frame": 0, "bboxNorm": {"x": 0, "y": 0, "width": 0.2, "height": 0.2}}}}}}
+    assert track_target(json.dumps(stored))["tracks"][0]["interpolation"] == "cubic"
+
+
+def test_track_bounds_follow_the_widget():
+    """Audit 108 V7: one keyframe is held at every frame, and a track's
+    startFrame/endFrame hold the nearest keyframe, as tracking-interpolation.js."""
+    import json
+    from potato.training.tracking import box_at, track_target
+    single = {"keyframes": [[10, 0.1, 0.1, 0.2, 0.2]]}
+    assert box_at(single, 0) == box_at(single, 500) == [0.1, 0.1, 0.2, 0.2]
+    bounded = {"keyframes": [[10, 0.0, 0.0, 0.2, 0.2], [20, 0.4, 0.0, 0.2, 0.2]],
+               "start": 5, "end": 25}
+    assert box_at(bounded, 6) == [0.0, 0.0, 0.2, 0.2]
+    assert box_at(bounded, 24) == [0.4, 0.0, 0.2, 0.2]
+    assert box_at(bounded, 4) is None and box_at(bounded, 26) is None
+    assert box_at(dict(bounded, start=10, end=20), 9) is None
+    stored = {"tracks": {"t1": {"label": "car", "startFrame": 5, "endFrame": 25, "keyframes": {
+        "10": {"frame": 10, "bboxNorm": {"x": 0, "y": 0, "width": 0.2, "height": 0.2}}}}}}
+    track = track_target(json.dumps(stored))["tracks"][0]
+    assert track["start"] == 5 and track["end"] == 25

@@ -226,7 +226,7 @@ def quantize_unsupported(params: Dict[str, Any]) -> List[str]:
     lora = params.get("lora")
     if isinstance(lora, dict) and lora.get("quantize"):
         return ["lora.quantize is supported by llm-sft, llm-dpo, "
-                "hf-text-classification and vlm-sft, not this trainer"]
+                "hf-text-classification, vlm-sft and reward-model, not this trainer"]
     return []
 
 
@@ -303,7 +303,8 @@ def apply_lora(model, lora: Optional[Dict[str, Any]], task_type: Optional[str],
     if lora.get("quantize") and not is_quantized(model):
         # The trainers that load quantized weights never get here.
         raise TrainerError("lora.quantize is supported by llm-sft, llm-dpo, "
-                           "hf-text-classification and vlm-sft, not this trainer")
+                           "hf-text-classification, vlm-sft and reward-model, "
+                           "not this trainer")
     kwargs = dict(r=int(lora["r"]), lora_alpha=int(lora["alpha"]),
                   lora_dropout=float(lora["dropout"]))
     if task_type:

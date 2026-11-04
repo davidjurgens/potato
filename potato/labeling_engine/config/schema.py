@@ -13,7 +13,7 @@ The ``labeling_engine`` config block.
           kind: llm
           endpoint_type: vllm
           model: google/gemma-4-12B-it-qat-w4a16-ct
-          base_url: http://burger.si.umich.edu:8001/v1
+          base_url: http://gpu-host:8001/v1
           confidence: {method: verbalized}
       cascade: [laya, gemma]        # tried in order; humans after the last
       contracts:

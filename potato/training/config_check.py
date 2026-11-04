@@ -9,6 +9,7 @@ a bundle is built).
 
 from __future__ import annotations
 
+import math
 import os
 from typing import Any, Dict, List, Sequence
 
@@ -129,6 +130,17 @@ def training_config_problems(config: Dict[str, Any]) -> List[str]:
                                   or queue_max < 1):
         problems.append("%s.queue_max must be a whole number of at least 1 "
                         "(got %r)" % (where, queue_max))
+
+    grace = training.get("grace_seconds")
+    if grace is not None and (not _number(grace) or not math.isfinite(grace) or grace < 0):
+        problems.append("%s.grace_seconds must be a number of seconds, 0 or more "
+                        "(got %r)" % (where, grace))
+    for key in ("retain_runs", "split_seed"):
+        value = training.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int)
+                                  or value < 0):
+            problems.append("%s.%s must be a whole number, 0 or more (got %r)"
+                            % (where, key, value))
 
     if training.get("tiling") is not None:
         from potato.training.tiling import TilingError, settings

@@ -261,3 +261,19 @@ def test_pushing_the_same_commit_twice_records_it_once(project):
     fake.existing = {"private": True}
     _push(project, fake)
     assert len(store.hub_pushes(project[0], "run-hub")) == 1
+
+
+def test_the_readme_says_when_the_model_was_trained_privately(project):
+    """Audit 108: DP was recorded in model_card.json only, not in the
+    README people read on the Hub."""
+    _config, run, _artifacts = project
+    card = {"base_model": "distilbert-base-uncased",
+            "dp": {"epsilon_target": 8.0, "epsilon_spent": 7.91, "delta": 0.001,
+                   "covers": "train split"}}
+    text = hub.model_card_markdown(run, card, ["model.safetensors"])
+    assert "| Differential privacy | DP-SGD, epsilon 7.91 spent of 8.0, delta 0.001" in text
+    partial = hub.model_card_markdown(run, {"dp": {"epsilon_spent": 2.5}}, ["model.safetensors"])
+    assert "| Differential privacy | DP-SGD, epsilon 2.5 spent, covering" in partial
+    assert "None" not in partial
+    assert "Differential privacy" not in hub.model_card_markdown(
+        run, {"base_model": "distilbert-base-uncased"}, ["model.safetensors"])

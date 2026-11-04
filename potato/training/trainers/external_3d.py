@@ -204,6 +204,9 @@ class External3DTrainer(Trainer):
         self._ids(folder, "train", train)
         self._ids(folder, "val", val)
         command = str(params.get("train_command") or "").strip()
+        # With no train command nothing is fitted here, so the predictions
+        # are the run, and a predict command that fails fails it.
+        self.predict_only = not command
         if command:
             if not train:
                 raise TrainerError("No annotated scans with a local file for %r" % schema.name)
@@ -221,7 +224,9 @@ class External3DTrainer(Trainer):
         return FitResult(model_version=version, artifact_paths=hf.artifact_files(spec.workdir),
                          metrics={"n_train": float(len(train))},
                          label_order=list(bundle.labels(schema.name)),
-                         selected_on="")
+                         # The train command is handed the val split and may
+                         # choose its checkpoint on it; test scores it first.
+                         selected_on="val" if command and val else "")
 
     # ------------------------------------------------------------ predict
 
@@ -244,12 +249,13 @@ class External3DTrainer(Trainer):
         self._run(card["predict_command"], {"dataset": folder, "workdir": spec.workdir,
                                             "predictions": out_dir},
                   spec.workdir, int(card.get("timeout_s") or 86400), report, "predict")
-        skipped = 0
+        skipped = n_files = n_objects = 0
         for n, (key, info) in enumerate(written.items()):
             report.progress("predict", n + 1, len(written))
             path = os.path.join(out_dir, key + ".txt")
             if not os.path.isfile(path):
                 continue
+            n_files += 1
             objects, scores = [], []
             with open(path) as fh:
                 for line in fh:
@@ -276,11 +282,23 @@ class External3DTrainer(Trainer):
                         objects.append(obj)
                         if score is not None:
                             scores.append(score)
+            n_objects += len(objects)
             if objects:
                 yield PredictionRecord(instance_id=info["instance_id"],
                                        schema_name=spec.primary_schema.name, payload=objects,
                                        confidence=round(min(scores), 4) if scores else None)
+        shape = ("'x y z dx dy dz heading label [score]' with a scheme label "
+                 "and a positive size")
+        # A detector that wrote no file, or only lines that could not be
+        # read, is broken, not a model that found nothing: scored, it would
+        # read as a model at 0. An empty file is a scan with no objects.
+        if not n_files:
+            raise TrainerError("The predict command exited 0 but wrote no "
+                               "<predictions>/<id>.txt for any of the %d scan(s)"
+                               % len(written))
+        if skipped and not n_objects:
+            raise TrainerError("None of the %d predicted line(s) could be used: each "
+                               "must be %s" % (skipped, shape))
         if skipped:
-            report.log("warning", "Left out %d predicted line(s) that are not "
-                                  "'x y z dx dy dz heading label [score]' with a scheme label "
-                                  "and a positive size" % skipped)
+            report.log("warning", "Left out %d predicted line(s) that are not %s"
+                       % (skipped, shape))

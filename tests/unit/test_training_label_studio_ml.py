@@ -465,3 +465,34 @@ def test_an_image_outside_the_task_directory_is_left_out(tmp_path, backend):
     sent = [t["data"]["image"] for r in FakeBackend.seen for t in r["body"]["tasks"]]
     assert sent and all(s.startswith("/data/local-files/?d=img/") for s in sent)
     assert _predictions(spec)
+
+
+# ----------------------------------------------------- key handling (audit 108)
+
+def test_a_pasted_token_in_place_of_a_variable_name_is_not_echoed(tmp_path):
+    from potato.training.trainers.label_studio_ml import LabelStudioMLTrainer
+    config, context = sentiment_project(tmp_path)
+    bundle, _, _ = build_bundle(context, str(tmp_path / "bundle"), ["s"])
+    token = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    spec = _spec(tmp_path, config, bundle, "label-studio-ml", "s",
+                 {"url": "http://x", "api_key_env": token})
+    problems = LabelStudioMLTrainer().validate(spec, bundle)
+    assert any("name of an environment variable" in p for p in problems), problems
+    assert not any(token in p for p in problems), problems
+
+
+def test_an_error_body_echoing_the_key_is_scrubbed(monkeypatch):
+    import requests
+
+    from potato.training.base import TrainerError
+    from potato.training.trainers.label_studio_ml import _post_json
+
+    class Echo:
+        status_code = 400
+        text = "bad request; Authorization: Token sekrit-value-123 was sent"
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: Echo())
+    with pytest.raises(TrainerError) as caught:
+        _post_json("http://x/predict", {}, {}, 5, secrets=["sekrit-value-123"])
+    assert "sekrit-value-123" not in str(caught.value)
+    assert "400" in str(caught.value)

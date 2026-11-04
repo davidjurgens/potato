@@ -100,10 +100,11 @@ class SklearnTextTrainer(Trainer):
                 "vectorizer_kwargs": {"type": "object", "default": {}},
                 "calibrate": {
                     "type": "boolean", "default": True,
-                    "description": "Fit isotonic calibration so confidences "
-                                   "mean something. Needs enough data to "
-                                   "cross-validate; skipped automatically "
-                                   "when there is not.",
+                    "description": "Calibrate the confidences so they mean "
+                                   "something: Platt scaling below 1000 "
+                                   "training items, isotonic from there. "
+                                   "Skipped automatically when there is too "
+                                   "little data to cross-validate.",
                 },
                 "min_instances": {
                     "type": "integer", "default": 10, "minimum": 2,

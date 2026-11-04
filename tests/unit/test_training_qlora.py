@@ -95,7 +95,8 @@ def test_a_quantized_model_is_not_moved():
 
 def test_a_trainer_that_does_not_load_quantized_says_so():
     with pytest.raises(hf.TrainerError, match="llm-sft, llm-dpo, "
-                                              "hf-text-classification and vlm-sft"):
+                                              "hf-text-classification, vlm-sft and "
+                                              "reward-model"):
         hf.apply_lora(_Model(False), dict(hf.LORA_DEFAULTS, quantize="4bit"),
                       "TOKEN_CLS", None)
 

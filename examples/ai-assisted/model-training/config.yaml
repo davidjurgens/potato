@@ -45,7 +45,7 @@ admin_api_key: "demo-admin-key"
 
 # One label per review, so the simulated annotators cover 120 different
 # reviews and leave 40 for the model to prelabel.
-max_annotations_per_item: 1
+num_annotators_per_item: 1
 
 annotation_schemes:
   - annotation_type: "radio"

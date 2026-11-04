@@ -138,6 +138,9 @@ class ExternalJob:
     cancel_at: float = 0.0
     completion: Optional[Dict[str, Any]] = None
     done: threading.Event = field(default_factory=threading.Event)
+    #: model_training.grace_seconds, sent to the agent so it gives the
+    #: worker the same time to exit after a cancel as the server does.
+    grace_seconds: float = 20.0
 
     def accepts_launch_token(self, token: str) -> bool:
         if not self.launch_token_digest or not token:
@@ -148,7 +151,7 @@ class ExternalJob:
     def public(self) -> Dict[str, Any]:
         return {"job_id": self.run_id, "backend": self.backend,
                 "state": self.state, "cancelled": self.cancel_requested,
-                "spec": self.spec}
+                "spec": self.spec, "grace_seconds": self.grace_seconds}
 
 
 class TrainingManager:
@@ -176,8 +179,8 @@ class TrainingManager:
         training = self.config.get("model_training", {}) or {}
         self.enabled = bool(training.get("enabled", False))
         self.retain_runs = int(training.get("retain_runs", 5))
-        self.grace_seconds = int(training.get("grace_seconds",
-                                              DEFAULT_GRACE_SECONDS))
+        self.grace_seconds = float(training.get("grace_seconds",
+                                                DEFAULT_GRACE_SECONDS))
         self.split_seed = int(training.get("split_seed", 0))
         self.split_spec = training.get("splits") or None
         self.aggregation = training.get("aggregation", "consensus")
@@ -970,7 +973,8 @@ class TrainingManager:
         sink = _EventSink(self, os.path.join(run_dir, "events.jsonl"))
         job = ExternalJob(run_id=run.run_id, backend=backend.name,
                           backend_type=backend.type, spec=spec.to_dict(),
-                          run_dir=run_dir, sink=sink)
+                          run_dir=run_dir, sink=sink,
+                          grace_seconds=float(self.grace_seconds))
         token = ""
         if backend.launched:
             # One token, one run. It reaches the agent on stdin, so it never

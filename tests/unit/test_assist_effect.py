@@ -61,6 +61,19 @@ class TestHoldout:
         assert "predictions" not in strip_holdout_fields(cfg, record, "u", "i1")
         assert "predictions" in strip_holdout_fields(config(0.0), record, "u", "i1")
 
+    def test_a_write_back_field_is_stripped_too(self):
+        """Write-back publishing to its own field, with no pre_annotation
+        block: the page pre-fills from that field, so it must not reach a
+        held-out annotator's item JSON either."""
+        cfg = dict(config(1.0), model_training={
+            "enabled": True, "writeback": {"schemas": ["s"], "field": "model_guess"}})
+        del cfg["pre_annotation"]
+        record = {"id": "i1", "text": "x", "model_guess": {"s": "a"}}
+        assert "model_guess" not in strip_holdout_fields(cfg, record, "u", "i1")
+        assert strip_holdout_fields(cfg, record, "u", "i1")["text"] == "x"
+        assistable = dict(cfg, ai_support={"holdout": {"fraction": 0.0}})
+        assert "model_guess" in strip_holdout_fields(assistable, record, "u", "i1")
+
 
 class TestEffect:
     def _arms(self, cfg, n_users=40, n_items=30):

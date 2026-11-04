@@ -72,12 +72,18 @@ def strip_holdout_fields(config: Dict[str, Any], record: Any, user_id: Optional[
 
     The page renders pre-annotations server-side, but the item record also
     reaches the browser (the instance-data routes, the page's item JSON), and a
-    prediction left in it could be read off the page source.
+    prediction left in it could be read off the page source. Model training's
+    write-back can publish to its own ``writeback.field``, which the page reads
+    when no ``pre_annotation`` block is enabled, so that field goes too.
     """
     if not isinstance(record, dict) or not is_held_out(config, user_id, instance_id):
         return record
     block = (config or {}).get("pre_annotation") or {}
-    field = str(block.get("field") or "predictions") if isinstance(block, dict) else "predictions"
-    if field not in record:
+    fields = {str(block.get("field") or "predictions") if isinstance(block, dict) else "predictions"}
+    from potato.quality_control import writeback_prelabel_settings
+    writeback = writeback_prelabel_settings(config or {})
+    if writeback:
+        fields.add(str(writeback.get("field") or "predictions"))
+    if not fields.intersection(record):
         return record
-    return {k: v for k, v in record.items() if k != field}
+    return {k: v for k, v in record.items() if k not in fields}

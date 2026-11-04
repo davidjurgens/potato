@@ -46904,7 +46904,8 @@ each prelabel in the queue: its id, trainer and held-out score.
 
 ## Verdicts
 
-A reviewer's judgement of a prelabel is stored separately from an annotation:
+A reviewer's judgement of a prelabel is stored separately from an annotation.
+Verdicts are posted to the API; the annotation page has no verdict buttons.
 
 ```bash
 curl -X POST -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
@@ -46929,6 +46930,13 @@ unmeasurable, because every accepted prelabel then looks like human work.
 A `correct` verdict also moves the item into the `train` split of every
 later [training run](model_training.md#corrections-and-pinned-items-always-train),
 so a correction teaches the next model and is never used to score it.
+
+A verdict records whether the item showed a prelabel when it was given. A
+`reject` takes the prelabel down, and the item then reads as empty; the
+verdict still counts as a rejected prelabel, not as something the model
+missed. Verdicts stored before 2.14 did not record this, and a `reject`
+among them counts as a rejected prelabel when training still holds a
+prediction for that item.
 
 Re-reviewing replaces a verdict rather than appending, so an annotator who
 changes their mind is counted once. An unknown verdict is refused: a silently
@@ -46957,7 +46965,7 @@ they have, Potato reports:
 A recall computed over an unreviewed denominator would be an assumption
 reported as a measurement.
 
-Once the pool is sampled, a verdict on an empty item can only mean the reviewer
+Once the pool is sampled, a verdict on an item that showed no prelabel can only mean the reviewer
 found something the model had not, so each is a confirmed false negative and
 recall becomes computable. Only items a human actually opened count; anything
 else moves recall by assumption.
@@ -47055,10 +47063,10 @@ All keys sit under `model_training`:
 |---|---|---|
 | `enabled` | `false` | Registers the `/admin/training` routes and the training manager. Without it the routes do not exist. |
 | `retain_runs` | `5` | Finished runs kept in the run ledger. Older runs are dropped from it unless their predictions are still stored. The run directories stay on disk. |
-| `grace_seconds` | `20` | After a cancel, seconds the run gets to exit before it is killed. |
+| `grace_seconds` | `20` | After a cancel, seconds the run gets to exit before it is killed; 0 or more. An ssh, SLURM or agent backend's agent is sent the same value with the job. |
 | `queue_max` | `10` | Runs that may wait behind the one in progress. See [The run queue](#the-run-queue). |
 | `split_seed` | `0` | Seeds the split assignment. Keep it fixed: changing it moves held-out items into training. |
-| `splits` | `{train: 0.7, val: 0.15, test: 0.15}` | Split fractions, normalized to sum to 1. Use the names `train`, `val` and `test`: predictions are made for `val` and `test` (and for unlabelled items with `writeback.include_unlabeled`). |
+| `splits` | `{train: 0.7, val: 0.15, test: 0.15}` | Split fractions, normalized to sum to 1. Use the names `train`, `val` and `test`: predictions are made for `val` and `test` (and for unlabelled items with `writeback.include_unlabeled`). Changing the fractions also moves items between splits, so items an earlier run held out can train in a later one. |
 | `aggregation` | `consensus` | How several annotators' labels become one. `consensus` is Dawid-Skene when there is more than one annotator (falling back to majority vote if it fails); `majority` is majority vote. |
 | `max_wall_seconds` | unset | Time limit for one run. The server stops a run that exceeds it: a local run is checked each time it reports an event, an ssh or agent run every second. |
 | `max_ram_mb` | unset | Address-space limit for the training process (`setrlimit`). Where the platform does not support the limit, the run logs a warning and continues. |
@@ -47066,6 +47074,7 @@ All keys sit under `model_training`:
 | `num_threads` | unset | Sets `OMP_NUM_THREADS`, `MKL_NUM_THREADS` and `OPENBLAS_NUM_THREADS` for the run, unless they are already set. |
 | `auto_retrain` | off | Retrain as annotations arrive. See below. |
 | `writeback` | none | Publish predictions as prelabels. See below. |
+| `tiling` | unset (`enabled: auto`) | Cut whole slides and other large images into tiles to train and predict on. See [Whole slides and other large images](#whole-slides-and-other-large-images). |
 | `backend` | `local` | Where runs execute unless the Training page or the API names another. See [Where runs execute](#where-runs-execute). |
 | `backends` | none | Named ssh, slurm and agent backends. |
 | `max_predictions_mb` | `512` | Largest `predictions.jsonl` a remote agent may upload. |
@@ -47675,6 +47684,10 @@ any one annotated item. `hf-image-classification` takes it too.
 | `delta` | 1 / (10 × train items) | The chance the guarantee does not hold. It must be below 1 / train items. |
 | `max_grad_norm` | 1.0 | Each item's gradient is clipped to this norm before noise is added. |
 
+`dp: null` or `dp: false` trains without DP. `validate` checks the keys and
+ranges inside `dp`; whether Opacus is installed is checked when the run
+starts, on the machine that trains.
+
 Each step draws its batch by Poisson sampling: every train item is in it
 independently, with probability 1 / batches per epoch (about `batch_size` /
 train items; the run log gives the exact rate). Each item's
@@ -47686,6 +47699,9 @@ multiplier and the clip. Stopping early on `patience` spends less.
 
 The guarantee covers the train split. It does not cover the val split, whose
 score picks the epoch kept, or the label list, which is read from the data.
+To keep val labels out of that choice, set `splits: {train: 0.7, val: 0,
+test: 0.3}`: with no val items the run keeps its last epoch, `patience` does
+not apply, and the held-out score comes from test.
 Under DP, mixed precision and gradient accumulation are off, and a quantized
 base model (`lora.quantize`) is refused. A text transformer's position and
 token-type embedding tables are frozen: their input is one row shared by the
@@ -48128,7 +48144,8 @@ differences between rewards are meaningful.
 | `batch_size` | 8 | Comparisons per step. |
 
 It also takes the parameters in [Parameters](#parameters), including `lora`
-with `quantize`. BWS tuples are built by the server from `bws_config`. A run
+with `quantize`. Its `learning_rate` defaults to 2e-5, or 2e-4 with `lora`.
+BWS tuples are built by the server from `bws_config`. A run
 from the server's own data has them; the tuples are not in the data files.
 
 ### `hf-relation`
@@ -48843,7 +48860,15 @@ back. Only cuboids are targets, and only single scans, not sequences.
 | `timeout_s` | 86400 | Seconds each command may run. |
 | `min_instances` | 1 | Annotated scans needed when `train_command` is set. |
 
-A command that exits non-zero fails the run with the last lines of its output.
+A train command that exits non-zero fails the run with the last lines of its
+output. So does a failing predict command when there is no `train_command`,
+since the predictions are then the whole run. After a train command, a
+failing predict command ends the run with a warning and no held-out score,
+keeping what the train command made. A predict command that exits 0 but
+writes no `<id>.txt` for any scan, or only lines that cannot be read, is
+treated as failing: scored, it would read as a model that found nothing. An
+empty file is a scan with no objects. The train command is given the val
+split, so a run that trained is scored on test first.
 Point-cloud prelabels are now checked before the viewer sees them: an object
 whose geometry does not parse, a cuboid with no size, and a label the scheme
 does not have are left out.
@@ -48854,7 +48879,9 @@ does not have are left out.
 `tracking` or `combined` mode (other modes train as segments). The annotated
 tracks are sampled at `frame_fps`: each sampled frame is read with OpenCV, and
 each track's box there is interpolated between its keyframes as the widget
-draws it, using the box as a fraction of the picture (the canvas-pixel box
+draws it (by the track's `interpolation`: linear, cubic or constant; a
+track with one keyframe is held at every frame, as the widget shows it),
+using the box as a fraction of the picture (the canvas-pixel box
 depends on the annotator's screen). A torchvision Faster R-CNN, with
 `torchvision-detect`'s parameters, is fine-tuned on those frames.
 
@@ -48865,7 +48892,8 @@ one-to-one match, at least `match_iou`); an unmatched detection of at least
 `new_track_score` starts a track; a track missed for more than `max_age`
 sampled frames ends. Each detection is a keyframe, so the widget interpolates
 between them. The tracks prefill the widget, which puts the boxes in its own
-canvas pixels when it draws them.
+canvas pixels when it draws them. In `combined` mode the prelabel holds tracks
+only; its segments are left empty for the annotator.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -49244,11 +49272,19 @@ counted in the run's write-back report (the `writeback` field of
 4. **The confidence floor.** Below `min_confidence`, the prediction is stored
    but not published.
 
+A prediction stored but not published (rejected, under the floor, or empty)
+also takes down the prelabel an earlier run left on that item and scheme.
+The stored prediction is now this run's, so the older prelabel would be
+credited to it on the review page, and it would not come back after a
+restart. A prelabel that came with the data is left alone. The report counts
+these in `n_superseded_cleared`.
+
 Write-back does not change human labels. Predictions go into item data;
 annotations live in user state, which write-back does not address.
 
 Prelabels show on the annotation page as a pre-filled answer once
-`writeback.schemas` is set: boxes, outlines and audio segments as shapes the
+`writeback.schemas` is set: a choice as the selected option, a free-text
+answer in its text box, boxes, outlines and audio segments as shapes the
 annotator can edit, a pairwise preference as the selected card or the scale's
 slider position, a ranking as the list's order, a BWS pick as the selected
 best and worst, a soft label as slider positions, a gloss in the gloss grid,
@@ -49330,6 +49366,7 @@ rejected pair or a prediction under the floor stays off after a restart too.
 
 To withdraw a run's prelabels, send `DELETE /admin/training/api/runs/<run_id>/predictions`.
 This removes the stored predictions and takes their prelabels off the items.
+An earlier run's prelabel on those items does not come back.
 
 ### Corrections and pinned items always train
 
@@ -49350,7 +49387,10 @@ place in the stable split:
 A run whose bundle moved held-out items into `train` logs a warning saying
 how many, because its held-out score is then computed without them and is not
 directly comparable with an earlier run's. The counts are in the bundle's
-`manifest.json`, under `stats.forced_train`.
+`manifest.json`, under `stats.forced_train`. When some of those items were in
+an earlier run's `val` or `test`, the warning also names those runs and how
+many items each: scoring the new model on those runs' held-out items, or on a
+dataset saved from them, would include items it trained on.
 
 ### Save a run's split as a dataset version
 
@@ -49457,8 +49497,8 @@ JSON routes under `/admin/training/api/`, are in the
 
 ### QLoRA: 4-bit base weights
 
-`llm-sft`, `llm-dpo`, `hf-text-classification` and `vlm-sft` take
-`lora: {quantize: 4bit}`. The base model is loaded with its weights in 4 bits
+`llm-sft`, `llm-dpo`, `hf-text-classification`, `vlm-sft` and `reward-model`
+take `lora: {quantize: 4bit}`. The base model is loaded with its weights in 4 bits
 (NF4 with double quantization, the QLoRA setup), and a LoRA adapter is trained
 on top of it in bf16 where the GPU supports bf16. In 4 bits the base weights
 take a quarter of the memory they take in bf16; activations, the adapter and
@@ -49496,9 +49536,10 @@ Each run has a directory under
 | `bundle.tar.gz` | Remote backends: the bundle as the agent downloaded it, media included. |
 
 The ledger (runs, each item's split per run, stored predictions, agent
-tokens, and pushes to the Hub) is in the project database,
-`<task_dir>/project.sqlite`, in the tables `training_runs`,
-`training_run_items`, `training_predictions`, `training_backends` and
+tokens, items pinned to train, and pushes to the Hub) is in the project
+database, `<task_dir>/project.sqlite`, in the tables `training_runs`,
+`training_run_items`, `training_predictions`, `training_backends`,
+`training_pinned_items` and
 `training_hub_pushes`.
 
 Set `POTATO_MODEL_CACHE` to a directory to have the training process use it
@@ -49518,8 +49559,8 @@ remote host.
 A successful run whose model is on this server has **Publish to the Hugging
 Face Hub** on its run page. It uploads the model and a `README.md` model card
 written from the run: the trainer, base model and adapter, the schemes and
-labels, the split sizes, the held-out score and what it was measured on, and
-the run and bundle ids.
+labels, the split sizes, the held-out score and what it was measured on, the
+epsilon spent for a run trained with `dp`, and the run and bundle ids.
 
 What is uploaded is a fixed list, not everything in `artifacts/`:
 

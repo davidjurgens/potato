@@ -109,3 +109,17 @@ def test_a_private_image_classifier_runs_and_reports_epsilon(tmp_path):
     code, result, report = _run(spec)
     assert code == EXIT_OK, report.of_type("error")
     assert 0 < result["metrics"]["dp_epsilon"] <= 5.0 + 1e-6, result["metrics"]
+
+
+def test_validate_checks_inside_dp_and_accepts_false():
+    """Audit 108: unknown keys inside dp surfaced only when a run started, and
+    dp: false, which the trainer reads as off, failed the parameter check."""
+    for name in ("hf-text-classification", "hf-image-classification"):
+        assert registry.param_problems(name, {"dp": False}) == []
+        assert any("does not take noise" in p for p in
+                   registry.param_problems(name, {"dp": {"epsilon": 3, "noise": 1}}))
+        assert any("dp.epsilon" in p for p in
+                   registry.param_problems(name, {"dp": {"epsilon": -1}}))
+        assert any("must be a mapping" in p for p in registry.param_problems(name, {"dp": True}))
+    assert registry.validate_trainer_params(
+        {"hf-text-classification": {"dp": {"epsilon": 3, "eps": 1}}})

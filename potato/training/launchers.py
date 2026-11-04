@@ -471,9 +471,9 @@ def choose_gpus(setting: str, gpus: List[Dict[str, Any]],
 
     ``auto`` takes the GPU with the most free memory, because on a shared
     server the least-busy card by utilisation can still be full. It passes
-    over a GPU the remote torch was not built for: burger's TITAN V (sm_70)
-    has no kernels in a torch built for sm_75 and up, and a run placed on it
-    fails at the first CUDA call.
+    over a GPU the remote torch was not built for: a TITAN V (sm_70) has no
+    kernels in a torch built for sm_75 and up, and a run placed on it fails
+    at the first CUDA call.
     """
     setting = (setting or "auto").strip().lower()
     if setting == "none":

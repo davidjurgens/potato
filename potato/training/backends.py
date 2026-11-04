@@ -37,7 +37,8 @@ from typing import Any, Dict, List, Optional
 from potato.training.slurm import SLURM_KEYS, settings_of, validate_settings
 
 __all__ = ["BACKEND_TYPES", "BackendConfig", "load_backends",
-           "default_backend_name", "validate_backends_config"]
+           "default_backend_name", "validate_backends_config",
+           "backends_config_warnings"]
 
 BACKEND_TYPES = ("local", "ssh", "agent", "slurm")
 
@@ -150,6 +151,18 @@ def load_backends(config: Dict[str, Any]) -> Dict[str, BackendConfig]:
 
 def default_backend_name(config: Dict[str, Any]) -> str:
     return str(_training(config).get("backend") or "local")
+
+
+def backends_config_warnings(config: Dict[str, Any]) -> List[str]:
+    """Settings that work but deserve a second look, such as a SLURM
+    ``time`` over 6 hours. ``validate`` and the server log them; the run
+    repeats them in its own log."""
+    raw = _training(config).get("backends")
+    out: List[str] = []
+    for name, data in (raw or {}).items() if isinstance(raw, dict) else ():
+        if isinstance(data, dict) and data.get("type") == "slurm":
+            out.extend(validate_settings(data, "model_training.backends.%s" % name)[1])
+    return out
 
 
 def validate_backends_config(config: Dict[str, Any]) -> List[str]:

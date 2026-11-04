@@ -624,9 +624,11 @@ def has_prediction(config: Dict[str, Any], instance_id: str,
     return row is not None
 
 
-def load_predictions(config: Dict[str, Any], run_id: Optional[str] = None
+def load_predictions(config: Dict[str, Any], run_id: Optional[str] = None,
+                     instance_ids: Optional[Iterable[str]] = None
                      ) -> List[Dict[str, Any]]:
-    """Every stored prediction, optionally filtered to one run.
+    """Every stored prediction, optionally filtered to one run or to some
+    items.
 
     Replayed into item data at boot, because runtime-written predictions are
     not durable on their own.
@@ -644,8 +646,11 @@ def load_predictions(config: Dict[str, Any], run_id: Optional[str] = None
         logger.debug("Could not read training predictions", exc_info=True)
         return []
 
+    wanted = None if instance_ids is None else {str(i) for i in instance_ids}
     out = []
     for row in rows:
+        if wanted is not None and row["instance_id"] not in wanted:
+            continue
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):

@@ -246,7 +246,7 @@ class SlurmJob:
     ``stdout`` yields the worker's event lines as they are written;
     ``poll()``/``wait()`` give its exit code; ``send_signal`` cancels it.
     ``log(level, message)`` reports queue changes ("PENDING (Priority)",
-    "RUNNING on sushi").
+    "RUNNING on node07").
     """
 
     def __init__(self, settings: Dict[str, Any], job_dir: str,

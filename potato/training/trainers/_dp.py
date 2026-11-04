@@ -36,9 +36,9 @@ from potato.training.base import ProgressReporter, TrainerError
 INSTALL_HINT = "pip install opacus"
 
 PARAM = {
-    "type": ["object", "null"], "default": None,
+    "type": ["object", "null", "boolean"], "default": None,
     "description": "Differentially private training (DP-SGD, Opacus): "
-                   "{epsilon, delta, max_grad_norm}. epsilon is the privacy "
+                   "{epsilon, delta, max_grad_norm}, or null or false for off. epsilon is the privacy "
                    "budget for the whole run (1 to 10 is usual); delta defaults "
                    "to 1/(10 x train items); max_grad_norm, the per-item gradient "
                    "clip, defaults to 1.0. Needs opacus."}
@@ -69,9 +69,12 @@ def settings(params: Dict[str, Any], n_train: int) -> Optional[Dict[str, float]]
             "max_grad_norm": float(dp.get("max_grad_norm", 1.0))}
 
 
-def problems(params: Dict[str, Any], n_train: int) -> List[str]:
+def problems(params: Dict[str, Any], n_train: int,
+             check_install: bool = True) -> List[str]:
     """Why these parameters cannot train privately; empty when they can or
-    DP is off."""
+    DP is off. With *n_train* 0 the delta-per-item check is skipped, and
+    without *check_install* the opacus check: ``validate`` checks settings on
+    the server, and the run may train on another machine."""
     import importlib.util
     dp = params.get("dp")
     if _off(dp):
@@ -106,7 +109,7 @@ def problems(params: Dict[str, Any], n_train: int) -> List[str]:
     if int(params.get("gradient_accumulation", 1) or 1) > 1:
         out.append("dp trains one sampled batch per step; set gradient_accumulation "
                    "to 1.")
-    if importlib.util.find_spec("opacus") is None:
+    if check_install and importlib.util.find_spec("opacus") is None:
         out.append("dp needs opacus, which is not installed (%s)." % INSTALL_HINT)
     return out
 

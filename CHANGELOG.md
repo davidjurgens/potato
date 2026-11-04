@@ -28,7 +28,8 @@ All notable changes to the Potato annotation platform are documented in this fil
   a restart, and holds `model_training.queue_max` runs (default 10).
   `"queue": false` keeps the old refusal. Automatic runs do not queue.
 - **QLoRA.** `lora: {quantize: 4bit}` (or `8bit`) loads the base model of
-  `llm-sft`, `llm-dpo` or `hf-text-classification` in 4 bits and trains a
+  `llm-sft`, `llm-dpo`, `hf-text-classification`, `vlm-sft` or
+  `reward-model` in 4 bits and trains a
   LoRA adapter on it; the base weights take a quarter of their bf16 memory
   (not yet measured on a GPU end to end). The run checks for
   a CUDA GPU and a working bitsandbytes first. Transformer runs now log
@@ -39,7 +40,9 @@ All notable changes to the Potato annotation platform are documented in this fil
   repository is typed twice, private is the default, and the token is read
   from an environment variable on the server. Every push is recorded with
   its commit.
-- **Sixteen new trainers**, beside `sklearn-text`. Text:
+- **37 new trainers** beside `sklearn-text`, 38 in all; five of them are
+  bridges that score a model running elsewhere and train nothing. The
+  entries below describe the later ones. The first sixteen: Text:
   `hf-text-classification` (also an LLM with LoRA), `hf-token-classification`
   for spans, `setfit`. Images: `hf-image-classification`,
   `torchvision-detect` and `ultralytics-detect` for boxes,
@@ -261,6 +264,21 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- With `ai_support.holdout`, a held-out annotator's item JSON still carried
+  the model's prelabels when `model_training.writeback.field` named a field
+  other than `pre_annotation.field` (or there was no `pre_annotation`
+  block), so they could be read in the page source. The page did not
+  pre-fill them. Both fields are now removed for a held-out pair.
+- Model review counted a `reject` as a label the model missed. Once the
+  rejected prelabel came off the item, the item read as empty, so the reject
+  left the precision denominator and entered the recall estimate. A verdict
+  now records whether the item showed a prelabel when it was given; older
+  rejects count against the prediction training still holds.
+- A newer run whose prediction for an item was not shown (under
+  `min_confidence`, empty, or rejected) left the older run's prelabel on the
+  item, while model review credited the newer run with it, and the prelabel
+  vanished at the next restart. The older prelabel now comes down at once.
+  Prelabels that came with the data are left alone.
 - A training run reported success before its predictions were written
   back, so the Training page (or a script waiting on the run) could read a
   finished run with no write-back report. The run now shows "writing back

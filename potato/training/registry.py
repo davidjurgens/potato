@@ -340,6 +340,12 @@ def param_problems(name: str, params: Dict[str, Any]) -> List[str]:
             problem = _value_problem(key, value, rule)
             if problem:
                 problems.append("%s: %s" % (name, problem))
+    if "dp" in properties and params.get("dp") not in (None, False):
+        # Inside dp the keys and ranges are checked here too, so `validate`
+        # finds a misspelt epsilon rather than the run's first second.
+        from potato.training.trainers import _dp
+        problems.extend("%s: %s" % (name, p)
+                        for p in _dp.problems(params, 0, check_install=False))
     return problems
 
 

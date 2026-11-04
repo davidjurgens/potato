@@ -303,7 +303,14 @@ class JobRunner:
         self.run_id = job["job_id"]
         self.root = os.path.abspath(os.path.expanduser(root))
         self.python = python
+        # The server's grace_seconds when it sends one: it ends the run
+        # after that long, so the worker should get the same time to exit.
         self.grace_s = grace_s
+        if job.get("grace_seconds") is not None:
+            try:
+                self.grace_s = max(0.0, float(job["grace_seconds"]))
+            except (TypeError, ValueError):
+                pass
         self.keep = keep
         self.stop_event = stop_event or threading.Event()
         self.job_dir = os.path.join(self.root, "jobs",

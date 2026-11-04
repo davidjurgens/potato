@@ -1883,8 +1883,11 @@ def validate_training_backends_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError("; ".join(problems))
         return
     if "backends" in training or "backend" in training:
-        from potato.training.backends import validate_backends_config
+        from potato.training.backends import (backends_config_warnings,
+                                              validate_backends_config)
         problems.extend(validate_backends_config(config_data))
+        for warning in backends_config_warnings(config_data):
+            logger.warning(warning)
     if "trainer_params" in training:
         from potato.training.registry import validate_trainer_params
         problems.extend(validate_trainer_params(training["trainer_params"]))

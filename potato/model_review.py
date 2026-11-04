@@ -294,6 +294,11 @@ class ReviewVerdict:
     #: apart from a rejection in the metrics.
     note: str = ""
     timestamp: Optional[float] = None
+    #: Whether the item showed a prelabel when the verdict was given. A
+    #: reject takes the prelabel down, so reading the item afterwards would
+    #: count the reject as a label the model missed. None for verdicts stored
+    #: before this was recorded.
+    had_prelabel: Optional[bool] = None
 
     def to_dict(self) -> dict:
         return {
@@ -303,6 +308,7 @@ class ReviewVerdict:
             "schema_name": self.schema_name,
             "note": self.note,
             "timestamp": self.timestamp,
+            "had_prelabel": self.had_prelabel,
         }
 
     @classmethod
@@ -314,6 +320,7 @@ class ReviewVerdict:
             schema_name=str(data.get("schema_name", "")),
             note=str(data.get("note", "")),
             timestamp=data.get("timestamp"),
+            had_prelabel=data.get("had_prelabel"),
         )
 
 
@@ -405,6 +412,7 @@ def review_metrics(verdicts: Sequence[ReviewVerdict],
 
 
 _VERDICT_MIGRATION = None
+_HAD_PRELABEL_MIGRATION = None
 
 
 def _db(task_dir: str):
@@ -429,8 +437,33 @@ def _db(task_dir: str):
                 ON model_review_verdicts (project, updated_at DESC);
             """,
         )
+    global _HAD_PRELABEL_MIGRATION
+    if _HAD_PRELABEL_MIGRATION is None:
+        _HAD_PRELABEL_MIGRATION = Migration(
+            name="0002_model_review_had_prelabel",
+            sql="ALTER TABLE model_review_verdicts ADD COLUMN had_prelabel INTEGER;",
+        )
     register_migration(_VERDICT_MIGRATION)
+    register_migration(_HAD_PRELABEL_MIGRATION)
     return get_db(task_dir)
+
+
+def _shows_prelabel(config: Dict[str, Any], instance_id: str,
+                    schema_name: str) -> Optional[bool]:
+    """Whether the item has a prelabel for *schema_name* (any scheme when
+    empty) right now, or None when the item cannot be read."""
+    try:
+        from potato.item_state_management import get_item_state_manager
+        item = get_item_state_manager().find_item(instance_id)
+    except Exception:
+        return None
+    if item is None:
+        return None
+    data = item.get_data() if hasattr(item, "get_data") else {}
+    schemes = [schema_name] if schema_name else [
+        s.get("name") for s in (config.get("annotation_schemes") or []) if s.get("name")]
+    return not summarize_predictions(instance_id, data, prediction_field(config),
+                                     schemes).empty
 
 
 def record_verdict(config: Dict[str, Any], verdict: ReviewVerdict) -> None:
@@ -453,18 +486,35 @@ def record_verdict(config: Dict[str, Any], verdict: ReviewVerdict) -> None:
             f"Unknown verdict {verdict.verdict!r}; expected one of "
             f"{', '.join(VERDICTS)}")
 
+    had_prelabel = verdict.had_prelabel
+    if had_prelabel is None:
+        had_prelabel = _shows_prelabel(config, verdict.instance_id,
+                                       verdict.schema_name)
     conn = _db(config.get("task_dir", "."))
     conn.execute(
         """INSERT INTO model_review_verdicts
                (project, instance_id, schema_name, reviewer, verdict, note,
-                updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+                updated_at, had_prelabel)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(project, instance_id, schema_name, reviewer)
            DO UPDATE SET verdict = excluded.verdict, note = excluded.note,
-                         updated_at = excluded.updated_at""",
+                         updated_at = excluded.updated_at,
+                         -- Once a verdict saw a prelabel, it keeps that:
+                         -- a reject takes the prelabel down, so the same
+                         -- verdict sent again would otherwise read as one
+                         -- on an empty item. A prelabel that appeared since
+                         -- (a later run) does count.
+                         had_prelabel = CASE
+                             WHEN model_review_verdicts.had_prelabel IS NULL
+                                 THEN excluded.had_prelabel
+                             WHEN excluded.had_prelabel IS NULL
+                                 THEN model_review_verdicts.had_prelabel
+                             ELSE MAX(model_review_verdicts.had_prelabel,
+                                      excluded.had_prelabel) END""",
         (config.get("annotation_task_name", "default"), verdict.instance_id,
          verdict.schema_name, verdict.reviewer, verdict.verdict, verdict.note,
-         verdict.timestamp or time.time()),
+         verdict.timestamp or time.time(),
+         None if had_prelabel is None else int(had_prelabel)),
     )
     conn.commit()
     if verdict.verdict == "reject":
@@ -481,7 +531,7 @@ def load_verdicts(config: Dict[str, Any]) -> List[ReviewVerdict]:
     try:
         rows = _db(config.get("task_dir", ".")).execute(
             """SELECT instance_id, schema_name, reviewer, verdict, note,
-                      updated_at
+                      updated_at, had_prelabel
                FROM model_review_verdicts WHERE project = ?
                ORDER BY updated_at ASC""",
             (config.get("annotation_task_name", "default"),),
@@ -493,7 +543,9 @@ def load_verdicts(config: Dict[str, Any]) -> List[ReviewVerdict]:
     return [ReviewVerdict(
         instance_id=row["instance_id"], schema_name=row["schema_name"],
         reviewer=row["reviewer"], verdict=row["verdict"], note=row["note"],
-        timestamp=row["updated_at"]) for row in rows]
+        timestamp=row["updated_at"],
+        had_prelabel=None if row["had_prelabel"] is None else bool(row["had_prelabel"]))
+        for row in rows]
 
 
 def prelabel_provenance(config: Dict[str, Any], instance_ids: Sequence[str]
@@ -551,15 +603,38 @@ def summarize_project(item_state_manager, config: Dict[str, Any]
 
     verdicts = load_verdicts(config)
     empty_ids = empty_prediction_ids(summaries)
-    reviewed_ids = {v.instance_id for v in verdicts}
-    reviewed_empty = sorted(reviewed_ids & set(empty_ids))
-    # A verdict on an item with NO prediction can only mean the reviewer found
-    # something the model had not: there was no prelabel to accept.
-    found_in_empty = sorted(v.instance_id for v in verdicts
-                            if v.instance_id in set(empty_ids)
+    empty_set = set(empty_ids)
+    # A verdict counts against the prelabel the reviewer saw. A reject takes
+    # that prelabel down, so the item reads as empty afterwards; judged by
+    # its current state, the reject became a label the model missed. Older
+    # verdicts did not record what was shown: a reject on an item training
+    # still has a stored prediction for was a reject of that prediction.
+    stored = set()
+    if any(v.had_prelabel is None and v.verdict == "reject" for v in verdicts):
+        try:
+            from potato.training import store
+            stored = set(store.prediction_runs(config, empty_set))
+        except Exception:
+            logger.debug("Could not read stored predictions", exc_info=True)
+
+    def saw_prelabel(v: ReviewVerdict) -> bool:
+        if v.had_prelabel is not None:
+            return v.had_prelabel
+        if v.instance_id not in empty_set:
+            return True
+        return v.verdict == "reject" and any(
+            iid == v.instance_id and (not v.schema_name or schema == v.schema_name)
+            for iid, schema in stored)
+
+    prelabelled = [v for v in verdicts if saw_prelabel(v)]
+    on_empty = [v for v in verdicts if not saw_prelabel(v)]
+    reviewed_empty = sorted({v.instance_id for v in on_empty} & empty_set)
+    # A verdict on an item that showed NO prediction can only mean the
+    # reviewer found something the model had not: there was nothing to accept.
+    found_in_empty = sorted(v.instance_id for v in on_empty
+                            if v.instance_id in empty_set
                             and v.verdict in ("correct", "reject"))
 
-    prelabelled = [v for v in verdicts if v.instance_id not in set(empty_ids)]
     metrics = review_metrics(prelabelled, reviewed_empty, found_in_empty,
                              n_empty_total=len(set(empty_ids)),
                              n_prelabelled_total=sum(1 for s in summaries if not s.empty))

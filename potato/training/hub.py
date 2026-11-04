@@ -182,6 +182,15 @@ def model_card_markdown(run, card: Dict[str, Any], files: List[str],
         lines.append("| Adapter | LoRA r=%s, alpha=%s%s |" % (
             lora.get("r"), lora.get("alpha"),
             ", base weights %s" % lora["quantize"] if lora.get("quantize") else ""))
+    dp = card.get("dp")
+    if isinstance(dp, dict) and dp.get("epsilon_spent") is not None:
+        target = dp.get("epsilon_target")
+        delta = dp.get("delta")
+        lines.append("| Differential privacy | DP-SGD, epsilon %s spent%s%s, covering "
+                     "the train split |" % (
+                         dp["epsilon_spent"],
+                         " of %s" % target if target is not None else "",
+                         ", delta %s" % delta if delta is not None else ""))
     lines.append("| Schemes | %s |" % ", ".join("`%s`" % s for s in run.schema_names))
     if run.kinds:
         lines.append("| Kinds | %s |" % ", ".join(run.kinds))

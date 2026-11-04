@@ -5,8 +5,10 @@ tracks: a label and a box per keyframe, keyed by frame number at the
 scheme's frame rate, the box both in the annotator's canvas pixels
 (``bbox``) and as fractions of the picture (``bboxNorm``). Only the
 normalized box means the same thing on every screen, so it is what is
-trained on. Between keyframes a track is interpolated linearly, as the
-widget draws it; before its first and after its last keyframe it is absent.
+trained on. Between keyframes a track is interpolated as the widget draws
+it, by the track's own ``interpolation`` (linear, cubic or constant;
+tracking-interpolation.js); before its first and after its last keyframe it
+is absent.
 
 The target is ``{fps, duration, width, height, tracks: [{id, label,
 keyframes: [[frame, x, y, w, h], ...]}]}``.
@@ -61,8 +63,17 @@ def track_target(value_map: Any, default_fps: float = 30.0) -> Optional[Dict[str
             if w > 0 and h > 0 and all(math.isfinite(v) for v in (x, y, w, h)):
                 keyframes.append([frame, x, y, w, h])
         if keyframes:
-            out.append({"id": str(track.get("id") or len(out)), "label": str(track["label"]),
-                        "keyframes": sorted(keyframes)})
+            entry = {"id": str(track.get("id") or len(out)), "label": str(track["label"]),
+                     "keyframes": sorted(keyframes),
+                     "interpolation": str(track.get("interpolation") or "linear")}
+            # The widget's own bounds, when the track has them.
+            for key, name in (("startFrame", "start"), ("endFrame", "end")):
+                try:
+                    if track.get(key) is not None:
+                        entry[name] = int(track[key])
+                except (TypeError, ValueError):
+                    pass
+            out.append(entry)
     if not out:
         return None
     try:
@@ -73,18 +84,48 @@ def track_target(value_map: Any, default_fps: float = 30.0) -> Optional[Dict[str
             "height": meta.get("height"), "tracks": out}
 
 
+def _catmull_rom(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
+    return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t
+                  + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t)
+
+
 def box_at(track: Dict[str, Any], frame: int) -> Optional[List[float]]:
-    """``[x, y, w, h]`` normalized at *frame*, interpolated linearly between
-    keyframes; None outside the track."""
+    """``[x, y, w, h]`` normalized at *frame*, interpolated between keyframes
+    the way the widget draws the track (tracking-interpolation.js); None
+    outside the track. As there, a track with one keyframe holds it at every
+    frame, and between a track's ``startFrame``/``endFrame`` and its first
+    or last keyframe the nearest keyframe is held."""
     keyframes = track["keyframes"]
-    if frame < keyframes[0][0] or frame > keyframes[-1][0]:
+    if len(keyframes) == 1:
+        return list(keyframes[0][1:5])
+    start = track.get("start", keyframes[0][0])
+    end = track.get("end", keyframes[-1][0])
+    if frame < start or frame > end:
         return None
-    for before, after in zip(keyframes, keyframes[1:] + [keyframes[-1]]):
+    if frame < keyframes[0][0]:
+        return list(keyframes[0][1:5])
+    if frame > keyframes[-1][0]:
+        return list(keyframes[-1][1:5])
+    mode = track.get("interpolation") or "linear"
+    for n, (before, after) in enumerate(zip(keyframes, keyframes[1:] + [keyframes[-1]])):
         if before[0] <= frame <= after[0]:
-            if after[0] == before[0]:
-                return list(before[1:])
+            if after[0] == before[0] or frame == before[0]:
+                return list(before[1:5])
+            if frame == after[0]:
+                return list(after[1:5])
+            if mode == "constant":
+                return list(before[1:5])
             share = (frame - before[0]) / float(after[0] - before[0])
-            return [b + (a - b) * share for b, a in zip(before[1:], after[1:])]
+            if mode == "cubic":
+                # The keyframes either side of the pair, or the pair's own ends.
+                first = keyframes[n - 1] if n > 0 else before
+                last = keyframes[n + 2] if n + 2 < len(keyframes) else after
+                x, y, w, h = (_catmull_rom(first[i], before[i], after[i], last[i], share)
+                              for i in range(1, 5))
+                # The widget floors a size at 1 canvas pixel; normalized,
+                # the screen is unknown, so only a positive size is kept.
+                return [x, y, max(w, 1e-6), max(h, 1e-6)]
+            return [b + (a - b) * share for b, a in zip(before[1:5], after[1:5])]
     return None
 
 

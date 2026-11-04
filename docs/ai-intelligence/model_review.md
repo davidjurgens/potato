@@ -109,7 +109,8 @@ each prelabel in the queue: its id, trainer and held-out score.
 
 ## Verdicts
 
-A reviewer's judgement of a prelabel is stored separately from an annotation:
+A reviewer's judgement of a prelabel is stored separately from an annotation.
+Verdicts are posted to the API; the annotation page has no verdict buttons.
 
 ```bash
 curl -X POST -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
@@ -134,6 +135,13 @@ unmeasurable, because every accepted prelabel then looks like human work.
 A `correct` verdict also moves the item into the `train` split of every
 later [training run](model_training.md#corrections-and-pinned-items-always-train),
 so a correction teaches the next model and is never used to score it.
+
+A verdict records whether the item showed a prelabel when it was given. A
+`reject` takes the prelabel down, and the item then reads as empty; the
+verdict still counts as a rejected prelabel, not as something the model
+missed. Verdicts stored before 2.14 did not record this, and a `reject`
+among them counts as a rejected prelabel when training still holds a
+prediction for that item.
 
 Re-reviewing replaces a verdict rather than appending, so an annotator who
 changes their mind is counted once. An unknown verdict is refused: a silently
@@ -162,7 +170,7 @@ they have, Potato reports:
 A recall computed over an unreviewed denominator would be an assumption
 reported as a measurement.
 
-Once the pool is sampled, a verdict on an empty item can only mean the reviewer
+Once the pool is sampled, a verdict on an item that showed no prelabel can only mean the reviewer
 found something the model had not, so each is a confirmed false negative and
 recall becomes computable. Only items a human actually opened count; anything
 else moves recall by assumption.

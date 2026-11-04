@@ -86,13 +86,15 @@ def label_config(scheme: Dict[str, Any], kind: str,
 
 
 def _post_json(url: str, body: Dict[str, Any], headers: Dict[str, str],
-               timeout: float) -> Any:
+               timeout: float, secrets: Iterable[str] = ()) -> Any:
     import requests
 
+    from potato.training.trainers._bridge_common import scrub
     response = requests.post(url, json=body, headers=headers, timeout=timeout)
     if response.status_code >= 400:
+        # A backend that echoes the request echoes its Authorization header.
         raise TrainerError("%s answered %d: %s" % (url, response.status_code,
-                                                   response.text[:300]))
+                                                   scrub(response.text, secrets)[:300]))
     return response.json()
 
 
@@ -221,11 +223,9 @@ class LabelStudioMLTrainer(Trainer):
             problems.append("Schema %r is %s; a Label Studio backend's results "
                             "are read for choices, spans and image regions."
                             % (schema.name, schema.kind))
-        for key in ("api_key_env", "basic_auth_user_env", "basic_auth_pass_env"):
-            env = params.get(key)
-            if env and not os.environ.get(env):
-                problems.append("%s names %s, which is not set in the "
-                                "server's environment." % (key, env))
+        from potato.training.trainers._bridge_common import env_problems
+        problems.extend(env_problems(
+            params, ("api_key_env", "basic_auth_user_env", "basic_auth_pass_env")))
         if bool(params.get("basic_auth_user_env")) != bool(
                 params.get("basic_auth_pass_env")):
             problems.append("basic_auth_user_env and basic_auth_pass_env go "
@@ -247,6 +247,13 @@ class LabelStudioMLTrainer(Trainer):
         env = params.get("api_key_env")
         token = os.environ.get(env, "") if env else ""
         return {"Authorization": "Token %s" % token} if token else {}
+
+    @staticmethod
+    def _secrets(params: Dict[str, Any]) -> List[str]:
+        """The values of the named variables, to keep out of error text."""
+        from potato.training.trainers._bridge_common import secret
+        return [secret(params.get(key)) for key in
+                ("api_key_env", "basic_auth_user_env", "basic_auth_pass_env")]
 
     def _scheme(self, spec: TrainingSpec, bundle: BundleRef) -> Dict[str, Any]:
         schema = spec.primary_schema
@@ -274,8 +281,9 @@ class LabelStudioMLTrainer(Trainer):
             health = requests.get(base + "/health", headers=self._headers(params),
                                   timeout=float(params["timeout_s"]))
         except requests.RequestException as exc:
+            from potato.training.trainers._bridge_common import scrub
             raise TrainerError("Could not reach the Label Studio ML backend at "
-                               "%s: %s" % (base, exc))
+                               "%s: %s" % (base, scrub(exc, self._secrets(params))))
         if health.status_code >= 400:
             hint = ""
             if health.status_code in (401, 403, 500) and params.get("api_key_env"):
@@ -475,7 +483,7 @@ class LabelStudioMLTrainer(Trainer):
             response = _post_json(card["url"] + "/predict", {
                 "tasks": tasks, "label_config": card["label_config"],
                 "project": "potato", "params": {"context": None}},
-                headers, float(params["timeout_s"]))
+                headers, float(params["timeout_s"]), self._secrets(params))
             results = predictions_of(response)
             if len(results) != len(chunk):
                 report.log("warning", "The backend returned %d predictions for "

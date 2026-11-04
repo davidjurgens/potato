@@ -162,7 +162,8 @@ def test_commands_keep_other_braces_and_nan_boxes_are_left_out(tmp_path):
         os.makedirs(out, exist_ok=True)
         for key in open(os.path.join(dataset, "ImageSets", "predict.txt")).read().split():
             with open(os.path.join(out, key + ".txt"), "w") as fh:
-                fh.write("1 1 1 4 2 1.5 nan Car 0.9\\n1 1 1 4 2 1.5 0.0 Car inf\\n")
+                fh.write("1 1 1 4 2 1.5 nan Car 0.9\\n1 1 1 4 2 1.5 0.0 Car inf\\n"
+                         "1 1 1 4 2 1.5 0.0 Car 0.8\\n")
     '''))
     config, context = spatial_project(tmp_path, n=4)
     bundle, _, _ = build_bundle(context, str(tmp_path / "b"), ["objs"], split_seed=0)
@@ -170,4 +171,69 @@ def test_commands_keep_other_braces_and_nan_boxes_are_left_out(tmp_path):
         "predict_command": "%s %s {dataset} {predictions} {a:1}" % (sys.executable, script)})
     code, result, report = _run(spec)
     assert code == EXIT_OK, report.of_type("error")
-    assert _predictions(spec) == []
+    records = _predictions(spec)
+    assert records and all(len(r["payload"]) == 1 for r in records)
+    assert records[0]["payload"][0]["source"] == "model"
+
+
+def test_a_failing_predict_command_fails_a_run_that_trained_nothing(tmp_path):
+    """Audit 108: with no train_command the predictions are the run, so a
+    predict command that fails is a failed run, not a success with no score."""
+    config, context = spatial_project(tmp_path, n=4)
+    bundle, _, _ = build_bundle(context, str(tmp_path / "b"), ["objs"], split_seed=0)
+    failing = "%s -c \"import sys; sys.exit(4)\"" % sys.executable
+    spec = _spec(tmp_path, config, bundle, "external-3d", "objs", {"predict_command": failing})
+    code, _, report = _run(spec)
+    assert code != EXIT_OK
+    assert any("Prediction pass failed" in e.get("message", "") for e in report.of_type("error"))
+
+    trained = _spec(tmp_path / "t", config, bundle, "external-3d", "objs", {
+        "train_command": "true", "predict_command": failing})
+    code, result, report = _run(trained)
+    assert code == EXIT_OK, report.of_type("error")
+    assert any("Prediction pass failed" in e.get("msg", "") for e in report.of_type("log"))
+
+
+def test_a_run_that_trained_is_scored_on_test_first(tmp_path):
+    """The train command is handed the val split, so test is the unseen one."""
+    script = tmp_path / "detector.py"
+    script.write_text(DETECTOR)
+    config, context = spatial_project(tmp_path, n=8)
+    bundle, _, _ = build_bundle(context, str(tmp_path / "b"), ["objs"], split_seed=0)
+    assert bundle.split_size("val") and bundle.split_size("test")
+    predict = "%s %s {dataset} {predictions}" % (sys.executable, script)
+    trained = _spec(tmp_path, config, bundle, "external-3d", "objs",
+                    {"train_command": "true", "predict_command": predict})
+    assert _run(trained)[1]["metrics"]["heldout_metric"].startswith("test ")
+    untrained = _spec(tmp_path / "u", config, bundle, "external-3d", "objs",
+                      {"predict_command": predict})
+    assert _run(untrained)[1]["metrics"]["heldout_metric"].startswith("val ")
+
+
+BROKEN_DETECTOR = """
+import os, sys
+dataset, out = sys.argv[1], sys.argv[2]
+os.makedirs(out, exist_ok=True)
+lines = sys.argv[3].replace("|", "\\n")
+if lines:
+    for key in open(os.path.join(dataset, "ImageSets", "predict.txt")).read().split():
+        with open(os.path.join(out, key + ".txt"), "w") as fh:
+            fh.write(lines)
+"""
+
+
+@pytest.mark.parametrize("lines, needle", [("", "wrote no"),
+                                           ("garbage line|nan nan|", "could be used")])
+def test_a_detector_that_writes_nothing_usable_fails_the_run(tmp_path, lines, needle):
+    """Audit 108 V3: a predict command that wrote no file, or only lines that
+    could not be read, scored 0.0 as if it were a model that found nothing."""
+    script = tmp_path / "broken.py"
+    script.write_text(BROKEN_DETECTOR)
+    config, context = spatial_project(tmp_path, n=4)
+    bundle, _, _ = build_bundle(context, str(tmp_path / "b"), ["objs"], split_seed=0)
+    spec = _spec(tmp_path, config, bundle, "external-3d", "objs", {
+        "predict_command": "%s %s {dataset} {predictions} '%s'" % (sys.executable, script, lines)})
+    code, _, report = _run(spec)
+    assert code != EXIT_OK
+    assert any(needle in e.get("message", "") for e in report.of_type("error")), \
+        report.of_type("error")

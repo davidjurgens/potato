@@ -67,6 +67,9 @@ class WritebackReport:
     n_skipped_missing_item: int = 0
     n_skipped_empty: int = 0
     n_skipped_heldout_only: int = 0
+    #: Older runs' prelabels taken down because this run's prediction for
+    #: the pair is stored but not shown.
+    n_superseded_cleared: int = 0
     schemas_enabled: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
@@ -81,6 +84,7 @@ class WritebackReport:
             "n_skipped_missing_item": self.n_skipped_missing_item,
             "n_skipped_empty": self.n_skipped_empty,
             "n_skipped_heldout_only": self.n_skipped_heldout_only,
+            "n_superseded_cleared": self.n_superseded_cleared,
             "schemas_enabled": list(self.schemas_enabled),
             "warnings": list(self.warnings),
             # The sentence the docs' troubleshooting quotes; the status
@@ -105,6 +109,22 @@ def _is_empty(payload: Any) -> bool:
     if isinstance(payload, dict) and set(payload) <= {"segments", "objects"}:
         return not any(payload.values())
     return False
+
+
+_MISSING = object()
+
+
+def _shown(item_manager, instance_id: str, schema_name: str, field_name: str) -> Any:
+    """The prelabel an item shows for *schema_name*, or a sentinel for none."""
+    find = getattr(item_manager, "find_item", None)
+    item = find(instance_id) if find else None
+    if item is None:
+        return _MISSING
+    data = item.get_data() if hasattr(item, "get_data") else getattr(item, "item_data", {})
+    predictions = (data or {}).get(field_name)
+    if not isinstance(predictions, dict):
+        return _MISSING
+    return predictions.get(schema_name, _MISSING)
 
 
 def _writeback_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -157,6 +177,11 @@ def ingest_predictions(run, predictions_path: str,
 
     to_store: List[tuple] = []
     to_publish: List[tuple] = []
+    # Stored but not shown: low confidence, empty or rejected. The stored
+    # prediction for a pair is the newest run's, so an older run's prelabel
+    # left on such an item would be credited to this run, and gone after a
+    # restart, which replays only what is stored.
+    superseded: List[tuple] = []
 
     with open(predictions_path) as fh:
         for line in fh:
@@ -193,17 +218,32 @@ def ingest_predictions(run, predictions_path: str,
                 continue
             if (instance_id, schema_name) in rejected:
                 report.n_skipped_rejected += 1
+                superseded.append((instance_id, schema_name))
                 continue
             if confidence is not None and float(confidence) < min_confidence:
                 report.n_skipped_low_confidence += 1
+                superseded.append((instance_id, schema_name))
                 continue
             if _is_empty(payload):
                 # No spans, no shapes, no segments: nothing to show, and
                 # counting it as written overstated what annotators see.
                 report.n_skipped_empty += 1
+                superseded.append((instance_id, schema_name))
                 continue
 
             to_publish.append((instance_id, schema_name, payload))
+
+    # Only a prelabel an earlier run wrote is taken down: the item must show
+    # exactly what that run stored. One imported with the data stays, even
+    # where an earlier run stored a prediction it did not publish.
+    earlier: Dict[tuple, Any] = {}
+    if superseded:
+        wanted = set(superseded)
+        earlier = {(r["instance_id"], r["schema_name"]): r["payload"]
+                   for r in store.load_predictions(config, instance_ids={i for i, _ in wanted})
+                   if (r["instance_id"], r["schema_name"]) in wanted
+                   and r["run_id"] != report.run_id}
+        superseded = [pair for pair in superseded if pair in earlier]
 
     # Persist first. This is the durable record, and it is what survives a
     # restart -- predictions written into item data alone do not.
@@ -215,7 +255,7 @@ def ingest_predictions(run, predictions_path: str,
                              report.run_id)
             report.warnings.append("Predictions could not be persisted")
 
-    if item_manager is None and (to_publish or own_train_ids):
+    if item_manager is None and (to_publish or own_train_ids or superseded):
         from potato.item_state_management import get_item_state_manager
         item_manager = get_item_state_manager()
 
@@ -226,6 +266,13 @@ def ingest_predictions(run, predictions_path: str,
             for schema_name in enabled_schemas:
                 item_manager.clear_prediction(instance_id, schema_name,
                                               field=field_name)
+        for instance_id, schema_name in superseded:
+            if _shown(item_manager, instance_id, schema_name, field_name) \
+                    != earlier[(instance_id, schema_name)]:
+                continue
+            if item_manager.clear_prediction(instance_id, schema_name,
+                                             field=field_name):
+                report.n_superseded_cleared += 1
 
     if not to_publish:
         return report
