@@ -207,7 +207,7 @@ _HOSTING_DEPS = [
 
 setup(
     name="potato-annotation",
-    version='2.13.1',
+    version='2.14.0',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",

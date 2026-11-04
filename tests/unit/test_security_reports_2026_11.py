@@ -239,6 +239,109 @@ class TestDeployHostTempFiles:
         assert all("x" in m and "w" in m for m in modes)
 
 
+class TestPullOnANonRootLogin:
+    """A host whose login is not root (Ubuntu on EC2, Lightsail, OpenStack).
+
+    `deploy pull` runs tar and sqlite3 there as root through sudo, then
+    downloads the result over SFTP as the login. The pull archive was made
+    mode 644, readable by every user on the host. The snapshot went the other
+    way: under umask 077 it was root's alone, so the login could not download
+    it and every pull of a database failed.
+
+    The commands run for real in a local shell standing in for the host,
+    with /tmp and /app mapped into tmp_path. Files a command makes belong to
+    root unless it chowns them; chown is a shim that records the new owner.
+    The fake SFTP reads a file only as the host would let the login read it.
+    """
+
+    LOGIN = "ubuntu"
+
+    def _host(self, tmp_path):
+        import shlex
+        import shutil
+        import subprocess
+        from potato.deploy.providers.base import ProviderError
+        from potato.deploy.remote import CommandResult
+        from tests.unit.test_deploy_remote import FakeSession
+
+        roots = {"/tmp/": str(tmp_path / "tmp") + "/", "/app": str(tmp_path / "app")}
+        for path in roots.values():
+            os.makedirs(path, exist_ok=True)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        chowned = tmp_path / "chowned.log"
+        (bin_dir / "chown").write_text(
+            f'#!/bin/sh\necho "$1 $2" >> {shlex.quote(str(chowned))}\n')
+        (bin_dir / "chown").chmod(0o755)
+
+        def local(path):
+            for remote, here in roots.items():
+                path = path.replace(remote, here)
+            return path
+
+        def owner(path):
+            lines = chowned.read_text().splitlines() if chowned.exists() else []
+            owners = {line.split(" ", 1)[1]: line.split(" ", 1)[0] for line in lines}
+            return owners.get(path, "root")
+
+        login = self.LOGIN
+        fetched_modes = []
+
+        class SFTP:
+            fetched = []
+
+            def get(self, remote, local_path):
+                path = local(remote)
+                mode = stat.S_IMODE(os.stat(path).st_mode)
+                readable = (mode & 0o004) or (owner(path) == login and mode & 0o400)
+                if not readable:
+                    raise PermissionError(f"{login} cannot read {remote}")
+                fetched_modes.append(mode)
+                self.fetched.append(remote)
+                shutil.copy(path, local_path)
+
+            def close(self):
+                pass
+
+        class Host(FakeSession):
+            def run(self, command, *, timeout=300, check=False):
+                self.commands.append(command)
+                env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+                done = subprocess.run(["sh", "-c", local(command)], env=env,
+                                      capture_output=True, text=True)
+                result = CommandResult(command, done.returncode, done.stdout, done.stderr)
+                if check and not result.ok:
+                    raise ProviderError(f"{command}: {done.stderr}")
+                return result
+
+        session = Host(username=login)
+        session.sftp = SFTP()
+        return session, roots["/app"], fetched_modes
+
+    @not_root
+    def test_the_database_snapshot_is_private_and_the_login_can_download_it(self, tmp_path):
+        import sqlite3
+        session, app, modes = self._host(tmp_path)
+        with sqlite3.connect(os.path.join(app, "project.sqlite")) as db:
+            db.execute("create table memos (text)")
+            db.execute("insert into memos values ('kept')")
+        out = tmp_path / "pulled.sqlite"
+        assert session.sqlite_safe_fetch("/app/project.sqlite", str(out)) is True
+        assert modes == [0o600]
+        with sqlite3.connect(out) as db:
+            assert db.execute("select text from memos").fetchall() == [("kept",)]
+
+    @not_root
+    def test_the_pull_archive_is_private_and_the_login_can_download_it(self, tmp_path):
+        session, app, modes = self._host(tmp_path)
+        os.makedirs(os.path.join(app, "annotation_output", "u1"))
+        with open(os.path.join(app, "annotation_output", "u1", "user_state.json"), "w") as handle:
+            handle.write("{}")
+        written = session.fetch_dir("/app/annotation_output", str(tmp_path / "pulled"))
+        assert modes == [0o600]
+        assert os.path.join("u1", "user_state.json") in written
+
+
 def test_debug_on_the_container_path_does_not_mint_reset_tokens_for_strangers():
     """The report's steps: debug: true, gunicorn's create_app,
     an unauthenticated POST /admin/create_reset_token from another machine."""

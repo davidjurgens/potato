@@ -222,6 +222,15 @@ class SSHSession:
             return command
         return f"sudo -n sh -c {shlex.quote(command)}"
 
+    def _give_to_login(self, path: str) -> str:
+        """`` && chown <login> path`` when commands run as root, else nothing.
+
+        A file root makes under umask 077 is one the login's SFTP cannot read.
+        """
+        if not self.needs_sudo:
+            return ""
+        return f" && chown {shlex.quote(self.username)} {shlex.quote(path)}"
+
     def run(self, command: str, *, timeout: int = 300,
             check: bool = False) -> CommandResult:
         client = self.connect()
@@ -340,8 +349,10 @@ class SSHSession:
             return []
         remote_archive = f"/tmp/potato-pull-{os.urandom(6).hex()}.tar.gz"
         exclude_args = " ".join(f"--exclude={shlex.quote(e)}" for e in excludes)
-        self.run(f"tar -czf {remote_archive} {exclude_args} "
-                 f"-C {shlex.quote(remote_dir)} . && chmod 644 {remote_archive}",
+        # The archive holds every annotation: mode 0600, handed to the login
+        # so SFTP can read it, rather than readable by every user on the host.
+        self.run(f"umask 077 && tar -czf {remote_archive} {exclude_args} "
+                 f"-C {shlex.quote(remote_dir)} .{self._give_to_login(remote_archive)}",
                  check=True, timeout=900)
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as handle:
             local_archive = handle.name
@@ -399,7 +410,8 @@ class SSHSession:
         snapshot = (f"/tmp/potato-snapshot-{os.urandom(8).hex()}-"
                     f"{os.path.basename(remote_path)}")
         result = self.run(
-            f"umask 077 && sqlite3 {remote_path} \".backup '{snapshot}'\"", timeout=300)
+            f"umask 077 && sqlite3 {remote_path} \".backup '{snapshot}'\""
+            f"{self._give_to_login(snapshot)}", timeout=300)
         if not result.ok:
             raise ProviderError(
                 f"Could not snapshot {remote_path} on the host: {result.output()}\n"

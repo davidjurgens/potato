@@ -297,6 +297,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.14.0](releasenotes/v2.14.0.md) - Model Training: 38 Trainers, GPU Servers and SLURM
 - [v2.13.1](releasenotes/v2.13.1.md) - Pairwise Order, Agreement and Export Fixes
 - [v2.13.0](releasenotes/v2.13.0.md) - Science Viewers, Scheduled Sessions and Consensus
 - [v2.12.3](releasenotes/v2.12.3.md) - Clean Rebuild of 2.12.2
@@ -76202,6 +76203,159 @@ python scripts/generate_llms_full.py --check
 
 Run them after adding an annotation type, a display type, a config key, or a
 route. See [Testing](../guides/testing.md) for the drift tests that enforce this.
+
+
+---
+
+<!-- source: docs/releasenotes/v2.14.0.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.14.0/
+
+# Release Notes: v2.14.0 — Model Training: 38 Trainers, GPU Servers and SLURM
+
+Model training grows from one trainer to 38, and runs can execute on a GPU
+server, a SLURM cluster or a machine Potato cannot reach. Every run is scored
+on held-out items, and its predictions come back as prelabels for
+annotators to accept or correct. This release also fixes three local security
+issues and bugs in training, exports, multirate ordering and the country
+list. The full list is in the
+[changelog](https://github.com/davidjurgens/potato/blob/master/CHANGELOG.md),
+and the training guide is [Model Training](../ai-intelligence/model_training.md).
+
+```bash
+pip install --upgrade potato-annotation
+# trainers' dependencies, none of them in `all`:
+pip install "potato-annotation[train]"   # or train-text, train-vision, train-audio, train-llm
+```
+
+## Upgrade notes
+
+- **Potato refuses to start when the system temp dir is writable by every
+  user and has no sticky bit**, and the package directory is read-only. Set
+  `POTATO_GENERATED_TEMPLATES_DIR` to a private directory in that case. See
+  Security below.
+- **The country list stores different values for 11 countries.** Answers
+  saved earlier keep the old values (`Afganistan`, `Zaire`, `Swaziland`, ...),
+  so map them before comparing with new ones. An old answer does not show as
+  selected when its page is reopened.
+- **The Runs table shows the held-out score**, not training accuracy.
+- **`assignment_strategy: llm_confidence` serves the least-confident prelabel
+  first**, after any items with an acquisition score (highest first), then
+  prelabels with no confidence, then items with no prelabel. It used to
+  assign at random.
+- **`validate` and server start fail on more training settings**: unknown
+  keys under `writeback` and `auto_retrain`, split names other than `train`,
+  `val` and `test`, missing write-back schemes, an out-of-range
+  `min_confidence`, and a missing calibration file.
+- **`install_requires` no longer lists joblib, threadpoolctl, six, soupsieve,
+  pytz, python-dateutil or ujson.** No module under `potato/` imports them.
+  Most still arrive as dependencies of pandas, scikit-learn and
+  beautifulsoup4, but code of your own that imports one of them should list
+  it.
+
+## Where runs execute
+
+- `model_training.backends` names where a run goes: `local` (CUDA, then
+  Apple's Metal, then the CPU), `ssh` (a host Potato can reach; progress and
+  the model stream back), `slurm` (submits to a compute node with `sbatch`
+  through the login node, with progress over shared storage) and `agent` (a
+  machine that runs `potato training agent` and polls for jobs).
+- `potato training check <backend> config.yaml` reports the remote Python,
+  its GPUs, and any GPU the installed torch has no kernels for.
+- A run started while another is in progress joins a first-in, first-out
+  queue that survives a restart, instead of being refused.
+- QLoRA (`lora: {quantize: 4bit}` or `8bit`) for `llm-sft`, `llm-dpo`,
+  `vlm-sft`, `reward-model` and `hf-text-classification`. Its memory saving is not yet measured on a
+  GPU end to end.
+- A model can be published to the Hugging Face Hub from its run page, with a
+  model card. The repository is private by default.
+
+## Trainers
+
+37 new trainers, 38 with `sklearn-text`. Five of them are bridges that score
+and write back a model running elsewhere and train nothing.
+
+- **Text:** `hf-text-classification` (also an LLM with LoRA, and soft
+  targets from annotator disagreement), `hf-token-classification`, `setfit`,
+  `hf-relation` for links, events and coreference (and dependency trees),
+  `hf-conversation-tree` and `byt5-gloss` for interlinear glossing.
+- **LLMs and preferences:** `llm-sft`, `llm-dpo`, `reward-model`
+  (Bradley-Terry over pairwise, ranking and BWS answers) and `prm-reward`
+  for process reward.
+- **Images and video:** `hf-image-classification`, `torchvision-detect`,
+  `ultralytics-detect`, `torchvision-segment`, `ultralytics-segment`,
+  `cellpose`, `sam-finetune`, `layoutlmv3`, `vlm-sft` and `video-track`.
+  Whole slides and images of 4096 pixels or more are tiled, and microscopy
+  ROIs and map features train the detectors.
+- **Audio:** `hf-audio-tagger`, `whisper-asr` (its CTranslate2 copy feeds
+  `potato transcripts --transcribe`), `diarization`, and spectrogram boxes
+  through the detectors.
+- **Science:** `volume-unet` for 3D masks, `external-3d` for point clouds
+  through your own OpenPCDet commands, `rdkit-property`, `peak-cnn`,
+  `signal-cnn` and `episode-model`.
+- **Decision models:** `decision-calibrate`, `laya-finetune` and
+  `openjev-finetune`.
+- **Bridges:** `label-studio-ml`, `openai-vlm-boxes`, `hf-inference`,
+  `roboflow` and `cvat-nuclio`.
+
+`hf-text-classification` and `hf-image-classification` can also write an
+acquisition score on each prediction (margin, entropy, BALD or coreset), which
+`llm_confidence` assignment serves highest first, and can train with DP-SGD
+through Opacus.
+
+The ultralytics trainers are AGPL-3.0 and the LayoutLMv3 weights are
+CC BY-NC-SA, so both ask for the licence to be acknowledged before a run.
+
+## Scores, prelabels and review
+
+- Each run is scored on held-out items with a metric that fits the answer,
+  such as macro-F1 for labels, mAP50 for boxes, token F1 for spans, word
+  error rate for transcripts, Dice for 3D masks, and MOTA and IDF1 for
+  tracks.
+- Predictions pre-fill audio segments, pairwise cards, outlines, spans,
+  rankings, BWS, soft labels, glosses, conversation trees, links, chains and
+  events, besides labels and boxes. A prelabel is no longer saved as the
+  annotator's answer when the page opens.
+- An item a reviewer marked `correct`, or pinned with the Catalog's "Train on
+  these", always goes to `train`. A run's split can be kept as a dataset
+  version.
+- The model-review report names the run behind each prelabel, and counts a
+  reject against the prediction rather than as a label the model missed.
+
+## Security
+
+- **Generated templates no longer go to a directory other local users can
+  control.** With a read-only package directory, Potato wrote the templates
+  it builds at startup to a predictable name in the system temp dir and used
+  that directory if it already existed, so another user on the machine could
+  plant a template. The directory is now named for the user, created mode
+  0700, and used only if that user owns it and nobody else can write to it.
+  Affects 2.13.1 and earlier.
+- **The generated admin API key is never logged.** It was logged in full when
+  `{task_dir}/admin_api_key.txt` could not be written. The file is now mode
+  0600, and an older file readable by others is changed to 0600 when read.
+- **`potato deploy` uses random, private names in the host's `/tmp`** for the
+  project upload and the `deploy pull` database snapshot. On a host whose
+  login is not root, the archive `deploy pull` downloads was readable by
+  every user on the host; it is now mode 0600 and owned by the login.
+
+## Other changes
+
+- **Transcripts:** `potato transcripts --transcribe` uses WhisperX when it is
+  installed. When WhisperX cannot run, it falls back to faster-whisper and
+  logs the reason.
+- **Import and export:** RTTM import (`potato import -f rttm`); a `segments`
+  export with an RTTM file per annotator (72 export formats, 71 in 2.13.1);
+  CoNLL-U HEAD and DEPREL from a directed `span_link` scheme.
+- **Exports now include links and events.** `span_link`, `coreference` and
+  `event_annotation` answers were missing from every export, and an item
+  whose only annotation was a link was left out.
+- **A `select` can read its options from a text file**, one per line:
+  `labels: options/languages.txt`, inside `task_dir`.
+- **`multirate` with `randomize_order` shuffles the rows**, and records that
+  order. It used to shuffle the rating scale and record it as the order
+  shown.
+- The server no longer imports pandas at startup (0.61 s to 0.42 s for
+  `import potato.flask_server` on a clean install).
 
 
 ---

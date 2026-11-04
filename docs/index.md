@@ -279,6 +279,7 @@ over prose when writing a config or calling the API.
 
 ## Release Notes
 
+- [v2.14.0](releasenotes/v2.14.0.md) - Model Training: 38 Trainers, GPU Servers and SLURM
 - [v2.13.1](releasenotes/v2.13.1.md) - Pairwise Order, Agreement and Export Fixes
 - [v2.13.0](releasenotes/v2.13.0.md) - Science Viewers, Scheduled Sessions and Consensus
 - [v2.12.3](releasenotes/v2.12.3.md) - Clean Rebuild of 2.12.2

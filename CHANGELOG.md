@@ -4,6 +4,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+## [2.14.0] - Model Training: 38 Trainers, GPU Servers and SLURM
+
+Model training grows from one trainer to 38, with runs on a GPU server, a
+SLURM cluster or a machine Potato cannot reach. The upgrade notes in the
+[release notes](docs/releasenotes/v2.14.0.md) list the changes that can affect
+existing scripts and configs.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
 ### Model training
 
 - **Runs on a GPU server or another machine.** `model_training.backends`
@@ -289,7 +300,9 @@ All notable changes to the Potato annotation platform are documented in this fil
   project upload and the database snapshot taken by `potato deploy pull`
   had fixed names, so another user on the host could create them first. Both
   now have random names, and both are created readable only by the deploy
-  user.
+  user. On a host whose login is not root, the archive `deploy pull`
+  downloads was mode 644, readable by every user on the host; it is now 0600
+  and owned by the login.
 
 ### Fixed
 
