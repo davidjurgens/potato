@@ -249,9 +249,11 @@ class TestPullOnANonRootLogin:
     it and every pull of a database failed.
 
     The commands run for real in a local shell standing in for the host,
-    with /tmp and /app mapped into tmp_path. Files a command makes belong to
-    root unless it chowns them; chown is a shim that records the new owner.
-    The fake SFTP reads a file only as the host would let the login read it.
+    with /tmp and /app mapped into tmp_path, wrapped by the session's own
+    `sudo -n sh -c` quoting and run through a sudo shim. Files a command makes
+    belong to root unless it chowns them; chown is a shim that records the new
+    owner (and fails when tmp_path/chown_fails exists). The fake SFTP reads a
+    file only as the host would let the login read it.
     """
 
     LOGIN = "ubuntu"
@@ -270,9 +272,13 @@ class TestPullOnANonRootLogin:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         chowned = tmp_path / "chowned.log"
+        fails = tmp_path / "chown_fails"
         (bin_dir / "chown").write_text(
-            f'#!/bin/sh\necho "$1 $2" >> {shlex.quote(str(chowned))}\n')
-        (bin_dir / "chown").chmod(0o755)
+            f'#!/bin/sh\n[ -e {shlex.quote(str(fails))} ] && exit 1\n'
+            f'echo "$1 $2" >> {shlex.quote(str(chowned))}\n')
+        (bin_dir / "sudo").write_text('#!/bin/sh\n[ "$1" = "-n" ] && shift\nexec "$@"\n')
+        for shim in ("chown", "sudo"):
+            (bin_dir / shim).chmod(0o755)
 
         def local(path):
             for remote, here in roots.items():
@@ -289,8 +295,11 @@ class TestPullOnANonRootLogin:
 
         class SFTP:
             fetched = []
+            broken = False
 
             def get(self, remote, local_path):
+                if self.broken:
+                    raise OSError("connection dropped")
                 path = local(remote)
                 mode = stat.S_IMODE(os.stat(path).st_mode)
                 readable = (mode & 0o004) or (owner(path) == login and mode & 0o400)
@@ -307,7 +316,7 @@ class TestPullOnANonRootLogin:
             def run(self, command, *, timeout=300, check=False):
                 self.commands.append(command)
                 env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-                done = subprocess.run(["sh", "-c", local(command)], env=env,
+                done = subprocess.run(["sh", "-c", local(self._privileged(command))], env=env,
                                       capture_output=True, text=True)
                 result = CommandResult(command, done.returncode, done.stdout, done.stderr)
                 if check and not result.ok:
@@ -315,16 +324,26 @@ class TestPullOnANonRootLogin:
                 return result
 
         session = Host(username=login)
+        assert session.needs_sudo
         session.sftp = SFTP()
         return session, roots["/app"], fetched_modes
+
+    def _database(self, app):
+        import sqlite3
+        with sqlite3.connect(os.path.join(app, "project.sqlite")) as db:
+            db.execute("create table memos (text)")
+            db.execute("insert into memos values ('kept')")
+
+    def _annotations(self, app):
+        os.makedirs(os.path.join(app, "annotation_output", "u1"))
+        with open(os.path.join(app, "annotation_output", "u1", "user_state.json"), "w") as handle:
+            handle.write("{}")
 
     @not_root
     def test_the_database_snapshot_is_private_and_the_login_can_download_it(self, tmp_path):
         import sqlite3
         session, app, modes = self._host(tmp_path)
-        with sqlite3.connect(os.path.join(app, "project.sqlite")) as db:
-            db.execute("create table memos (text)")
-            db.execute("insert into memos values ('kept')")
+        self._database(app)
         out = tmp_path / "pulled.sqlite"
         assert session.sqlite_safe_fetch("/app/project.sqlite", str(out)) is True
         assert modes == [0o600]
@@ -334,12 +353,33 @@ class TestPullOnANonRootLogin:
     @not_root
     def test_the_pull_archive_is_private_and_the_login_can_download_it(self, tmp_path):
         session, app, modes = self._host(tmp_path)
-        os.makedirs(os.path.join(app, "annotation_output", "u1"))
-        with open(os.path.join(app, "annotation_output", "u1", "user_state.json"), "w") as handle:
-            handle.write("{}")
+        self._annotations(app)
         written = session.fetch_dir("/app/annotation_output", str(tmp_path / "pulled"))
         assert modes == [0o600]
         assert os.path.join("u1", "user_state.json") in written
+        assert os.listdir(tmp_path / "tmp") == []
+
+    @not_root
+    def test_a_failed_download_leaves_no_copy_on_the_host(self, tmp_path):
+        session, app, _ = self._host(tmp_path)
+        self._database(app)
+        self._annotations(app)
+        session.sftp.broken = True
+        with pytest.raises(OSError):
+            session.sqlite_safe_fetch("/app/project.sqlite", str(tmp_path / "p.sqlite"))
+        with pytest.raises(OSError):
+            session.fetch_dir("/app/annotation_output", str(tmp_path / "pulled"))
+        assert os.listdir(tmp_path / "tmp") == []
+
+    @not_root
+    def test_a_failed_chown_says_so_and_leaves_no_copy(self, tmp_path):
+        from potato.deploy.providers.base import ProviderError
+        session, app, _ = self._host(tmp_path)
+        self._database(app)
+        (tmp_path / "chown_fails").touch()
+        with pytest.raises(ProviderError, match="Could not give .* to ubuntu"):
+            session.sqlite_safe_fetch("/app/project.sqlite", str(tmp_path / "p.sqlite"))
+        assert os.listdir(tmp_path / "tmp") == []
 
 
 def test_debug_on_the_container_path_does_not_mint_reset_tokens_for_strangers():

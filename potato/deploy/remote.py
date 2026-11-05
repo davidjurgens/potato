@@ -222,14 +222,19 @@ class SSHSession:
             return command
         return f"sudo -n sh -c {shlex.quote(command)}"
 
-    def _give_to_login(self, path: str) -> str:
-        """`` && chown <login> path`` when commands run as root, else nothing.
+    def _hand_to_login(self, path: str) -> None:
+        """Give a file root made to the login, so the login's SFTP can read it.
 
-        A file root makes under umask 077 is one the login's SFTP cannot read.
+        A file made under umask 077 through sudo is root's alone. Nothing to do
+        when the login is root.
         """
         if not self.needs_sudo:
-            return ""
-        return f" && chown {shlex.quote(self.username)} {shlex.quote(path)}"
+            return
+        result = self.run(f"chown {shlex.quote(self.username)} {shlex.quote(path)}")
+        if not result.ok:
+            raise ProviderError(
+                f"Could not give {path} to {self.username} on the host so it can "
+                f"be downloaded: {result.output()}")
 
     def run(self, command: str, *, timeout: int = 300,
             check: bool = False) -> CommandResult:
@@ -349,21 +354,24 @@ class SSHSession:
             return []
         remote_archive = f"/tmp/potato-pull-{os.urandom(6).hex()}.tar.gz"
         exclude_args = " ".join(f"--exclude={shlex.quote(e)}" for e in excludes)
-        # The archive holds every annotation: mode 0600, handed to the login
-        # so SFTP can read it, rather than readable by every user on the host.
-        self.run(f"umask 077 && tar -czf {remote_archive} {exclude_args} "
-                 f"-C {shlex.quote(remote_dir)} .{self._give_to_login(remote_archive)}",
-                 check=True, timeout=900)
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as handle:
             local_archive = handle.name
         try:
-            client = self.connect()
-            sftp = client.open_sftp()
             try:
-                sftp.get(remote_archive, local_archive)
+                # The archive holds every annotation: mode 0600, handed to the
+                # login so SFTP can read it, rather than readable by every user
+                # on the host.
+                self.run(f"umask 077 && tar -czf {remote_archive} {exclude_args} "
+                         f"-C {shlex.quote(remote_dir)} .", check=True, timeout=900)
+                self._hand_to_login(remote_archive)
+                client = self.connect()
+                sftp = client.open_sftp()
+                try:
+                    sftp.get(remote_archive, local_archive)
+                finally:
+                    sftp.close()
             finally:
-                sftp.close()
-            self.run(f"rm -f {remote_archive}")
+                self.run(f"rm -f {remote_archive}")
             return _safe_extract(local_archive, local_dir)
         finally:
             os.unlink(local_archive)
@@ -409,24 +417,27 @@ class SSHSession:
         # user on the host created first would receive the whole database.
         snapshot = (f"/tmp/potato-snapshot-{os.urandom(8).hex()}-"
                     f"{os.path.basename(remote_path)}")
-        result = self.run(
-            f"umask 077 && sqlite3 {remote_path} \".backup '{snapshot}'\""
-            f"{self._give_to_login(snapshot)}", timeout=300)
-        if not result.ok:
-            raise ProviderError(
-                f"Could not snapshot {remote_path} on the host: {result.output()}\n"
-                "Refusing to copy the file directly — a WAL-mode database copied "
-                "while a writer holds it is corrupt or stale, and the damage is "
-                "silent.")
-
-        client = self.connect()
-        sftp = client.open_sftp()
         try:
-            os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
-            sftp.get(snapshot, local_path)
+            result = self.run(
+                f"umask 077 && sqlite3 {remote_path} \".backup '{snapshot}'\"",
+                timeout=300)
+            if not result.ok:
+                raise ProviderError(
+                    f"Could not snapshot {remote_path} on the host: {result.output()}\n"
+                    "Refusing to copy the file directly — a WAL-mode database copied "
+                    "while a writer holds it is corrupt or stale, and the damage is "
+                    "silent.")
+            self._hand_to_login(snapshot)
+            client = self.connect()
+            sftp = client.open_sftp()
+            try:
+                os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
+                sftp.get(snapshot, local_path)
+            finally:
+                sftp.close()
         finally:
-            sftp.close()
-        self.run(f"rm -f {snapshot}")
+            # A failed download must not leave a copy of the database in /tmp.
+            self.run(f"rm -f {snapshot}")
         return True
 
 

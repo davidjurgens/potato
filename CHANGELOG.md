@@ -4,6 +4,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Fixed
+
+- `potato deploy pull` left its archive or database snapshot in the host's
+  `/tmp` when the download failed. Both are now removed either way. When the
+  snapshot could not be handed to a login that is not root, the error said
+  the database could not be snapshotted; it now says what failed.
+
 ## [2.14.0] - Model Training: 38 Trainers, GPU Servers and SLURM
 
 Model training grows from one trainer to 38, with runs on a GPU server, a
