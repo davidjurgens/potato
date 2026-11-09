@@ -53,10 +53,14 @@ DEFAULTS: Dict[str, int] = {"font_size": 18, "max_width": 900}
 FALLBACK_FONTS = ("DejaVuSans.ttf", "arial.ttf", "Arial.ttf",
                   "LiberationSans-Regular.ttf")
 
-#: instance_display field types that put readable words on the page. The
-#: picture never replaces them, so the validator refuses them beside the feature.
-TEXT_DISPLAY_TYPES = frozenset({
-    "text", "html", "dialogue", "pairwise", "document", "code", "spreadsheet",
+#: instance_display field types that show no copyable item text: media,
+#: charts and viewers. The picture never replaces an instance_display field, so
+#: the validator warns about every other type, including a type it does not
+#: know. A list of the text types instead would miss each new trace or chat
+#: display. ``gallery`` is not here: it shows captions.
+NON_TEXT_DISPLAY_TYPES = frozenset({
+    "image", "image_region", "video", "audio", "depth_map", "fits_cutout",
+    "spectrum", "time_series", "molecule", "protein_structure", "genome_locus",
 })
 
 #: Schemes that anchor annotations to character offsets in the instance text.

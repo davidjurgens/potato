@@ -672,9 +672,26 @@ class TestPillowMissing:
                 "annotation_schemes": [{"annotation_type": "radio"}],
             })
 
-    def test_the_extra_exists(self):
-        source = (REPO_ROOT / "setup.py").read_text(encoding="utf-8")
-        assert '"text-image": _TEXT_IMAGE_DEPS' in source
+    def test_the_extra_in_the_message_installs_a_pillow_that_can_draw(self):
+        """The extra exists, is in `all`, and asks for a Pillow whose
+        load_default takes a size, which the ASCII fallback needs (10.1)."""
+        from packaging.requirements import Requirement
+
+        from tests.unit.test_deploy_install_extras import _extras
+
+        extras = _extras()
+        pillow = [Requirement(r) for r in extras["text-image"]
+                  if Requirement(r).name.lower() == "pillow"]
+        assert len(pillow) == 1
+        assert not pillow[0].specifier.contains("10.0.1")
+        assert pillow[0].specifier.contains("10.1.0")
+        assert any(Requirement(r).name.lower() == "pillow" for r in extras["all"])
+
+
+def _display_types():
+    from potato.server_utils.displays.registry import display_registry
+
+    return display_registry.get_supported_types()
 
 
 class TestInstanceDisplayTextIsWarned:
@@ -693,15 +710,29 @@ class TestInstanceDisplayTextIsWarned:
             "annotation_schemes": [{"annotation_type": "radio", "name": "q"}],
         })
 
-    @pytest.mark.parametrize("kind", sorted(text_to_image.TEXT_DISPLAY_TYPES))
+    @pytest.mark.parametrize("kind", sorted(
+        set(_display_types()) - text_to_image.NON_TEXT_DISPLAY_TYPES) + ["not_a_type_yet"])
     def test_a_text_field_is_warned_by_name(self, kind, caplog):
+        """Every registered type that is not exempt, and one nobody has
+        registered yet: a new trace or chat display must not slip through."""
         with caplog.at_level("WARNING"):
             self._validate([{"key": "comment", "type": kind},
                             {"key": "issue", "type": kind}])
         assert "comment, issue" in caplog.text
         assert "can be copied" in caplog.text
 
-    def test_an_image_only_display_gets_no_text_warning(self, caplog):
+    @pytest.mark.parametrize("kind", sorted(text_to_image.NON_TEXT_DISPLAY_TYPES))
+    def test_a_media_only_display_gets_no_text_warning(self, kind, caplog):
         with caplog.at_level("WARNING"):
-            self._validate([{"key": "image_url", "type": "image"}])
+            self._validate([{"key": "media", "type": kind}])
         assert "can be copied" not in caplog.text
+
+    def test_only_the_text_fields_are_named(self, caplog):
+        with caplog.at_level("WARNING"):
+            self._validate([{"key": "photo", "type": "image"},
+                            {"key": "steps", "type": "agent_trace"}])
+        assert "can be copied: steps." in caplog.text
+
+    def test_every_exempt_type_is_a_registered_display(self):
+        """A misspelt exemption would exempt nothing and hide the typo."""
+        assert sorted(text_to_image.NON_TEXT_DISPLAY_TYPES - set(_display_types())) == []

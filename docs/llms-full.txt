@@ -54216,7 +54216,7 @@ Without `font_path`, Potato uses the first of these fonts that it finds in the
 system font folders:
 
 1. `DejaVuSans.ttf`, on most Linux systems. The Docker image has it when you
-   build it with the `text-image` extra.
+   build it with the `text-image` or `all` extra.
 2. `Arial.ttf`, on Windows and macOS.
 3. `LiberationSans-Regular.ttf`, on Red Hat systems.
 
@@ -54237,10 +54237,10 @@ that holds the item.
 ## Where the feature applies
 
 The feature replaces the item text box. It does not replace the fields of an
-`instance_display` block. If that block shows a field of type `text`, `html`,
-`dialogue`, `pairwise`, `document`, `code` or `spreadsheet`, the words of that
-field reach the page, and annotators can copy them. Potato starts, and writes a
-warning that names the fields:
+`instance_display` block. A field of any type that shows words, such as
+`text`, `html`, `dialogue`, `document`, `agent_trace` or `gallery` (its
+captions), puts those words on the page, and annotators can copy them. Potato
+starts, and writes a warning that names the fields:
 
 ```text
 WARNING: text_as_image does not cover instance_display. It replaces only the
@@ -54251,10 +54251,15 @@ remove the instance_display block and put the text in the text_key field.
 
 `potato validate --strict` treats this warning as an error.
 
+These types show media, a chart or a 3D view instead of item text, and get no
+warning: `image`, `image_region`, `video`, `audio`, `depth_map`, `fits_cutout`,
+`spectrum`, `time_series`, `molecule`, `protein_structure` and `genome_locus`.
+Every other type gets the warning. So does a type Potato does not recognise.
+
 The feature does nothing on a project that renders the item some other way:
 
-- A project with an `instance_display` block that shows no text, for example
-  only an image.
+- A project with an `instance_display` block whose fields are all of the
+  types above that get no warning, for example only an image.
 - A project with a `video_annotation`, `audio_annotation` or `image_annotation`
   scheme.
 - A project with a `tiered_annotation` scheme. Its `media_type` is `audio` or

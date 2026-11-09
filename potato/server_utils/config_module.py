@@ -2204,7 +2204,7 @@ def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
         str(field.get("key") or "?")
         for field in display_fields or ()
         if isinstance(field, dict)
-        and field.get("type") in text_to_image.TEXT_DISPLAY_TYPES
+        and field.get("type") not in text_to_image.NON_TEXT_DISPLAY_TYPES
     ]
     if text_fields:
         logger.warning(

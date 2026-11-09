@@ -15,13 +15,15 @@ All notable changes to the Potato annotation platform are documented in this fil
   DejaVu Sans, Arial or Liberation Sans when the system has one, and the new
   `text_as_image.font_path` key names a .ttf or .otf file. A warning names the
   key when Potato finds no such font. The Docker image adds DejaVu Sans when
-  it is built with the new `text-image` extra.
+  it is built with the new `text-image` extra or with `all`.
 - `text_as_image` without Pillow installed returned HTTP 500 on every
   annotation page. Potato now refuses to start and names the new extra:
   `pip install 'potato-annotation[text-image]'`.
 - `text_as_image` beside an `instance_display` block that shows text does
   nothing, and the startup warning only said "no effect". The warning now
-  names the fields and says that their text stays copyable.
+  names the fields and says that their text stays copyable. Every display
+  type except the media, chart and 3D ones gets it, including the trace and
+  chat displays.
   `potato validate --strict` stops on it. No config that started before
   stops starting.
 
