@@ -212,15 +212,89 @@ def test_katex_fonts_referenced_as_woff2_are_vendored():
         assert first.endswith(".woff2"), face
 
 
+#: SRI of every vendored KaTeX file, from the upstream 0.18.11 release. Kept
+#: here as well as in scripts/vendor_assets.py because a checkout from git
+#: does not always carry that script's KaTeX entries, and this check must run
+#: in every checkout.
+KATEX_SRI = {
+    "LICENSE":
+        "sha256-dmzMHzBsiFqkVUKphGu9ClBbJ6A3TxRneBccIlTOGOM=",
+    "fonts/KaTeX_AMS-Regular.woff2":
+        "sha256-DN04fJWQoan5eUVgAi27WWVKfYbxh6oMgUla1C06cwg=",
+    "fonts/KaTeX_Caligraphic-Bold.woff2":
+        "sha256-3ncB5Czx9M8LdmwD+yeXcgfu4vT9XXb6ghiEBtpD6kw=",
+    "fonts/KaTeX_Caligraphic-Regular.woff2":
+        "sha256-XVPnCtYHwjUhYt7J4JI/tU7Nr6zL9gTNjc99APrLmJs=",
+    "fonts/KaTeX_Fraktur-Bold.woff2":
+        "sha256-dERO/Vk8AF4/RXO0RSRwTArwqTf+kRzKnpQGjQ0UDT8=",
+    "fonts/KaTeX_Fraktur-Regular.woff2":
+        "sha256-UYFNJw0G/wJV26B5mZT6TYyE0R8JlR1HWV9Kux82Atw=",
+    "fonts/KaTeX_Main-Bold.woff2":
+        "sha256-D2DRuJeTjskYyM4HMJJBG6+UOPZzlGVpP/GLD50gsCE=",
+    "fonts/KaTeX_Main-BoldItalic.woff2":
+        "sha256-mc1Co8By2Rjy9EmEqAfPeqFuE1Rf0IdfwHxsZfmecVs=",
+    "fonts/KaTeX_Main-Italic.woff2":
+        "sha256-l0ecpszpBqvJYeyslvql+couYbjnZw1HWCa83umnwmc=",
+    "fonts/KaTeX_Main-Regular.woff2":
+        "sha256-wjQs2Lhp4BdSqTIdwXIT/EDU0Ex5aIwdQ/LPMWq9eGY=",
+    "fonts/KaTeX_Math-BoldItalic.woff2":
+        "sha256-3Ec0TbtstbZVyEYNVh9N9fUBuQyAStPGzsZf4yI1GrE=",
+    "fonts/KaTeX_Math-Italic.woff2":
+        "sha256-evWMXsjxMqLd3pAnxteBTezOTTuCKhEZKkKiDi6XMmQ=",
+    "fonts/KaTeX_SansSerif-Bold.woff2":
+        "sha256-6ZrlEUS/EjLvzBv+Wt02JixoZrD6qyT6dXQOG5hXemI=",
+    "fonts/KaTeX_SansSerif-Italic.woff2":
+        "sha256-ALJqyCXiCVBWOW4FU7isJtP4rRWMOCbii0xFs4XEcUo=",
+    "fonts/KaTeX_SansSerif-Regular.woff2":
+        "sha256-aOjHPvQq/TzOxYvw+6MCzORIk45/wCCl4x+KlS7uE0I=",
+    "fonts/KaTeX_Script-Regular.woff2":
+        "sha256-A21OlRSbaf+bzAzVV3Hv6yX/o5Ryk+aazXjVrDKMaEs=",
+    "fonts/KaTeX_Size1-Regular.woff2":
+        "sha256-a0fEAWa22+IaXfyncYQT8hR/0jmb4bpgXYrTnO3yXf4=",
+    "fonts/KaTeX_Size2-Regular.woff2":
+        "sha256-0ExUIZ+ersbU1P1C37KHhZdaR5TWsvxx5Wa5zW24Qt0=",
+    "fonts/KaTeX_Size3-Regular.woff2":
+        "sha256-c9WRJxsWBJYMsQu5D+4CFnCvcpcBfg6YSAszLRH1GZU=",
+    "fonts/KaTeX_Size4-Regular.woff2":
+        "sha256-pK99QURAocF5CCXPtwDPnPQ7DyxLBPDrxSMBGtmFPsA=",
+    "fonts/KaTeX_Typewriter-Regular.woff2":
+        "sha256-cdUX1ngneHz6vfGGkUzDNY7aU543kxlB8rL9SiH2jAs=",
+    "katex.min.css":
+        "sha256-uFEe6IDkmBrCi7w9Z1qQy5+ggOJ18G1kgUftMWy0Ibo=",
+    "katex.min.js":
+        "sha256-YHyybbjiP7qYuo4cC3ZP9MZ681EG5ZMW7FRJqUCD+mg=",
+}
+
+
+def _sri(data, algorithm):
+    import base64
+    import hashlib
+    return f"{algorithm}-" + base64.b64encode(hashlib.new(algorithm, data).digest()).decode()
+
+
+def test_the_vendored_katex_files_are_the_pinned_release():
+    """No file added, removed or changed under the KaTeX vendor directory.
+
+    Hidden files are left out: git ignores .DS_Store, so one Finder leaves
+    there is not part of the checkout."""
+    on_disk = {p.relative_to(KATEX_DIR).as_posix(): p for p in KATEX_DIR.rglob("*")
+               if p.is_file() and not p.name.startswith(".")}
+    assert sorted(on_disk) == sorted(KATEX_SRI)
+    changed = [name for name, sri in KATEX_SRI.items()
+               if _sri(on_disk[name].read_bytes(), sri.split("-", 1)[0]) != sri]
+    assert changed == []
+
+
 def test_katex_files_are_in_the_vendor_manifest():
+    """When scripts/vendor_assets.py lists KaTeX, it agrees with the pins above."""
     import importlib.util
     spec = importlib.util.spec_from_file_location("vendor_assets", REPO / "scripts" / "vendor_assets.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     katex = [a for a in mod.ASSETS if "katex-0.18.11" in str(a.path)]
-    on_disk = {p for p in KATEX_DIR.rglob("*") if p.is_file()}
-    assert {a.path for a in katex} == on_disk
-    assert all(mod.check(a) for a in katex)
+    if not katex:
+        pytest.skip("scripts/vendor_assets.py in this checkout has no KaTeX entries")
+    assert {Path(a.path).relative_to(KATEX_DIR).as_posix(): a.sri for a in katex} == KATEX_SRI
 
 
 def test_template_gates_katex_on_the_math_config():
