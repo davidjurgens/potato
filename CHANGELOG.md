@@ -6,10 +6,26 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- `potato mcp connect` dropped the argument descriptions of the live tools,
+  so an agent saw that `live_submit_annotation` takes an `annotations` object
+  but not the `{schema: {label: value}}` shape. The descriptions now reach
+  the tool's input schema.
+- `list_config_keys` and `list_examples` returned an empty list when a filter
+  matched nothing, which read the same as "there are none". A config key
+  category now matches without case or as a substring (`auth` finds
+  `Authentication / Login`), and a filter that matches nothing names itself
+  and lists the values it accepts.
+- Three live MCP tool summaries described results the tools do not return.
+  `live_get_item` returns the item's data and its annotators' usernames, not
+  their answers; `live_list_items` returns usernames, not counts; and
+  `live_get_status` reports no health check.
 - `potato deploy pull` left its archive or database snapshot in the host's
   `/tmp` when the download failed. Both are now removed either way. When the
   snapshot could not be handed to a login that is not root, the error said
   the database could not be snapshotted; it now says what failed.
+- `potato deploy up --provider heroku --heroku-registry` kept the image it built
+  with local Docker, about 1 GB per deploy. It now deletes the local copy
+  after pushing it to Heroku's registry, and after a push that fails.
 - `text_as_image` drew ü, ß, „ and other letters outside ASCII as boxes,
   because Pillow's default font has ASCII glyphs only. Potato now draws with
   DejaVu Sans, Arial or Liberation Sans when the system has one, and the new
@@ -26,6 +42,19 @@ All notable changes to the Potato annotation platform are documented in this fil
   chat displays.
   `potato validate --strict` stops on it. No config that started before
   stops starting.
+
+### Changed
+
+- MCP `get_config_schema` without arguments returns the top-level key names
+  and what is required, not the whole schema of over 200,000 characters.
+  Pass `key` (a dotted path) for one key's schema, or `full: true` for all of
+  it.
+- MCP tool results are compact JSON text, and the tools no longer advertise
+  an output schema that said only "an object". The authoring tools except
+  `render_task_screenshot`, and the live read tools, are marked read-only;
+  `live_delete_annotations` is marked destructive. Every argument of the
+  authoring tools has a description, and the server instructions now start
+  from a shipped example.
 
 ## [2.14.0] - Model Training: 38 Trainers, GPU Servers and SLURM
 

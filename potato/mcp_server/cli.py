@@ -60,21 +60,10 @@ def cmd_tools(args) -> int:
     """
     from potato.mcp_server import tools_local as local
 
-    tools = [
-        ("list_annotation_types", "Every annotation type, with descriptions"),
-        ("describe_annotation_type", "Fields and a working example for one type"),
-        ("list_display_types", "Every instance_display field type"),
-        ("describe_display_type", "Fields for one display type"),
-        ("list_plugins", "Installed plugins and the types they add"),
-        ("list_config_keys", "Documented top-level config keys"),
-        ("describe_config_key", "One config key by dotted path"),
-        ("get_config_schema", "The full config JSON Schema"),
-        ("list_examples", "Search the shipped example projects"),
-        ("get_example", "Read one example's config"),
-        ("validate_config", "Validate a config with the server's own validator"),
-        ("preview_config", "Schemes, labels and keybindings a config declares"),
-        ("render_task_screenshot", "Boot the task, screenshot it, report browser errors"),
-    ]
+    from potato.mcp_server.server import TOOL_DESCRIPTIONS
+
+    tools = [(name, description.split("\n\n")[0])
+             for name, description in TOOL_DESCRIPTIONS.items()]
 
     if args.json:
         print(json.dumps([{"name": n, "description": d} for n, d in tools], indent=2))

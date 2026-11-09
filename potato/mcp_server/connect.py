@@ -24,7 +24,7 @@ import logging
 import inspect
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +110,9 @@ def build_connected_server(url: str, token: str, root: Optional[str] = None):
     # forwarder per granted remote tool.
     mcp_server = build_server(root=root or os.getcwd())
 
+    destructive_enabled = manifest.get("destructive_enabled") or []
     for entry in remote_tools:
-        _register_forwarder(mcp_server, client, entry)
+        _register_forwarder(mcp_server, client, entry, destructive_enabled)
 
     logger.info(
         "Connected to %s as %s (%s); %d remote tool(s) granted",
@@ -141,9 +142,15 @@ def _forwarder_signature(parameters: List[dict]):
     passing the obvious thing (`{"instance_id": "W01"}`) was silently dropped
     in favour of the wrapper the schema never mentioned.
 
+    Each parameter's description rides along as a pydantic `Field`, so it
+    reaches the schema. Without it, `submit_annotation`'s agent saw that
+    `annotations` was an object and not what shape the object takes.
+
     Required parameters come first: a signature cannot put a parameter without
     a default after one with a default.
     """
+    from pydantic import Field
+
     ordered = ([p for p in parameters if p.get("required")] +
                [p for p in parameters if not p.get("required")])
     params, annotations = [], {}
@@ -157,6 +164,8 @@ def _forwarder_signature(parameters: List[dict]):
         else:
             annotation = Optional[annotation]
             default = spec.get("default", None)
+        if spec.get("description"):
+            annotation = Annotated[annotation, Field(description=spec["description"])]
         params.append(inspect.Parameter(
             pname, inspect.Parameter.KEYWORD_ONLY,
             default=default, annotation=annotation))
@@ -164,21 +173,31 @@ def _forwarder_signature(parameters: List[dict]):
     return inspect.Signature(params), annotations
 
 
-def _raise_if_refused(result: Any) -> Any:
+def _raise_if_refused(result: Any) -> str:
     """A refused call becomes a tool error, so the agent's client sees
     ``isError: true``. Returned as an ordinary result, a 403 read as a
-    successful call whose payload happened to mention an error."""
+    successful call whose payload happened to mention an error.
+
+    An answer goes back as compact JSON text, as the local tools' do."""
     if isinstance(result, dict) and int(result.get("http_status") or 200) >= 400:
         try:
             from mcp.server.fastmcp.exceptions import ToolError
         except ImportError:  # pragma: no cover - older SDKs
             ToolError = RuntimeError
         raise ToolError(str(result.get("error") or result))
-    return result
+    return json.dumps(result, ensure_ascii=False, default=str,
+                      separators=(",", ":"))
 
 
-def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
-    """Add one remote tool, named `live_<tool>` to keep it distinct."""
+def _register_forwarder(mcp_server, client: PotatoClient, entry: dict,
+                        destructive_enabled: Optional[List[str]] = None) -> None:
+    """Add one remote tool, named `live_<tool>` to keep it distinct.
+
+    `destructive_enabled` is the manifest's list of destructive tools the task
+    switched on. None means the caller does not know.
+    """
+    from mcp.types import ToolAnnotations
+
     name = entry["name"]
     summary = entry.get("summary", "")
     destructive = entry.get("destructive", False)
@@ -188,20 +207,20 @@ def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
     publishes_schema = parameters is not None
     parameters = parameters or []
 
+    # The arguments are in the input schema, descriptions included, so the
+    # description does not list them again.
     description = summary
-    if parameters:
-        described = ", ".join(
-            f"{p['name']} ({p.get('type', 'string')}"
-            f"{', required' if p.get('required') else ''})"
-            for p in parameters if p.get("name")
-        )
-        description += f". Arguments: {described}"
     if destructive:
-        description += (
-            ". Destroys annotation work: the call must include "
-            '"confirm": true, and the task admin must have listed this tool in '
-            "mcp.destructive."
-        )
+        if destructive_enabled is not None and name not in destructive_enabled:
+            description += (
+                ". Destroys annotation work. This task has not listed it in "
+                "mcp.destructive, so every call is refused."
+            )
+        else:
+            description += (
+                '. Destroys annotation work. Every call must include '
+                '"confirm": true.'
+            )
 
     if publishes_schema:
         signature, annotations = _forwarder_signature(parameters)
@@ -241,7 +260,11 @@ def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
     forwarder.__doc__ = description or f"Call {name} on the connected instance."
 
     mcp_server.add_tool(
-        forwarder, name=f"live_{name}", description=forwarder.__doc__
+        forwarder, name=f"live_{name}", description=forwarder.__doc__,
+        annotations=ToolAnnotations(
+            readOnlyHint=bool(entry.get("read_only")),
+            destructiveHint=bool(destructive)),
+        structured_output=False,
     )
 
 

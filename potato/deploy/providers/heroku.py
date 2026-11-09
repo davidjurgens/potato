@@ -252,6 +252,7 @@ class HerokuProvider(Provider):
             plan.actions += [
                 Action("docker.build", "build the task image locally for linux/amd64"),
                 Action("docker.push", f"push to registry.heroku.com/{name}/web"),
+                Action("docker.rmi", "delete the local copy of the image"),
                 Action("heroku.release", "release the pushed image"),
             ]
         else:
@@ -402,6 +403,7 @@ class HerokuProvider(Provider):
             raise ProviderError("--heroku-registry needs Docker installed locally.")
         image = f"registry.heroku.com/{name}/web"
         workdir = tempfile.mkdtemp(prefix="potato-heroku-")
+        built = False
         try:
             shutil.copytree(bundle.bundle_dir, workdir, dirs_exist_ok=True)
             for filename, content in source_files(spec).items():
@@ -411,11 +413,19 @@ class HerokuProvider(Provider):
                     stdin=self.token)
             self.console("Building the image for linux/amd64...")
             _docker(["build", "--platform", "linux/amd64", "-t", image, workdir])
+            built = True
             self.console("Pushing to Heroku's registry...")
             _docker(["push", image])
             image_id = _docker(["inspect", image, "--format", "{{.Id}}"]).strip()
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
+            # The registry holds the image now. Kept here, each deploy left
+            # about 1 GB in Docker's disk image, failed pushes included.
+            if built:
+                try:
+                    _docker(["rmi", "--force", image])
+                except ProviderError as exc:
+                    self.console(f"Could not delete the local image {image}: {exc}")
         api.release_image(name, image_id)
 
     # -- status / logs / pull / destroy --------------------------------

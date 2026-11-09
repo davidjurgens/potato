@@ -58,6 +58,9 @@ class LiveTool:
             and `confirm: true` at call time.
         handler: Name of the function in `live_handlers` that implements it.
         parameters: What the tool's JSON payload accepts, published to clients.
+        read_only: Reads only, although its permission is not the dashboard
+            one. Tools that need only VIEW_ADMIN_DASHBOARD are read-only
+            without it.
     """
 
     name: str
@@ -66,17 +69,20 @@ class LiveTool:
     destructive: bool = False
     handler: str = ""
     parameters: Tuple[LiveParam, ...] = ()
+    read_only: bool = False
 
 
 _TOOLS: List[LiveTool] = [
     # ---- read -------------------------------------------------------------
-    LiveTool("get_status", "Server health, task name and item counts",
+    LiveTool("get_status", "Task name, item count and annotator count",
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_status"),
-    LiveTool("get_progress", "Overall annotation progress",
+    LiveTool("get_progress", "Items, items with an annotation, percent complete, "
+             "total annotations and active annotators",
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_progress"),
-    LiveTool("list_annotators", "Annotators and how much each has done",
+    LiveTool("list_annotators", "Each annotator's phase and items assigned and annotated",
              Permission.VIEW_ADMIN_DASHBOARD, handler="list_annotators"),
-    LiveTool("list_items", "Items, with per-item annotation counts",
+    LiveTool("list_items", "A page of item ids, each with the usernames of its "
+             "annotators",
              Permission.VIEW_ADMIN_DASHBOARD, handler="list_items",
              parameters=(
                  LiveParam("limit", "integer", False,
@@ -84,15 +90,17 @@ _TOOLS: List[LiveTool] = [
                  LiveParam("offset", "integer", False,
                            "Index of the first item to return", 0),
              )),
-    LiveTool("get_item", "One item's data and its annotations",
+    LiveTool("get_item", "One item's data and the usernames of its annotators, "
+             "without their answers",
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_item",
              parameters=(
                  LiveParam("instance_id", "string", True,
                            "The item's id, as it appears in the data file"),
              )),
-    LiveTool("get_agreement", "Inter-annotator agreement",
+    LiveTool("get_agreement", "Krippendorff's alpha per scheme and overall. Needs "
+             "items that two or more annotators labelled",
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_agreement"),
-    LiveTool("get_config", "The task's current configuration",
+    LiveTool("get_config", "The task's config, without its secret keys and mcp block",
              Permission.VIEW_ADMIN_DASHBOARD, handler="get_config"),
     LiveTool("engine_status", "Labeling engine progress: predictions, requests, "
              "contracts, spend", Permission.VIEW_ADMIN_DASHBOARD, handler="engine_status"),
@@ -143,7 +151,9 @@ _TOOLS: List[LiveTool] = [
              Permission.EXPORT_DATA, handler="engine_certificate",
              parameters=(
                  LiveParam("format", "string", False, "json, md or html", "json"),
-             )),
+             ),
+             # build_certificate(save=False): nothing is written.
+             read_only=True),
     LiveTool("assign_items", "Set how many items an annotator may receive",
              Permission.MANAGE_ASSIGNMENT, handler="assign_items",
              parameters=(
@@ -183,7 +193,8 @@ TOOL_NAMES = sorted(TOOLS)
 DESTRUCTIVE_TOOL_NAMES = sorted(t.name for t in _TOOLS if t.destructive)
 READ_ONLY_TOOL_NAMES = sorted(
     t.name for t in _TOOLS
-    if not t.destructive and t.permission == Permission.VIEW_ADMIN_DASHBOARD
+    if not t.destructive
+    and (t.read_only or t.permission == Permission.VIEW_ADMIN_DASHBOARD)
 )
 
 
@@ -200,6 +211,7 @@ def describe_tools(enabled: Optional[List[str]] = None) -> List[dict]:
             "summary": tool.summary,
             "permission": tool.permission,
             "destructive": tool.destructive,
+            "read_only": tool.name in READ_ONLY_TOOL_NAMES,
             "parameters": [p.to_dict() for p in tool.parameters],
         }
         for tool in (TOOLS[n] for n in names if n in TOOLS)

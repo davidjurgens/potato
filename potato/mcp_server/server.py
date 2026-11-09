@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
+
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -35,19 +37,19 @@ single YAML config.
 
 The loop that works:
 
-  1. list_annotation_types() to see what is available, then
-     describe_annotation_type(name) for the one you want. Its `example` field is
-     a scheme lifted from a config that really runs -- start from that rather
-     than assembling fields yourself.
-  2. list_examples(...) to find a whole project close to the task, and
-     get_example(name) to read its config.
+  1. list_examples(...) to find a shipped project close to the task, and
+     get_example(name) to read its config. Copying a config that runs beats
+     assembling one from field lists.
+  2. describe_annotation_type(name) for each scheme you add or change. Its
+     `example` is a scheme taken from a config that runs. list_annotation_types()
+     lists them all.
   3. Write the config. Put this line at the top so editors validate it live:
      # yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
-  4. validate_config(path) -- the server's own validator. Fix what it reports
+  4. validate_config(path), the server's own validator. Fix what it reports
      and run it again.
-  5. render_task_screenshot(path) -- boots the task in a browser and returns the
+  5. render_task_screenshot(path) boots the task in a browser and returns the
      annotation page plus any errors the browser hit. A config can validate
-     cleanly and still render a broken interface; this is what catches that.
+     cleanly and still render a broken interface, and the screenshot shows it.
 
 Four keys are always required: annotation_task_name, task_dir,
 output_annotation_dir, item_properties (with id_key and text_key). A data source
@@ -56,6 +58,88 @@ is also required: data_files, data_directory, or data_sources.
 Paths are resolved against task_dir, and anything resolving outside it is
 rejected.
 """
+
+#: Every local tool and what an agent is told about it. `potato mcp tools`
+#: prints the first line of each, so the two cannot drift apart, and it needs
+#: no SDK to do so.
+TOOL_DESCRIPTIONS = {
+    "list_annotation_types": (
+        "List every annotation type Potato supports, with a one-line "
+        "description and its required fields."
+    ),
+    "describe_annotation_type": (
+        "Fields and a working example for one annotation type.\n\n"
+        "The `example` is a scheme from a shipped config that uses this type, "
+        "so it is known to run."
+    ),
+    "list_display_types": (
+        "List every `instance_display` field type (text, image, audio, ...)."
+    ),
+    "describe_display_type": (
+        "Required and optional keys for one `instance_display` field type."
+    ),
+    "list_plugins": (
+        "Installed plugins, read from package metadata without importing them."
+        "\n\nPass `name` to load one plugin and list the annotation and "
+        "display types it adds. A plugin's types work only in a config that "
+        "lists the plugin under `plugins:`."
+    ),
+    "list_config_keys": (
+        "List the documented top-level config keys, optionally for one "
+        "category.\n\nWithout a category it returns every key. "
+        "describe_config_key answers about one."
+    ),
+    "describe_config_key": (
+        "Describe one config key by dotted path, e.g. "
+        "`attention_checks.frequency`: type, default, example and sub-keys."
+    ),
+    "get_config_schema": (
+        "The config JSON Schema for one key, by dotted path.\n\n"
+        "Without `key` it returns the top-level key names and what is "
+        "required. `full=true` returns the whole schema, which is very large."
+    ),
+    "list_examples": (
+        "Find shipped example projects. Filters combine with AND.\n\n"
+        "Start here: copying a working example beats assembling a config from "
+        "field lists. A filter that matches nothing says which one and what "
+        "it accepts."
+    ),
+    "get_example": (
+        "Read one example's full config, by the `name` list_examples returns "
+        "(`classification/likert`)."
+    ),
+    "validate_config": (
+        "Validate a config with the server's own validator, the same check "
+        "`potato start` runs.\n\n"
+        "Pass a path relative to the server root, or the YAML text. Returns "
+        "errors, unrecognized keys and other warnings. Run it after every edit."
+    ),
+    "preview_config": (
+        "Show what a config declares: schemes, labels, keybindings and their "
+        "conflicts.\n\nNo server is started; render_task_screenshot shows the "
+        "real page."
+    ),
+    "render_task_screenshot": (
+        "Boot the task, screenshot one page, and report browser errors.\n\n"
+        "Returns the image plus every uncaught exception, console.error and "
+        "failed request. Most annotation UI is built by JavaScript after the "
+        "HTML arrives, so a config that validates can still render a broken "
+        "page, and this is the only check that sees it. Needs Playwright."
+    ),
+}
+
+
+def _compact(result: Any) -> str:
+    """A tool result as compact JSON.
+
+    FastMCP indents JSON results by two spaces, and every tool used to
+    advertise an output schema that said only "an object". Returning text
+    drops both. The full config schema is a third smaller this way.
+    """
+    import json
+
+    return json.dumps(result, ensure_ascii=False, default=str,
+                      separators=(",", ":"))
 
 
 def check_sdk_available() -> bool:
@@ -94,132 +178,154 @@ def build_server(root: Optional[str] = None):
             "hint": "Start the server with --root pointing at your project.",
         }
 
+    from mcp.types import ToolAnnotations
+
+    def tool(read_only: bool = True):
+        """Register a tool under its TOOL_DESCRIPTIONS entry.
+
+        Every tool here only reads, except render_task_screenshot, which boots
+        the task and so may write its output directory.
+        """
+        def register(fn):
+            return mcp_server.tool(
+                description=TOOL_DESCRIPTIONS[fn.__name__],
+                annotations=ToolAnnotations(
+                    readOnlyHint=read_only, destructiveHint=False,
+                    idempotentHint=True, openWorldHint=False),
+                structured_output=False,
+            )(fn)
+        return register
+
     # ------------------------------------------------------------- discovery --
 
-    @mcp_server.tool()
-    def list_annotation_types() -> List[Dict[str, Any]]:
-        """List every annotation type Potato supports, with a short description."""
-        return local.list_annotation_types()
+    @tool()
+    def list_annotation_types() -> str:
+        return _compact(local.list_annotation_types())
 
-    @mcp_server.tool()
-    def describe_annotation_type(name: str) -> Dict[str, Any]:
-        """Full field list and a working example for one annotation type.
+    @tool()
+    def describe_annotation_type(
+        name: Annotated[str, Field(description="An annotation type, e.g. radio, span, likert")],
+    ) -> str:
+        return _compact(local.describe_annotation_type(name))
 
-        The `example` is taken from a shipped config that uses this type, so it
-        is known to run.
-        """
-        return local.describe_annotation_type(name)
+    @tool()
+    def list_display_types() -> str:
+        return _compact(local.list_display_types())
 
-    @mcp_server.tool()
-    def list_display_types() -> List[Dict[str, Any]]:
-        """List every `instance_display` field type (text, image, audio, ...)."""
-        return local.list_display_types()
+    @tool()
+    def list_plugins(
+        name: Annotated[Optional[str], Field(
+            description="One installed plugin to load and describe")] = None,
+    ) -> str:
+        return _compact(local.list_plugins(name))
 
-    @mcp_server.tool()
-    def list_plugins(name: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Installed plugins, from package metadata; nothing is imported.
+    @tool()
+    def describe_display_type(
+        name: Annotated[str, Field(description="A display type, e.g. image, audio, dialogue")],
+    ) -> str:
+        return _compact(local.describe_display_type(name))
 
-        Pass `name` to load one plugin and list the annotation and display
-        types it adds. A plugin's types work only in a config that lists the
-        plugin under `plugins:`.
-        """
-        return local.list_plugins(name)
+    @tool()
+    def list_config_keys(
+        category: Annotated[Optional[str], Field(description=(
+            "Matched without case, exactly or as a substring: 'auth' finds "
+            "'Authentication / Login'. An unknown one returns the categories."
+        ))] = None,
+    ) -> str:
+        return _compact(local.list_config_keys(category))
 
-    @mcp_server.tool()
-    def describe_display_type(name: str) -> Dict[str, Any]:
-        """Required and optional keys for one `instance_display` field type."""
-        return local.describe_display_type(name)
+    @tool()
+    def describe_config_key(
+        path: Annotated[str, Field(description="Dotted key path, e.g. attention_checks.frequency")],
+    ) -> str:
+        return _compact(local.describe_config_key(path))
 
-    @mcp_server.tool()
-    def list_config_keys(category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """List documented top-level config keys, optionally by category."""
-        return local.list_config_keys(category)
-
-    @mcp_server.tool()
-    def describe_config_key(path: str) -> Dict[str, Any]:
-        """Describe one config key by dotted path, e.g. `attention_checks.frequency`."""
-        return local.describe_config_key(path)
-
-    @mcp_server.tool()
-    def get_config_schema() -> Dict[str, Any]:
-        """The complete config JSON Schema.
-
-        Large. Prefer describe_annotation_type / describe_config_key unless you
-        need the whole contract.
-        """
-        return local.get_config_schema()
+    @tool()
+    def get_config_schema(
+        key: Annotated[Optional[str], Field(description=(
+            "Dotted key path, e.g. attention_checks or item_properties.id_key"
+        ))] = None,
+        full: Annotated[bool, Field(description=(
+            "Return the whole schema. Ignored when key is given."
+        ))] = False,
+    ) -> str:
+        if key:
+            return _compact(local.get_config_schema(key))
+        if full:
+            return _compact(local.get_config_schema())
+        return _compact(local.config_schema_overview())
 
     # -------------------------------------------------------------- examples --
 
-    @mcp_server.tool()
+    @tool()
     def list_examples(
-        annotation_type: Optional[str] = None,
-        display_type: Optional[str] = None,
-        category: Optional[str] = None,
-        config_key: Optional[str] = None,
-        query: Optional[str] = None,
-        limit: int = 20,
-    ) -> Dict[str, Any]:
-        """Find shipped example projects. Filters are combined with AND.
-
-        Copying a working example beats assembling a config from field lists.
-        """
-        return local.list_examples(
+        annotation_type: Annotated[Optional[str], Field(
+            description="Only examples with a scheme of this type, e.g. likert")] = None,
+        display_type: Annotated[Optional[str], Field(
+            description="Only examples with an instance_display field of this type")] = None,
+        category: Annotated[Optional[str], Field(description=(
+            "The examples/ subdirectory: classification, span, image, audio, "
+            "video, advanced, ..."
+        ))] = None,
+        config_key: Annotated[Optional[str], Field(
+            description=("Only examples that set this key. A dotted key is "
+                         "matched by its top-level part"))] = None,
+        query: Annotated[Optional[str], Field(description=(
+            "Substring, without case, of the directory, task name, "
+            "description or annotation types"
+        ))] = None,
+        limit: Annotated[int, Field(description="Most results to return")] = 20,
+    ) -> str:
+        return _compact(local.list_examples(
             annotation_type=annotation_type,
             display_type=display_type,
             category=category,
             config_key=config_key,
             query=query,
             limit=limit,
-        )
+        ))
 
-    @mcp_server.tool()
-    def get_example(name: str) -> Dict[str, Any]:
-        """Read one example's full config, by directory (`classification/likert`)."""
-        return local.get_example(name)
+    @tool()
+    def get_example(
+        name: Annotated[str, Field(description="The `name` from list_examples, e.g. classification/likert")],
+    ) -> str:
+        return _compact(local.get_example(name))
 
     # ------------------------------------------------------------ validation --
 
-    @mcp_server.tool()
+    @tool()
     def validate_config(
-        path: Optional[str] = None, yaml_text: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Validate a config with the server's own validator.
-
-        Pass a path relative to the server root, or the YAML text directly.
-        Returns errors, unrecognized keys, and other warnings. Run this after
-        every edit -- it is the same check `potato start` performs.
-        """
+        path: Annotated[Optional[str], Field(
+            description="Config path, relative to the server root")] = None,
+        yaml_text: Annotated[Optional[str], Field(
+            description="The config itself, instead of a path")] = None,
+    ) -> str:
         if path:
             resolved = _resolve(root_dir, path)
             if resolved is None:
-                return _outside(path)
-            return local.validate_config(path=resolved)
-        return local.validate_config(yaml_text=yaml_text)
+                return _compact(_outside(path))
+            return _compact(local.validate_config(path=resolved))
+        return _compact(local.validate_config(yaml_text=yaml_text))
 
-    @mcp_server.tool()
-    def preview_config(path: str) -> Dict[str, Any]:
-        """Show what a config declares: schemes, labels, keybindings, conflicts.
-
-        No server is started. Use render_task_screenshot to see the real page.
-        """
+    @tool()
+    def preview_config(
+        path: Annotated[str, Field(description="Config path, relative to the server root")],
+    ) -> str:
         resolved = _resolve(root_dir, path)
         if resolved is None:
-            return _outside(path)
-        return local.preview_config(resolved)
+            return _compact(_outside(path))
+        return _compact(local.preview_config(resolved))
 
-    @mcp_server.tool()
+    @tool(read_only=False)
     def render_task_screenshot(
-        path: str, phase: str = "annotation", width: int = 1280, height: int = 900
+        path: Annotated[str, Field(description="Config path, relative to the server root")],
+        phase: Annotated[str, Field(description=(
+            "The page to show: consent, instructions, training, annotation "
+            "or poststudy"
+        ))] = "annotation",
+        width: Annotated[int, Field(description="Viewport width in pixels")] = 1280,
+        height: Annotated[int, Field(description="Viewport height in pixels")] = 900,
     ) -> List[Any]:
-        """Boot the task, screenshot the annotation page, report browser errors.
-
-        Returns the image plus a summary of every uncaught exception,
-        console.error and failed request. A config can validate cleanly and
-        still render a broken interface -- most annotation UI is built by
-        JavaScript after the HTML arrives, so this is the only check that sees
-        those failures.
-        """
         from mcp.server.fastmcp import Image as _Image  # noqa: F811
 
         from potato.preview_render import capture_task, playwright_available
@@ -318,4 +424,4 @@ def _json_block(payload: Dict[str, Any]):
 
     from mcp.types import TextContent
 
-    return TextContent(type="text", text=json.dumps(payload, indent=2))
+    return TextContent(type="text", text=json.dumps(payload, separators=(",", ":")))

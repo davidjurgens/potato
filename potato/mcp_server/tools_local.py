@@ -170,15 +170,27 @@ def describe_display_type(name: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------- config keys --
 
 def list_config_keys(category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Documented top-level config keys, optionally filtered by category."""
+    """Documented top-level config keys, optionally filtered by category.
+
+    The category matches without case, exactly or as a substring, so "auth"
+    finds "Authentication / Login". A category that matches nothing returns
+    the list of categories: an empty list read as "no such keys".
+    """
     from potato.server_utils.config_key_docs import UNSET, iter_key_docs
 
+    top = [(path, doc) for path, doc in iter_key_docs() if "." not in path]
+    if category:
+        wanted = category.strip().lower()
+        categories = sorted({doc.category for _, doc in top})
+        matched = ({c for c in categories if c.lower() == wanted}
+                   or {c for c in categories if wanted in c.lower()})
+        if not matched:
+            return [{"error": f"No config key category matches {category!r}",
+                     "categories": categories}]
+        top = [(path, doc) for path, doc in top if doc.category in matched]
+
     out = []
-    for path, doc in iter_key_docs():
-        if "." in path:
-            continue
-        if category and doc.category != category:
-            continue
+    for path, doc in top:
         entry = {
             "key": path,
             "type": doc.type,
@@ -223,10 +235,7 @@ def describe_config_key(path: str) -> Dict[str, Any]:
     doc = get_key_doc(path)
     if doc is None:
         result["documented"] = False
-        result["note"] = (
-            "This key is accepted by the server but has no entry in "
-            "CONFIG_KEY_DOCS yet."
-        )
+        result["note"] = "The server accepts this key, but it is not documented yet."
         return result
 
     result.update({
@@ -245,11 +254,50 @@ def describe_config_key(path: str) -> Dict[str, Any]:
     return result
 
 
-def get_config_schema() -> Dict[str, Any]:
-    """The full config JSON Schema, as published."""
+def get_config_schema(key: Optional[str] = None) -> Dict[str, Any]:
+    """The config JSON Schema, as published, or one key's part of it.
+
+    `key` is a dotted path, e.g. `attention_checks` or `item_properties.id_key`.
+    """
     from potato.server_utils.config_schema import build_config_schema
 
-    return build_config_schema()
+    schema = build_config_schema()
+    if not key:
+        return schema
+    node = schema
+    for part in key.split("."):
+        properties = (node.get("properties")
+                      or (node.get("items") or {}).get("properties") or {})
+        if part not in properties:
+            return {"error": f"Not a key in the config schema: {key!r}",
+                    "keys_here": sorted(properties)}
+        node = properties[part]
+    result = {"key": key, "schema": node}
+    if not node:
+        result["note"] = ("The schema does not constrain this key. For a "
+                          "scheme field, describe_annotation_type says more.")
+    return result
+
+
+def config_schema_overview() -> Dict[str, Any]:
+    """The schema's top level without the per-key detail.
+
+    The whole schema is too large to request casually: one call would take a
+    sizeable share of an agent's context. This names the keys and what is
+    required, and says how big the rest is.
+    """
+    from potato.server_utils.config_schema import build_config_schema
+
+    schema = build_config_schema()
+    size = len(json.dumps(schema, separators=(",", ":")))
+    return {
+        "required": schema.get("required", []),
+        "required_one_of": [alt.get("required") for alt in schema.get("anyOf", [])],
+        "keys": sorted(schema.get("properties", {})),
+        "note": (f"Pass key='attention_checks' (or a dotted path) for one key's "
+                 f"schema, or full=true for all of it, about {size // 1000}k "
+                 f"characters. For a scheme, describe_annotation_type is shorter."),
+    }
 
 
 # -------------------------------------------------------------------- examples --
@@ -269,15 +317,31 @@ def list_examples(
     """
     from potato.server_utils.examples_manifest import search_examples
 
+    if category:
+        category = category.strip().lower()
+    # The catalog records top-level keys only, so a dotted key is searched by
+    # its first part. Searched whole, `attention_checks.frequency` matched
+    # nothing and was reported as set by no example, though one sets it.
+    searched_key = config_key.split(".")[0] if config_key else None
     results = search_examples(
         annotation_type=annotation_type,
         display_type=display_type,
         category=category,
-        config_key=config_key,
+        config_key=searched_key,
         query=query,
         limit=limit,
     )
+    if not results:
+        return {"count": 0, "examples": [],
+                **_why_no_examples(annotation_type, display_type, category,
+                                   searched_key)}
+    note = {}
+    if searched_key != config_key:
+        note["note"] = (f"These examples set {searched_key!r}. The catalog "
+                        f"records top-level keys only; get_example shows "
+                        f"whether each sets {config_key!r}.")
     return {
+        **note,
         "count": len(results),
         "examples": [
             {
@@ -298,6 +362,49 @@ def list_examples(
             for r in results
         ],
     }
+
+
+def _why_no_examples(annotation_type, display_type, category,
+                     config_key) -> Dict[str, Any]:
+    """Name the filter that matched nothing, and what it accepts.
+
+    A bare `count: 0` for `annotation_type="radioo"` read the same as "no
+    example uses radio", so a typo ended the search.
+    """
+    from potato.server_utils.displays import display_registry
+    from potato.server_utils.examples_manifest import load_manifest
+    from potato.server_utils.schemas.registry import schema_registry
+
+    entries = (load_manifest() or {}).get("examples", [])
+    used = lambda field: {v for e in entries for v in e.get(field, [])}  # noqa: E731
+
+    if category and category not in {e["category"] for e in entries}:
+        return {"error": f"Unknown example category: {category!r}",
+                "categories": sorted({e["category"] for e in entries})}
+    checks = (
+        ("annotation_type", annotation_type, "annotation_types",
+         schema_registry.get_supported_types(), "describe_annotation_type"),
+        ("display_type", display_type, "display_types",
+         display_registry.get_supported_types(), "describe_display_type"),
+    )
+    for label, value, field, registered, describer in checks:
+        if not value or value in used(field):
+            continue
+        if value in registered:
+            return {"hint": f"No shipped example uses the {label} {value!r}. "
+                            f"{describer}({value!r}) shows its fields."}
+        return {"error": f"Unknown {label}: {value!r}",
+                f"valid_{label}s": sorted(registered)}
+    if config_key and config_key not in used("config_keys"):
+        from potato.server_utils.config_module import KNOWN_CONFIG_KEYS
+
+        if config_key.split(".")[0] not in KNOWN_CONFIG_KEYS:
+            return {"error": f"Not a config key: {config_key!r}",
+                    "hint": "list_config_keys() lists the documented keys."}
+        return {"hint": f"No shipped example sets {config_key!r}. "
+                        f"describe_config_key({config_key!r}) documents it."}
+    return {"hint": "Nothing matches every filter together. Try fewer "
+                    "filters or a shorter query."}
 
 
 def get_example(name: Optional[str] = None,

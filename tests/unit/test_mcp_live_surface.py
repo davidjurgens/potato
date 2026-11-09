@@ -553,6 +553,47 @@ class TestRemoteBridge:
         assert "alice" in text
 
 
+def _bridged(destructive_enabled=None):
+    import asyncio
+
+    from mcp.server.fastmcp import FastMCP
+
+    from potato.mcp_server.connect import PotatoClient, _register_forwarder
+
+    server = FastMCP("t")
+    for entry in describe_tools():
+        _register_forwarder(server, PotatoClient("http://x", "tok"), entry,
+                            destructive_enabled)
+    return {t.name: t for t in asyncio.run(server.list_tools())}
+
+
+@pytest.mark.skipif(not check_sdk_available(), reason="mcp SDK not installed")
+class TestBridgedToolListing:
+    def test_argument_descriptions_reach_the_schema(self):
+        """They were declared on the server and dropped by the bridge, so an
+        agent never saw the shape `annotations` takes."""
+        props = _bridged()["live_submit_annotation"].inputSchema["properties"]
+        assert "{schema: {label: value}}" in props["annotations"]["description"]
+
+    def test_the_description_does_not_repeat_the_arguments(self):
+        assert "Arguments:" not in _bridged()["live_list_items"].description
+
+    def test_read_and_destructive_hints(self):
+        tools = _bridged()
+        assert tools["live_get_status"].annotations.readOnlyHint
+        # Needs EXPORT_DATA, but only reads: build_certificate(save=False).
+        assert tools["live_engine_certificate"].annotations.readOnlyHint
+        assert not tools["live_add_items"].annotations.readOnlyHint
+        assert tools["live_delete_annotations"].annotations.destructiveHint
+        assert not tools["live_add_items"].annotations.destructiveHint
+
+    def test_a_destructive_tool_the_task_did_not_enable_says_it_is_refused(self):
+        off = _bridged(destructive_enabled=[])["live_delete_annotations"]
+        on = _bridged(destructive_enabled=["delete_annotations"])["live_delete_annotations"]
+        assert "refused" in off.description
+        assert '"confirm": true' in on.description and "refused" not in on.description
+
+
 @pytest.mark.skipif(not check_sdk_available(), reason="mcp SDK not installed")
 def test_a_refused_tool_call_is_an_error_result_over_the_bridge(monkeypatch):
     """Found by potato-skill (C8): the stdio bridge returned a permission

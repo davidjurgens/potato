@@ -275,3 +275,66 @@ class TestDestroyAndStatus:
         status = provider.status(DeploymentRecord(
             name="pilot", provider="heroku", provider_ref={"app": "potato-pilot"}))
         assert status.state == "absent"
+
+
+class TestRegistryRelease:
+    """``--heroku-registry`` builds a ~1 GB image with local Docker. Once the
+    registry has it, the local copy is only disk space."""
+
+    @pytest.fixture
+    def docker_calls(self, monkeypatch):
+        calls = []
+        failing = set()
+
+        def fake_docker(args, *, stdin=None):
+            calls.append(args[0])
+            if args[0] in failing:
+                raise ProviderError(f"docker {args[0]} failed: boom")
+            return "sha256:abc\n" if args[0] == "inspect" else ""
+        monkeypatch.setattr(heroku, "_docker", fake_docker)
+        monkeypatch.setattr(heroku.shutil, "which", lambda name: "/usr/bin/docker")
+        return calls, failing
+
+    class FakeAPI:
+        def __init__(self):
+            self.released = []
+
+        def release_image(self, name, image_id):
+            self.released.append((name, image_id))
+
+    def test_the_local_image_is_deleted_after_the_push(self, provider, spec, bundle,
+                                                       docker_calls):
+        calls, _ = docker_calls
+        api = self.FakeAPI()
+        provider._release_from_registry(api, spec, bundle, "potato-pilot")
+        assert calls == ["login", "build", "push", "inspect", "rmi"]
+        assert api.released == [("potato-pilot", "sha256:abc")]
+
+    def test_a_failed_push_still_deletes_the_image(self, provider, spec, bundle,
+                                                   docker_calls):
+        calls, failing = docker_calls
+        failing.add("push")
+        with pytest.raises(ProviderError, match="push"):
+            provider._release_from_registry(self.FakeAPI(), spec, bundle,
+                                            "potato-pilot")
+        assert calls[-1] == "rmi"
+
+    def test_a_failed_build_has_nothing_to_delete(self, provider, spec, bundle,
+                                                  docker_calls):
+        calls, failing = docker_calls
+        failing.add("build")
+        with pytest.raises(ProviderError, match="build"):
+            provider._release_from_registry(self.FakeAPI(), spec, bundle,
+                                            "potato-pilot")
+        assert "rmi" not in calls
+
+    def test_a_failed_delete_does_not_fail_the_deploy(self, provider, spec, bundle,
+                                                      docker_calls):
+        _, failing = docker_calls
+        failing.add("rmi")
+        messages = []
+        provider.console = messages.append
+        api = self.FakeAPI()
+        provider._release_from_registry(api, spec, bundle, "potato-pilot")
+        assert api.released
+        assert any("Could not delete the local image" in m for m in messages)

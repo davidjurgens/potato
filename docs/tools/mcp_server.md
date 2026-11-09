@@ -49,7 +49,7 @@ before they are checked.
 | `list_plugins` | Which plugins are installed, and what types do they add? |
 | `list_config_keys` | What top-level keys exist? |
 | `describe_config_key` | What is `attention_checks.frequency`? |
-| `get_config_schema` | The whole contract, as JSON Schema |
+| `get_config_schema` | The JSON Schema for one key, such as `attention_checks` |
 | `list_examples` | Is there an example that already does most of this? |
 | `get_example` | Show me its config |
 | `validate_config` | Is this config correct? |
@@ -61,6 +61,14 @@ before they are checked.
 so it can correct itself instead of guessing. Errors name the alternatives: an
 unknown `annotation_type` comes back with the list of valid ones.
 
+**`list_examples`** and **`list_config_keys`** say which filter matched
+nothing. An unknown annotation type comes back with the valid ones, an unknown
+category with the categories, and a key category matches without case or as a
+substring, so `auth` finds `Authentication / Login`.
+
+**`get_config_schema`** without a key returns the top-level key names and what
+is required. `full: true` returns the whole schema, over 200,000 characters.
+
 **`render_task_screenshot`** boots the task on a spare port, opens it in a
 headless browser, and returns a picture of the annotation page along with every
 uncaught exception, `console.error` and failed request. A config can validate
@@ -71,8 +79,8 @@ by JavaScript after the HTML arrives, so nothing server-side sees those failures
 
 `describe_annotation_type` returns an `example`: a scheme lifted from a config in
 `examples/` that uses that type. CI already checks those configs run and really
-use the type they claim, so the example is known to work. 60 of the 61 registered
-types have one.
+use the type they claim, so the example is known to work. Every built-in type
+has one, and a test fails when a new type ships without one.
 
 ```json
 {
@@ -88,6 +96,10 @@ types have one.
   "example_source": "examples/classification/likert/config.yaml"
 }
 ```
+
+Results come back as compact JSON text. Every tool except
+`render_task_screenshot` is marked read-only. A client can use that to run them
+without asking first.
 
 ## Resources and prompt
 
@@ -214,7 +226,9 @@ potato mcp connect --url https://my-task.example
 
 Remote tools arrive prefixed `live_`, and only the ones the token is actually
 granted appear — the list comes from the server's manifest, not from a guess made
-locally. Refusals come back with the server's own message, so an agent told
+locally. Each one carries its argument descriptions, and the read tools are
+marked read-only. `live_delete_annotations` is marked destructive, and its
+description says whether this task has listed it in `mcp.destructive`. Refusals come back with the server's own message, so an agent told
 `'delete_annotations' destroys work. Pass "confirm": true to proceed.` can act on
 it.
 

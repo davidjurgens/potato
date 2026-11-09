@@ -52,6 +52,8 @@ installed.
 
 If the build fails on that route, `--heroku-registry` builds the image locally
 with Docker instead, for `linux/amd64`, and pushes it to Heroku's registry.
+The local copy of the image is deleted after the push, and after a push that
+fails.
 
 Secrets (the session key, the admin key, backup credentials) are set as config
 vars. They are not built into the image.

@@ -104,6 +104,73 @@ class TestConfigKeyTools:
         assert "annotation_schemes" in schema["properties"]
 
 
+class TestFiltersThatMatchNothing:
+    """An empty answer to a typo read the same as "there are none", so an
+    agent stopped looking. Each miss now names the filter and its values."""
+
+    def test_a_category_matches_without_case_or_as_a_substring(self):
+        keys = local.list_config_keys(category="auth")
+        assert keys and all(k["category"] == "Authentication / Login" for k in keys)
+
+    def test_an_unknown_category_lists_the_categories(self):
+        (row,) = local.list_config_keys(category="no such category")
+        assert "error" in row
+        assert "Core / Required" in row["categories"]
+
+    def test_a_misspelled_annotation_type_is_named(self):
+        result = local.list_examples(annotation_type="radioo")
+        assert result["count"] == 0
+        assert "radioo" in result["error"]
+        assert "radio" in result["valid_annotation_types"]
+
+    def test_an_unknown_example_category_lists_the_directories(self):
+        result = local.list_examples(category="no-such-dir")
+        assert "classification" in result["categories"]
+
+    def test_the_example_category_ignores_case(self):
+        assert local.list_examples(category="Classification")["count"] > 0
+
+    def test_an_unknown_config_key_is_not_called_undocumented(self):
+        result = local.list_examples(config_key="not_a_real_key")
+        assert "Not a config key" in result["error"]
+
+    def test_a_dotted_config_key_is_searched_by_its_top_level_part(self):
+        """Found by potato-skill: the catalog records top-level keys, so
+        `attention_checks.frequency` matched nothing and was reported as set
+        by no example, though full-study-skeleton sets it."""
+        result = local.list_examples(config_key="attention_checks.frequency")
+        dirs = [e["name"] for e in result["examples"]]
+        assert "examples/advanced/full-study-skeleton" in dirs
+        assert "top-level keys only" in result["note"]
+
+    def test_valid_filters_with_no_common_example_say_so(self):
+        result = local.list_examples(annotation_type="bws", category="video")
+        assert result["count"] == 0
+        assert "error" not in result and "fewer filters" in result["hint"]
+
+
+class TestConfigSchemaByKey:
+    def test_one_key(self):
+        result = local.get_config_schema("attention_checks.frequency")
+        assert result["schema"]["type"] == "integer"
+
+    def test_an_unknown_key_lists_the_keys_at_that_level(self):
+        result = local.get_config_schema("attention_checks.nope")
+        assert "error" in result
+        assert "frequency" in result["keys_here"]
+
+    def test_an_unconstrained_key_says_so_rather_than_returning_bare_braces(self):
+        result = local.get_config_schema("annotation_schemes.labels")
+        assert result["schema"] == {} and "describe_annotation_type" in result["note"]
+
+    def test_the_overview_is_small_and_names_every_key(self):
+        overview = local.config_schema_overview()
+        full = local.get_config_schema()
+        assert sorted(full["properties"]) == overview["keys"]
+        assert ["data_files"] in overview["required_one_of"]
+        assert len(json.dumps(overview)) * 20 < len(json.dumps(full))
+
+
 class TestExampleTools:
     def test_search_by_annotation_type(self):
         result = local.list_examples(annotation_type="bws")
@@ -245,6 +312,60 @@ class TestServerConstruction:
         assert server.instructions == INSTRUCTIONS
         assert "validate_config" in INSTRUCTIONS
         assert "render_task_screenshot" in INSTRUCTIONS
+
+
+@pytest.mark.skipif(not check_sdk_available(), reason="mcp SDK not installed")
+class TestToolListing:
+    """What an agent reads before it calls anything."""
+
+    @pytest.fixture(scope="class")
+    def listed(self, tmp_path_factory):
+        import asyncio
+
+        from potato.mcp_server.server import build_server
+
+        server = build_server(root=str(tmp_path_factory.mktemp("root")))
+        return {t.name: t for t in asyncio.run(server.list_tools())}
+
+    def test_every_argument_is_described(self, listed):
+        for tool in listed.values():
+            for arg, schema in tool.inputSchema.get("properties", {}).items():
+                assert schema.get("description"), f"{tool.name}.{arg}"
+
+    def test_no_tool_advertises_an_empty_output_schema(self, listed):
+        assert [t.name for t in listed.values() if t.outputSchema] == []
+
+    def test_only_the_screenshot_tool_is_not_read_only(self, listed):
+        writers = [t.name for t in listed.values() if not t.annotations.readOnlyHint]
+        assert writers == ["render_task_screenshot"]
+
+    def test_the_cli_lists_the_registered_tools(self, listed):
+        from potato.mcp_server.server import TOOL_DESCRIPTIONS
+        assert sorted(TOOL_DESCRIPTIONS) == sorted(listed)
+
+    def test_results_are_compact_json(self, tmp_path):
+        import asyncio
+
+        from potato.mcp_server.server import build_server
+
+        server = build_server(root=str(tmp_path))
+        content = asyncio.run(server.call_tool("describe_annotation_type",
+                                               {"name": "radio"}))
+        blocks = content[0] if isinstance(content, tuple) else content
+        text = blocks[0].text
+        assert json.loads(text)["name"] == "radio"
+        assert "\n  " not in text
+
+    def test_the_schema_tool_does_not_return_everything_by_default(self, tmp_path):
+        import asyncio
+
+        from potato.mcp_server.server import build_server
+
+        server = build_server(root=str(tmp_path))
+        content = asyncio.run(server.call_tool("get_config_schema", {}))
+        blocks = content[0] if isinstance(content, tuple) else content
+        assert "keys" in json.loads(blocks[0].text)
+        assert len(blocks[0].text) < 10_000
 
 
 @pytest.mark.skipif(not check_sdk_available(), reason="mcp SDK not installed")
