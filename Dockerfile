@@ -67,11 +67,16 @@ FROM python:3.11-slim AS runtime
 # sqlite3 is not optional: `potato deploy pull` snapshots the project database
 # with `.backup` before copying it, because project.sqlite runs in WAL mode with
 # a live writer and copying the file alone yields a corrupt or stale database.
+# text-image, and all, which includes it, add DejaVu Sans: the slim image has no
+# fonts, and Pillow's own default draws ASCII letters only.
 ARG POTATO_EXTRAS=""
 RUN apt-get update && \
     apt-get install -y --no-install-recommends sqlite3 curl && \
     case ",${POTATO_EXTRAS}," in *,saml,*) \
         apt-get install -y --no-install-recommends libxmlsec1 libxmlsec1-openssl ;; \
+    esac && \
+    case ",${POTATO_EXTRAS}," in *,text-image,*|*,all,*) \
+        apt-get install -y --no-install-recommends fonts-dejavu-core ;; \
     esac && \
     rm -rf /var/lib/apt/lists/*
 

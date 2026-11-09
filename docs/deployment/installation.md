@@ -58,6 +58,7 @@ extra, and import its libraries only when they are used. Several extras go in on
 |---|---|
 | `ai` | LLM label suggestions and the chat assistant: the OpenAI, Anthropic, Ollama and Gemini clients |
 | `formats` | PDF, Word, Markdown, code and Excel source documents |
+| `text-image` | Pillow, for [`text_as_image`](../advanced/text_as_image.md). In the Docker image it also adds the DejaVu Sans font |
 | `export` | Parquet export |
 | `viz` | UMAP for the embedding visualization |
 | `auth` | Google, GitHub and OIDC sign-in (Authlib) |
@@ -87,7 +88,7 @@ extra, and import its libraries only when they are used. Several extras go in on
 | `embeddings` | `sentence-transformers`, for embedding vectorizers, diversity ordering and the `setfit` trainer |
 | `train-text`, `train-vision`, `train-audio`, `train-llm` | The [model trainers](../ai-intelligence/model_training.md#trainers) for text, images, audio and LLMs |
 | `train` | All four `train-*` extras |
-| `all` | `ai`, `formats`, `viz`, `export`, `huggingface`, `auth`, `langchain`, `db`, `mysql`, `deploy`, `hosting`, `preview`, `mcp` and `transcribe` |
+| `all` | `ai`, `formats`, `text-image`, `viz`, `export`, `huggingface`, `auth`, `langchain`, `db`, `mysql`, `deploy`, `hosting`, `preview`, `mcp` and `transcribe` |
 
 `vision`, `decision`, `embeddings` and the `train-*` extras install PyTorch,
 which is several gigabytes, so `all` leaves them out. It also leaves out

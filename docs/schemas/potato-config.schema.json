@@ -7493,6 +7493,13 @@
           "description": "Turn the picture on, when text_as_image is written as a mapping",
           "type": "boolean"
         },
+        "font_path": {
+          "description": "A .ttf or .otf font for the picture, relative to task_dir. Without it, Potato tries DejaVu Sans, Arial, then Liberation Sans, then Pillow's ASCII-only default",
+          "examples": [
+            "fonts/DejaVuSans.ttf"
+          ],
+          "type": "string"
+        },
         "font_size": {
           "default": 18,
           "description": "Point size of the text in the picture",
