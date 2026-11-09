@@ -15,6 +15,12 @@ All notable changes to the Potato annotation platform are documented in this fil
   category now matches without case or as a substring (`auth` finds
   `Authentication / Login`), and a filter that matches nothing names itself
   and lists the values it accepts.
+- MCP `live_delete_annotations` cleared an annotator's answers but left them
+  on the item, so the item still counted them toward its completion and
+  `live_get_item` and `live_list_items` still listed them. The delete now
+  takes them off the item too, as clearing every answer in the browser does.
+  An unknown `instance_id` now answers 404, as an unknown username does,
+  instead of "deleted".
 - Three live MCP tool summaries described results the tools do not return.
   `live_get_item` returns the item's data and its annotators' usernames, not
   their answers; `live_list_items` returns usernames, not counts; and

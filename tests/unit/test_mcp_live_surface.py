@@ -644,3 +644,80 @@ def test_get_item_on_an_unknown_id_is_a_404(tmp_path):
         assert "No such item: nope" in r.get_json()["error"]
     finally:
         clear_item_state_manager()
+
+
+class TestDeleteReachesTheItemSide:
+    """Found by potato-skill: delete_annotations cleared the user's answers but
+    left them in the item's annotator set, so the item still counted them
+    toward its cap, and live_get_item and live_list_items still listed them."""
+
+    @pytest.fixture
+    def surface(self, tmp_path):
+        from potato.item_state_management import (
+            clear_item_state_manager, init_item_state_manager)
+        from potato.phase import UserPhase
+        from potato.user_state_management import (
+            clear_user_state_manager, init_user_state_manager)
+
+        config = _base_config(
+            tmp_path, tools=["submit_annotation", "delete_annotations", "get_item"],
+            destructive=["delete_annotations"],
+            audit_log=str(tmp_path / "audit.jsonl"))
+        config["num_annotators_per_item"] = 2
+        config["annotation_schemes"] = [
+            {"name": "decision", "annotation_type": "radio",
+             "description": "d", "labels": ["Accept", "Reject"]}]
+
+        clear_item_state_manager()
+        clear_user_state_manager()
+        ism = init_item_state_manager(config)
+        ism.add_item("P01", {"id": "P01", "text": "first"})
+        usm = init_user_state_manager(config)
+        for name in ("r1", "r2"):
+            usm.add_user(name)
+            state = usm.get_user_state(name)
+            state.current_phase_and_page = (UserPhase.ANNOTATION, None)
+            ism.assign_instances_to_user(state)
+
+        flask_app = Flask(__name__)
+        flask_app.config["mcp_task_config"] = config
+        flask_app.register_blueprint(mcp_bp)
+        token = issue_token("test-agent", role="admin", config=config)
+        client = flask_app.test_client()
+        for name in ("r1", "r2"):
+            response = _post(client, "submit_annotation", token, {
+                "username": name, "instance_id": "P01",
+                "annotations": {"decision": "Accept"}})
+            assert response.status_code == 200, response.get_json()
+        yield client, token, ism, usm
+        clear_item_state_manager()
+        clear_user_state_manager()
+
+    def _delete(self, client, token, username):
+        response = _post(client, "delete_annotations", token, {
+            "username": username, "instance_id": "P01", "confirm": True})
+        assert response.status_code == 200, response.get_json()
+
+    def test_the_annotator_leaves_the_item(self, surface):
+        client, token, ism, usm = surface
+        self._delete(client, token, "r1")
+        assert ism.get_annotators_for_item("P01") == {"r2"}
+        assert not usm.get_user_state("r1").has_annotated("P01")
+        item = _post(client, "get_item", token, {"instance_id": "P01"}).get_json()
+        assert item["annotators"] == ["r2"]
+
+    def test_the_item_is_no_longer_complete(self, surface):
+        """r1 still holds the assignment, so the item stays spoken for
+        (saturated); it is no longer finished."""
+        client, token, ism, _usm = surface
+        assert ism._item_is_complete("P01")
+        self._delete(client, token, "r1")
+        assert not ism._item_is_complete("P01")
+
+    def test_an_unknown_item_is_a_404(self, surface):
+        client, token, ism, _usm = surface
+        response = _post(client, "delete_annotations", token, {
+            "username": "r1", "instance_id": "no_such_item", "confirm": True})
+        assert response.status_code == 404
+        assert "No such item" in response.get_json()["error"]
+        assert ism.get_annotators_for_item("P01") == {"r1", "r2"}

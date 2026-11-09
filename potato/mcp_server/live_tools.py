@@ -152,7 +152,9 @@ _TOOLS: List[LiveTool] = [
              parameters=(
                  LiveParam("format", "string", False, "json, md or html", "json"),
              ),
-             # build_certificate(save=False): nothing is written.
+             # build_certificate(save=False) stores no certificate. Its one
+             # write recomputes the human-label spend from the requests
+             # already opened, which every engine path does.
              read_only=True),
     LiveTool("assign_items", "Set how many items an annotator may receive",
              Permission.MANAGE_ASSIGNMENT, handler="assign_items",

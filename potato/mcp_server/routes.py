@@ -722,6 +722,7 @@ def tool_export_data(record, payload):
 @mcp_bp.route("/api/mcp/tools/delete_annotations", methods=["POST"])
 @mcp_tool("delete_annotations")
 def tool_delete_annotations(record, payload):
+    from potato.annotation_commit import finish_annotation_write
     from potato.user_state_management import get_user_state_manager
 
     username = payload.get("username")
@@ -733,9 +734,16 @@ def tool_delete_annotations(record, payload):
     state = usm.get_user_state(username)
     if state is None:
         return _refuse(f"No such annotator: {username}", 404)
+    # An unknown item answered "deleted" while an unknown user got a 404.
+    from potato.item_state_management import get_item_state_manager
+    if get_item_state_manager().find_item(instance_id) is None:
+        return _refuse(f"No such item: {instance_id}", 404)
 
     state.set_annotation(instance_id, {}, [], {})
-    usm.save_user_state(username)
+    # Through the shared commit, not a bare save: that cleared the user side
+    # and left the annotator on the item, so the item still counted them
+    # toward its completion and live_get_item still listed them.
+    finish_annotation_write(state, instance_id, username)
     audit("annotations_deleted", agent=record.name, target=username,
           instance_id=instance_id)
     return jsonify({"status": "deleted", "username": username,
