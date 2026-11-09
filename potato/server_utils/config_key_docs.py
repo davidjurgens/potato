@@ -193,6 +193,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Width of the picture in CSS pixels",
         type="integer", default=900, category=QC, example=800,
     ),
+    "text_as_image.font_path": _D(
+        "A .ttf or .otf font for the picture, relative to task_dir. Without "
+        "it, Potato tries DejaVu Sans, Arial, then Liberation Sans, then "
+        "Pillow's ASCII-only default",
+        type="string", category=QC, example="fonts/DejaVuSans.ttf",
+    ),
     "task_description": _D(
         "Short description of the task, shown to annotators",
         type="string", category=CORE,

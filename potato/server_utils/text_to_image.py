@@ -44,6 +44,21 @@ _FOREGROUND = "#111111"
 
 DEFAULTS: Dict[str, int] = {"font_size": 18, "max_width": 900}
 
+#: Fonts tried, by file name, when the config names no ``font_path``. Pillow
+#: looks these up in the system font folders. Pillow's own default font
+#: (Aileron) has ASCII glyphs only, so ü, ß, „ or – come out as boxes. It is
+#: the last resort. DejaVu Sans is on most Linux systems and in the Docker
+#: image, Arial on Windows (arial.ttf) and macOS (Arial.ttf), Liberation Sans
+#: on Red Hat systems. Pillow matches the file name case-sensitively.
+FALLBACK_FONTS = ("DejaVuSans.ttf", "arial.ttf", "Arial.ttf",
+                  "LiberationSans-Regular.ttf")
+
+#: instance_display field types that put readable words on the page. The
+#: picture never replaces them, so the validator refuses them beside the feature.
+TEXT_DISPLAY_TYPES = frozenset({
+    "text", "html", "dialogue", "pairwise", "document", "code", "spreadsheet",
+})
+
 #: Schemes that anchor annotations to character offsets in the instance text.
 #: The feature removes that text, so the two cannot work together.
 SPAN_SCHEME_TYPES = frozenset({
@@ -58,7 +73,7 @@ SPAN_SCHEME_TYPES = frozenset({
 })
 
 
-def settings(config: Dict[str, Any]) -> Optional[Dict[str, int]]:
+def settings(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Return the resolved options, or None when the feature is off.
 
     Accepts ``text_as_image: true`` and the mapping form::
@@ -67,17 +82,22 @@ def settings(config: Dict[str, Any]) -> Optional[Dict[str, int]]:
           enabled: true
           font_size: 20
           max_width: 800
+          font_path: fonts/DejaVuSans.ttf
+
+    ``font_path`` is in the result only when the config sets it.
     """
     raw = config.get("text_as_image")
     if raw is True:
         return dict(DEFAULTS)
     if not isinstance(raw, dict) or not raw.get("enabled", True):
         return None
-    resolved = dict(DEFAULTS)
+    resolved: Dict[str, Any] = dict(DEFAULTS)
     for key in DEFAULTS:
         value = raw.get(key)
         if isinstance(value, int) and not isinstance(value, bool) and value > 0:
             resolved[key] = value
+    if isinstance(raw.get("font_path"), str) and raw["font_path"]:
+        resolved["font_path"] = raw["font_path"]
     return resolved
 
 
@@ -100,7 +120,7 @@ def _tiered_plays_media(scheme: Dict[str, Any]) -> bool:
 
 
 def applies(config: Dict[str, Any],
-            annotation_schemes: Any) -> Optional[Dict[str, int]]:
+            annotation_schemes: Any) -> Optional[Dict[str, Any]]:
     """Return the options when the picture replaces the text here, else None.
 
     The shared template shows the instance text in its own box only when no
@@ -277,12 +297,34 @@ def _wrap(text: str, font, width: int) -> List[str]:
     return lines or [""]
 
 
-@lru_cache(maxsize=512)
-def render_png(text: str, font_size: int, max_width: int) -> bytes:
-    """Render ``text`` to PNG bytes. Cached, because a page reload repeats it."""
-    from PIL import Image, ImageDraw, ImageFont
+@lru_cache(maxsize=32)
+def load_font(size: int, font_path: Optional[str] = None):
+    """Return ``(font, name)``: the font to draw with and what it is.
 
-    font = ImageFont.load_default(size=font_size * _SCALE)
+    ``font_path`` wins when set; an unreadable file raises ``OSError``, which
+    the validator reports at startup. Without it, the first of
+    ``FALLBACK_FONTS`` that Pillow finds is used, then Pillow's ASCII-only
+    default. ``name`` is None for that last case, so a caller can warn.
+    """
+    from PIL import ImageFont
+
+    if font_path:
+        return ImageFont.truetype(font_path, size), font_path
+    for name in FALLBACK_FONTS:
+        try:
+            return ImageFont.truetype(name, size), name
+        except OSError:
+            continue
+    return ImageFont.load_default(size=size), None
+
+
+@lru_cache(maxsize=512)
+def render_png(text: str, font_size: int, max_width: int,
+               font_path: Optional[str] = None) -> bytes:
+    """Render ``text`` to PNG bytes. Cached, because a page reload repeats it."""
+    from PIL import Image, ImageDraw
+
+    font, _ = load_font(font_size * _SCALE, font_path)
     width = max_width * _SCALE
     padding = 12 * _SCALE
     line_height = int(font_size * _SCALE * 1.45)
@@ -301,12 +343,13 @@ def render_png(text: str, font_size: int, max_width: int) -> bytes:
     return buffer.getvalue()
 
 
-def image_html(markup: str, options: Dict[str, int]) -> str:
+def image_html(markup: str, options: Dict[str, Any]) -> str:
     """Return the <img> that replaces the instance text, or "" if there is none."""
     text = to_plain(markup)
     if not text:
         return ""
-    png = render_png(text, options["font_size"], options["max_width"])
+    png = render_png(text, options["font_size"], options["max_width"],
+                     options.get("font_path"))
     payload = base64.b64encode(png).decode("ascii")
     return (
         f'<img src="data:image/png;base64,{payload}" '

@@ -10,6 +10,20 @@ All notable changes to the Potato annotation platform are documented in this fil
   `/tmp` when the download failed. Both are now removed either way. When the
   snapshot could not be handed to a login that is not root, the error said
   the database could not be snapshotted; it now says what failed.
+- `text_as_image` drew ü, ß, „ and other letters outside ASCII as boxes,
+  because Pillow's default font has ASCII glyphs only. Potato now draws with
+  DejaVu Sans, Arial or Liberation Sans when the system has one, and the new
+  `text_as_image.font_path` key names a .ttf or .otf file. A warning names the
+  key when Potato finds no such font. The Docker image adds DejaVu Sans when
+  it is built with the new `text-image` extra.
+- `text_as_image` without Pillow installed returned HTTP 500 on every
+  annotation page. Potato now refuses to start and names the new extra:
+  `pip install 'potato-annotation[text-image]'`.
+- `text_as_image` beside an `instance_display` block that shows text does
+  nothing, and the startup warning only said "no effect". The warning now
+  names the fields and says that their text stays copyable.
+  `potato validate --strict` stops on it. No config that started before
+  stops starting.
 
 ## [2.14.0] - Model Training: 38 Trainers, GPU Servers and SLURM
 

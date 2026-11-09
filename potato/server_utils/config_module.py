@@ -423,7 +423,7 @@ KNOWN_CONFIG_KEYS = {
     # text_as_image: the item text is rendered to a PNG server-side, so an
     # annotator cannot copy it into a chatbot. Accepts `true` as well as this
     # mapping. See potato/server_utils/text_to_image.py.
-    "text_as_image": {"enabled", "font_size", "max_width"},
+    "text_as_image": {"enabled", "font_size", "max_width", "font_path"},
     # KaTeX math rendering in item text, display fields and trace steps.
     # Validated in detail by potato.math_rendering.validate_math_config().
     "math": {"enabled", "delimiters", "fields", "macros"},
@@ -855,6 +855,7 @@ def normalize_config_before_validation(
         logger.debug(f"Resolved task_dir to: {task_dir}")
 
     _absolute_calibration_paths(config_data)
+    _absolute_text_as_image_font(config_data)
 
     _apply_require_fully_annotated(config_data)
     _normalize_runtime_phases(config_data)
@@ -1842,6 +1843,17 @@ def _warn_engine_budget_too_small(engine_cfg) -> None:
                 "threshold). Raise the budget or loosen the target.")
 
 
+def _absolute_text_as_image_font(config_data: Dict[str, Any]) -> None:
+    """``text_as_image.font_path``, relative to task_dir like the data files."""
+    block = config_data.get("text_as_image")
+    task_dir = config_data.get("task_dir")
+    if not isinstance(block, dict) or not isinstance(task_dir, str):
+        return
+    path = block.get("font_path")
+    if isinstance(path, str) and path and not os.path.isabs(path):
+        block["font_path"] = os.path.normpath(os.path.join(task_dir, path))
+
+
 #: Deprecation notes already printed in this process.
 _DEPRECATION_NOTES_SHOWN = set()
 
@@ -2163,16 +2175,45 @@ def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
             value = raw[key]
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 errors.append(f"text_as_image.{key} must be a positive integer")
+        font_path = raw.get("font_path")
+        if "font_path" in raw and (not isinstance(font_path, str) or not font_path):
+            errors.append("text_as_image.font_path must be a path to a .ttf or .otf file")
+        elif isinstance(font_path, str) and not os.path.isfile(font_path):
+            errors.append(
+                f"text_as_image.font_path: no file at {font_path} (a relative "
+                "path is read from task_dir)")
     if errors:
         raise ConfigValidationError(
             "Invalid text_as_image configuration:\n  - "
             + "\n  - ".join(errors)
         )
 
-    if text_to_image.settings(config_data) is None:
+    options = text_to_image.settings(config_data)
+    if options is None:
         return
 
     schemes = config_data.get("annotation_schemes") or []
+
+    # instance_display owns the page, so the picture never replaces its text
+    # fields. A text field there shows the words in the clear: the setting
+    # looks on and protects nothing. A warning and not an error, so a config
+    # that starts today keeps starting; `potato validate --strict` stops it.
+    display = config_data.get("instance_display")
+    display_fields = display.get("fields") if isinstance(display, dict) else None
+    text_fields = [
+        str(field.get("key") or "?")
+        for field in display_fields or ()
+        if isinstance(field, dict)
+        and field.get("type") in text_to_image.TEXT_DISPLAY_TYPES
+    ]
+    if text_fields:
+        logger.warning(
+            "text_as_image does not cover instance_display. It replaces only "
+            "the item_properties.text_key text box, so the text of these "
+            "instance_display fields stays on the page and can be copied: "
+            "%s. To protect the text, remove the instance_display block and "
+            "put the text in the text_key field.", ", ".join(text_fields))
+        return
 
     # Applicability first. A media or instance_display project renders the item
     # itself, so the feature never runs there and nothing can conflict with it.
@@ -2252,6 +2293,27 @@ def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
             "the page, so the scheme would render empty. Point the scheme at a "
             "different field, or turn off text_as_image."
         )
+
+    # Pillow draws the picture. It is not a core dependency, and without it
+    # every annotation page failed with HTTP 500 instead of one clear error.
+    import importlib.util
+    if importlib.util.find_spec("PIL") is None:
+        raise ConfigValidationError(
+            "text_as_image is on, which needs Pillow to draw the item text. "
+            "Install it with: pip install 'potato-annotation[text-image]'")
+    try:
+        _, font_name = text_to_image.load_font(
+            options["font_size"], options.get("font_path"))
+    except OSError as error:
+        raise ConfigValidationError(
+            f"text_as_image.font_path: {options.get('font_path')} is not a font "
+            f"Pillow can read ({error}). Use a .ttf or .otf file.") from error
+    if font_name is None:
+        logger.warning(
+            "text_as_image found none of these fonts: %s. It uses Pillow's "
+            "default font, which has ASCII letters only, so letters such as "
+            "ü, ß or é show as boxes. Set text_as_image.font_path to a .ttf "
+            "or .otf file.", ", ".join(text_to_image.FALLBACK_FONTS))
 
     logger.warning(
         "text_as_image is on. Annotators see a picture of each item, so a "

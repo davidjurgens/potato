@@ -525,3 +525,183 @@ class TestSchemesReadingTheRemovedFieldAreRefused:
                 {"annotation_type": "span", "name": "s"},
             ],
         })
+
+
+#: German text with every letter Pillow's default font (Aileron) lacks.
+GERMAN = "Grüße aus Zürich – „Straße“, Bär, Öl, Übung"
+
+
+def _is_notdef(font, char):
+    """Whether ``font`` draws ``char`` as its missing-glyph box.
+
+    U+10FFFD is a private-use code point that no ordinary font maps, so its
+    bitmap is the font's ``.notdef`` box.
+    """
+    def bitmap(c):
+        mask = font.getmask(c)
+        return mask.size, bytes(mask)
+    return bitmap(char) == bitmap("\U0010FFFD")
+
+
+def _system_font_or_skip():
+    font, name = text_to_image.load_font(36)
+    if name is None:
+        pytest.skip("none of text_to_image.FALLBACK_FONTS is installed here")
+    return font, name
+
+
+class TestFont:
+    """Pillow's default font has ASCII glyphs only, so German came out as boxes."""
+
+    @pytest.fixture(autouse=True)
+    def _fresh_cache(self):
+        text_to_image.load_font.cache_clear()
+        text_to_image.render_png.cache_clear()
+        yield
+        text_to_image.load_font.cache_clear()
+        text_to_image.render_png.cache_clear()
+
+    def test_the_check_itself_sees_the_boxes_of_the_default_font(self):
+        """Holds the helper honest: Aileron has no ü, so it must report one."""
+        from PIL import ImageFont
+
+        default = ImageFont.load_default(size=36)
+        if not hasattr(default, "getmask2"):
+            pytest.skip("this Pillow has no scalable default font")
+        assert _is_notdef(default, "ü")
+        assert not _is_notdef(default, "u")
+
+    def test_the_fallback_font_draws_german(self):
+        font, _ = _system_font_or_skip()
+        missing = sorted({c for c in GERMAN if not c.isspace() and _is_notdef(font, c)})
+        assert missing == []
+
+    def test_font_path_is_the_font_that_draws(self):
+        _, name = _system_font_or_skip()
+        path = name if Path(name).is_file() else _resolve_system_font(name)
+        font, used = text_to_image.load_font(36, path)
+        assert used == path
+        assert not _is_notdef(font, "ß")
+        options = text_to_image.settings(
+            {"text_as_image": {"enabled": True, "font_path": path}})
+        assert options["font_path"] == path
+        assert text_to_image.image_html(GERMAN, options).startswith("<img")
+
+    def test_no_system_font_falls_back_to_the_default(self, monkeypatch):
+        monkeypatch.setattr(text_to_image, "FALLBACK_FONTS", ("no-such-font.ttf",))
+        font, name = text_to_image.load_font(36)
+        assert name is None
+        assert font.getlength("abc") > 0
+
+    def test_the_validator_warns_when_only_the_default_is_left(self, monkeypatch, caplog):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        monkeypatch.setattr(text_to_image, "FALLBACK_FONTS", ("no-such-font.ttf",))
+        with caplog.at_level("WARNING"):
+            validate_text_as_image_config({
+                "text_as_image": True,
+                "annotation_schemes": [{"annotation_type": "radio"}],
+            })
+        assert "ASCII letters only" in caplog.text
+        assert "font_path" in caplog.text
+
+
+def _resolve_system_font(name):
+    """The file Pillow opened for a font it found by name."""
+    from PIL import ImageFont
+
+    return ImageFont.truetype(name, 12).path
+
+
+class TestFontPathValidation:
+    def _validate(self, block):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        validate_text_as_image_config({
+            "text_as_image": dict({"enabled": True}, **block),
+            "annotation_schemes": [{"annotation_type": "radio"}],
+        })
+
+    @pytest.mark.parametrize("bad", ["", 12, None])
+    def test_a_wrong_type_is_rejected(self, bad):
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError, match="font_path"):
+            self._validate({"font_path": bad})
+
+    def test_a_missing_file_is_rejected(self, tmp_path):
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError, match="no file at"):
+            self._validate({"font_path": str(tmp_path / "missing.ttf")})
+
+    def test_a_file_that_is_no_font_is_rejected(self, tmp_path):
+        from potato.server_utils.config_module import ConfigValidationError
+
+        text_to_image.load_font.cache_clear()
+        fake = tmp_path / "fake.ttf"
+        fake.write_text("not a font", encoding="utf-8")
+        with pytest.raises(ConfigValidationError, match="not a font"):
+            self._validate({"font_path": str(fake)})
+
+    def test_a_relative_path_is_read_from_task_dir(self, tmp_path):
+        from potato.server_utils.config_module import _absolute_text_as_image_font
+
+        config = {"task_dir": str(tmp_path),
+                  "text_as_image": {"font_path": "fonts/DejaVuSans.ttf"}}
+        _absolute_text_as_image_font(config)
+        assert config["text_as_image"]["font_path"] == str(
+            tmp_path / "fonts" / "DejaVuSans.ttf")
+
+
+class TestPillowMissing:
+    """Without Pillow every annotation page returned HTTP 500."""
+
+    def test_startup_refuses_and_names_the_extra(self, monkeypatch):
+        import importlib.util
+
+        from potato.server_utils.config_module import (
+            ConfigValidationError, validate_text_as_image_config)
+
+        real = importlib.util.find_spec
+        monkeypatch.setattr(importlib.util, "find_spec",
+                            lambda name, *a: None if name == "PIL" else real(name, *a))
+        with pytest.raises(ConfigValidationError, match=r"potato-annotation\[text-image\]"):
+            validate_text_as_image_config({
+                "text_as_image": True,
+                "annotation_schemes": [{"annotation_type": "radio"}],
+            })
+
+    def test_the_extra_exists(self):
+        source = (REPO_ROOT / "setup.py").read_text(encoding="utf-8")
+        assert '"text-image": _TEXT_IMAGE_DEPS' in source
+
+
+class TestInstanceDisplayTextIsWarned:
+    """instance_display owns the page, so its text fields stay readable.
+
+    A warning, not an error: a config that starts on 2.14.0 must keep
+    starting. ``potato validate --strict`` turns the warning into a stop.
+    """
+
+    def _validate(self, fields):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        validate_text_as_image_config({
+            "text_as_image": True,
+            "instance_display": {"fields": fields},
+            "annotation_schemes": [{"annotation_type": "radio", "name": "q"}],
+        })
+
+    @pytest.mark.parametrize("kind", sorted(text_to_image.TEXT_DISPLAY_TYPES))
+    def test_a_text_field_is_warned_by_name(self, kind, caplog):
+        with caplog.at_level("WARNING"):
+            self._validate([{"key": "comment", "type": kind},
+                            {"key": "issue", "type": kind}])
+        assert "comment, issue" in caplog.text
+        assert "can be copied" in caplog.text
+
+    def test_an_image_only_display_gets_no_text_warning(self, caplog):
+        with caplog.at_level("WARNING"):
+            self._validate([{"key": "image_url", "type": "image"}])
+        assert "can be copied" not in caplog.text

@@ -10,6 +10,14 @@ Turn the feature on with one key:
 text_as_image: true
 ```
 
+The feature needs Pillow. Install it with the `text-image` extra:
+
+```bash
+pip install 'potato-annotation[text-image]'
+```
+
+If Pillow is missing, Potato refuses to start and names the extra.
+
 ## What the feature stops
 
 An annotator who wants a shortcut usually selects the item text, copies it, and
@@ -24,6 +32,11 @@ pastes it into a chatbot. Four routes make that easy:
 
 The server blanks all four and sends a PNG instead. "Select all", "copy",
 "view source" and the endpoints then return nothing to paste.
+
+The feature protects only the `item_properties.text_key` field. The page JSON
+and the endpoints still carry every other column of the data file. If another
+column holds text that annotators must not copy, add it to
+`item_properties.private_keys`, or remove it from the data file.
 
 ## What the feature does not stop
 
@@ -121,16 +134,18 @@ BATCH assignment strategy.
 
 Potato checks in this order:
 
-1. Does the feature apply at all? A media or `instance_display` project renders
+1. Does an `instance_display` block show text? Warn (see
+   [Where the feature applies](#where-the-feature-applies)).
+2. Does the feature apply at all? A media or `instance_display` project renders
    the item itself, so the feature stays inert and nothing can conflict. One
    case is the exception: an audio or video scheme that shows the item text.
    Refuse it (see above).
-2. Is Pocket Mode on? Refuse.
-3. Is Rooms on? Refuse.
-4. Is a span scheme present? Refuse.
-5. Does a scheme read the blanked field? Refuse.
+3. Is Pocket Mode on? Refuse.
+4. Is Rooms on? Refuse.
+5. Is a span scheme present? Refuse.
+6. Does a scheme read the blanked field? Refuse.
 
-Step 1 comes first on purpose. An image project sets `text_key` to `image_url`
+Step 2 comes before the scheme checks on purpose. An image project sets `text_key` to `image_url`
 and its scheme reads `source_field: image_url`. That looks like a conflict, but
 the feature never runs there, so it is not one.
 
@@ -144,14 +159,33 @@ Potato writes a warning at startup to state this.
 
 ## Options
 
-The mapping form takes two more keys:
+The mapping form takes three more keys:
 
 ```yaml
 text_as_image:
   enabled: true
-  font_size: 20      # points, default 18
-  max_width: 800     # CSS pixels, default 900
+  font_size: 20                   # points, default 18
+  max_width: 800                  # CSS pixels, default 900
+  font_path: fonts/DejaVuSans.ttf # a .ttf or .otf file, read from task_dir
 ```
+
+### Font
+
+Without `font_path`, Potato uses the first of these fonts that it finds in the
+system font folders:
+
+1. `DejaVuSans.ttf`, on most Linux systems. The Docker image has it when you
+   build it with the `text-image` extra.
+2. `Arial.ttf`, on Windows and macOS.
+3. `LiberationSans-Regular.ttf`, on Red Hat systems.
+
+If Potato finds none of them, it uses the default font of Pillow. That font
+has ASCII letters only, so letters such as ü, ß, é and „ show as boxes. Potato
+writes a warning at startup in this case. For text in a language other than
+English, set `font_path` to a font that has the letters of that language.
+
+A relative `font_path` is read from `task_dir`, like the data files. If the file
+does not exist or Pillow cannot read it, Potato refuses to start.
 
 Potato renders the picture at twice `font_size` and `max_width`, then displays
 it at half. The text therefore stays sharp on a high-density screen.
@@ -161,10 +195,25 @@ that holds the item.
 
 ## Where the feature applies
 
-The feature replaces the item text box. It does nothing on a project that
-renders the item some other way:
+The feature replaces the item text box. It does not replace the fields of an
+`instance_display` block. If that block shows a field of type `text`, `html`,
+`dialogue`, `pairwise`, `document`, `code` or `spreadsheet`, the words of that
+field reach the page, and annotators can copy them. Potato starts, and writes a
+warning that names the fields:
 
-- A project with an `instance_display` block.
+```text
+WARNING: text_as_image does not cover instance_display. It replaces only the
+item_properties.text_key text box, so the text of these instance_display fields
+stays on the page and can be copied: comment, issue. To protect the text,
+remove the instance_display block and put the text in the text_key field.
+```
+
+`potato validate --strict` treats this warning as an error.
+
+The feature does nothing on a project that renders the item some other way:
+
+- A project with an `instance_display` block that shows no text, for example
+  only an image.
 - A project with a `video_annotation`, `audio_annotation` or `image_annotation`
   scheme.
 - A project with a `tiered_annotation` scheme. Its `media_type` is `audio` or

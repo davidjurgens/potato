@@ -104,6 +104,9 @@ _ASTRO_DEPS = ["astropy>=5.3"]
 _MICROSCOPY_DEPS = ["zarr>=3.0; python_version>='3.11'",
                     "zarr>=2.16,<3; python_version<'3.11'",
                     "tifffile>=2023.1", "numpy>=1.21"]
+# text_as_image draws the item text with Pillow. 10.1 is the first release
+# whose load_default() takes a size, which the ASCII-only fallback needs.
+_TEXT_IMAGE_DEPS = ["pillow>=10.1.0"]
 # The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
 # in "all": FiftyOne brings its own MongoDB and a large dependency tree.
 _FIFTYONE_DEPS = [
@@ -276,6 +279,7 @@ setup(
         # OpenStack clouds: Jetstream2, campus clouds, EGI.
         "deploy-openstack": _DEPLOY_DEPS + ["openstacksdk>=3.0.0"],
         "vision": _VISION_DEPS,
+        "text-image": _TEXT_IMAGE_DEPS,
         # Training extras. `embeddings` is also what the sentence-transformers
         # and CLIP vectorizers need, which users were told to install by hand.
         "embeddings": _EMBEDDING_DEPS,
@@ -292,7 +296,7 @@ setup(
         "spectra": _SPECTRA_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _MYSQL_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _TEXT_IMAGE_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _MYSQL_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
     },
     include_package_data=True,
     entry_points={
