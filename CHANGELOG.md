@@ -28,6 +28,12 @@ All notable changes to the Potato annotation platform are documented in this fil
   dropdown or editable region, and no other control on the page handled the
   key. The left and right arrow keys also no longer change items while a
   dropdown or editable region has focus.
+- On a video or audio page, the left and right arrows seeked 5 seconds and also
+  moved to the next or previous item, and an arrow on a focused range-slider
+  thumb moved the thumb and changed the item. The arrows now change the item
+  only when no other control on the page handled them, so they seek on video
+  and audio pages, as the video and audio docs describe, and move the thumb on
+  a range slider.
 - The point cloud viewer stored hidden classes under one browser key for every
   scheme in every project, so hiding `car` in one point-cloud scheme hid `car`
   in every other point-cloud scheme opened in that browser. It is now stored

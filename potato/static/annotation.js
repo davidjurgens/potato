@@ -810,10 +810,23 @@ function setupEventListeners() {
         });
     }
 
-    // Keyboard navigation and shortcuts
-    document.addEventListener('keydown', function (e) {
+    installArrowNavigation();
+    installLabelKeyShortcuts();
+}
+
+/**
+ * Left and right arrows change the item. The listener is on window, bubbling,
+ * so it runs after every handler on the page: a viewer that uses the arrows
+ * (video and audio seek, a range-slider thumb, rollout nudges) calls
+ * preventDefault and keeps them.
+ */
+function installArrowNavigation() {
+    window.addEventListener('keydown', function (e) {
         // A running timed trial owns the keyboard (trial-timing.js).
         if (window.potatoTrial && window.potatoTrial.ownsKeys) {
+            return;
+        }
+        if (e.defaultPrevented) {
             return;
         }
         // Arrows in a text field or a <select> move the caret or the option.
@@ -832,8 +845,6 @@ function setupEventListeners() {
                 break;
         }
     });
-
-    installLabelKeyShortcuts();
 }
 
 /**

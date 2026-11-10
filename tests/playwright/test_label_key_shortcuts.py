@@ -63,3 +63,28 @@ class TestLabelKeyShortcuts(BasePlaywrightTest):
         page.click("#instance-text")
         page.keyboard.press("c")
         assert radio_checked(page, "positive")
+
+
+SLIDER = [{"annotation_type": "range_slider", "name": "span", "description": "Range",
+           "min_value": 0, "max_value": 100}]
+
+
+class TestArrowNavigation(BasePlaywrightTest):
+    def test_an_arrow_a_control_uses_does_not_change_the_item(self, make_server, page):
+        server = make_server(SLIDER, num_items=3)
+        self.register_and_login(page, server)
+        first = page.input_value("#instance_id")
+
+        # On a focused slider thumb the arrow moves the thumb, and only that.
+        page.focus(".range-slider-thumb-low")
+        page.keyboard.press("ArrowRight")
+        assert page.get_attribute(".range-slider-thumb-low", "aria-valuenow") != "0"
+        page.wait_for_timeout(500)
+        assert page.input_value("#instance_id") == first
+
+        # Elsewhere on the page it still changes the item.
+        page.click("#instance-text")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_function(
+            f"() => document.getElementById('instance_id').value !== '{first}'",
+            timeout=10000)
