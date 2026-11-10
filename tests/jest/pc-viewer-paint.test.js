@@ -14,6 +14,19 @@ global.THREE = {
     BufferAttribute: class {
         constructor(array, size) { this.array = array; this.itemSize = size; }
     },
+    BufferGeometry: class {
+        constructor() { this.attributes = {}; this.index = null; }
+        setAttribute(name, attr) { this.attributes[name] = attr; return this; }
+        getAttribute(name) { return this.attributes[name]; }
+        setIndex(index) { this.index = index; }
+    },
+    Points: class {
+        constructor(geometry, material) {
+            this.geometry = geometry; this.material = material;
+            this.userData = {}; this.visible = true;
+        }
+    },
+    PointsMaterial: class { constructor(opts) { Object.assign(this, opts); } },
     Matrix4: class {
         multiplyMatrices() {
             this.elements = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -272,10 +285,11 @@ test('under LOD a stroke stores the source indices of a node, and arming warns',
         .toMatch(/only the 4 of 50 points loaded/);
     stroke(m, 25, 50, 75, 50);
     expect(stored()[0].indices).toEqual([10, 20, 30]);
-    // A node that loads after the stroke takes the paint as it arrives.
-    const late = fakeBuffer();
-    m._applyPaint(late.obj, late.parsed);
-    expect(Array.from(late.obj.geometry.getAttribute('color').array.slice(0, 3))).toEqual([1, 0, 0]);
+    // A node that loads after the stroke takes the paint as it is built.
+    const late = m._pointsObject(fakeBuffer().parsed);
+    expect(Array.from(late.geometry.getAttribute('color').array.slice(0, 3))).toEqual([1, 0, 0]);
+    expect(Array.from(late.geometry.getAttribute('color').array.slice(9, 12)))
+        .not.toEqual([1, 0, 0]);
 });
 
 test('a painted segment needs no per-object attributes', () => {
