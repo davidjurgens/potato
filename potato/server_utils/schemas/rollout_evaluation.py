@@ -145,11 +145,14 @@ TOOL_KEYS = {
 def page_keys(annotation_scheme):
     """
     The keys rollout-eval.js handles anywhere on the page: the tool keys, and
-    a digit per panel. With a manifest_field the panel count is per item, so
-    all of 1-9.
+    a digit per panel. A manifest_field wins over ``streams`` (as in
+    rollouts/registry.py) and its panel count is per item, so all of 1-9.
     """
     streams = annotation_scheme.get("streams")
-    panels = min(len(streams), 9) if isinstance(streams, list) and streams else 9
+    if annotation_scheme.get("manifest_field") or not isinstance(streams, list) or not streams:
+        panels = 9
+    else:
+        panels = min(len(streams), 9)
     return list(TOOL_KEYS.values()) + [str(i) for i in range(1, panels + 1)]
 
 

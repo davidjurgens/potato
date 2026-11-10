@@ -53,3 +53,32 @@ def test_a_rollout_takes_a_digit_per_stream():
              "labels": ["x", "y", "z"], "sequential_key_binding": True}
     keys = [e["key"] for e in allocate_keybindings([rollout, radio])["tone"]]
     assert keys == ["3", "4", "5"]
+
+
+def test_a_rollout_manifest_wins_over_its_streams():
+    # The page reads the manifest whenever manifest_field is set, so its
+    # panel count is unknown here and every digit stays reserved.
+    rollout = {"annotation_type": "rollout_evaluation", "name": "roll", "description": "d",
+               "manifest_field": "manifest",
+               "streams": [{"field": "a", "name": "A"}, {"field": "b", "name": "B"}]}
+    radio = {"annotation_type": "radio", "name": "tone", "description": "d",
+             "labels": ["x", "y", "z"], "sequential_key_binding": True}
+    keys = [e["key"] for e in allocate_keybindings([rollout, radio])["tone"]]
+    assert not any(k.isdigit() and k != "0" for k in keys) and len(keys) == 3
+
+
+def test_an_uppercase_label_key_on_an_image_tool_key_warns(caplog):
+    # Keys match without case, so R is the bbox tool's r; the check compared
+    # them as given and said nothing.
+    scheme = {"annotation_type": "image_annotation", "name": "img", "description": "d",
+              "tools": ["bbox"], "labels": [{"name": "car", "key_value": "R"}]}
+    schema_registry.generate(scheme)
+    assert "key 'r' is bound to bbox tool" in caplog.text
+
+
+def test_an_uppercase_phase_key_on_an_episode_tool_key_warns(caplog):
+    schema_registry.generate({
+        "annotation_type": "episode_annotation", "name": "review", "description": "d",
+        "layers": ["phases", "reward"],
+        "phases": [{"name": "reach", "key_value": "R"}]})
+    assert "uses key 'r', which is already a tool shortcut" in caplog.text

@@ -385,3 +385,53 @@ class TestHindsightRelabelling(BasePlaywrightTest):
         page.wait_for_timeout(600)
 
         assert page.input_value(".episode-relabel") == "pushed it left"
+
+
+class TestEpisodeKeys(BasePlaywrightTest):
+    def test_the_advertised_tool_and_phase_keys_work_inside_the_episode(
+            self, episode_server, page):
+        # The server listed p / r / v and each phase's key_value in the
+        # shortcut help and sent them to the page, where nothing read them.
+        open_episode(self, page, episode_server)
+        state = "[m.currentTool, m.currentPhase || null]"
+        page.focus(".episode-annotation-container canvas")
+        page.keyboard.press("r")
+        assert manager_eval(page, state)[0] == "reward"
+        page.keyboard.press("2")
+        assert manager_eval(page, state) == ["phase", "grasp"]
+        page.keyboard.press("v")
+        assert manager_eval(page, state)[0] == "select"
+        page.keyboard.press("P")
+        assert manager_eval(page, state)[0] == "phase"
+
+        # Outside the episode they are not its keys.
+        page.evaluate("() => document.activeElement.blur()")
+        page.keyboard.press("r")
+        assert manager_eval(page, state)[0] == "phase"
+
+    def test_typing_in_the_relabel_box_types(self, episode_server, page):
+        # The box is inside the widget, so without the text-field guard every
+        # r, v or p typed there switched tools and never reached the text.
+        open_episode(self, page, episode_server)
+        page.focus(".episode-annotation-container canvas")
+        page.keyboard.press("v")
+        page.focus(".episode-relabel")
+        page.keyboard.type("rvp pushed it")
+        assert page.input_value(".episode-relabel") == "rvp pushed it"
+        assert manager_eval(page, "m.currentTool") == "select"
+
+    def test_a_tool_key_without_its_tool_does_nothing(self, make_server, page):
+        # No reward layer, so no Reward button: r must not arm a tool the
+        # annotator cannot see.
+        if not (MEDIA / "episodes" / "episode_0000" / "episode.json").is_file():
+            pytest.skip("run examples/embodied/lerobot-episode/generate_episode.py first")
+        server = make_server(
+            [dict(SCHEMES[0], layers=["phases", "outcome"])],
+            items=episode_items(),
+            extra_config={"media_directory": str(MEDIA),
+                          "item_properties": {"id_key": "id", "text_key": "note"}})
+        open_episode(self, page, server)
+        page.focus(".episode-annotation-container canvas")
+        page.keyboard.press("v")
+        page.keyboard.press("r")
+        assert manager_eval(page, "m.currentTool") == "select"

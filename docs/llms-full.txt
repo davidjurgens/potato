@@ -25897,13 +25897,18 @@ dataset worth annotating.
 | Action | Result |
 |---|---|
 | `p` then drag on the phase lane | Draw a phase segment |
-| `1`–`5` (or your `key_value`s) | Pick a phase class |
+| A phase's `key_value` | Pick that phase class |
 | `r` then drag on the reward lane | Draw the progress curve |
+| `v` | Select and edit |
 | Click anywhere else on the timeline | Seek |
 | Drag a phase edge | Move that boundary only |
 | `Space` | Play / pause every stream together |
 | `←` / `→` | Step one **frame** |
 | `Delete` | Remove the selected phase |
+
+The keys work while focus is inside the episode, so click the timeline or a
+toolbar button first. A phase without a `key_value` has no key; pick it from
+its button.
 
 Phases are a **segmentation**: at any instant the robot was doing one thing. A
 new segment truncates whatever it overlaps, and one that covers another

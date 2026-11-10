@@ -386,8 +386,10 @@ def _keybindings(phases, layers, schema_name):
     if "phases" in layers:
         for phase in phases:
             key = phase.get("key_value")
-            if not key:
+            if key is None or key == "":
                 continue
+            # The page matches keys as text and without case.
+            key = str(key).lower()
             if key in taken:
                 logger.warning(
                     "Schema '%s': phase '%s' uses key '%s', which is already a "

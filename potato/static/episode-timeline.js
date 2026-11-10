@@ -873,6 +873,40 @@
                 });
                 bar.appendChild(group);
             }
+
+            // Tool and phase keys. The server sent toolKeys and phaseKeys and
+            // listed them in the shortcut help, but nothing read them, so every
+            // advertised key did nothing. Scoped to this widget, as the canvas
+            // keys are: a key works while focus is inside the episode, so it
+            // takes nothing from label shortcuts elsewhere on the page. A
+            // phase key wins over a tool key, as the server's warning says.
+            this.container.addEventListener('keydown', (e) => {
+                if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+                const t = e.target;
+                const tag = t && t.tagName;
+                if (tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+                if (tag === 'INPUT'
+                        && ['radio', 'checkbox', 'button'].indexOf((t.type || '').toLowerCase()) === -1) {
+                    return;
+                }
+                const key = (e.key || '').toLowerCase();
+                const matches = (k) => k != null && k !== '' && String(k).toLowerCase() === key;
+                const phaseKeys = this.config.phaseKeys || {};
+                const phase = (this.config.layers || []).indexOf('phases') !== -1
+                    && Object.keys(phaseKeys).find((name) => matches(phaseKeys[name]));
+                if (phase) {
+                    e.preventDefault();
+                    this.setPhase(phase);
+                    return;
+                }
+                const toolKeys = this.config.toolKeys || {};
+                const tool = Object.keys(toolKeys).find((name) => matches(toolKeys[name])
+                    && this.container.querySelector(`[data-tool="${name}"]`));
+                if (tool) {
+                    e.preventDefault();
+                    this.setTool(tool);
+                }
+            });
         }
 
         setTool(tool) {

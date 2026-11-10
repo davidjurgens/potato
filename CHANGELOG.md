@@ -49,6 +49,14 @@ All notable changes to the Potato annotation platform are documented in this fil
   `accept_key`, `reject_key` or `skip_key`, and spectrogram annotation no
   longer fills in a digit that another label sets. The video player no
   longer logs every key press to the browser console.
+- Episode annotation listed `p`, `r`, `v` and each phase's `key_value` in its
+  shortcut help, but none of them did anything. They now pick the tool or
+  phase while focus is inside the episode. The episode docs said phases get
+  `1`–`5` by default; a phase has a key only when it sets `key_value`.
+- With `manifest_field` set, rollout evaluation reads the panels from the
+  manifest and ignores `streams`, but the key allocator counted `streams`, so
+  a sequential radio could get a digit that picks a panel. It now keeps all of
+  `1`–`9` free for the rollout whenever `manifest_field` is set.
 - Label shortcuts on radio, checkbox, Likert, span, pairwise and BWS questions
   fire when the key is released, so a widget that handled the key when it was
   pressed could not stop them. On a page with a triage question, pressing `1`
