@@ -11,6 +11,8 @@ rule with synthetic events; this drives real key presses.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from tests.playwright.test_base import BasePlaywrightTest
@@ -88,3 +90,41 @@ class TestArrowNavigation(BasePlaywrightTest):
         page.wait_for_function(
             f"() => document.getElementById('instance_id').value !== '{first}'",
             timeout=10000)
+
+
+IMAGE_MEDIA = Path("examples/image/geometry-primitives/media").resolve()
+
+
+def sequential_radio(name, n):
+    return {"annotation_type": "radio", "name": name, "description": name,
+            "labels": [f"{name}{i}" for i in range(n)], "sequential_key_binding": True}
+
+
+class TestKeysBesideAnImage(BasePlaywrightTest):
+    def test_every_radio_key_ticks_its_label_and_picks_no_tool(self, make_server, page):
+        # The allocator used to give the second radio q w e r t, and the
+        # canvas took r for the bounding-box tool before the radio saw it.
+        if not (IMAGE_MEDIA / "street.jpg").is_file():
+            pytest.skip("examples/image/geometry-primitives media is missing")
+        image = {"annotation_type": "image_annotation", "name": "shapes",
+                 "description": "Box things", "source_field": "image_url",
+                 "tools": ["bbox"], "labels": [{"name": "car", "color": "#E74C3C"}]}
+        server = make_server(
+            [image, sequential_radio("first", 10), sequential_radio("second", 5)],
+            items=[{"id": "img_1", "image_url": "/media/street.jpg"}],
+            extra_config={"media_directory": str(IMAGE_MEDIA),
+                          "item_properties": {"id_key": "id", "text_key": "image_url"}})
+        self.register_and_login(page, server)
+        self.image_manager_ready(page, "shapes")
+        tool = """() => document.querySelector('.image-annotation-container')
+                          .annotationManager.currentTool"""
+        before = page.evaluate(tool)
+
+        for i in range(5):
+            radio = page.locator(f'input[type="radio"][name*="second"][value="second{i}"]')
+            key = radio.get_attribute("data-key")
+            page.evaluate("() => document.activeElement && document.activeElement.blur()")
+            page.keyboard.press(key)
+            assert radio.is_checked(), f"{key} did not tick second{i}"
+            assert page.evaluate(tool) == before, f"{key} picked a tool"
+

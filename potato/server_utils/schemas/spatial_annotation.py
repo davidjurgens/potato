@@ -61,6 +61,18 @@ VIEWER_KEYS = {
 }
 PAINT_KEYS = dict.fromkeys(["-", "_", "=", "+"], "the paint tool is armed")
 
+
+def page_keys(annotation_scheme):
+    """
+    The keys pc-viewer.js handles anywhere on the page, at least while its
+    condition in VIEWER_KEYS or PAINT_KEYS holds.
+    """
+    tools = annotation_scheme.get("tools") or []
+    keys = [TOOL_KEYS[t] for t in tools if t in TOOL_KEYS] + list(VIEWER_KEYS)
+    if "segment_3d" in tools:
+        keys += list(PAINT_KEYS)
+    return keys
+
 TOOL_LABELS = {
     "cuboid_3d": ("3D box", "▧"),
     "point_3d": ("Point", "⬤"),

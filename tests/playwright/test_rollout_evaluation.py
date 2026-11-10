@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from tests.playwright.test_base import BasePlaywrightTest
+from tests.playwright.viewer_keys import keys_reserved_for, keys_taken_page_wide
 
 pytestmark = pytest.mark.playwright
 
@@ -484,3 +485,12 @@ class TestAccessibility(BasePlaywrightTest):
         press(page, "m")
         page.wait_for_timeout(300)
         assert "frame" in page.text_content(".rollout-announce")
+
+
+class TestPageKeys(BasePlaywrightTest):
+    def test_every_key_the_player_takes_is_reserved(self, page, rollout_server):
+        # keybinding_allocator keeps sequential label keys off these; a key the
+        # player takes that is not listed would go to a label and do nothing.
+        open_rollout(self, page, rollout_server)
+        wait_for_media(page)
+        assert keys_taken_page_wide(page) - keys_reserved_for(SCHEMES[0]) == set()

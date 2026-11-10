@@ -28,9 +28,25 @@ from tests.helpers.test_utils import (
     create_test_config,
 )
 from tests.playwright.test_base import BasePlaywrightTest
+from tests.playwright.viewer_keys import keys_reserved_for, keys_taken_page_wide
 
 
 AUDIO_CONTAINER = ".audio-annotation-container"
+
+
+AUDIO_SCHEME = {
+    "annotation_type": "audio_annotation",
+    "name": "audio_segmentation",
+    "description": "Segment the audio by content type",
+    "mode": "label",
+    "labels": [
+        {"name": "speech", "color": "#4ECDC4", "key_value": "1"},
+        {"name": "music", "color": "#FF6B6B", "key_value": "2"},
+        {"name": "silence", "color": "#95A5A6", "key_value": "3"},
+    ],
+    "zoom_enabled": True,
+    "playback_rate_control": True,
+}
 
 
 @pytest.fixture(scope="module")
@@ -47,21 +63,7 @@ def audio_server():
         {"id": "audio_003", "audio_url": "/test-audio/test_audio_10s.mp3"},
     ]
     data_file = create_test_data_file(test_dir, data, filename="audio_data.jsonl")
-    schemes = [
-        {
-            "annotation_type": "audio_annotation",
-            "name": "audio_segmentation",
-            "description": "Segment the audio by content type",
-            "mode": "label",
-            "labels": [
-                {"name": "speech", "color": "#4ECDC4", "key_value": "1"},
-                {"name": "music", "color": "#FF6B6B", "key_value": "2"},
-                {"name": "silence", "color": "#95A5A6", "key_value": "3"},
-            ],
-            "zoom_enabled": True,
-            "playback_rate_control": True,
-        }
-    ]
+    schemes = [AUDIO_SCHEME]
     config_file = create_test_config(
         test_dir,
         schemes,
@@ -324,3 +326,9 @@ class TestAudioWaveformUX(BasePlaywrightTest):
         now = page.evaluate("() => document.querySelector('.audio-annotation-container')"
                             ".audioAnnotationManager.peaks.player.getCurrentTime()")
         assert now > 0
+
+    def test_every_key_the_waveform_takes_is_reserved(self, page, audio_server):
+        # keybinding_allocator keeps sequential label keys off these; a key the
+        # waveform takes that is not listed would go to a label and do nothing.
+        self._login(page, audio_server)
+        assert keys_taken_page_wide(page) - keys_reserved_for(AUDIO_SCHEME) == set()

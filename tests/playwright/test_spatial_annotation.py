@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from tests.playwright.test_base import BasePlaywrightTest
+from tests.playwright.viewer_keys import keys_reserved_for, keys_taken_page_wide
 
 pytestmark = pytest.mark.playwright
 
@@ -1103,3 +1104,11 @@ class TestSlabPanelsOnFirstLoad(BasePlaywrightTest):
         # Bootstrap blue that appears nowhere else in the product.
         assert color == "rgb(110, 86, 207)", ring
         assert width == "3px", ring
+
+
+class TestPageKeys(BasePlaywrightTest):
+    def test_every_key_the_viewer_takes_is_reserved(self, page, spatial_server):
+        # keybinding_allocator keeps sequential label keys off these; a key the
+        # viewer takes that is not listed would go to a label and do nothing.
+        open_viewer(self, page, spatial_server)
+        assert keys_taken_page_wide(page) - keys_reserved_for(SCHEMES[0]) == set()

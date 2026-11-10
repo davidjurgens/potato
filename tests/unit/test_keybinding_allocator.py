@@ -491,3 +491,96 @@ class TestCrossSchemaWarning:
         scale = {"annotation_type": "pairwise", "mode": "scale", "name": "pref"}
         binary = {"annotation_type": "pairwise", "mode": "binary", "name": "help"}
         assert self.warnings(caplog, [scale, binary]) == []
+
+
+# ---------------------------------------------------------------------------
+# Viewer keys. Image, video, audio, point-cloud, rollout and interval viewers
+# listen on the whole page, and their handler runs before the label shortcuts
+# and calls preventDefault, so a radio label given one of their keys did
+# nothing. The allocator did not know those keys: beside an image with the bbox
+# tool, a second sequential radio got q w e r t, and its r picked the tool.
+# The expected keys below are the ones each viewer's JS handles, written out.
+# ---------------------------------------------------------------------------
+
+IMAGE = {"annotation_type": "image_annotation", "name": "img", "description": "d",
+         "tools": ["bbox"], "labels": ["car"]}
+VIDEO = {"annotation_type": "video_annotation", "name": "clip", "description": "d",
+         "mode": "segment", "labels": ["speech"]}
+AUDIO = {"annotation_type": "audio_annotation", "name": "sound", "description": "d",
+         "labels": ["music", "speech", "noise"]}
+ROLLOUT = {"annotation_type": "rollout_evaluation", "name": "roll", "description": "d"}
+INTERVAL = {"annotation_type": "interval_label", "name": "sleep", "description": "d",
+            "signal_field": "signal", "labels": ["W", "N1", "N2"]}
+POINTS = {"annotation_type": "spatial_annotation", "name": "scan", "description": "d",
+          "tools": ["cuboid_3d"], "labels": ["car"]}
+
+
+def keys_beside(viewer, *schemes):
+    """Rendered keys of ``schemes`` when they share a page with ``viewer``."""
+    alloc = allocate_keybindings([viewer, *schemes])
+    keys = {}
+    for scheme in schemes:
+        scheme = dict(scheme, _allocated_keys=alloc[scheme["name"]])
+        html, _ = schema_registry.generate(scheme)
+        keys[scheme["name"]] = {k.lower() for k in re.findall(r'data-key="([^"]+)"', html)}
+    return keys
+
+
+def allocator_warnings(caplog, schemes):
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="potato.server_utils.schemas.keybinding_allocator"):
+        allocate_keybindings(schemes)
+    return [r.getMessage() for r in caplog.records]
+
+
+def mnemonic(name, labels):
+    return dict(radio(name, 0, keybinding_strategy="mnemonic"), labels=labels)
+
+
+class TestViewerKeysAreReserved:
+    def test_a_radio_beside_an_image_skips_the_tool_keys(self):
+        keys = keys_beside(IMAGE, radio("first", 10), radio("second", 5))
+        assert len(keys["second"]) == 5 and "r" not in keys["second"]   # r is bbox
+        keys = keys_beside(IMAGE, mnemonic("tone", ["vivid", "harsh", "rough"]))
+        assert len(keys["tone"]) == 3 and not keys["tone"] & {"v", "h", "r"}
+
+    def test_a_radio_beside_a_video_skips_the_player_keys(self):
+        keys = keys_beside(VIDEO, mnemonic("tone", ["calm", "kind", "tense"]))
+        assert len(keys["tone"]) == 3 and not keys["tone"] & {"c", "k"}
+        assert "0" not in keys_beside(VIDEO, radio("many", 10))["many"]   # zoom to fit
+
+    def test_tracking_mode_also_takes_t(self):
+        keys = keys_beside(dict(VIDEO, mode="tracking"), mnemonic("tone", ["tense", "terse"]))
+        assert len(keys["tone"]) == 2 and "t" not in keys["tone"]
+
+    def test_a_radio_beside_audio_skips_the_digits_that_pick_its_labels(self):
+        keys = keys_beside(AUDIO, radio("tone", 3))
+        assert len(keys["tone"]) == 3 and not keys["tone"] & {"1", "2", "3"}
+
+    def test_a_radio_beside_a_rollout_gets_no_digit(self):
+        keys = keys_beside(ROLLOUT, radio("tone", 3))
+        assert len(keys["tone"]) == 3 and not any(k.isdigit() for k in keys["tone"])
+
+    def test_a_radio_beside_interval_labels_skips_their_filled_in_keys(self):
+        keys = keys_beside(INTERVAL, radio("tone", 3))
+        assert len(keys["tone"]) == 3 and not keys["tone"] & {"1", "2", "3"}
+
+    def test_a_radio_beside_a_point_cloud_skips_its_keys(self):
+        keys = keys_beside(POINTS, mnemonic("tone", ["cold", "quiet", "hot"]))
+        assert len(keys["tone"]) == 3 and not keys["tone"] & {"c", "q", "h"}
+
+    def test_an_explicit_key_on_a_viewer_key_warns(self, caplog):
+        fixed = {"annotation_type": "radio", "name": "tone", "description": "d",
+                 "labels": [{"name": "vivid", "key_value": "v"}]}
+        messages = allocator_warnings(caplog, [IMAGE, fixed])
+        assert any("Key 'v' is bound by more than one schema: 'img' (viewer shortcut), "
+                   "'tone' (label 'vivid')" in m for m in messages)
+
+    def test_two_viewers_of_one_type_share_their_keys_without_a_warning(self, caplog):
+        # One press of ] steps both interval plots; that is the design.
+        free = dict(INTERVAL, name="arousals", labels=[{"name": "arousal", "key_value": "a"}])
+        assert allocator_warnings(caplog, [INTERVAL, free]) == []
+
+    def test_a_malformed_viewer_scheme_leaves_the_error_to_its_generator(self):
+        broken = {"annotation_type": "interval_label", "name": "x", "labels": [{"color": "red"}]}
+        assert allocate_keybindings([broken, radio("tone", 3)])["tone"]

@@ -71,7 +71,7 @@ annotation_schemes:
       - name: "Animal"
         key_value: "a"
       - name: "Vehicle"
-        key_value: "v"
+        key_value: "c"  # v is the image select tool
       - name: "Nature/Landscape"
         key_value: "n"
       - name: "Object/Item"

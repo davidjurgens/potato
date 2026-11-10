@@ -54,6 +54,24 @@ DEFAULT_SPECTROGRAM_OPTIONS = {
 # Valid color maps for spectrogram
 VALID_COLOR_MAPS = ["viridis", "magma", "plasma", "inferno", "grayscale"]
 
+#: Single-character keys audio-annotation.js takes on `document` while the
+#: waveform is visible. Digits 1-9 also pick the label in that position.
+VIEWER_KEYS = {
+    " ": "play/pause", "[": "selection start", "]": "selection end",
+    "+": "zoom in", "=": "zoom in", "-": "zoom out", "0": "zoom to fit",
+}
+
+
+def page_keys(annotation_scheme: Dict[str, Any]) -> List[str]:
+    """The keys this scheme's waveform handles anywhere on the page."""
+    return list(VIEWER_KEYS)
+
+
+def label_keys(annotation_scheme: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """(digit, label) for the first nine labels, which 1-9 pick by position."""
+    return [(str(i + 1), lab["name"]) for i, lab in
+            enumerate(_process_labels(annotation_scheme.get("labels") or [])[:9])]
+
 
 def generate_audio_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:
     """

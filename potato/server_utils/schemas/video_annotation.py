@@ -49,6 +49,25 @@ VALID_MODES = ["segment", "frame", "keyframe", "tracking", "combined"]
 # The cases tracking-interpolation.js switches on.
 TRACKING_INTERPOLATIONS = ("linear", "cubic", "constant")
 
+#: Single-character keys video-annotation.js takes on `document`, in every mode.
+#: A label shortcut elsewhere on the page that uses one of them never fires.
+VIEWER_KEYS = {
+    " ": "play/pause", ",": "previous frame", ".": "next frame",
+    "[": "selection start", "]": "selection end", "k": "mark keyframe",
+    "c": "classify frame", "+": "zoom in", "=": "zoom in", "-": "zoom out",
+    "0": "zoom to fit",
+}
+#: Added by tracking-ui.js in tracking and combined mode.
+TRACKING_KEYS = {"t": "new track", "<": "previous keyframe", ">": "next keyframe"}
+
+
+def page_keys(annotation_scheme: Dict[str, Any]) -> List[str]:
+    """The keys this scheme's player handles anywhere on the page."""
+    keys = list(VIEWER_KEYS)
+    if annotation_scheme.get("mode", "segment") in ("tracking", "combined"):
+        keys += list(TRACKING_KEYS)
+    return keys
+
 
 def generate_video_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:
     """

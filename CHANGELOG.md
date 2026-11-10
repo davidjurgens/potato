@@ -27,6 +27,15 @@ All notable changes to the Potato annotation platform are documented in this fil
   each tile now has its own key, along the number row and the row below it.
   When two schemes fix the same key, a warning names them. The BWS docs listed
   `a`–`d` for worst and now list `q w e r`.
+- `sequential_key_binding` could also give a label a key that an image,
+  video, audio, point-cloud, rollout or interval viewer on the same page takes
+  first, so the label shortcut did nothing or fired along with the viewer's
+  action. Beside an image with the bounding-box tool, a second radio got
+  `q w e r t`, and `r` picked the tool.
+  The allocator now skips each viewer's keys and warns when a `key_value` is
+  one of them. Two examples, `image-ai-detection/config-image-rating.yaml` and
+  `image-vllm-rationale`, bound their vehicle label to `v`, the image select
+  tool; it is now `c`.
 - Label shortcuts on radio, checkbox, Likert, span, pairwise and BWS questions
   fire when the key is released, so a widget that handled the key when it was
   pressed could not stop them. On a page with a triage question, pressing `1`

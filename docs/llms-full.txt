@@ -6798,12 +6798,15 @@ its `accept_key`, `reject_key` and `skip_key`). When two schemes fix the same
 key, as two binary pairwise schemes do, neither can be moved, so Potato logs a
 warning naming both; only one of them responds to that key.
 
-Viewer keys are not reserved yet. Image, video, audio and point-cloud
-annotation each handle their own tool and playback keys across the whole page
-(in image annotation, `r` picks the bounding-box tool), and
-`sequential_key_binding` does not skip them. On a page with one of these
-viewers, check that the keys given to other schemes miss its tool keys, or set
-`key_value` by hand.
+Viewer keys are skipped too. Image, video, audio, point-cloud, rollout and
+interval annotation listen for their own keys across the whole page, so a
+label shortcut on one of those keys either does nothing or fires along with the
+viewer's action. In image annotation, for example, `r` picks the bounding-box
+tool and `0` fits the image. Audio also uses `1`–`9` to pick its first nine
+labels, and interval annotation uses the keys it fills in for its labels. A label
+whose `key_value` is a viewer key gets the same warning. Spectrogram, volume
+and microscopy annotation and the listening and triad tests are not affected:
+they take keys only while focus is inside them.
 
 ## AI Support
 

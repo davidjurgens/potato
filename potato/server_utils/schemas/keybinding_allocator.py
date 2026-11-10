@@ -11,11 +11,13 @@ Key pools (QWERTY layout):
   Pool 2: a s d f g h j k l     (home row)
 
 Schemas that self-manage keys (pairwise, bws, triage) pre-claim the keys they
-bind, as do explicit per-label key_value settings in any schema. Explicit keys
-are always honored; a key bound by two schemas is logged, because only one of
-them responds to it.
+bind, as do explicit per-label key_value settings in any schema and the keys a
+viewer handles on the whole page (PAGE_KEY_MODULES). Explicit keys are always
+honored; a key bound by two schemas is logged, because only one of them
+responds to it.
 """
 
+import importlib
 import logging
 from collections.abc import Mapping
 
@@ -29,6 +31,23 @@ KEY_POOLS = [
 
 # Schema types that manage their own keybindings internally
 SELF_MANAGED_TYPES = {'pairwise', 'bws', 'triage'}
+
+#: Schema types whose viewer listens for keys on the whole page rather than on
+#: an element of its own, and the module whose ``page_keys(scheme)`` lists them.
+#: A label shortcut on one of these keys loses it to the viewer. Two viewers of
+#: one type share their keys by design (one press steps both interval plots),
+#: so only a clash with another type is logged. A module may also define
+#: ``label_keys(scheme)``, the (key, label) pairs its labels take without a
+#: key_value. Viewers that take keys only while focus is inside them
+#: (spectrogram, volume, microscopy, listening and triad tests) are not listed.
+PAGE_KEY_MODULES = {
+    'image_annotation': 'image_annotation',
+    'video_annotation': 'video_annotation',
+    'audio_annotation': 'audio_annotation',
+    'spatial_annotation': 'spatial_annotation',
+    'rollout_evaluation': 'rollout_evaluation',
+    'interval_label': 'interval_label',
+}
 
 
 def _get_label_name(label_data):
@@ -73,6 +92,27 @@ def _hardcoded_keys(scheme):
         return [str(scheme.get(f"{action}_key", default)).lower()
                 for action, default in DEFAULT_KEYBINDINGS.items()]
     return []
+
+
+def _viewer_claims(scheme):
+    """
+    (key, what) for every key a viewer scheme handles page-wide, lowercased
+    (see PAGE_KEY_MODULES). ``what`` is None for a viewer shortcut.
+    """
+    module_name = PAGE_KEY_MODULES.get(scheme.get("annotation_type", ""))
+    if module_name is None:
+        return []
+    module = importlib.import_module(f".{module_name}", __package__)
+    try:
+        claims = [(key, None) for key in module.page_keys(scheme)]
+        if hasattr(module, "label_keys"):
+            claims += [(key, f"label '{label}'") for key, label in module.label_keys(scheme)]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        # A malformed scheme. Its generator runs next and reports the problem
+        # in its own words; failing here would replace that message with ours.
+        return []
+    return [(key.lower(), what) for key, what in claims
+            if isinstance(key, str) and len(key) == 1 and not key.isspace()]
 
 
 def _labels_for_allocation(scheme):
@@ -169,25 +209,30 @@ def allocate_keybindings(annotation_schemes):
     """
     # Steps 1-2: claim every key already bound on the page, by any schema:
     # explicit key_value on any label (a schema that is not allocated still
-    # binds it), and the keys self-managed schemas hard-code.
+    # binds it), the keys self-managed schemas hard-code, and viewer keys.
     globally_used = set()
     owners = {}
 
     for scheme in annotation_schemes:
         name = scheme.get("name", "")
-        claimed = [(_get_explicit_key(label_data), _get_label_name(label_data))
+        ann_type = scheme.get("annotation_type", "")
+        claimed = [(_get_explicit_key(label_data), f"label '{_get_label_name(label_data)}'")
                    for label_data in (scheme.get("labels") or [])]
         claimed += [(key, None) for key in _hardcoded_keys(scheme)]
-        for key, label in claimed:
+        claimed += [(key, what or "viewer shortcut") for key, what in _viewer_claims(scheme)]
+        for key, what in claimed:
             if not key:
                 continue
             globally_used.add(key)
-            owners.setdefault(key, {}).setdefault(name, label)
+            # Who answers the key: the viewer type for a viewer shortcut,
+            # otherwise the scheme.
+            party = ("viewer", ann_type) if what == "viewer shortcut" else name
+            owners.setdefault(key, {}).setdefault(name, (what, party))
 
     for key, by_schema in owners.items():
-        if len(by_schema) > 1:
-            names = ", ".join(f"'{s}'" + (f" (label '{l}')" if l else "")
-                              for s, l in by_schema.items())
+        if len({party for _, party in by_schema.values()}) > 1:
+            names = ", ".join(f"'{s}'" + (f" ({w})" if w else "")
+                              for s, (w, _) in by_schema.items())
             logger.warning(
                 f"Key '{key}' is bound by more than one schema: {names}. Only one "
                 f"of them responds to it; set a different key_value or turn off "

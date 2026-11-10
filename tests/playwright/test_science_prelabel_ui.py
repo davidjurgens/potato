@@ -20,6 +20,7 @@ pytest.importorskip("playwright.sync_api")
 
 from tests.helpers.test_utils import create_test_directory  # noqa: E402
 from tests.playwright.test_base import BasePlaywrightTest  # noqa: E402
+from tests.playwright.viewer_keys import keys_reserved_for, keys_taken_page_wide  # noqa: E402
 
 pytestmark = pytest.mark.playwright
 
@@ -150,6 +151,12 @@ class TestSignalModelIntervals(BasePlaywrightTest):
         page.wait_for_function(
             "[...document.querySelectorAll('form.interval-label')]"
             ".every(f => f.getAttribute('data-il-ready'))", timeout=30000)
+
+    def test_every_key_the_plot_takes_is_reserved(self, page, signal_server):
+        # keybinding_allocator keeps sequential label keys off these; a key the
+        # plot takes that is not listed would go to a label and do nothing.
+        self._open(page, signal_server)
+        assert keys_taken_page_wide(page) - keys_reserved_for(self.SCHEMES[0]) == set()
 
     def test_model_intervals_are_pre_annotations_from_the_model(self, page, signal_server):
         self._open(page, signal_server)

@@ -60,7 +60,7 @@ RESERVED_KEYS = {"Delete", "Backspace", "Escape", "PageUp", "PageDown", "Home", 
 _COLOUR = re.compile(r"^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$")
 
 
-def labels_of(scheme: Dict[str, Any]) -> List[Dict[str, str]]:
+def labels_of(scheme: Dict[str, Any], warn: bool = True) -> List[Dict[str, str]]:
     """Labels with their key, colour and kind filled in."""
     out = []
     used = set()
@@ -77,8 +77,9 @@ def labels_of(scheme: Dict[str, Any]) -> List[Dict[str, str]]:
                 pool.pop(0)
             key = pool.pop(0) if pool else ""
         if key in used:
-            logger.warning("interval_label '%s': key %s is used by two labels; the second "
-                           "one has no key", scheme.get("name"), key)
+            if warn:
+                logger.warning("interval_label '%s': key %s is used by two labels; the second "
+                               "one has no key", scheme.get("name"), key)
             key = ""
         if key:
             used.add(key)
@@ -90,6 +91,16 @@ def labels_of(scheme: Dict[str, Any]) -> List[Dict[str, str]]:
             "tooltip": str(lab.get("tooltip") or lab.get("description") or ""),
         })
     return out
+
+
+def page_keys(scheme: Dict[str, Any]) -> List[str]:
+    """The step keys interval-label.js handles anywhere on the page."""
+    return [str(scheme.get("next_key", "]")), str(scheme.get("previous_key", "["))]
+
+
+def label_keys(scheme: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """(key, label) for every label, including keys filled in from DEFAULT_KEYS."""
+    return [(lab["key"], lab["name"]) for lab in labels_of(scheme, warn=False) if lab["key"]]
 
 
 def validate_binding(config: Dict[str, Any]) -> List[str]:

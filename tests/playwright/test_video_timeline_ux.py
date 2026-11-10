@@ -28,9 +28,27 @@ from tests.helpers.test_utils import (
     create_test_config,
 )
 from tests.playwright.test_base import BasePlaywrightTest
+from tests.playwright.viewer_keys import keys_reserved_for, keys_taken_page_wide
 
 
 VIDEO_CONTAINER = ".video-annotation-container"
+
+
+VIDEO_SCHEME = {
+    "annotation_type": "video_annotation",
+    "name": "video_segmentation",
+    "description": "Segment the video by content type",
+    "mode": "segment",
+    "labels": [
+        {"name": "intro", "color": "#4ECDC4", "key_value": "1"},
+        {"name": "main", "color": "#FF6B6B", "key_value": "2"},
+        {"name": "outro", "color": "#95A5A6", "key_value": "3"},
+    ],
+    "timeline_height": 70,
+    "overview_height": 40,
+    "zoom_enabled": True,
+    "playback_rate_control": True,
+}
 
 
 @pytest.fixture(scope="module")
@@ -42,23 +60,7 @@ def video_server():
         {"id": "video_003", "video_url": "/test-video/test_video_6s.webm"},
     ]
     data_file = create_test_data_file(test_dir, data, filename="video_data.jsonl")
-    schemes = [
-        {
-            "annotation_type": "video_annotation",
-            "name": "video_segmentation",
-            "description": "Segment the video by content type",
-            "mode": "segment",
-            "labels": [
-                {"name": "intro", "color": "#4ECDC4", "key_value": "1"},
-                {"name": "main", "color": "#FF6B6B", "key_value": "2"},
-                {"name": "outro", "color": "#95A5A6", "key_value": "3"},
-            ],
-            "timeline_height": 70,
-            "overview_height": 40,
-            "zoom_enabled": True,
-            "playback_rate_control": True,
-        }
-    ]
+    schemes = [VIDEO_SCHEME]
     config_file = create_test_config(
         test_dir,
         schemes,
@@ -211,3 +213,9 @@ class TestVideoTimelineUX(BasePlaywrightTest):
             "() => { const t = document.getElementById('text-content'); return t ? t.textContent.trim() : null; }"
         )
         assert hidden and "/test-video/" in hidden, "hidden #text-content should retain the media URL"
+
+    def test_every_key_the_player_takes_is_reserved(self, page, video_server):
+        # keybinding_allocator keeps sequential label keys off these; a key the
+        # player takes that is not listed would go to a label and do nothing.
+        self._login(page, video_server)
+        assert keys_taken_page_wide(page) - keys_reserved_for(VIDEO_SCHEME) == set()

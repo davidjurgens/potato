@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from tests.playwright.test_base import BasePlaywrightTest
+from tests.playwright.viewer_keys import keys_reserved_for, keys_taken_page_wide
 
 pytestmark = pytest.mark.playwright
 
@@ -132,3 +133,13 @@ class TestCanvasWorkSavesWithoutNavigating(BasePlaywrightTest):
 
         assert len(self.read_annotation_data(page, "shapes")) == 2
         assert "shapes" in self._stored_on_server(page, autosave_server)
+
+
+class TestPageKeys(BasePlaywrightTest):
+    def test_every_key_the_canvas_takes_is_reserved(self, page, autosave_server):
+        # keybinding_allocator keeps sequential label keys off these; a key the
+        # canvas takes that is not listed would go to a label and do nothing.
+        self.register_and_login(page, autosave_server)
+        page.goto(f"{autosave_server.base_url}/annotate")
+        self.image_manager_ready(page, "shapes")
+        assert keys_taken_page_wide(page) - keys_reserved_for(SCHEMES[0]) == set()

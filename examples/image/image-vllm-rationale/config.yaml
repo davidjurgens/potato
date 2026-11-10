@@ -84,7 +84,7 @@ annotation_schemes:
       - name: "animals"
         key_value: "a"
       - name: "vehicles"
-        key_value: "v"
+        key_value: "c"  # v is the image select tool
       - name: "buildings"
         key_value: "b"
       - name: "vegetation"

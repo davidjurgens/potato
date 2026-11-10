@@ -208,9 +208,26 @@ COMMON_KEYBINDINGS = {
 }
 
 
+#: Keys image-annotation.js handles in every profile besides COMMON_KEYBINDINGS.
+VIEWER_KEYS = {" ": "pan", "+": "zoom in", "=": "zoom in", "-": "zoom out",
+               "0": "zoom to fit"}
+
+
 def get_tool_keys(profile: str = DEFAULT_KEYBINDING_PROFILE) -> dict:
     """Return the {tool: key} map for a keybinding profile."""
     return dict(KEYBINDING_PROFILES.get(profile, KEYBINDING_PROFILES[DEFAULT_KEYBINDING_PROFILE]))
+
+
+def page_keys(annotation_scheme) -> list:
+    """
+    The keys this scheme's canvas handles anywhere on the page while it is
+    visible: the keys of the tools it enables, plus the common and viewer keys.
+    """
+    tool_keys = get_tool_keys(annotation_scheme.get(
+        "keybinding_profile", DEFAULT_KEYBINDING_PROFILE))
+    tools = annotation_scheme.get("tools") or []
+    return ([tool_keys[t] for t in tools if t in tool_keys]
+            + list(COMMON_KEYBINDINGS.values()) + list(VIEWER_KEYS))
 
 
 def generate_image_annotation_layout(annotation_scheme):
