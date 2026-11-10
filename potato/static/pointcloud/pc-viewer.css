@@ -88,6 +88,79 @@
     min-height: 1.2em;
 }
 
+/* Paint controls (segment_3d), shown while the paint tool is armed. */
+.pointcloud-annotation-container .pc-paint:not([hidden]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.pointcloud-annotation-container .pc-brush-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-sm, 0.875rem);
+    color: light-dark(#495057, #c2c6c9);
+}
+
+.pointcloud-annotation-container .pc-brush-slider {
+    width: 120px;
+    accent-color: var(--primary, #6e56cf);
+}
+
+.pointcloud-annotation-container .pc-brush-slider:focus-visible {
+    outline: 3px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+.pointcloud-annotation-container .pc-brush-value {
+    font-variant-numeric: tabular-nums;
+    min-width: 3.5em;
+}
+
+/* The brush circle replaces the pointer, which would otherwise hide the
+   points at its centre. */
+.pointcloud-annotation-container .pc-canvas.pc-painting {
+    cursor: crosshair;
+}
+
+.pointcloud-annotation-container .pc-brush-cursor {
+    position: absolute;
+    border-radius: 50%;
+    /* Two rings, so the circle reads against both a dark sky and a bright
+       painted class. */
+    border: 1.5px solid #ffffff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+}
+
+.pointcloud-annotation-container .pc-brush-cursor[hidden] {
+    display: none;
+}
+
+.pointcloud-annotation-container .pc-brush-cursor.pc-erasing {
+    border-style: dashed;
+}
+
+.pointcloud-annotation-container .pc-lasso {
+    position: absolute;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.pointcloud-annotation-container .pc-lasso polygon {
+    fill: rgba(255, 255, 255, 0.12);
+    stroke: #ffffff;
+    stroke-width: 1.5;
+    stroke-dasharray: 5 3;
+}
+
+.pointcloud-annotation-container .pc-lasso.pc-erasing polygon {
+    fill: rgba(0, 0, 0, 0.25);
+}
+
 /* Sequence frame bar. Hidden on single-cloud items. */
 .pointcloud-annotation-container .pc-frames:not([hidden]) {
     display: flex;

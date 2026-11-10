@@ -26,6 +26,7 @@ two places and drifted; there is no reason to make that mistake twice.
 
 import json
 import logging
+import math
 
 from potato.export.spatial_utils import SPATIAL_TYPES
 
@@ -58,6 +59,11 @@ TOOL_LABELS = {
 #: How a cloud is coloured when no per-point RGB is present.
 VALID_COLOR_MODES = ("height", "intensity", "rgb", "uniform")
 
+#: Brush radius for painting points, in screen pixels. The bounds match
+#: BRUSH_MIN / BRUSH_MAX in pc-viewer.js.
+DEFAULT_BRUSH_SIZE = 10
+BRUSH_SIZE_RANGE = (2, 80)
+
 
 def generate_spatial_annotation_layout(annotation_scheme):
     """
@@ -76,8 +82,11 @@ def generate_spatial_annotation_layout(annotation_scheme):
             - color_mode: height | intensity | rgb | uniform
             - point_size: Rendered point size in pixels (default 1.5)
             - lod: Load the cloud as an octree, densifying where the camera
-              looks (default true). Set false to fall back to one uniformly
-              decimated buffer capped at ``max_points``.
+              looks (default true, or false when segment_3d is among the
+              tools). Set false to fall back to one uniformly decimated buffer
+              capped at ``max_points``.
+            - brush_size: Starting brush radius for painting points, in screen
+              pixels (default 10, 2 to 80); the annotator can change it
             - max_points: Decimation cap, used only when ``lod: false``
             - point_budget: Points held in memory at once under LOD
             - min_screen_size: Projected pixels below which a node is not
@@ -130,6 +139,8 @@ def _generate_internal(annotation_scheme):
 
     labels = _process_labels(annotation_scheme["labels"])
     escaped_name = escape_html_content(schema_name)
+    paints = "segment_3d" in tools
+    brush_size = _brush_size(annotation_scheme.get("brush_size"), schema_name)
 
     # Per-object attributes (occlusion, truncation, ...) on cuboids and points.
     from .object_attributes import normalize_attributes, panel_html
@@ -153,7 +164,12 @@ def _generate_internal(annotation_scheme):
         # yields a single root node the viewer loads exactly as it loads a
         # non-LOD cloud. There is deliberately no size threshold: one path that
         # degenerates correctly beats two that have to agree with each other.
-        "lod": annotation_scheme.get("lod", True) is not False,
+        #
+        # Painting is the exception. A stroke labels the points on screen, and
+        # under LOD the points not loaded at the current zoom are not on
+        # screen, so a scan painted "completely" would still have gaps. A
+        # painting scheme loads the whole cloud unless it asks for LOD.
+        "lod": annotation_scheme.get("lod", not paints) is not False,
         "pointBudget": annotation_scheme.get("point_budget"),
         "minScreenSize": annotation_scheme.get("min_screen_size"),
         "maxLoadedNodes": annotation_scheme.get("max_loaded_nodes"),
@@ -169,6 +185,7 @@ def _generate_internal(annotation_scheme):
         "minAnnotations": annotation_scheme.get("min_annotations", 0),
         "maxAnnotations": annotation_scheme.get("max_annotations"),
         "attributes": attributes,
+        "brushSize": brush_size,
     }
 
     html = f"""
@@ -184,6 +201,7 @@ def _generate_internal(annotation_scheme):
             <div class="pc-labels" role="group" aria-label="Annotation classes">
                 {_label_buttons(labels)}
             </div>
+            {_paint_controls(brush_size) if paints else ""}
 
             <div class="pc-viewport">
                 <canvas id="pc-canvas-{escaped_name}" class="pc-canvas"
@@ -320,6 +338,50 @@ def _generate_internal(annotation_scheme):
     return html, _keybindings(labels, tools, schema_name)
 
 
+def _brush_size(value, schema_name):
+    """``brush_size`` as a whole number of pixels, clamped to the range."""
+    if value is None:
+        return DEFAULT_BRUSH_SIZE
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value)):
+        raise ValueError(
+            f"brush_size must be a number of pixels in schema: {schema_name}, "
+            f"got {value!r}")
+    lo, hi = BRUSH_SIZE_RANGE
+    size = int(round(value))
+    if not lo <= size <= hi:
+        logger.warning(
+            "Schema '%s': brush_size %s is outside %d-%d px; using %d.",
+            schema_name, value, lo, hi, min(hi, max(lo, size)))
+    return min(hi, max(lo, size))
+
+
+def _paint_controls(brush_size):
+    """
+    Brush, lasso, erase and brush size, shown by the viewer while the paint
+    tool is armed. Rendered only for a scheme that paints, so a box-only
+    project has no hidden controls for a screen reader to find.
+    """
+    lo, hi = BRUSH_SIZE_RANGE
+    return f"""
+            <div class="pc-paint" role="group" aria-label="Paint points" hidden>
+                <button type="button" class="tool-btn" data-paint-mode="brush"
+                        aria-pressed="true"
+                        title="Paint every point under the circle">Brush</button>
+                <button type="button" class="tool-btn" data-paint-mode="lasso"
+                        aria-pressed="false"
+                        title="Draw around points to paint them">Lasso</button>
+                <button type="button" class="tool-btn" data-paint-erase
+                        aria-pressed="false"
+                        title="Unlabel points instead of painting them (or hold Shift while dragging)">Erase</button>
+                <label class="pc-brush-size">Brush size
+                    <input type="range" class="pc-brush-slider" min="{lo}" max="{hi}"
+                           step="1" value="{brush_size}">
+                    <output class="pc-brush-value">{brush_size} px</output>
+                </label>
+            </div>"""
+
+
 def _tool_buttons(tools):
     out = []
     for tool in tools:
@@ -388,5 +450,9 @@ def _keybindings(labels, tools, schema_name):
     # it is the only route to an existing box without a mouse.
     bindings.append({"key": ", / .", "description": "Previous / next annotation"})
     bindings.append({"key": "q / e", "description": "Rotate selected box"})
+    if "segment_3d" in tools:
+        bindings.append({"key": "Shift + drag", "description": "Erase painted points"})
+        bindings.append({"key": "Alt + drag", "description": "Orbit while painting"})
+        bindings.append({"key": "- / =", "description": "Smaller / larger brush"})
 
     return bindings

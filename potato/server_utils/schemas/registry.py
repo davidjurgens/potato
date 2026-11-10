@@ -748,7 +748,7 @@ def _register_builtin_schemas():
             name="spatial_annotation",
             generator=generate_spatial_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["source_field", "calibration_field", "color_mode", "point_size", "max_points", "lod", "point_budget", "min_screen_size", "max_loaded_nodes", "mpr", "slab_thickness", "default_box_height", "fit_box_height", "min_annotations", "max_annotations", "attributes"],
+            optional_fields=["source_field", "calibration_field", "color_mode", "point_size", "max_points", "lod", "point_budget", "min_screen_size", "max_loaded_nodes", "mpr", "slab_thickness", "default_box_height", "fit_box_height", "brush_size", "min_annotations", "max_annotations", "attributes"],
             supports_keybindings=True,
             description="3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
         ),

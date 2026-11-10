@@ -387,17 +387,21 @@
     "sha256": "11e79ec8beef3418",
     "version": "1"
   },
+  "pointcloud/pc-paint.js": {
+    "sha256": "7d3524ce0b21bd17",
+    "version": "1"
+  },
   "pointcloud/pc-sequence.js": {
     "sha256": "307eed7c2e52d8f4",
     "version": "3"
   },
   "pointcloud/pc-viewer.css": {
-    "sha256": "218c6fa81211acbe",
-    "version": "8"
+    "sha256": "0a15ab95d0299c96",
+    "version": "9"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "bb4870fd53352840",
-    "version": "16"
+    "sha256": "fa98bf3d73a4dd93",
+    "version": "17"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",
@@ -500,8 +504,8 @@
     "version": "2"
   },
   "styles.css": {
-    "sha256": "dfce8e44716dd169",
-    "version": "42"
+    "sha256": "5ea100ea5463c15f",
+    "version": "43"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

@@ -4,7 +4,26 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [Unreleased]
 
+### Added
+
+- Painting points for `segment_3d` in the point cloud viewer. A brush labels
+  every point within its radius on screen, a lasso labels the points inside an
+  outline, and Erase or Shift + drag removes labels. Each class is saved as one
+  `segment_3d` object, and a point moves to the class painted last. Painted
+  points take their class colour, and a hidden class is left out of the view
+  and cannot be painted over. The new `brush_size` key sets the starting
+  radius. A scheme with `segment_3d` now loads the cloud as one buffer, up to
+  `max_points`, instead of as an octree, unless it sets `lod: true`.
+
 ### Fixed
+
+- The point cloud viewer stored hidden classes under one browser key for every
+  scheme in every project, so hiding `car` in one point-cloud scheme hid `car`
+  in every other point-cloud scheme opened in that browser. It is now stored
+  per scheme and project, as in image and video annotation.
+- The multirate fix changed `styles.css` without changing its version number,
+  so a browser that had the file cached kept the old rules, including those for
+  each item's label cell in a multi-column multirate. The version is now bumped.
 
 - `potato mcp connect` dropped the argument descriptions of the live tools,
   so an agent saw that `live_submit_annotation` takes an `annotations` object

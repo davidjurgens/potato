@@ -63,6 +63,7 @@ all in the file's own frame. You don't need to re-centre the file yourself.
 | `max_points` | `500000` | Decimation cap (see below) |
 | `default_box_height` | `1.7` | Height a new box starts at, in metres |
 | `fit_box_height` | `true` | Snap a new box's vertical extent to the points inside its footprint |
+| `brush_size` | `10` | Starting brush radius for [painting points](#painting-points), in screen pixels (2 to 80) |
 | `min_annotations` / `max_annotations` | — | Completion rules |
 | `attributes` | — | Typed fields for each box or point (occlusion, ...), edited in a panel under the viewer for the selected object. See [Per-Object Attributes](../multimedia/object_attributes.md) |
 
@@ -99,7 +100,7 @@ The status line under the viewport says what is on screen:
 
 | Option | Default | Effect |
 |---|---|---|
-| `lod` | `true` | Octree loading. `false` falls back to one uniformly thinned buffer. |
+| `lod` | `true`, or `false` when `tools` includes `segment_3d` | Octree loading. `false` falls back to one uniformly thinned buffer. |
 | `point_budget` | 2,000,000 | Points held at once. Lower it for weak GPUs. |
 | `min_screen_size` | 120 | Projected pixels below which a node is not fetched. Lower means more detail and more requests. |
 | `max_loaded_nodes` | 512 | Cache size before least-recently-visible nodes are released. |
@@ -133,12 +134,14 @@ since, they are suspect.
 | Action | Result |
 |---|---|
 | Left-drag *(no tool armed)* | Orbit |
+| Alt + left-drag *(painting)* | Orbit |
 | Right-drag | Pan |
 | Scroll | Zoom |
 | `c` then left-drag | Draw a 3D box footprint on the ground |
 | `k` then click | Place a point |
 | `n` | Polyline |
-| `g` | Paint points |
+| `g` then left-drag | [Paint points](#painting-points); Shift + drag erases |
+| `-` / `=` *(painting)* | Smaller / larger brush |
 | `q` / `e` | Rotate the selected box (Shift for 1° steps) |
 | `Delete` | Remove the selected box |
 | `Escape` | Deselect |
@@ -166,6 +169,81 @@ did not see, and fitting to nothing would be fabricating a measurement.
 
 Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
 the world frame, so the key always turns it the same way on screen.
+
+## Painting points
+
+`segment_3d` labels individual points, the way SemanticKITTI labels every point
+of a scan with a class. Each class you paint is stored as one `segment_3d`
+object holding the indices of its points.
+
+```yaml
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: semantics
+    description: "Give every point a class."
+    source_field: point_cloud
+    tools: [segment_3d]
+    labels:
+      - {name: road, color: "#FF00FF", key_value: "1"}
+      - {name: sidewalk, color: "#4B004B", key_value: "2"}
+      - {name: car, color: "#6496F5", key_value: "3"}
+      - {name: moving-car, color: "#FA5050", key_value: "4"}
+      - {name: vegetation, color: "#00AF00", key_value: "5"}
+    brush_size: 12
+```
+
+Press `g` or click **Paint points**, pick a class, and drag over the cloud.
+
+- **Brush** labels every point within the brush radius of the cursor. The
+  circle under the pointer shows the radius. Change it with the slider, with
+  `-` and `=`, or set its starting value with `brush_size`.
+- **Lasso** labels every point inside the outline you draw, when you release
+  the mouse. `Escape` abandons a stroke before release.
+- **Erase**, or Shift held during a stroke, removes the class from the points
+  instead.
+- **Alt + drag** orbits while painting. Right-drag pans and the wheel zooms as
+  usual.
+
+The brush works in screen space: it labels every point under the cursor
+whatever its depth, so the points behind the object you aim at are labelled
+too. Orbit until the object is clear of what lies behind it, or hide the
+classes you have finished.
+
+A point has one class. Painting it again moves it to the new class, and erasing
+it leaves it unlabelled. Painted points take their class colour in the cloud.
+
+Hide a class you have finished, with the eye on its class button or `h` with
+the class armed, and no brush, lasso or eraser stroke changes its points until
+you show it again. Its points also disappear from the view. Arming a hidden
+class and painting with it does nothing except a warning in the status line.
+
+The saved answer holds one object per class:
+
+```json
+{"type": "segment_3d", "label": "road", "color": "#FF00FF",
+ "indices": [0, 1, 4, 7, 12]}
+```
+
+The indices are sorted and refer to points in the source file. `,` and `.` step
+through the segments along with any boxes and report how many points each
+holds. `Delete` removes the selected class from every point. With no tool
+armed, choosing another class for a selected segment moves its points to that
+class, and merges them into that class's segment if it already has one. A
+segment from a model or an import that a person repaints is saved with
+`edited: true`, as a moved box is.
+
+Painting labels only the points in the browser. A scheme with `segment_3d`
+therefore loads the whole cloud rather than an octree, unless it sets
+`lod: true`. That whole cloud is still capped at `max_points`, 500,000 by
+default; a SemanticKITTI scan has about 120,000 points. When the cap applies,
+or under `lod: true`, the status line says how many points painting can reach
+when you arm the tool. Raise `max_points` above the cloud's size to paint all
+of it.
+
+Painting has no per-point attributes. To separate moving from parked cars, as
+SemanticKITTI does, use two classes such as `car` and `moving-car`. In a
+[sequence](#sequences), each frame's painting is stored on that frame and is
+not carried between frames.
 
 ## Sequences
 
@@ -375,12 +453,12 @@ local origin (see [Formats](#formats)).
 | `cuboid_3d` | `{center: [x,y,z], size: [l,w,h], rotation: [qx,qy,qz,qw]}` |
 | `point_3d` | `[x, y, z]` |
 | `polyline_3d` | `[[x,y,z], ...]` |
-| `segment_3d` | `indices: [i, ...]` into the served cloud |
+| `segment_3d` | `indices: [i, ...]` into the source file |
 
 `segment_3d` stores **point indices**, not coordinates: per-point labels over a
 million-point cloud would otherwise be larger than the cloud itself. The
-indices are stable because the served cloud is a fixed decimation, and the
-decimation is part of the cache key.
+indices refer to the source file, so they stay valid whatever subset the viewer
+loads (see [Per-point labels stay stable](#per-point-labels-stay-stable)).
 
 ### Rotation is a quaternion, not a yaw angle
 

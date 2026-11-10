@@ -48,6 +48,12 @@
         || (typeof require !== 'undefined' ? require('./pc-mpr.js') : null);
     const sequence = (root && root.PointCloudSequence)
         || (typeof require !== 'undefined' ? require('./pc-sequence.js') : null);
+    const paintLib = (root && root.PointCloudPaint)
+        || (typeof require !== 'undefined' ? require('./pc-paint.js') : null);
+
+    /** Brush radius limits, in CSS pixels. */
+    const BRUSH_MIN = 2;
+    const BRUSH_MAX = 80;
 
     /** Edges of a cuboid, as index pairs into `cuboid_corners` order. */
     const BOX_EDGES = [
@@ -151,6 +157,18 @@
             this._drag = null;
             this._previewMesh = null;
             this.cameras = [];
+
+            // Per-point painting (segment_3d; the arithmetic is in
+            // pc-paint.js). `_pointLabels` maps a source index to its label
+            // and is rebuilt from the segments after every edit, so the
+            // segments in `annotations` stay the only stored state.
+            // `_paintStroke` is the stroke in flight.
+            this._pointLabels = new Map();
+            this._paintRgbCache = new Map();
+            this.paintMode = 'brush';
+            this.paintErase = false;
+            this.brushSize = clampBrush(this.config.brushSize || 10);
+            this._paintStroke = null;
         }
 
         // -------------------------------------------------------------
@@ -509,11 +527,16 @@
                                                 this._colorRange);
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-            return new THREE.Points(geometry, new THREE.PointsMaterial({
+            const points = new THREE.Points(geometry, new THREE.PointsMaterial({
                 size: this.config.pointSize || 1.5,
                 sizeAttenuation: false,
                 vertexColors: true,
             }));
+            // Painted points of this buffer take their label's colour as it
+            // arrives: an octree node loaded after the painting must not show
+            // its labelled points in the height ramp.
+            this._applyPaint(points, parsed);
+            return points;
         }
 
         /**
@@ -847,9 +870,11 @@
 
         _bindDrawing() {
             const canvas = this.canvas;
+            this._bindPainting();
 
             canvas.addEventListener('mousedown', (e) => {
                 if (e.button !== 0) return;
+                if (this.currentTool === 'segment_3d') return;   // _bindPainting
                 if (this.currentTool === 'cuboid_3d') {
                     const hit = this._groundPointAt(e);
                     if (!hit) return;
@@ -983,6 +1008,458 @@
             if (this.frames) this._updateFrameBar();
         }
 
+        // -------------------------------------------------------------
+        // Painting points (segment_3d)
+        //
+        // A stroke labels every point whose screen position falls under the
+        // brush, or inside the lasso, from the camera the annotator is looking
+        // through. The camera cannot move during a stroke, so every buffer is
+        // projected once, on mousedown, and each mousemove is a 2D test.
+        // -------------------------------------------------------------
+
+        _bindPainting() {
+            const canvas = this.canvas;
+            if (!paintLib) return;
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (e.button !== 0 || this.currentTool !== 'segment_3d') return;
+                // Alt+drag orbits instead, for a trackpad with no middle button.
+                if (e.altKey) return;
+                e.preventDefault();
+                this._startStroke(e);
+            });
+            canvas.addEventListener('mousemove', (e) => this._moveBrushCursor(e));
+            canvas.addEventListener('mouseleave', () => {
+                if (this._brushCursor) this._brushCursor.hidden = true;
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (this._paintStroke) this._extendStroke(e);
+            });
+            // On `window` for the reason the box drag is: a stroke released
+            // outside the canvas still has to end.
+            window.addEventListener('mouseup', (e) => {
+                if (this._paintStroke && e.button === 0) this._endStroke();
+            });
+
+            const group = this.container && this.container.querySelector('.pc-paint');
+            if (!group) return;
+            group.querySelectorAll('[data-paint-mode]').forEach((btn) => {
+                btn.addEventListener('click', () => this.setPaintMode(btn.dataset.paintMode));
+            });
+            const erase = group.querySelector('[data-paint-erase]');
+            if (erase) erase.addEventListener('click', () => this.setPaintErase(!this.paintErase));
+            const slider = group.querySelector('.pc-brush-slider');
+            if (slider) {
+                slider.min = String(BRUSH_MIN);
+                slider.max = String(BRUSH_MAX);
+                slider.addEventListener('input', () => this.setBrushSize(parseInt(slider.value, 10)));
+            }
+            this._syncPaintControls();
+        }
+
+        /** Canvas-content coordinates of a mouse event, in CSS pixels. */
+        _canvasPoint(event) {
+            const rect = this.canvas.getBoundingClientRect();
+            return [event.clientX - rect.left - (this.canvas.clientLeft || 0),
+                    event.clientY - rect.top - (this.canvas.clientTop || 0)];
+        }
+
+        /** Every point buffer in the scene with its parse, LOD or not. */
+        _paintBuffers() {
+            const out = [];
+            if (this.lodIndex) {
+                this.lodNodes.forEach((obj, key) => {
+                    const parsed = this.lodParsed.get(key);
+                    if (parsed) out.push({ obj, parsed });
+                });
+            } else if (this.cloud && this.parsed) {
+                out.push({ obj: this.cloud, parsed: this.parsed });
+            }
+            return out;
+        }
+
+        /** Linear RGB for a label, matching its swatch (see threeColor). */
+        _paintRgb(label) {
+            if (this._paintRgbCache.has(label)) return this._paintRgbCache.get(label);
+            let hex = this.colorForLabel(label);
+            if (!hex) {
+                const seg = this.annotations.find(
+                    (obj) => obj && obj.type === 'segment_3d' && obj.label === label);
+                hex = seg && seg.color;
+            }
+            let rgb = null;
+            if (hex && typeof THREE !== 'undefined') {
+                const c = threeColor(hex);
+                rgb = { r: c.r, g: c.g, b: c.b };
+            }
+            this._paintRgbCache.set(label, rgb);
+            return rgb;
+        }
+
+        /**
+         * Keep the buffer's own colours, the first time it is painted, so
+         * that erasing a point puts back its height or intensity colour.
+         * Lazy: a cloud nobody paints does not pay for a second copy.
+         */
+        _baseColors(obj) {
+            if (!obj.userData.baseColors) {
+                obj.userData.baseColors = obj.geometry.getAttribute('color').array.slice();
+            }
+            return obj.userData.baseColors;
+        }
+
+        /** Recolour one buffer from the label map and apply hidden classes. */
+        _applyPaint(obj, parsed) {
+            if (!paintLib || !obj || !obj.geometry) return;
+            const attr = obj.geometry.getAttribute('color');
+            if (attr && (this._pointLabels.size || obj.userData.baseColors)) {
+                paintLib.paintColors(attr.array, this._baseColors(obj), parsed.count,
+                                     parsed.indices, this._pointLabels,
+                                     (label) => this._paintRgb(label));
+                attr.needsUpdate = true;
+            }
+            this._applyPointVisibility(obj, parsed);
+        }
+
+        /**
+         * Draw only the points whose class is not hidden. An index buffer
+         * rather than a second geometry, so the positions are not copied.
+         */
+        _applyPointVisibility(obj, parsed) {
+            if (!paintLib || !obj || !obj.geometry) return;
+            const keep = paintLib.visibleIndex(parsed.count, parsed.indices,
+                                               this._pointLabels, this._hiddenLabels);
+            if (!keep && !obj.geometry.index) return;
+            obj.geometry.setIndex(keep ? new THREE.BufferAttribute(keep, 1) : null);
+        }
+
+        /** Rebuild the label map from the segments and recolour the cloud. */
+        _refreshPaint() {
+            if (!paintLib) return;
+            this._pointLabels = paintLib.labelsByPoint(this.annotations);
+            this._paintRgbCache = new Map();
+            if (typeof THREE === 'undefined') return;
+            this._paintBuffers().forEach(({ obj, parsed }) => this._applyPaint(obj, parsed));
+        }
+
+        _startStroke(event) {
+            const erase = this.paintErase || event.shiftKey;
+            if (!erase && !this.currentLabel) {
+                this._status('Pick a class before painting.', 'warn');
+                return;
+            }
+            if (!erase && this._hiddenLabels && this._hiddenLabels.has(this.currentLabel)) {
+                // Painting with a hidden class would make the points vanish
+                // as they were painted, which reads as the brush deleting them.
+                this._status(`${this.currentLabel} is hidden. Show it before `
+                             + 'painting with it.', 'warn');
+                return;
+            }
+            if (!this.camera || !this.canvas.clientWidth) return;
+            this.camera.updateMatrixWorld();
+            const m = new THREE.Matrix4().multiplyMatrices(
+                this.camera.projectionMatrix, this.camera.matrixWorldInverse).elements;
+            const w = this.canvas.clientWidth;
+            const h = this.canvas.clientHeight;
+            const buffers = this._paintBuffers()
+                .filter(({ obj }) => obj.visible)
+                .map(({ obj, parsed }) => {
+                    this._baseColors(obj);
+                    return { obj, parsed,
+                             screen: paintLib.projectPoints(parsed.positions, parsed.count, m, w, h) };
+                });
+            const at = this._canvasPoint(event);
+            this._paintStroke = {
+                mode: this.paintMode, erase, label: erase ? null : this.currentLabel,
+                buffers, path: [at], last: at, changed: 0,
+            };
+            if (this.paintMode === 'brush') {
+                this._applyHits((b, accept) => paintLib.brushHits(
+                    b.screen, b.parsed.count, at[0], at[1], at[0], at[1], this.brushSize, accept));
+            } else {
+                this._drawLasso();
+            }
+        }
+
+        _extendStroke(event) {
+            const stroke = this._paintStroke;
+            const at = this._canvasPoint(event);
+            if (stroke.mode === 'brush') {
+                this._moveBrushCursor(event);
+                const from = stroke.last;
+                this._applyHits((b, accept) => paintLib.brushHits(
+                    b.screen, b.parsed.count, from[0], from[1], at[0], at[1],
+                    this.brushSize, accept));
+            } else {
+                const prev = stroke.path[stroke.path.length - 1];
+                // Every 3 px is plenty for a hand-drawn outline and keeps the
+                // point-in-polygon test short on a long lasso.
+                if (Math.hypot(at[0] - prev[0], at[1] - prev[1]) < 3) return;
+                stroke.path.push(at);
+                this._drawLasso();
+            }
+            stroke.last = at;
+        }
+
+        _endStroke() {
+            const stroke = this._paintStroke;
+            if (stroke.mode === 'lasso') {
+                this._applyHits((b, accept) => paintLib.lassoHits(
+                    b.screen, b.parsed.count, stroke.path, accept));
+            }
+            this._paintStroke = null;
+            this._drawLasso();
+            this._commitPaint(stroke);
+        }
+
+        /** Abandon the stroke in flight, putting back what it had painted. */
+        cancelStroke() {
+            if (!this._paintStroke) return false;
+            this._paintStroke = null;
+            this._drawLasso();
+            this._refreshPaint();
+            this._render();
+            return true;
+        }
+
+        /**
+         * Label (or unlabel) the points `hitsFor` returns in each buffer, and
+         * recolour just those points. Points of a hidden class are never hit:
+         * hiding a finished class is how the annotator protects it.
+         */
+        _applyHits(hitsFor) {
+            const stroke = this._paintStroke;
+            const map = this._pointLabels;
+            const hidden = this._hiddenLabels && this._hiddenLabels.size ? this._hiddenLabels : null;
+            const rgb = stroke.label === null ? null : this._paintRgb(stroke.label);
+            let touched = false;
+            stroke.buffers.forEach((b) => {
+                const parsed = b.parsed;
+                const accept = hidden ? (i) => {
+                    const label = map.get(wire.sourceIndex(parsed, i));
+                    return label === undefined || !hidden.has(label);
+                } : null;
+                const hits = hitsFor(b, accept);
+                if (!hits.length) return;
+                const colors = b.obj.geometry.getAttribute('color');
+                const base = b.obj.userData.baseColors;
+                let changed = false;
+                hits.forEach((i) => {
+                    const src = wire.sourceIndex(parsed, i);
+                    if (stroke.label === null) {
+                        if (!map.delete(src)) return;
+                    } else {
+                        if (map.get(src) === stroke.label) return;
+                        map.set(src, stroke.label);
+                    }
+                    stroke.changed += 1;
+                    const c = rgb || { r: base[i * 3], g: base[i * 3 + 1], b: base[i * 3 + 2] };
+                    colors.array[i * 3] = c.r;
+                    colors.array[i * 3 + 1] = c.g;
+                    colors.array[i * 3 + 2] = c.b;
+                    changed = true;
+                });
+                if (changed) {
+                    colors.needsUpdate = true;
+                    touched = true;
+                }
+            });
+            if (touched) this._render();
+        }
+
+        /** Store the stroke: rewrite the segments from the label map. */
+        _commitPaint(stroke) {
+            if (!stroke.changed) {
+                let message = 'No visible points under the brush.';
+                if (stroke.mode === 'lasso') {
+                    // A drag in a straight line encloses nothing, which reads
+                    // as the lasso being broken unless the status says so.
+                    message = stroke.path.length < 3
+                        ? 'Draw a loop around the points to lasso them.'
+                        : 'No visible points inside the lasso.';
+                }
+                this._status(message);
+                return;
+            }
+            const selected = this.annotations[this.selectedIndex] || null;
+            const order = (this.config.labels || []).map(
+                (l) => ((l && l.name !== undefined) ? l.name : l));
+            this.annotations = paintLib.segmentsFrom(
+                this.annotations, this._pointLabels, (label) => this.colorForLabel(label), order);
+            // The selection follows its object; a repainted segment is a new
+            // object with the same label.
+            this.selectedIndex = !selected ? -1 : this.annotations.findIndex((obj) => (
+                obj === selected || (selected.type === 'segment_3d'
+                    && obj.type === 'segment_3d' && obj.label === selected.label)));
+            this._rebuildMeshes();
+            this._saveState();
+            this._updateAnnotationData();
+
+            const n = stroke.changed.toLocaleString();
+            const noun = stroke.changed === 1 ? 'point' : 'points';
+            let message;
+            if (stroke.label === null) {
+                message = `Unlabelled ${n} ${noun}.`;
+            } else {
+                const total = this.paintedCount(stroke.label).toLocaleString();
+                message = `Painted ${n} ${noun} as ${stroke.label} `
+                    + `(${total} ${stroke.label} points in all).`;
+            }
+            this._status(message);
+            this._announce(message);
+        }
+
+        /** How many points carry `label`, across the whole cloud. */
+        paintedCount(label) {
+            let n = 0;
+            this._pointLabels.forEach((l) => { if (l === label) n += 1; });
+            return n;
+        }
+
+        setPaintMode(mode) {
+            if (mode !== 'brush' && mode !== 'lasso') return;
+            this.cancelStroke();
+            this.paintMode = mode;
+            this._syncPaintControls();
+        }
+
+        setPaintErase(on) {
+            this.paintErase = !!on;
+            this._syncPaintControls();
+        }
+
+        setBrushSize(px) {
+            this.brushSize = clampBrush(px);
+            this._syncPaintControls();
+            if (this._brushCursor && !this._brushCursor.hidden && this._cursorAt) {
+                this._placeBrushCursor(this._cursorAt);
+            }
+        }
+
+        /** Paint controls and cursor follow the tool, mode and size. */
+        _syncPaintControls() {
+            const on = this.currentTool === 'segment_3d';
+            if (this.canvas) {
+                this.canvas.classList.toggle('pc-painting', on);
+                this.canvas.classList.toggle('pc-erasing', on && this.paintErase);
+            }
+            if (!on) {
+                this.cancelStroke();
+                if (this._brushCursor) this._brushCursor.hidden = true;
+            }
+            const group = this.container && this.container.querySelector('.pc-paint');
+            if (!group) return;
+            group.hidden = !on;
+            group.querySelectorAll('[data-paint-mode]').forEach((btn) => {
+                const pressed = btn.dataset.paintMode === this.paintMode;
+                btn.classList.toggle('active', pressed);
+                btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+            });
+            const erase = group.querySelector('[data-paint-erase]');
+            if (erase) {
+                erase.classList.toggle('active', this.paintErase);
+                erase.setAttribute('aria-pressed', this.paintErase ? 'true' : 'false');
+            }
+            const slider = group.querySelector('.pc-brush-slider');
+            if (slider) {
+                slider.value = String(this.brushSize);
+                slider.setAttribute('aria-valuetext', `${this.brushSize} pixels`);
+            }
+            const output = group.querySelector('.pc-brush-value');
+            if (output) output.textContent = `${this.brushSize} px`;
+        }
+
+        /** The brush circle and the lasso outline, created on first use. */
+        _paintOverlay() {
+            if (this._brushCursor || !this.canvas) return;
+            const host = this.canvas.parentElement;
+            if (!host) return;
+            const cursor = document.createElement('div');
+            cursor.className = 'pc-brush-cursor';
+            cursor.setAttribute('aria-hidden', 'true');
+            cursor.hidden = true;
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'pc-lasso');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'polygon'));
+            svg.style.display = 'none';
+            host.appendChild(cursor);
+            host.appendChild(svg);
+            this._brushCursor = cursor;
+            this._lassoSvg = svg;
+        }
+
+        _moveBrushCursor(event) {
+            if (this.currentTool !== 'segment_3d' || this.paintMode !== 'brush') {
+                if (this._brushCursor) this._brushCursor.hidden = true;
+                return;
+            }
+            this._paintOverlay();
+            if (!this._brushCursor) return;
+            this._cursorAt = this._canvasPoint(event);
+            this._placeBrushCursor(this._cursorAt);
+        }
+
+        _placeBrushCursor(at) {
+            const c = this._brushCursor;
+            const r = this.brushSize;
+            const left = this.canvas.offsetLeft + (this.canvas.clientLeft || 0);
+            const top = this.canvas.offsetTop + (this.canvas.clientTop || 0);
+            c.style.width = `${r * 2}px`;
+            c.style.height = `${r * 2}px`;
+            c.style.left = `${left + at[0] - r}px`;
+            c.style.top = `${top + at[1] - r}px`;
+            c.classList.toggle('pc-erasing', this.paintErase);
+            c.hidden = false;
+        }
+
+        _drawLasso() {
+            const stroke = this._paintStroke;
+            if (!stroke || stroke.mode !== 'lasso') {
+                if (this._lassoSvg) this._lassoSvg.style.display = 'none';
+                return;
+            }
+            this._paintOverlay();
+            const svg = this._lassoSvg;
+            if (!svg) return;
+            svg.style.left = `${this.canvas.offsetLeft + (this.canvas.clientLeft || 0)}px`;
+            svg.style.top = `${this.canvas.offsetTop + (this.canvas.clientTop || 0)}px`;
+            svg.setAttribute('width', String(this.canvas.clientWidth));
+            svg.setAttribute('height', String(this.canvas.clientHeight));
+            svg.classList.toggle('pc-erasing', stroke.erase);
+            svg.firstChild.setAttribute('points',
+                stroke.path.map((p) => `${p[0]},${p[1]}`).join(' '));
+            svg.style.display = '';
+        }
+
+        /**
+         * What painting cannot reach in this view, or null. A stroke labels
+         * the points on screen, so a sampled cloud or a partly loaded octree
+         * leaves points unlabelled however carefully it is painted.
+         */
+        _paintCoverageNote() {
+            if (this.lodIndex) {
+                const total = this.lodIndex.totalCount || 0;
+                const loaded = this.loadedPointCount();
+                if (total && loaded < total) {
+                    return `Painting labels only the ${loaded.toLocaleString()} of `
+                        + `${total.toLocaleString()} points loaded at this zoom. `
+                        + 'Set lod: false on this scheme to paint every point.';
+                }
+                return null;
+            }
+            const header = this.parsed && this.parsed.header;
+            const shown = header ? header.count | 0 : 0;
+            const total = header ? (header.original_count | 0) || shown : 0;
+            if (total > shown) {
+                return `This cloud is sampled to ${shown.toLocaleString()} of `
+                    + `${total.toLocaleString()} points, and painting labels only `
+                    + `the points shown. Raise max_points above `
+                    + `${total.toLocaleString()} to paint all of them.`;
+            }
+            return null;
+        }
+
         /** Select the annotation nearest a click, in screen space. */
         _selectAt(event) {
             if (!this.camera || typeof THREE === 'undefined') return;
@@ -1032,8 +1509,12 @@
             this._highlightSelection();
             this._drawOverlays();
             const obj = this.annotations[this.selectedIndex];
-            const where = obj.type === 'cuboid_3d' && obj.coordinates
+            let where = obj.type === 'cuboid_3d' && obj.coordinates
                 ? ` ${describeBox(obj.coordinates, this.origin)}` : '';
+            if (obj.type === 'segment_3d') {
+                const n = Array.isArray(obj.indices) ? obj.indices.length : 0;
+                where = ` ${n.toLocaleString()} painted ${n === 1 ? 'point' : 'points'}.`;
+            }
             const message = `${this.selectedIndex + 1} of ${n}: `
                 + `${obj.label}.${where}`;
             this._status(message);
@@ -1054,7 +1535,10 @@
         _renderAttributePanel() {
             if (!this.attributeDefs || !this.attributeDefs.length || !this.attributePanel
                     || !window.ObjectAttributes) return;
-            const obj = this.selectedIndex >= 0 ? this.annotations[this.selectedIndex] : null;
+            let obj = this.selectedIndex >= 0 ? this.annotations[this.selectedIndex] : null;
+            // A painted class is not an object: occlusion or truncation has
+            // no meaning for "every road point", so its panel stays empty.
+            if (obj && obj.type === 'segment_3d') obj = null;
             // The frame too: on a sequence the selected object is a new view
             // object on every frame, and per_keyframe values differ by frame.
             const key = obj ? this.selectedIndex + '|' + obj.label + '|' + (this.frameIndex || 0) : null;
@@ -1090,7 +1574,8 @@
             const objects = this.frames
                 ? Object.values(sequence.tracksOf(this.sequenceStore)).map((list) => list[0])
                 : this.annotations;
-            const missing = objects.filter(obj => window.ObjectAttributes.incomplete(
+            const missing = objects.filter(obj => obj && obj.type !== 'segment_3d'
+                && window.ObjectAttributes.incomplete(
                 this.attributeDefs, obj.label, obj.attributes || {})).length;
             window.ObjectAttributes.updateRequirement(this.attributePanel, this.container,
                                                       missing, 'object');
@@ -1680,7 +2165,10 @@
             let last = null;
 
             this.canvas.addEventListener('mousedown', (e) => {
-                if (this.currentTool && e.button === 0) return;  // drawing
+                // Drawing. Alt+drag still orbits while painting, which is
+                // the only orbit a trackpad without a middle button has.
+                if (this.currentTool && e.button === 0
+                    && !(this.currentTool === 'segment_3d' && e.altKey)) return;
                 dragging = e.button === 2 ? 'pan' : 'orbit';
                 last = { x: e.clientX, y: e.clientY };
                 e.preventDefault();
@@ -1749,9 +2237,13 @@
             if (first) this.setLabel(first.dataset.label, first.dataset.color);
 
             if (typeof LabelVisibilityManager !== 'undefined') {
+                // schemaName and projectKey are what the manager keys its
+                // stored state on; passed as `schema`, every point-cloud scheme
+                // in every project shared one hidden set.
                 this.labelVisibility = new LabelVisibilityManager({
                     container: this.container,
-                    schema: this.config.schema,
+                    schemaName: this.config.schema,
+                    projectKey: (root && root.config && root.config.annotation_task_name) || undefined,
                     onChange: (hidden) => this.applyLabelVisibility(hidden),
                 });
             }
@@ -1769,6 +2261,21 @@
                     return;
                 }
                 if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+                if (this.currentTool === 'segment_3d') {
+                    if (e.key === 'Escape' && this._paintStroke) {
+                        e.preventDefault();
+                        this.cancelStroke();
+                        return;
+                    }
+                    if (e.key === '-' || e.key === '_' || e.key === '=' || e.key === '+') {
+                        e.preventDefault();
+                        const step = (e.key === '-' || e.key === '_') ? -2 : 2;
+                        this.setBrushSize(this.brushSize + step);
+                        this._status(`Brush size ${this.brushSize} px.`);
+                        return;
+                    }
+                }
 
                 if (this.frames) {
                     if (e.key === '[' || e.key === ']') {
@@ -1856,6 +2363,16 @@
                 // keyboard shortcut is used (WCAG 4.1.2).
                 btn.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
+            this._syncPaintControls();
+            if (this.currentTool === 'segment_3d') {
+                const note = this._paintCoverageNote();
+                if (note) {
+                    this._status(note, 'warn');
+                } else {
+                    this._status('Drag over points to paint them with the selected class. '
+                                 + 'Shift+drag erases, Alt+drag orbits, - and = change the brush size.');
+                }
+            }
         }
 
         setLabel(name, color, fromUser) {
@@ -1866,7 +2383,9 @@
             // object, so a wrong cuboid had to be deleted and drawn again. An
             // object the viewer selected itself (the one just drawn) is left
             // alone, or choosing the class of the next box would relabel it.
-            if (fromUser) {
+            // Not while painting: there a class button picks the paint, and
+            // relabelling the selected segment would recolour a whole class.
+            if (fromUser && this.currentTool !== 'segment_3d') {
                 const index = this._userSelectedIndex();
                 if (index >= 0 && this.annotations[index].label !== name) {
                     this.relabelAnnotation(index, name);
@@ -1932,6 +2451,7 @@
             }
             this.annotations.push(obj);
             this._buildMesh(obj);
+            if (obj.type === 'segment_3d') this._refreshPaint();
             this._saveState();
             this._updateAnnotationData();
             return true;
@@ -1963,6 +2483,7 @@
             const removed = this.annotations.splice(index, 1)[0];
             const mesh = this.meshes.splice(index, 1)[0];
             if (mesh) this.scene.remove(mesh);
+            if (removed.type === 'segment_3d') this._refreshPaint();
             if (this.frames && removed.track_id !== undefined) {
                 // A keyframe between two others leaves the track still
                 // passing through this frame: show it interpolated, in the
@@ -2002,6 +2523,18 @@
                     }
                 }
             }
+            if (obj.type === 'segment_3d' && paintLib) {
+                // One segment per class: relabelling into a class that
+                // already has points merges the two.
+                const order = (this.config.labels || []).map(
+                    (l) => ((l && l.name !== undefined) ? l.name : l));
+                this.annotations = paintLib.segmentsFrom(
+                    this.annotations, paintLib.labelsByPoint(this.annotations),
+                    (name) => this.colorForLabel(name), order);
+                this.selectedIndex = this.annotations.findIndex(
+                    (a) => a.type === 'segment_3d' && a.label === label);
+                this._markUserSelection();
+            }
             this._rebuildMeshes();
             this._saveState();
             this._updateAnnotationData();
@@ -2022,6 +2555,11 @@
                 const obj = this.annotations[i];
                 if (mesh) mesh.visible = !this._hiddenLabels.has(obj.label);
             });
+            // Painted points of a hidden class are left out of the draw too.
+            if (typeof THREE !== 'undefined') {
+                this._paintBuffers().forEach(
+                    ({ obj, parsed }) => this._applyPointVisibility(obj, parsed));
+            }
             // Hiding a class must hide it in the camera panels too, or the
             // verification view contradicts the viewport.
             this._drawOverlays();
@@ -2049,6 +2587,12 @@
             // Left set across an instance switch, the next mousemove over a
             // panel would resize whatever ended up at the old selected index.
             this._slabDrag = null;
+            // Painting state: a stroke in flight, and the label map, which
+            // would otherwise colour the next item's points by this item's
+            // indices.
+            this._paintStroke = null;
+            this._syncPaintControls();
+            this._refreshPaint();
             this._clearPreview();
             this._render();
             this._updateAnnotationData();
@@ -2131,6 +2675,7 @@
             this.meshes.forEach((m) => { if (m) this.scene.remove(m); });
             this.meshes = [];
             this.annotations.forEach((obj) => this._buildMesh(obj));
+            this._refreshPaint();
             if (this._hiddenLabels) this.applyLabelVisibility(this._hiddenLabels);
             this._render();
         }
@@ -2150,8 +2695,8 @@
             } else if (obj.type === 'polyline_3d') {
                 mesh = this._polylineMesh(obj, color);
             }
-            // segment_3d has no mesh of its own: it recolours points in the
-            // cloud, which is handled by the cloud's own colour attribute.
+            // segment_3d has no mesh of its own: its points are recoloured in
+            // the cloud's colour attribute, by _refreshPaint.
 
             if (mesh && obj.interpolated) {
                 // Between keyframes: drawn dashed (boxes) or hollow (points)
@@ -2634,6 +3179,13 @@
         return { c: Math.cos(-yaw), s: Math.sin(-yaw) };
     }
 
+    /** A brush radius in whole pixels within [BRUSH_MIN, BRUSH_MAX]. */
+    function clampBrush(px) {
+        const n = Math.round(Number(px));
+        if (!Number.isFinite(n)) return 10;
+        return Math.max(BRUSH_MIN, Math.min(BRUSH_MAX, n));
+    }
+
     /** A representative 3D point for an annotation, for hit-testing. */
     function annotationCenter(obj) {
         if (!obj) return null;
@@ -2734,6 +3286,7 @@
     PointCloudAnnotationManager.annotationCenter = annotationCenter;
     PointCloudAnnotationManager.asChunks = asChunks;
     PointCloudAnnotationManager.withParam = withParam;
+    PointCloudAnnotationManager.clampBrush = clampBrush;
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = PointCloudAnnotationManager;
