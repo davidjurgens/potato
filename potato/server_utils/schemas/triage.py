@@ -74,9 +74,10 @@ def _generate_triage_layout_internal(annotation_scheme: Dict[str, Any]) -> Tuple
     skip_label = annotation_scheme.get("skip_label", DEFAULT_SKIP_LABEL)
 
     # Get keyboard shortcuts
-    accept_key = annotation_scheme.get("accept_key", DEFAULT_KEYBINDINGS["accept"])
-    reject_key = annotation_scheme.get("reject_key", DEFAULT_KEYBINDINGS["reject"])
-    skip_key = annotation_scheme.get("skip_key", DEFAULT_KEYBINDINGS["skip"])
+    # str(): `accept_key: 4` in YAML is a number, and .upper() below needs text.
+    accept_key = str(annotation_scheme.get("accept_key", DEFAULT_KEYBINDINGS["accept"]))
+    reject_key = str(annotation_scheme.get("reject_key", DEFAULT_KEYBINDINGS["reject"]))
+    skip_key = str(annotation_scheme.get("skip_key", DEFAULT_KEYBINDINGS["skip"]))
 
     # Get options
     auto_advance = annotation_scheme.get("auto_advance", True)

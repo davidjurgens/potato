@@ -1246,8 +1246,9 @@ def _generate_keybindings(labels, tools, tool_keys=None, schema_name="",
     # they cannot reach.
     for label in labels:
         key = label.get("key_value")
-        if not key:
+        if key is None or key == "":
             continue
+        key = str(key).lower()
         if key in used:
             logger.warning(
                 "Keybinding conflict in image_annotation schema '%s': key '%s' is "

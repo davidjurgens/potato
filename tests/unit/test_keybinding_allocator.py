@@ -544,6 +544,12 @@ class TestViewerKeysAreReserved:
         keys = keys_beside(IMAGE, mnemonic("tone", ["vivid", "harsh", "rough"]))
         assert len(keys["tone"]) == 3 and not keys["tone"] & {"v", "h", "r"}
 
+    def test_the_image_keys_follow_its_keybinding_profile(self):
+        # legacy puts bbox on b, so r is free and b is not.
+        keys = keys_beside(dict(IMAGE, keybinding_profile="legacy"),
+                           mnemonic("tone", ["bold", "rough"]))
+        assert "b" not in keys["tone"] and "r" in keys["tone"]
+
     def test_a_radio_beside_a_video_skips_the_player_keys(self):
         keys = keys_beside(VIDEO, mnemonic("tone", ["calm", "kind", "tense"]))
         assert len(keys["tone"]) == 3 and not keys["tone"] & {"c", "k"}
@@ -568,6 +574,13 @@ class TestViewerKeysAreReserved:
     def test_a_radio_beside_a_point_cloud_skips_its_keys(self):
         keys = keys_beside(POINTS, mnemonic("tone", ["cold", "quiet", "hot"]))
         assert len(keys["tone"]) == 3 and not keys["tone"] & {"c", "q", "h"}
+
+    def test_the_paint_keys_count_only_with_the_paint_tool(self, caplog):
+        minus = {"annotation_type": "radio", "name": "tone", "description": "d",
+                 "labels": [{"name": "less", "key_value": "-"}]}
+        painting = dict(POINTS, tools=["cuboid_3d", "segment_3d"])
+        assert any("Key '-'" in m for m in allocator_warnings(caplog, [painting, minus]))
+        assert allocator_warnings(caplog, [POINTS, minus]) == []
 
     def test_an_explicit_key_on_a_viewer_key_warns(self, caplog):
         fixed = {"annotation_type": "radio", "name": "tone", "description": "d",

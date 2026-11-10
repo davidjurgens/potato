@@ -1144,27 +1144,27 @@ class AudioAnnotationManager {
                 this.zoomToFit();
                 break;
 
-            default:
-                // Check for label shortcuts (1-9)
-                if (/^[1-9]$/.test(key)) {
-                    const labels = this.config.labels || [];
-                    const labelIndex = parseInt(key) - 1;
-                    if (labelIndex < labels.length) {
-                        const label = labels[labelIndex];
-                        this.setActiveLabel(label.name, label.color);
-                        // Update UI button
-                        this._updateLabelButtons(label.name);
-                    }
+            default: {
+                // Label shortcuts. A label's key_value wins; otherwise 1-9
+                // pick a label by position, unless some label sets that digit.
+                // (Positional digits used to win, so `key_value: "2"` on the
+                // first label picked the second; a numeric or uppercase
+                // key_value never matched.)
+                if (event.ctrlKey || event.metaKey || event.altKey) break;
+                const labels = this.config.labels || [];
+                const keyOf = (l) => (l.key_value != null && l.key_value !== '')
+                    ? String(l.key_value).toLowerCase() : null;
+                let label = labels.find(l => keyOf(l) === key);
+                if (!label && /^[1-9]$/.test(key) && !labels.some(l => keyOf(l) === key)) {
+                    label = labels[parseInt(key, 10) - 1];
                 }
-                // Check for custom label key_values
-                else if (this.config.labels) {
-                    const matchingLabel = this.config.labels.find(l => l.key_value === key);
-                    if (matchingLabel) {
-                        this.setActiveLabel(matchingLabel.name, matchingLabel.color);
-                        this._updateLabelButtons(matchingLabel.name);
-                    }
+                if (label) {
+                    event.preventDefault();
+                    this.setActiveLabel(label.name, label.color);
+                    this._updateLabelButtons(label.name);
                 }
                 break;
+            }
         }
     }
 

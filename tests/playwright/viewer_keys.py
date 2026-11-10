@@ -6,6 +6,10 @@ keybinding_allocator reserves the keys each viewer module lists in
 on the page avoid them. The lists are Python; the handlers are JS. This presses
 each printable key with nothing focused and reports the ones some handler
 called preventDefault on, so a test can check that every one is listed.
+
+Keys a viewer acts on without preventDefault are invisible here: audio's
+positional digits and the label keys of image and video. Only ``label_keys``
+and the allocator's claim on explicit ``key_value`` cover those.
 """
 
 from __future__ import annotations

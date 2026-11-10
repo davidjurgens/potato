@@ -140,6 +140,22 @@ class TestVolumeAnnotation(BasePlaywrightTest):
 
 
 @pytest.mark.playwright
+class TestVolumeKeys(BasePlaywrightTest):
+
+    def test_the_keys_it_handles_are_taken(self, page, volume_server):
+        # Without preventDefault, a radio label on b or 2 ticked as well.
+        self.register_and_login(page, volume_server)
+        _ready(page)
+        page.evaluate("""() => { window.__downs = [];
+            window.addEventListener('keydown', e => window.__downs.push(e), true); }""")
+        page.locator(".vol-view[data-axis='axial'] .vol-stage").focus()
+        page.keyboard.press("b")
+        page.keyboard.press("2")
+        assert page.evaluate(f"(() => [{MANAGER}.tool, {MANAGER}.label])()") == ["brush", "Bone"]
+        assert page.evaluate("window.__downs.map(e => e.defaultPrevented)") == [True, True]
+
+
+@pytest.mark.playwright
 class TestVolumePolygonFillsTheMask(BasePlaywrightTest):
     """A closed polygon was saved as a shape only, so it reached neither the
     NIfTI nor the DICOM SEG mask nor Dice."""

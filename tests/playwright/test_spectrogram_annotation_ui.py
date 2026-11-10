@@ -10,6 +10,8 @@ import json
 import os
 import shutil
 
+import yaml
+
 import pytest
 
 pytest.importorskip("playwright.sync_api")
@@ -31,6 +33,27 @@ def server():
     shutil.copytree(EXAMPLE, work, ignore=shutil.ignore_patterns(
         "annotation_output", "*.sqlite*", ".potato_cache", "layouts"))
     srv = FlaskTestServer(config_file=os.path.join(work, "config.yaml"))
+    if not srv.start():
+        pytest.fail("could not start the bioacoustics example")
+    yield srv
+    srv.stop()
+
+
+@pytest.fixture(scope="module")
+def upper_key_server():
+    """The example with `key_value: U` on upsweep."""
+    work = os.path.join(create_test_directory("spectrogram_ui_keys"), "bio")
+    shutil.copytree(EXAMPLE, work, ignore=shutil.ignore_patterns(
+        "annotation_output", "*.sqlite*", ".potato_cache", "layouts"))
+    path = os.path.join(work, "config.yaml")
+    with open(path) as f:
+        config = yaml.safe_load(f)
+    scheme = next(s for s in config["annotation_schemes"]
+                  if s["annotation_type"] == "spectrogram_annotation")
+    next(lab for lab in scheme["labels"] if lab["name"] == "upsweep")["key_value"] = "U"
+    with open(path, "w") as f:
+        yaml.safe_dump(config, f)
+    srv = FlaskTestServer(config_file=path)
     if not srv.start():
         pytest.fail("could not start the bioacoustics example")
     yield srv
@@ -191,3 +214,17 @@ def test_fits_a_phone(server):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
         page.wait_for_function(f"document.querySelectorAll('.sg-box').length === {before + 1}")
         assert not layout_problems(page)
+
+
+def test_an_uppercase_key_value_answers_its_letter(upper_key_server):
+    # Label keys were compared with case, so `key_value: U` needed Shift.
+    p, browser, page, errors = _desktop(upper_key_server, "sg_case")
+    try:
+        page.focus(".sg-root")
+        page.keyboard.press("n")
+        page.keyboard.press("u")
+        assert _boxes(page)[-1]["label"] == "upsweep"
+        assert not errors, errors
+    finally:
+        browser.close()
+        p.stop()

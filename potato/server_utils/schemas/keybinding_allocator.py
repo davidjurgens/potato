@@ -234,9 +234,9 @@ def allocate_keybindings(annotation_schemes):
             names = ", ".join(f"'{s}'" + (f" ({w})" if w else "")
                               for s, (w, _) in by_schema.items())
             logger.warning(
-                f"Key '{key}' is bound by more than one schema: {names}. Only one "
-                f"of them responds to it; set a different key_value or turn off "
-                f"sequential_key_binding on one.")
+                f"Key '{key}' is bound by more than one schema: {names}. A press "
+                f"reaches only one of them, or all of them at once; set a different "
+                f"key_value or turn off sequential_key_binding on one.")
 
     # Step 3: Build available pools (excluding globally used keys)
     available_pools = []
@@ -292,7 +292,8 @@ def allocate_keybindings(annotation_schemes):
             # Not enough keys in any single pool — assign what we can
             logger.warning(
                 f"Schema '{name}' has {needed} labels needing keys "
-                f"but no single pool has enough capacity. "
+                f"but no single pool has enough free keys; keys that other "
+                f"schemes and viewers on the page hold are skipped. "
                 f"Some labels will not have keybindings."
             )
             # Use the pool with the most remaining keys

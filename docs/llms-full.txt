@@ -6796,7 +6796,8 @@ Keys that another scheme already binds are skipped. Those include any label's
 (the number row for best, `q w e r …` for worst) and triage (`1`, `2`, `3`, or
 its `accept_key`, `reject_key` and `skip_key`). When two schemes fix the same
 key, as two binary pairwise schemes do, neither can be moved, so Potato logs a
-warning naming both; only one of them responds to that key.
+warning naming both. A press of that key reaches only one of them, or all of
+them at once.
 
 Viewer keys are skipped too. Image, video, audio, point-cloud, rollout and
 interval annotation listen for their own keys across the whole page, so a

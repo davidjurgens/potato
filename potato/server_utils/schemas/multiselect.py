@@ -118,7 +118,9 @@ def _generate_multiselect_layout_internal(annotation_scheme):
 
             # Handle explicit per-label keyboard shortcuts
             if "key_value" in label_data:
-                shortcut_key = str(label_data["key_value"])
+                # Lowercase: shortcuts are matched without case, so "A" and
+                # "a" are one key.
+                shortcut_key = str(label_data["key_value"]).lower()
                 if shortcut_key in key2label:
                     # Warn and keep the label. Skipping it here took the
                     # option off the page, not just its shortcut.

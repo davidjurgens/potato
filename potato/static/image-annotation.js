@@ -685,11 +685,17 @@ class ImageAnnotationManager {
                         break;
                 }
 
-                // Label shortcuts
+                // Label shortcuts. String() and lowercase: a YAML `key_value: 1`
+                // is a number and never equalled e.key, and `key_value: A`
+                // needed Shift. preventDefault so a label elsewhere on the
+                // page bound to the same key does not fire as well.
                 for (const label of this.config.labels) {
-                    if (label.key_value && e.key === label.key_value) {
+                    if (label.key_value != null && label.key_value !== ''
+                            && String(label.key_value).toLowerCase() === pressed) {
                         this.setLabel(label.name, label.color);
                         this._updateLabelButtonState(label.name);
+                        e.preventDefault();
+                        break;
                     }
                 }
             }

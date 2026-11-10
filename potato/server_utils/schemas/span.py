@@ -328,7 +328,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         # key_value did nothing.
         if isinstance(label_data, Mapping) and label_data.get("key_value") is not None \
                 and label not in allocated_map:
-            shortcut_key = str(label_data["key_value"])
+            # Lowercase: shortcuts are matched without case.
+            shortcut_key = str(label_data["key_value"]).lower()
             if shortcut_key in key2label:
                 logger.warning(
                     f"Keyboard input conflict in '{scheme_name}': key '{shortcut_key}' is "

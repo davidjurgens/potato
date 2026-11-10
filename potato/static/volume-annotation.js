@@ -238,12 +238,17 @@
             }
             if (key === 'Escape' && this._polygon) { this._polygon = null; this._refreshOverlays(); return; }
             if (key === 'Enter' && this._polygon) { this._closePolygon(); event.preventDefault(); return; }
-            if (key === 'i') { this.interpolate(); return; }
+            // preventDefault on each key used here, or a radio label bound to
+            // the same key ticks too: Potato's label shortcuts skip only a
+            // key something already took.
+            const lower = key.toLowerCase();
+            if (lower === 'i') { event.preventDefault(); this.interpolate(); return; }
             for (const [tool, k] of Object.entries(this.config.toolKeys || {})) {
-                if (k === key) { this._selectTool(tool); return; }
+                if (k === lower) { event.preventDefault(); this._selectTool(tool); return; }
             }
-            const label = this.labels.find(l => l.key_value && String(l.key_value) === key);
-            if (label) this._selectLabel(label.name);
+            const label = this.labels.find(l => l.key_value != null && l.key_value !== ''
+                && String(l.key_value).toLowerCase() === lower);
+            if (label) { event.preventDefault(); this._selectLabel(label.name); }
         }
 
         _focusedView() {

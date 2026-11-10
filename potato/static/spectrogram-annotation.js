@@ -661,7 +661,9 @@
         var tStep = state.duration / (100 * state.zoom), fStep = (state.fmax - state.fmin) / 50;
         var labelHit = null;
         state.cfg.labels.forEach(function (l) {
-            if (l.key && e.key === l.key && !e.ctrlKey && !e.metaKey && !e.altKey) { labelHit = l.name; }
+            // Without case, as every other label shortcut matches.
+            if (l.key && e.key.toLowerCase() === l.key.toLowerCase()
+                    && !e.ctrlKey && !e.metaKey && !e.altKey) { labelHit = l.name; }
         });
         if (labelHit) {
             setLabel(state, labelHit);

@@ -220,8 +220,21 @@ class BasePlaywrightTest:
             self.select_label(page, schema, label)
         if tool:
             self.select_tool(page, schema, tool)
-        # One rendered frame, so a resize triggered by the click is applied
-        # before anything measures.
+        # The manager re-fits 150 ms after a resize (a debounced
+        # ResizeObserver), so one frame was not enough: on a slower layout the
+        # box was drawn against the old fit and landed 29 px left. Wait until
+        # the canvas matches its wrapper, which is what handleResize restores.
+        page.wait_for_function(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.image-annotation-container[data-schema="${schema}"]`);
+                const m = c && c.annotationManager;
+                if (!m || !m.canvas || !m._resizeContainer || m.deepZoom) return true;
+                return Math.abs(m._resizeContainer.clientWidth - m.canvas.getWidth()) < 2;
+            }""",
+            arg=schema,
+            timeout=5000,
+        )
         page.evaluate("() => new Promise(requestAnimationFrame)")
 
     def draw_bbox_on_image(self, page: "Page", schema: str,

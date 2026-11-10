@@ -1164,7 +1164,10 @@
                     if (this.selectedViolation < 0) return;
                     event.preventDefault();
                     this.deleteViolation();
-                } else if (/^[1-9]$/.test(key)) {
+                } else if (/^[1-9]$/.test(key)
+                           && parseInt(key, 10) <= this.streamIds.length) {
+                    // Only a digit with a panel; the rest stay free for
+                    // label shortcuts elsewhere on the page.
                     event.preventDefault();
                     this.selectPanelByIndex(parseInt(key, 10) - 1);
                 }

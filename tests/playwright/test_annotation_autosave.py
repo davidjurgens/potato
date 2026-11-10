@@ -39,8 +39,8 @@ SCHEMES = [{
     "source_field": "image_url",
     "tools": ["bbox", "polygon", "polyline", "ellipse"],
     "labels": [
-        {"name": "lane", "color": "#E74C3C"},
-        {"name": "cell", "color": "#27AE60"},
+        {"name": "lane", "color": "#E74C3C", "key_value": 1},
+        {"name": "cell", "color": "#27AE60", "key_value": "C"},
     ],
 }]
 
@@ -143,3 +143,16 @@ class TestPageKeys(BasePlaywrightTest):
         page.goto(f"{autosave_server.base_url}/annotate")
         self.image_manager_ready(page, "shapes")
         assert keys_taken_page_wide(page) - keys_reserved_for(SCHEMES[0]) == set()
+
+    def test_label_keys_pick_their_label(self, page, autosave_server):
+        # The canvas compared e.key === key_value, so a YAML number never
+        # matched and an uppercase letter needed Shift.
+        self.register_and_login(page, autosave_server)
+        page.goto(f"{autosave_server.base_url}/annotate")
+        self.image_manager_ready(page, "shapes")
+        current = ("() => document.querySelector('.image-annotation-container')"
+                   ".annotationManager.currentLabel")
+        for key, label in (("c", "cell"), ("1", "lane")):
+            page.evaluate("() => document.activeElement && document.activeElement.blur()")
+            page.keyboard.press(key)
+            assert page.evaluate(current) == label, key

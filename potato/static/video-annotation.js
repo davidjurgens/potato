@@ -995,18 +995,14 @@ class VideoAnnotationManager {
      * Handle keydown events
      */
     _handleKeydown(event) {
-        // Debug: Log all key presses to help diagnose keyboard issues
-        console.log('[VideoAnnotation] Keydown:', event.key, 'code:', event.code, 'target:', event.target.tagName);
-
-        // Don't handle if typing in input/textarea
+        // Don't handle if typing in input/textarea. (Every key, typed text
+        // included, used to be logged to the console here.)
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-            console.log('[VideoAnnotation] Ignoring: in text input');
             return;
         }
 
         // Check if this container exists (simplified check - removed offsetParent)
         if (!this.container) {
-            console.log('[VideoAnnotation] Ignoring: no container');
             return;
         }
 
@@ -1016,13 +1012,11 @@ class VideoAnnotationManager {
         // Handle bracket keys explicitly using both key and code for cross-platform compatibility
         // code is more reliable across different keyboard layouts
         if (key === '[' || code === 'BracketLeft') {
-            console.log('[VideoAnnotation] Handling [ key (code:', code, ')');
             event.preventDefault();
             this.setSelectionStart();
             return;
         }
         if (key === ']' || code === 'BracketRight') {
-            console.log('[VideoAnnotation] Handling ] key (code:', code, ')');
             event.preventDefault();
             this.setSelectionEnd();
             return;
@@ -1113,8 +1107,12 @@ class VideoAnnotationManager {
                 break;
 
             default:
-                // Check for label shortcuts
-                this._handleLabelShortcut(key);
+                // Label shortcuts. preventDefault so a label elsewhere on the
+                // page bound to the same key does not fire as well.
+                if (!event.ctrlKey && !event.metaKey && !event.altKey
+                        && this._handleLabelShortcut(keyLower)) {
+                    event.preventDefault();
+                }
                 break;
         }
     }
@@ -1125,7 +1123,10 @@ class VideoAnnotationManager {
     _handleLabelShortcut(key) {
         const labels = this.config.labels || [];
         for (const label of labels) {
-            if (label.key_value && label.key_value.toLowerCase() === key) {
+            // String(): `key_value: 1` in YAML arrives as a number, and
+            // number.toLowerCase() threw on every unhandled key.
+            if (label.key_value != null && label.key_value !== ''
+                    && String(label.key_value).toLowerCase() === key) {
                 this.setActiveLabel(label.name, label.color);
                 // Update UI
                 const buttons = this.container.querySelectorAll('.label-btn');
@@ -1133,9 +1134,10 @@ class VideoAnnotationManager {
                     btn.classList.toggle('active', btn.dataset.label === label.name);
                 });
                 this._showToast(`Selected: ${label.name}`);
-                break;
+                return true;
             }
         }
+        return false;
     }
 
     // ==================== Zoom Controls ====================

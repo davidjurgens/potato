@@ -40,8 +40,9 @@ VIDEO_SCHEME = {
     "description": "Segment the video by content type",
     "mode": "segment",
     "labels": [
-        {"name": "intro", "color": "#4ECDC4", "key_value": "1"},
-        {"name": "main", "color": "#FF6B6B", "key_value": "2"},
+        # A number and an uppercase letter, as YAML often gives them.
+        {"name": "intro", "color": "#4ECDC4", "key_value": 1},
+        {"name": "main", "color": "#FF6B6B", "key_value": "M"},
         {"name": "outro", "color": "#95A5A6", "key_value": "3"},
     ],
     "timeline_height": 70,
@@ -219,3 +220,17 @@ class TestVideoTimelineUX(BasePlaywrightTest):
         # player takes that is not listed would go to a label and do nothing.
         self._login(page, video_server)
         assert keys_taken_page_wide(page) - keys_reserved_for(VIDEO_SCHEME) == set()
+
+    def test_label_keys_pick_their_label(self, page, video_server):
+        # A numeric key_value threw from number.toLowerCase() on every key the
+        # player did not handle, and an uppercase one needed Shift.
+        self._login(page, video_server)
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        active = ("() => document.querySelector('.video-annotation-container')"
+                  ".videoAnnotationManager.activeLabel")
+        for key, label in (("m", "main"), ("1", "intro"), ("3", "outro")):
+            page.evaluate("() => document.activeElement && document.activeElement.blur()")
+            page.keyboard.press(key)
+            assert page.evaluate(active) == label, key
+        assert errors == []

@@ -40,6 +40,10 @@ def _labels(raw: Any, schema_name: str) -> List[Dict[str, Any]]:
     if not isinstance(raw, list) or not raw:
         raise ValueError(f"spectrogram_annotation '{schema_name}': labels must be a non-empty list")
     out = []
+    # A label without key_value gets the next digit no other label sets.
+    explicit = {str(lab["key_value"]).lower() for lab in raw
+                if isinstance(lab, dict) and lab.get("key_value") is not None}
+    free = [d for d in "123456789" if d not in explicit]
     for i, label in enumerate(raw):
         if isinstance(label, dict):
             name = str(label.get("name", "")).strip()
@@ -49,8 +53,8 @@ def _labels(raw: Any, schema_name: str) -> List[Dict[str, Any]]:
             name, color, key = str(label).strip(), DEFAULT_COLORS[i % len(DEFAULT_COLORS)], None
         if not name:
             raise ValueError(f"spectrogram_annotation '{schema_name}': label {i + 1} has no name")
-        if key is None and i < 9:
-            key = str(i + 1)
+        if key is None and free:
+            key = free.pop(0)
         out.append({"name": name, "color": str(color), "key": str(key) if key is not None else ""})
     return out
 

@@ -36,6 +36,19 @@ All notable changes to the Potato annotation platform are documented in this fil
   one of them. Two examples, `image-ai-detection/config-image-rating.yaml` and
   `image-vllm-rationale`, bound their vehicle label to `v`, the image select
   tool; it is now `c`.
+- A numeric label `key_value` (YAML `1`) made the video player throw on
+  every key it did not handle, and never matched in image or audio
+  annotation. An uppercase one needed Shift in image and spectrogram
+  annotation and never matched in audio. Audio's `1`–`9` picked labels by
+  position even when a label set that digit as its `key_value`; the
+  `key_value` now wins. Image, video, audio and volume annotation now keep a
+  key they act on from also ticking a radio or checkbox label bound to it.
+  Rollout evaluation takes only the digits it has panels for. Radio,
+  checkbox and span labels whose keys differ only in case now count as one
+  key, and the second gets the duplicate warning. Triage accepts a numeric
+  `accept_key`, `reject_key` or `skip_key`, and spectrogram annotation no
+  longer fills in a digit that another label sets. The video player no
+  longer logs every key press to the browser console.
 - Label shortcuts on radio, checkbox, Likert, span, pairwise and BWS questions
   fire when the key is released, so a widget that handled the key when it was
   pressed could not stop them. On a page with a triage question, pressing `1`

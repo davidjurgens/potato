@@ -68,9 +68,15 @@ def page_keys(annotation_scheme: Dict[str, Any]) -> List[str]:
 
 
 def label_keys(annotation_scheme: Dict[str, Any]) -> List[Tuple[str, str]]:
-    """(digit, label) for the first nine labels, which 1-9 pick by position."""
-    return [(str(i + 1), lab["name"]) for i, lab in
-            enumerate(_process_labels(annotation_scheme.get("labels") or [])[:9])]
+    """
+    (digit, label) for the first nine labels, which 1-9 pick by position. A
+    digit that some label sets as its key_value goes to that label instead.
+    """
+    labels = _process_labels(annotation_scheme.get("labels") or [])
+    explicit = {str(lab["key_value"]).lower() for lab in labels
+                if lab.get("key_value") is not None}
+    return [(str(i + 1), lab["name"]) for i, lab in enumerate(labels[:9])
+            if str(i + 1) not in explicit]
 
 
 def generate_audio_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:

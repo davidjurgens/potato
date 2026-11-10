@@ -494,3 +494,9 @@ class TestPageKeys(BasePlaywrightTest):
         open_rollout(self, page, rollout_server)
         wait_for_media(page)
         assert keys_taken_page_wide(page) - keys_reserved_for(SCHEMES[0]) == set()
+
+    def test_digits_past_the_last_panel_stay_free(self, page, rollout_server):
+        # 1-9 were all taken whatever the panel count, so a radio on 4 was dead.
+        open_rollout(self, page, rollout_server)
+        wait_for_media(page)
+        assert keys_taken_page_wide(page, "123456789") == {"1", "2", "3"}

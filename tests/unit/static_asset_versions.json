@@ -24,8 +24,8 @@
     "version": "6"
   },
   "audio-annotation.js": {
-    "sha256": "5cc0c875b1651b55",
-    "version": "10"
+    "sha256": "a2f8307cf8a74596",
+    "version": "11"
   },
   "audio-dialogue.css": {
     "sha256": "141904f6914ed5e2",
@@ -236,8 +236,8 @@
     "version": "20"
   },
   "image-annotation.js": {
-    "sha256": "1d795725b32bf76c",
-    "version": "60"
+    "sha256": "cced378dbefc69c0",
+    "version": "61"
   },
   "incentive-elicitation.css": {
     "sha256": "20183e12b6f6efa0",
@@ -428,8 +428,8 @@
     "version": "4"
   },
   "rollout-eval.js": {
-    "sha256": "941baa74136fb2f2",
-    "version": "7"
+    "sha256": "d2cef4de4b34a003",
+    "version": "8"
   },
   "run-tree.js": {
     "sha256": "074d3ccc44b64809",
@@ -496,8 +496,8 @@
     "version": "1"
   },
   "spectrogram-annotation.js": {
-    "sha256": "5e2909ac5df1d310",
-    "version": "2"
+    "sha256": "d86e14784c463600",
+    "version": "3"
   },
   "spreadsheet-display.css": {
     "sha256": "b7ae8488ab879d3c",
@@ -568,8 +568,8 @@
     "version": "4"
   },
   "video-annotation.js": {
-    "sha256": "913b05779170e631",
-    "version": "24"
+    "sha256": "8d6fb0d55ed917a3",
+    "version": "25"
   },
   "viewers/fits-cutout.css": {
     "sha256": "f3e20dfd67fa36ca",
@@ -624,8 +624,8 @@
     "version": "1"
   },
   "volume-annotation.js": {
-    "sha256": "f487bf28f3c4f470",
-    "version": "2"
+    "sha256": "fc214815bd165a23",
+    "version": "3"
   },
   "web-agent-overlays.js": {
     "sha256": "ba2cd17c89c458af",

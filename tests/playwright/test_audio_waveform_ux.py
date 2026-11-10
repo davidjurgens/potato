@@ -40,9 +40,10 @@ AUDIO_SCHEME = {
     "description": "Segment the audio by content type",
     "mode": "label",
     "labels": [
-        {"name": "speech", "color": "#4ECDC4", "key_value": "1"},
-        {"name": "music", "color": "#FF6B6B", "key_value": "2"},
-        {"name": "silence", "color": "#95A5A6", "key_value": "3"},
+        # Keys that disagree with position, and an uppercase one.
+        {"name": "speech", "color": "#4ECDC4", "key_value": "2"},
+        {"name": "music", "color": "#FF6B6B", "key_value": "1"},
+        {"name": "silence", "color": "#95A5A6", "key_value": "S"},
     ],
     "zoom_enabled": True,
     "playback_rate_control": True,
@@ -332,3 +333,14 @@ class TestAudioWaveformUX(BasePlaywrightTest):
         # waveform takes that is not listed would go to a label and do nothing.
         self._login(page, audio_server)
         assert keys_taken_page_wide(page) - keys_reserved_for(AUDIO_SCHEME) == set()
+
+    def test_label_keys_pick_their_label(self, page, audio_server):
+        # 1-9 used to pick by position whatever key_value said, so 1 gave
+        # speech, and an uppercase key_value never matched.
+        self._login(page, audio_server)
+        active = ("() => document.querySelector('.audio-annotation-container')"
+                  ".audioAnnotationManager.activeLabel")
+        for key, label in (("1", "music"), ("2", "speech"), ("s", "silence")):
+            page.evaluate("() => document.activeElement && document.activeElement.blur()")
+            page.keyboard.press(key)
+            assert page.evaluate(active) == label, key
