@@ -49,6 +49,18 @@ TOOL_KEYS = {
     "segment_3d": "g",
 }
 
+#: Keys pc-viewer.js `_bindKeys` handles before the class keys, with when it
+#: does (None for always). A class bound to one of these loses the key then.
+#: The viewer compares `event.key` exactly, so both cases of a letter count.
+VIEWER_KEYS = {
+    ",": None, ".": None, "h": None, "H": None,
+    **dict.fromkeys(["q", "Q", "e", "E", "Delete", "Backspace", "Escape"],
+                    "an annotation is selected"),
+    **dict.fromkeys(["[", "]"], "the scan is a sequence"),
+    **dict.fromkeys(["f", "F"], "an annotation in a sequence is selected"),
+}
+PAINT_KEYS = dict.fromkeys(["-", "_", "=", "+"], "the paint tool is armed")
+
 TOOL_LABELS = {
     "cuboid_3d": ("3D box", "▧"),
     "point_3d": ("Point", "⬤"),
@@ -406,7 +418,7 @@ def _label_buttons(labels):
     for label in labels:
         name = escape_html_content(label["name"])
         color = label["color"]
-        key_hint = f' ({label["key_value"]})' if label.get("key_value") else ""
+        key_hint = f' ({label["key_value"]})' if _has_key(label) else ""
         out.append(
             f'<button type="button" class="label-btn" data-label="{name}" '
             f'data-color="{color}" aria-pressed="false" '
@@ -416,37 +428,52 @@ def _label_buttons(labels):
     return "\n".join(out)
 
 
+def _has_key(label):
+    """A YAML ``key_value: 0`` is an int, so truthiness would drop the 0 key."""
+    return label.get("key_value") not in (None, "")
+
+
 def _keybindings(labels, tools, schema_name):
     """
     Shortcuts, with tool keys taking precedence over label keys.
 
-    A label whose ``key_value`` collides with a tool key or ``h`` is still
-    rendered, its key does nothing in the viewer, and the collision is logged:
-    the project convention is to warn and continue rather than silently drop
-    one binding, because a dropped shortcut is discovered by an annotator
-    mid-task.
+    A label whose ``key_value`` collides with a tool key or one of
+    ``VIEWER_KEYS`` is still rendered and the collision is logged; its key does
+    nothing in the viewer, or nothing while the viewer's condition holds. The
+    project convention is to warn and continue rather than silently drop one
+    binding, because a dropped shortcut is discovered by an annotator mid-task.
     """
     bindings = []
-    taken = set()
+    taken = dict(VIEWER_KEYS)
+    if "segment_3d" in tools:
+        taken.update(PAINT_KEYS)
     for tool in tools:
         key = TOOL_KEYS[tool]
-        taken.add(key)
+        taken[key] = None
         bindings.append({"key": key, "description": TOOL_LABELS[tool][0]})
-    # The viewer handles `h` before any class key, so a class bound to it
-    # would never be selected by that key.
-    taken.add("h")
     bindings.append({"key": "h / Shift+H", "description": "Hide the armed class / show only it"})
 
+    by_label = {}
     for label in labels:
-        key = label.get("key_value")
-        if not key:
+        if not _has_key(label):
             continue
-        if key in taken:
+        key = str(label["key_value"])
+        if key in by_label:
+            logger.warning(
+                "Schema '%s': labels '%s' and '%s' both use key '%s'. The "
+                "first keeps it; click the class button for the other.",
+                schema_name, by_label[key], label["name"], key)
+        elif key in taken:
+            when = taken[key]
             logger.warning(
                 "Schema '%s': label '%s' uses key '%s', which is already a "
-                "viewer shortcut. The viewer keeps the key; click the class "
-                "button instead.", schema_name, label["name"], key)
-        taken.add(key)
+                "viewer shortcut. The viewer keeps the key%s; click the class "
+                "button instead.", schema_name, label["name"], key,
+                f" while {when}" if when else "")
+            if when:                        # the class has it the rest of the time
+                by_label[key] = label["name"]
+        else:
+            by_label[key] = label["name"]
         bindings.append({"key": key, "description": f'Select {label["name"]}'})
 
     # Published so they appear in the instructions panel with everything else.

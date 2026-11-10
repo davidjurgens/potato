@@ -228,3 +228,19 @@ class TestPainting(BasePlaywrightTest):
         page.keyboard.press("h")
         page.keyboard.press("Shift+H")
         assert manager_eval(page, "Array.from(m._hiddenLabels)") == ["road"]
+
+    def test_the_0_key_arms_a_class_bound_to_it(self, make_server, page):
+        if not MEDIA.is_dir():
+            pytest.skip("run examples/spatial/kitti-cuboids/generate_scene.py first")
+        schemes = [dict(SCHEMES[0], labels=[
+            {"name": "car", "color": "#FF6B6B", "key_value": 1},
+            {"name": "road", "color": "#4ECDC4", "key_value": 0},
+        ])]
+        server = make_server(schemes, items=scene_items(), extra_config={
+            "media_directory": str(MEDIA),
+            "item_properties": {"id_key": "id", "text_key": "point_cloud"}})
+        open_viewer(self, page, server)
+        page.click("body")
+        page.keyboard.press("0")
+        assert manager_eval(page, "m.currentLabel") == "road"
+        assert page.get_attribute('.label-btn[data-label="road"]', "aria-pressed") == "true"

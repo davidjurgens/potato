@@ -331,6 +331,33 @@ test('a class bound to h does not take the key from hide', () => {
     expect(m.currentLabel).toBe('car');
 });
 
+// The generator's VIEWER_KEYS warns that `,` always and `q` only with a
+// selection keep the key from a class; this is the viewer side of that table.
+test('the viewer keeps , from a class always and q only while a box is selected', () => {
+    const m = makeManager({ labels: [{ name: 'car', color: '#ff0000' },
+                                     { name: 'road', color: '#0000ff', key_value: ',' },
+                                     { name: 'sign', color: '#00ff00', key_value: 'q' }] });
+    m._bindKeys();
+    const press = (key) => document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true }));
+    press(',');
+    expect(m.currentLabel).toBe('car');
+    expect(m.selectedIndex).toBe(-1);
+    press('q');
+    expect(m.currentLabel).toBe('sign');
+    document.removeEventListener('keydown', m._keyHandler);
+});
+
+test('a class on the 0 key gets it', () => {
+    // YAML `key_value: 0` arrives as the number 0, which is falsy.
+    const m = makeManager({ labels: [{ name: 'car', color: '#ff0000' },
+                                     { name: 'road', color: '#0000ff', key_value: 0 }] });
+    m._bindKeys();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
+    document.removeEventListener('keydown', m._keyHandler);
+    expect(m.currentLabel).toBe('road');
+});
+
 test('the class-visibility manager is keyed by this schema and project', () => {
     const seen = [];
     global.LabelVisibilityManager = class { constructor(opts) { seen.push(opts); } };

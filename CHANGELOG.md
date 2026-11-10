@@ -26,6 +26,17 @@ All notable changes to the Potato annotation platform are documented in this fil
   annotation does, and lists them with the other shortcuts. A class whose
   `key_value` is `h` or a tool key now gets a warning that the viewer keeps the
   key; the old warning said the class kept it, which was wrong for tool keys.
+- A point cloud class bound to `,` or `.` never got its key, because the viewer
+  uses both to step through annotations, and the generator did not warn. It now
+  warns for each key the viewer handles before the class keys. When the viewer
+  takes a key only some of the time, the warning says when: `q`, `e`, `Delete`,
+  `Backspace` and `Escape` while an annotation is selected; `[` and `]` in a
+  sequence; `f` while an annotation in a sequence is selected; `-` and `=`
+  while the paint tool is armed. Two classes on one key now get a warning that
+  names both and says the first keeps the key.
+- A point cloud class with `key_value: 0` never got the `0` key. YAML reads `0`
+  as the number zero, which the viewer and the generator both treated as "no
+  key". Both now bind it.
 - The multirate fix changed `styles.css` without changing its version number,
   so a browser that had the file cached kept the old rules, including those for
   each item's label cell in a multi-column multirate. The version is now bumped.

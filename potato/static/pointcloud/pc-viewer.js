@@ -2249,6 +2249,9 @@
             }
         }
 
+        // A key handled here before the class-key loop takes the key from a
+        // class bound to it. Add any new one to VIEWER_KEYS (or PAINT_KEYS) in
+        // server_utils/schemas/spatial_annotation.py so the config warns.
         _bindKeys() {
             const keys = this.config.toolKeys || {};
             this._keyHandler = (e) => {
@@ -2353,7 +2356,8 @@
                     }
                 }
                 for (const label of (this.config.labels || [])) {
-                    if (label.key_value && e.key === String(label.key_value)) {
+                    if (label.key_value != null && label.key_value !== ''
+                            && e.key === String(label.key_value)) {
                         e.preventDefault();
                         this.setLabel(label.name, label.color, true);
                         return;
