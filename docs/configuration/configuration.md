@@ -779,6 +779,22 @@ annotation_schemes:
 
 `sequential_key_binding` belongs on an annotation scheme, not at the top level.
 
+When several schemes on a page use `sequential_key_binding`, each gets its own
+keys: the first takes the number row, the next the row below it, and so on.
+Keys that another scheme already binds are skipped. Those include any label's
+`key_value` and the fixed keys of pairwise (`1`, `2`, and `0` for a tie), BWS
+(the number row for best, `q w e r …` for worst) and triage (`1`, `2`, `3`, or
+its `accept_key`, `reject_key` and `skip_key`). When two schemes fix the same
+key, as two binary pairwise schemes do, neither can be moved, so Potato logs a
+warning naming both; only one of them responds to that key.
+
+Viewer keys are not reserved yet. Image, video, audio and point-cloud
+annotation each handle their own tool and playback keys across the whole page
+(in image annotation, `r` picks the bounding-box tool), and
+`sequential_key_binding` does not skip them. On a page with one of these
+viewers, check that the keys given to other schemes miss its tool keys, or set
+`key_value` by hand.
+
 ## AI Support
 
 With `ai_support` on, an LLM suggests labels and highlights keywords in the text while the annotator works. The annotator still makes the call.

@@ -379,3 +379,115 @@ class TestDictLabels:
         assert labels == ["positive", "negative"]
         keys = [e["key"] for e in alloc["s1"]]
         assert keys == ["1", "2"]
+
+
+# ---------------------------------------------------------------------------
+# Keys on a rendered page. The allocator used to reserve a-d for BWS "worst"
+# while bws.py bound q-r, never reserved triage's 1/2/3, allocated a likert
+# nothing (so it bound 1..size over whatever else held them), and ignored
+# explicit keys on schemas it was not allocating. Each case renders every
+# scheme the way the server does and reads the data-key attributes back.
+# ---------------------------------------------------------------------------
+
+import re
+
+from potato.server_utils.schemas.registry import schema_registry
+
+
+def rendered_keys(schemes):
+    """{scheme name: set of data-key values} after allocation and rendering."""
+    alloc = allocate_keybindings(schemes)
+    keys = {}
+    for scheme in schemes:
+        scheme = dict(scheme)
+        if scheme["name"] in alloc:
+            scheme["_allocated_keys"] = alloc[scheme["name"]]
+        html, _ = schema_registry.generate(scheme)
+        keys[scheme["name"]] = {k.lower() for k in re.findall(r'data-key="([^"]+)"', html)}
+    return keys
+
+
+def assert_disjoint(keys):
+    names = list(keys)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            assert not keys[a] & keys[b], f"{a} and {b} share {keys[a] & keys[b]}"
+
+
+def radio(name, n, **extra):
+    return {"annotation_type": "radio", "name": name, "description": "d",
+            "labels": [f"{name}{i}" for i in range(n)], "sequential_key_binding": True,
+            **extra}
+
+
+LIKERT = {"annotation_type": "likert", "name": "agree", "description": "d", "size": 5,
+          "min_label": "lo", "max_label": "hi", "sequential_key_binding": True}
+
+
+class TestKeysOnARenderedPage:
+    def test_triage_keys_are_reserved(self):
+        keys = rendered_keys([{"annotation_type": "triage", "name": "keep", "description": "d"},
+                              radio("tone", 3)])
+        assert keys["keep"] == {"1", "2", "3"} and len(keys["tone"]) == 3
+        assert_disjoint(keys)
+
+    def test_custom_triage_keys_are_reserved_too(self):
+        keys = rendered_keys([{"annotation_type": "triage", "name": "keep", "description": "d",
+                               "accept_key": "A", "reject_key": "q", "skip_key": "w"},
+                              dict(radio("tone", 3, keybinding_strategy="mnemonic"),
+                                   labels=["apple", "quiet", "wild"])])
+        assert keys["keep"] == {"a", "q", "w"} and len(keys["tone"]) == 3
+        assert_disjoint(keys)
+
+    def test_bws_worst_keys_are_reserved(self):
+        # Seven labels do not fit the six number keys BWS leaves, so the radio
+        # goes to a letter row; it used to land on BWS's q w e r.
+        keys = rendered_keys([{"annotation_type": "bws", "name": "bws", "description": "d"},
+                              radio("tone", 7)])
+        assert {"q", "w", "e", "r"} <= keys["bws"] and len(keys["tone"]) == 7
+        assert_disjoint(keys)
+
+    def test_every_bws_tile_has_its_own_key(self):
+        keys = rendered_keys([{"annotation_type": "bws", "name": "bws", "description": "d",
+                               "tuple_size": 5}])
+        assert len(keys["bws"]) == 10          # position 5 used to repeat position 3's `e`
+
+    def test_a_likert_after_a_radio_gets_free_keys(self):
+        keys = rendered_keys([radio("tone", 3), LIKERT])
+        assert len(keys["agree"]) == 5
+        assert_disjoint(keys)
+
+    def test_a_likert_on_its_own_keeps_the_number_row(self):
+        assert rendered_keys([LIKERT])["agree"] == {"1", "2", "3", "4", "5"}
+
+    def test_an_explicit_key_on_an_unallocated_schema_is_reserved(self):
+        fixed = {"annotation_type": "radio", "name": "fixed", "description": "d",
+                 "labels": [{"name": "yes", "key_value": 1}, {"name": "no", "key_value": 2}]}
+        keys = rendered_keys([fixed, radio("tone", 3)])
+        assert keys["fixed"] == {"1", "2"}
+        assert_disjoint(keys)
+
+
+class TestCrossSchemaWarning:
+    def warnings(self, caplog, schemes):
+        caplog.clear()
+        with caplog.at_level("WARNING",
+                             logger="potato.server_utils.schemas.keybinding_allocator"):
+            allocate_keybindings(schemes)
+        return [r.getMessage() for r in caplog.records]
+
+    def test_two_hard_coded_schemas_on_one_key_warn(self, caplog):
+        binary = {"annotation_type": "pairwise", "mode": "binary", "description": "d"}
+        messages = self.warnings(caplog, [dict(binary, name="a"), dict(binary, name="b")])
+        assert any("Key '1' is bound by more than one schema: 'a', 'b'" in m for m in messages)
+
+    def test_an_explicit_key_on_a_triage_key_names_the_label(self, caplog):
+        fixed = {"annotation_type": "radio", "name": "fixed", "description": "d",
+                 "labels": [{"name": "yes", "key_value": "1"}]}
+        messages = self.warnings(caplog, [fixed, {"annotation_type": "triage", "name": "keep"}])
+        assert any("'fixed' (label 'yes'), 'keep'" in m for m in messages)
+
+    def test_pairwise_without_keys_does_not_warn(self, caplog):
+        scale = {"annotation_type": "pairwise", "mode": "scale", "name": "pref"}
+        binary = {"annotation_type": "pairwise", "mode": "binary", "name": "help"}
+        assert self.warnings(caplog, [scale, binary]) == []

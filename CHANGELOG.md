@@ -17,6 +17,16 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- `sequential_key_binding` could give two schemes on one page the same key.
+  The key allocator never reserved triage's `1`, `2` and `3`, reserved `a`–`d`
+  for BWS's worst column while BWS bound `q w e r`, ignored `key_value` on
+  schemes it was not allocating, and gave a Likert scale no keys at all, so a
+  Likert listed after a radio bound `1`–`5` over the radio's keys. It now
+  reserves the keys each of those schemes binds and allocates Likert points
+  like labels. A BWS tuple of five or more bound `e` to two worst tiles;
+  each tile now has its own key, along the number row and the row below it.
+  When two schemes fix the same key, a warning names them. The BWS docs listed
+  `a`–`d` for worst and now list `q w e r`.
 - Label shortcuts on radio, checkbox, Likert, span, pairwise and BWS questions
   fire when the key is released, so a widget that handled the key when it was
   pressed could not stop them. On a page with a triage question, pressing `1`

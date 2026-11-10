@@ -492,12 +492,12 @@ class TestBwsUI(unittest.TestCase):
         assert best_input.get_attribute("value") == "B"
 
     def test_keyboard_shortcut_worst(self):
-        """Pressing letter key selects corresponding worst tile."""
+        """Pressing a worst key (q w e r: the row below 1 2 3 4) selects that tile."""
         self._go_to_annotate()
 
-        # Press "c" to select C as worst
+        # Press "e" to select C as worst
         body = self.driver.find_element(By.TAG_NAME, "body")
-        body.send_keys("c")
+        body.send_keys("e")
         time.sleep(0.3)
 
         worst_input = self.driver.find_element(

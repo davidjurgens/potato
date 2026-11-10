@@ -94,7 +94,7 @@ over an empty item list, so the annotator is asked to choose between blanks.
 | `best_description` | "Which is BEST?" | Question text for best selection. |
 | `worst_description` | "Which is WORST?" | Question text for worst selection. |
 | `tuple_size` | 4 | Must match `bws_config.tuple_size`. |
-| `sequential_key_binding` | true | Enable keyboard shortcuts (1-9 for best, a-z for worst). |
+| `sequential_key_binding` | true | Enable keyboard shortcuts: the number row for best, the row below it (`q w e r …`) for worst. |
 
 ## Tuple Generation
 
@@ -218,10 +218,14 @@ When `sequential_key_binding: true`:
 | `2` | Select item B as best |
 | `3` | Select item C as best |
 | `4` | Select item D as best |
-| `a` | Select item A as worst |
-| `b` | Select item B as worst |
-| `c` | Select item C as worst |
-| `d` | Select item D as worst |
+| `q` | Select item A as worst |
+| `w` | Select item B as worst |
+| `e` | Select item C as worst |
+| `r` | Select item D as worst |
+
+A larger tuple continues along both rows (`5` and `t` for item E, and so on).
+Past the tenth item a tile has no key. Potato keeps these keys away from other
+schemes on the page that use `sequential_key_binding`.
 
 ## Annotation Storage
 

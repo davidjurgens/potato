@@ -311,3 +311,16 @@ class TestAudioWaveformUX(BasePlaywrightTest):
             "() => { const t = document.getElementById('text-content'); return t ? t.textContent.trim() : null; }"
         )
         assert hidden and "/test-audio/" in hidden, "hidden #text-content should retain the media URL"
+
+    def test_arrow_keys_seek_without_changing_the_item(self, page, audio_server):
+        # audio-annotation.js uses the arrows to seek. annotation.js used to
+        # move to the next item on the same key press, so a seek was lost.
+        self._login(page, audio_server)
+        first = page.input_value("#instance_id")
+        page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(500)
+        assert page.input_value("#instance_id") == first
+        now = page.evaluate("() => document.querySelector('.audio-annotation-container')"
+                            ".audioAnnotationManager.peaks.player.getCurrentTime()")
+        assert now > 0

@@ -7,7 +7,7 @@ Features include:
 - Best selection row — clickable tiles
 - Worst selection row — clickable tiles
 - Validation that best != worst
-- Keyboard shortcuts: 1-9 for best, q/w/e/r for worst
+- Keyboard shortcuts: the number row for best, q w e r t ... for worst (BEST_KEYS, WORST_KEYS)
 - Two hidden inputs storing the best/worst position labels
 
 Config keys:
@@ -32,6 +32,20 @@ from .identifier_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Keys for each position: the number row for best, the row below it for worst.
+#: Past the tenth position a tile has no key.
+BEST_KEYS = "1234567890"
+WORST_KEYS = "qwertyuiop"
+
+
+def bws_keys(tuple_size):
+    """
+    The (best, worst) keys a tuple of this size binds, in position order.
+    keybinding_allocator reserves exactly these, so it must not compute its own.
+    """
+    n = max(0, min(int(tuple_size), len(BEST_KEYS)))
+    return list(BEST_KEYS[:n]), list(WORST_KEYS[:n])
 
 
 def generate_bws_layout(
@@ -88,25 +102,26 @@ def _generate_bws_layout_internal(
     # Position labels: A, B, C, D, ...
     positions = [chr(ord("A") + i) for i in range(tuple_size)]
 
+    best_keys, worst_keys = bws_keys(tuple_size)
+
     # Build best tiles
     best_tiles_html = ""
     for idx, pos in enumerate(positions):
-        key_num = str(idx + 1)
-        shortcut = f"[{key_num}]" if enable_keybindings else ""
-        data_key = f'data-key="{key_num}"' if enable_keybindings else ""
+        key_num = best_keys[idx] if idx < len(best_keys) else None
+        shortcut = f"[{key_num}]" if enable_keybindings and key_num else ""
+        data_key = f'data-key="{key_num}"' if enable_keybindings and key_num else ""
         best_tiles_html += f"""
                 <div class="bws-tile bws-best-tile" data-value="{pos}" data-schema="{escaped_schema}" data-role="best" tabindex="0" {data_key}>
                     <span class="bws-tile-label">{pos}</span>
                     <span class="bws-tile-shortcut">{shortcut}</span>
                 </div>"""
 
-    # Build worst tiles — keys q, w, e, r (row below 1, 2, 3, 4)
-    worst_keys = "qwer"
+    # Build worst tiles
     worst_tiles_html = ""
     for idx, pos in enumerate(positions):
-        key_letter = worst_keys[idx] if idx < len(worst_keys) else chr(ord("a") + idx)
-        shortcut = f"[{key_letter}]" if enable_keybindings else ""
-        data_key = f'data-key="{key_letter}"' if enable_keybindings else ""
+        key_letter = worst_keys[idx] if idx < len(worst_keys) else None
+        shortcut = f"[{key_letter}]" if enable_keybindings and key_letter else ""
+        data_key = f'data-key="{key_letter}"' if enable_keybindings and key_letter else ""
         worst_tiles_html += f"""
                 <div class="bws-tile bws-worst-tile" data-value="{pos}" data-schema="{escaped_schema}" data-role="worst" tabindex="0" {data_key}>
                     <span class="bws-tile-label">{pos}</span>
@@ -157,16 +172,11 @@ def _generate_bws_layout_internal(
     </form>
     """
 
-    # Key bindings — best: 1,2,3,4  worst: q,w,e,r
-    worst_binding_keys = "qwer"
     key_bindings = []
     if enable_keybindings:
-        for idx, pos in enumerate(positions):
-            key_bindings.append((str(idx + 1), f"{schema_name}: Best {pos}"))
-            wk = worst_binding_keys[idx] if idx < len(worst_binding_keys) else chr(ord("a") + idx)
-            key_bindings.append(
-                (wk, f"{schema_name}: Worst {pos}")
-            )
+        for idx, pos in enumerate(positions[:len(best_keys)]):
+            key_bindings.append((best_keys[idx], f"{schema_name}: Best {pos}"))
+            key_bindings.append((worst_keys[idx], f"{schema_name}: Worst {pos}"))
 
     logger.info(f"Successfully generated BWS layout for {schema_name}")
     return schematic, key_bindings
