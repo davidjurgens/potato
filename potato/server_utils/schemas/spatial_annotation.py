@@ -420,10 +420,11 @@ def _keybindings(labels, tools, schema_name):
     """
     Shortcuts, with tool keys taking precedence over label keys.
 
-    A label whose ``key_value`` collides with a tool key keeps its label and the
-    collision is logged — the project convention is to warn and continue rather
-    than silently drop one binding, because a dropped shortcut is discovered by
-    an annotator mid-task.
+    A label whose ``key_value`` collides with a tool key or ``h`` is still
+    rendered, its key does nothing in the viewer, and the collision is logged:
+    the project convention is to warn and continue rather than silently drop
+    one binding, because a dropped shortcut is discovered by an annotator
+    mid-task.
     """
     bindings = []
     taken = set()
@@ -431,6 +432,10 @@ def _keybindings(labels, tools, schema_name):
         key = TOOL_KEYS[tool]
         taken.add(key)
         bindings.append({"key": key, "description": TOOL_LABELS[tool][0]})
+    # The viewer handles `h` before any class key, so a class bound to it
+    # would never be selected by that key.
+    taken.add("h")
+    bindings.append({"key": "h / Shift+H", "description": "Hide the armed class / show only it"})
 
     for label in labels:
         key = label.get("key_value")
@@ -439,7 +444,7 @@ def _keybindings(labels, tools, schema_name):
         if key in taken:
             logger.warning(
                 "Schema '%s': label '%s' uses key '%s', which is already a "
-                "tool shortcut. The label keeps the binding; press the tool "
+                "viewer shortcut. The viewer keeps the key; click the class "
                 "button instead.", schema_name, label["name"], key)
         taken.add(key)
         bindings.append({"key": key, "description": f'Select {label["name"]}'})

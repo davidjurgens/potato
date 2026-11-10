@@ -2334,6 +2334,17 @@
                     }
                 }
 
+                // Hide the armed class, or with Shift show only it (again to
+                // undo), as in image annotation. Before the tool and class
+                // keys so a class bound to `h` cannot take it.
+                if ((e.key === 'h' || e.key === 'H') && this.labelVisibility
+                        && this.currentLabel) {
+                    e.preventDefault();
+                    if (e.shiftKey) this.labelVisibility.solo(this.currentLabel);
+                    else this.labelVisibility.toggle(this.currentLabel);
+                    return;
+                }
+
                 for (const tool of Object.keys(keys)) {
                     if (e.key === keys[tool]) {
                         e.preventDefault();

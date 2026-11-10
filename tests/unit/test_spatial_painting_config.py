@@ -76,3 +76,11 @@ def test_painting_keys_are_published_only_when_painting():
     assert {"Shift + drag", "Alt + drag", "- / ="} <= keys
     keys = {b["key"] for b in _keybindings(labels, ["cuboid_3d"], "scan")}
     assert "Shift + drag" not in keys
+
+
+def test_h_is_published_and_a_class_bound_to_it_warns(caplog):
+    labels = [{"name": "road", "color": "#808080", "key_value": "h"}]
+    with caplog.at_level("WARNING"):
+        keys = {b["key"] for b in _keybindings(labels, ["cuboid_3d"], "scan")}
+    assert "h / Shift+H" in keys
+    assert "uses key 'h', which is already a viewer shortcut" in caplog.text

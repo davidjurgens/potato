@@ -306,6 +306,31 @@ test('a painted segment needs no per-object attributes', () => {
     delete window.ObjectAttributes;
 });
 
+test('h hides the armed class and Shift+H shows only it', () => {
+    const m = makeManager();
+    const calls = [];
+    m.labelVisibility = { toggle: (l) => calls.push(['toggle', l]),
+                          solo: (l) => calls.push(['solo', l]) };
+    m._bindKeys();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'H', shiftKey: true, bubbles: true }));
+    document.removeEventListener('keydown', m._keyHandler);
+    expect(calls).toEqual([['toggle', 'car'], ['solo', 'car']]);
+});
+
+test('a class bound to h does not take the key from hide', () => {
+    const m = makeManager({ labels: [{ name: 'car', color: '#ff0000' },
+                                     { name: 'road', color: '#0000ff', key_value: 'h' }] });
+    const calls = [];
+    m.labelVisibility = { toggle: (l) => calls.push(['toggle', l]),
+                          solo: (l) => calls.push(['solo', l]) };
+    m._bindKeys();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
+    document.removeEventListener('keydown', m._keyHandler);
+    expect(calls).toEqual([['toggle', 'car']]);
+    expect(m.currentLabel).toBe('car');
+});
+
 test('the class-visibility manager is keyed by this schema and project', () => {
     const seen = [];
     global.LabelVisibilityManager = class { constructor(opts) { seen.push(opts); } };

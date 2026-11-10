@@ -400,8 +400,8 @@
     "version": "9"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "fa98bf3d73a4dd93",
-    "version": "17"
+    "sha256": "1e28e7fad9c887ba",
+    "version": "18"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "63b2cecee7f6dd3d",

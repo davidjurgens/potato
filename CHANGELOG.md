@@ -21,6 +21,11 @@ All notable changes to the Potato annotation platform are documented in this fil
   scheme in every project, so hiding `car` in one point-cloud scheme hid `car`
   in every other point-cloud scheme opened in that browser. It is now stored
   per scheme and project, as in image and video annotation.
+- The point cloud docs listed `h` (hide the armed class) and `Shift+H` (show
+  only it), but the viewer ignored both keys. It now handles them as image
+  annotation does, and lists them with the other shortcuts. A class whose
+  `key_value` is `h` or a tool key now gets a warning that the viewer keeps the
+  key; the old warning said the class kept it, which was wrong for tool keys.
 - The multirate fix changed `styles.css` without changing its version number,
   so a browser that had the file cached kept the old rules, including those for
   each item's label cell in a multi-column multirate. The version is now bumped.

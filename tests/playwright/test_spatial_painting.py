@@ -218,3 +218,13 @@ class TestPainting(BasePlaywrightTest):
         })""")
         assert widths["page"] <= 360, widths
         assert widths["right"] <= 360, widths
+
+    def test_h_hides_the_armed_class_and_shift_h_shows_only_it(self, paint_server, page):
+        open_viewer(self, page, paint_server)
+        arm(page, "car")
+        page.click("body")
+        page.keyboard.press("h")
+        assert manager_eval(page, "Array.from(m._hiddenLabels)") == ["car"]
+        page.keyboard.press("h")
+        page.keyboard.press("Shift+H")
+        assert manager_eval(page, "Array.from(m._hiddenLabels)") == ["road"]
