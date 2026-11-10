@@ -816,13 +816,9 @@ function setupEventListeners() {
         if (window.potatoTrial && window.potatoTrial.ownsKeys) {
             return;
         }
-        // Only block navigation when in text input fields (not radio/checkbox)
-        const inputType = e.target.getAttribute('type');
-        const isTextInput = e.target.tagName === 'TEXTAREA' ||
-            (e.target.tagName === 'INPUT' && inputType !== 'radio' && inputType !== 'checkbox');
-
-        if (isTextInput) {
-            return; // Don't handle navigation when typing in text fields
+        // Arrows in a text field or a <select> move the caret or the option.
+        if (isEditableElement(e.target)) {
+            return;
         }
 
         switch (e.key) {
@@ -837,21 +833,59 @@ function setupEventListeners() {
         }
     });
 
-    // Keyboard shortcuts for checkboxes and radio buttons (matches base_template.html behavior)
+    installLabelKeyShortcuts();
+}
+
+/**
+ * True where a key types or picks rather than triggers a shortcut: text inputs,
+ * textareas, selects and contenteditable regions. Radios and checkboxes are
+ * not editable here; their shortcuts are the point.
+ */
+function isEditableElement(el) {
+    if (!el || !el.tagName) return false;
+    if (el.isContentEditable
+            || (el.closest && el.closest('[contenteditable]:not([contenteditable="false"])'))) {
+        return true;
+    }
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+    if (el.tagName === 'INPUT') {
+        const type = (el.getAttribute('type') || 'text').toLowerCase();
+        return type !== 'radio' && type !== 'checkbox';
+    }
+    return false;
+}
+
+/**
+ * Label shortcuts for checkboxes, radios, pairwise and BWS tiles, matched on
+ * each input's `data-key`. They fire on keyup, after every keydown handler has
+ * run, so the keydown each keyup pairs with is kept: it is recorded at window
+ * capture (before anything can stop it) and read at keyup, when its
+ * `defaultPrevented` holds what every later handler did.
+ */
+function installLabelKeyShortcuts() {
+    // `code` survives Shift being released first ("H" down, "h" up); synthetic
+    // events without one fall back to the key.
+    const keyId = (e) => e.code || (e.key || '').toLowerCase();
+    const keyDowns = new Map();
+    window.addEventListener('keydown', function (e) {
+        keyDowns.set(keyId(e), e);
+    }, true);
+
     document.addEventListener('keyup', function (e) {
         // A running timed trial owns the keyboard; its keys are not shortcuts.
         if (window.potatoTrial && window.potatoTrial.ownsKeys) {
             return;
         }
-        // Don't handle when in text input fields (but allow radio/checkbox)
-        const activeElement = document.activeElement;
-        const activeId = activeElement.id;
-        const activeType = activeElement.getAttribute('type');
-        const isTextInput = activeElement.tagName === 'TEXTAREA' ||
-            activeId === 'go_to' ||
-            (activeElement.tagName === 'INPUT' && activeType !== 'radio' && activeType !== 'checkbox');
-
-        if (isTextInput) {
+        // Act only on a key pressed on this page, with no modifier, that no
+        // widget handled on keydown. Ctrl+C would otherwise also toggle a
+        // label bound to `c`, and a triage, card-sort or viewer key would
+        // both do its own action and toggle a label bound to the same key.
+        const down = keyDowns.get(keyId(e));
+        keyDowns.delete(keyId(e));
+        if (!down || down.defaultPrevented || down.ctrlKey || down.metaKey || down.altKey) {
+            return;
+        }
+        if (isEditableElement(document.activeElement)) {
             return;
         }
 

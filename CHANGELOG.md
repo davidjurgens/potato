@@ -17,6 +17,17 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- Label shortcuts on radio, checkbox, Likert, span, pairwise and BWS questions
+  fire when the key is released, so a widget that handled the key when it was
+  pressed could not stop them. On a page with a triage question, pressing `1`
+  accepted the item and also ticked a radio label bound to `1`; a digit on a
+  focused card in a card sort moved the card and ticked the label; Ctrl+C
+  ticked a label bound to `c`; and typing in a dropdown or an editable text
+  region ran shortcuts. A label shortcut now fires only if the key went down on
+  this page with no Ctrl, Cmd or Alt held, focus is not in a text field,
+  dropdown or editable region, and no other control on the page handled the
+  key. The left and right arrow keys also no longer change items while a
+  dropdown or editable region has focus.
 - The point cloud viewer stored hidden classes under one browser key for every
   scheme in every project, so hiding `car` in one point-cloud scheme hid `car`
   in every other point-cloud scheme opened in that browser. It is now stored
