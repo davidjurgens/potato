@@ -24,6 +24,8 @@ from .identifier_utils import (
     generate_validation_attribute, escape_html_content, generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -95,6 +97,13 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         }}
 
         function build() {{
+            render();
+            save();
+        }}
+
+        // Draw the grid from the hidden input. Never saves: a live session
+        // calls this for a teammate's answer.
+        function render() {{
             var d = instanceData();
             var prev = restore();
             STATE = {{
@@ -116,7 +125,6 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
             renderLegend();
             renderGrid();
-            save();
         }}
 
         function onDims() {{
@@ -189,6 +197,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('table_grid', 'render')}
     }})();
     </script>
 

@@ -122,14 +122,14 @@ function flushPendingSave() {
     }
     collectAnnotationDataInputs(labelAnnotations);
 
-    const payload = JSON.stringify({
+    const payload = JSON.stringify(decorateSavePayload({
         instance_id: currentInstance.id,
         annotations: labelAnnotations,
         cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
         span_annotations: extractSpanAnnotationsFromDOM(),
         client_timestamp: new Date().toISOString(),
         response_time_seconds: currentInstanceResponseSeconds()
-    });
+    }));
 
     navigator.sendBeacon('/updateinstance',
         new Blob([payload], {type: 'application/json'}));
@@ -1743,6 +1743,32 @@ function generateAnnotationForms() {
  * server renders the whole next page into the POST response, which this code
  * then throws away and fetches again with a GET.
  */
+function navigationEndpoint() {
+    // Where navigation actions are POSTed. A page that is not driven by the
+    // annotator's own queue (a live collaborative session) installs its own
+    // endpoint; it takes the same {action, go_to} body.
+    const nav = window.potatoNavigation;
+    return (nav && typeof nav.endpoint === 'string' && nav.endpoint) || '/annotate';
+}
+
+/**
+ * Let an installed hook add to a save payload before it is sent.
+ *
+ * Both save paths call this: the fetch in `saveAnnotations()` and the beacon
+ * in `flushPendingSave()`. A beacon cannot carry headers, so anything a
+ * feature needs the server to know about a save has to travel in the body.
+ */
+function decorateSavePayload(payload) {
+    const hooks = window.potatoSaveHooks;
+    if (!hooks || typeof hooks.decorate !== 'function') return payload;
+    try {
+        return hooks.decorate(payload) || payload;
+    } catch (error) {
+        console.warn('A save hook failed; saving without it:', error);
+        return payload;
+    }
+}
+
 function navigationHeaders(extra) {
     return Object.assign({
         'Content-Type': 'application/json',
@@ -1760,7 +1786,14 @@ function navigationHeaders(extra) {
  * dropped because a GET carrying it moves the annotator back to that item,
  * undoing the navigation the server has just made.
  */
-function loadNavigatedPage() {
+function loadNavigatedPage(response) {
+    // A page that navigates somewhere other than /annotate (a live
+    // collaborative session) names the next page in this header.
+    const location = response && response.headers && response.headers.get('X-Potato-Location');
+    if (location) {
+        window.location.replace(new URL(location, window.location.href).toString());
+        return;
+    }
     const url = new URL(window.location.href);
     url.hash = '';
     url.searchParams.delete('instance_id');
@@ -1822,7 +1855,7 @@ async function saveAnnotations({ background = false } = {}) {
         const response = await fetch('/updateinstance', {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({
+            body: JSON.stringify(decorateSavePayload({
                 instance_id: currentInstance.id,
                 annotations: labelAnnotations,
                 cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
@@ -1835,7 +1868,7 @@ async function saveAnnotations({ background = false } = {}) {
                 // The finished timed trial, if any (trial-timing.js).
                 trial: (window.potatoTrial && typeof window.potatoTrial.record === 'function')
                     ? (window.potatoTrial.record() || undefined) : undefined
-            })
+            }))
         });
 
         if (response.ok) {
@@ -1855,6 +1888,10 @@ async function saveAnnotations({ background = false } = {}) {
                 }
                 debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
                 handleQualityControlResponse(result);
+                document.dispatchEvent(new CustomEvent('potato:annotations-saved', {
+                    detail: { instanceId: currentInstance && currentInstance.id,
+                              background: background, result: result }
+                }));
             } catch (jsonError) {
                 console.error('[DEBUG] saveAnnotations: JSON parse error:', jsonError);
                 console.error('[DEBUG] saveAnnotations: Response text (first 500 chars):', responseText.substring(0, 500));
@@ -2036,7 +2073,7 @@ async function navigateToPrevious() {
         }
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
             headers: navigationHeaders(),
             body: JSON.stringify({
@@ -2059,7 +2096,7 @@ async function navigateToPrevious() {
 
             // onInstanceChange() above is synchronous for the current id, so
             // there is nothing to wait for before leaving the page.
-            loadNavigatedPage();
+            loadNavigatedPage(response);
         } else {
             console.error('[DEEP DEBUG NAV] navigateToPrevious - Navigation failed:', response.status);
             setLoading(false);
@@ -2190,7 +2227,7 @@ async function navigateToNext(options = {}) {
         }
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
             headers: navigationHeaders(),
             body: JSON.stringify({
@@ -2213,7 +2250,7 @@ async function navigateToNext(options = {}) {
 
             // onInstanceChange() above is synchronous for the current id, so
             // there is nothing to wait for before leaving the page.
-            loadNavigatedPage();
+            loadNavigatedPage(response);
         } else {
             handleNavigationResponseError(response);
             setLoading(false);
@@ -2294,7 +2331,7 @@ async function navigateToInstance(instanceIndex) {
         if (window.config.api_key) {
             headers['X-API-Key'] = window.config.api_key;
         }
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
@@ -2320,7 +2357,7 @@ async function navigateToInstance(instanceIndex) {
             // up until it arrives: clearing it here showed the instance being
             // left, with Next enabled, for as long as the request took.
             leavingPage = true;
-            loadNavigatedPage();
+            loadNavigatedPage(response);
         } else {
             await handleNavigationResponseError(response);
         }
@@ -3235,6 +3272,59 @@ function maybeAutoAdvance() {
     }, delay);
 }
 
+/**
+ * Show answers that arrived from somewhere other than this page.
+ *
+ * A live collaborative session hears that a teammate changed a scheme on this
+ * item and has to show it without a reload. `changes` maps a scheme name to
+ * its whole new answer, `{label: value}`, or to null when it was cleared.
+ * Schemes not named are left exactly as they are, including any edit of this
+ * annotator's own that has not been saved yet.
+ *
+ * `populateInputValues()` cannot do this on its own: it fills inputs from
+ * `currentAnnotations` but never empties one, so a label a teammate removed
+ * would stay on screen, and it skips radios marked `data-server-set`.
+ *
+ * Nothing here counts as this annotator's input: no change events, and the
+ * redraw event is the restore kind the save listeners ignore.
+ */
+function applyRemoteLabels(changes) {
+    syncAnnotationsFromDOM();
+    const inputs = Array.from(document.querySelectorAll('.annotation-input'));
+    for (const [schema, labels] of Object.entries(changes || {})) {
+        const answer = labels && Object.keys(labels).length ? labels : null;
+        inputs.filter(input => input.getAttribute('schema') === schema).forEach(input => {
+            const label = input.getAttribute('label_name');
+            const value = answer && label != null ? answer[label] : undefined;
+            const has = value !== undefined && value !== null && value !== '' && value !== false;
+            const type = (input.type || '').toLowerCase();
+            if (type === 'radio' || type === 'checkbox') {
+                input.checked = has;
+                if (has) input.setAttribute('data-server-set', 'true');
+                else input.removeAttribute('data-server-set');
+                return;
+            }
+            input.value = has ? String(value) : '';
+            input.removeAttribute('data-modified');
+            if (has && (type === 'range' || type === 'hidden')) {
+                input.setAttribute('data-server-set', 'true');
+            } else {
+                input.removeAttribute('data-server-set');
+            }
+            input.dispatchEvent(restoreInputEvent());
+        });
+        if (answer) {
+            currentAnnotations[schema] = Object.assign({}, answer);
+        } else {
+            delete currentAnnotations[schema];
+        }
+    }
+    // The custom schemes (ranking, BWS, pairwise, ...) redraw from
+    // currentAnnotations; the native inputs above already match it.
+    populateInputValues();
+}
+window.potatoApplyRemoteLabels = applyRemoteLabels;
+
 function populateInputValues() {
     if (!currentAnnotations) return;
 
@@ -3473,6 +3563,22 @@ function restoreHierarchicalAnnotations() {
                 tree.querySelectorAll('.hier-checkbox').forEach(cb => {
                     cb.checked = selected.includes(cb.value);
                 });
+                // Open the branches above each checked label, as the page
+                // does when it loads an answer: a teammate's nested choice
+                // must not be checked inside a collapsed branch.
+                tree.querySelectorAll('.hier-checkbox:checked').forEach(cb => {
+                    let branch = cb.closest('.hier-children');
+                    while (branch) {
+                        branch.style.display = 'block';
+                        const node = branch.closest('.hier-node');
+                        const toggle = node && node.querySelector(':scope > .hier-node-row .hier-toggle');
+                        if (toggle) {
+                            toggle.innerHTML = '&#9660;';
+                            toggle.setAttribute('aria-expanded', 'true');
+                        }
+                        branch = node && node.parentElement ? node.parentElement.closest('.hier-children') : null;
+                    }
+                });
                 // Update tags display
                 const tagsContainer = tree.parentElement.querySelector('.hier-selected-tags');
                 if (tagsContainer) {
@@ -3611,7 +3717,7 @@ function restoreTextEditAnnotations() {
             // Recompute the diff and REWRITE the hidden input in the canonical JSON
             // shape, so a legacy plain-text record converges on the next save.
             if (typeof window.textEditOnInput === 'function') {
-                window.textEditOnInput(schema);
+                window.textEditOnInput(schema, { restore: true });
             }
         }
 
@@ -3644,9 +3750,16 @@ function restoreExtractiveQaAnnotations() {
             hiddenInput.setAttribute('data-server-set', 'true');
             hiddenInput.setAttribute('data-modified', 'true');
 
+            // Start from the plain passage: a restore shown over another
+            // answer (a teammate's, live) must not keep the old one's marks.
+            var unansBtn = document.getElementById(schema + '-unanswerable');
+            var passage = document.getElementById(schema + '-passage');
+            if (passage && passage.querySelector('.eqa-highlight')) {
+                passage.replaceChildren(document.createTextNode(passage.textContent));
+            }
+            if (unansBtn) unansBtn.classList.remove('eqa-unanswerable-active');
             if (data.unanswerable) {
                 document.getElementById(schema + '-answer-text').textContent = 'Unanswerable';
-                var unansBtn = document.getElementById(schema + '-unanswerable');
                 if (unansBtn) unansBtn.classList.add('eqa-unanswerable-active');
             } else if (data.answer_text) {
                 document.getElementById(schema + '-answer-text').textContent = data.answer_text;
@@ -5405,7 +5518,7 @@ async function jumpToUnannotatedPrev() {
         await saveAnnotations();
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
             headers: navigationHeaders(),
             body: JSON.stringify({
@@ -5428,7 +5541,7 @@ async function jumpToUnannotatedPrev() {
             }
 
             debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, loading page');
-            loadNavigatedPage();
+            loadNavigatedPage(response);
         } else {
             console.error('[NAV] jumpToUnannotatedPrev - Navigation failed:', response.status);
             setLoading(false);
@@ -5473,7 +5586,7 @@ async function jumpToUnannotated() {
         await saveAnnotations();
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
             headers: navigationHeaders(),
             body: JSON.stringify({
@@ -5496,7 +5609,7 @@ async function jumpToUnannotated() {
             }
 
             debugLog('[NAV] jumpToUnannotated - Navigation successful, loading page');
-            loadNavigatedPage();
+            loadNavigatedPage(response);
         } else {
             await handleNavigationResponseError(response);
             setLoading(false);
@@ -6145,7 +6258,10 @@ function restorePairwiseAnnotations() {
             // hidden input is invisible to syncAnnotationsFromDOM.
             hiddenInput.setAttribute('data-modified', 'true');
 
-            // Select the appropriate tile or button
+            // Select the appropriate tile or button, and only that one: a
+            // teammate's choice shown live replaces the one on screen.
+            form.querySelectorAll('.pairwise-tile, .pairwise-tie-btn, .pairwise-neither-btn')
+                .forEach(t => t.classList.remove('selected'));
             if (savedValue === 'tie' || savedValue === 'neither') {
                 const optionBtn = form.querySelector(`.pairwise-tie-btn[data-value="${savedValue}"], .pairwise-neither-btn[data-value="${savedValue}"]`);
                 if (optionBtn) {
@@ -6225,12 +6341,10 @@ function restorePairwiseAnnotations() {
                     cb.checked = jdata.reasons.includes(cb.value);
                 });
             }
-            if (jdata.rationale) {
-                const ta = div.querySelector('.pairwise-rationale-textarea');
-                if (ta) {
-                    ta.value = jdata.rationale;
-                    updatePairwiseRationaleCounter(ta);
-                }
+            const ta = div.querySelector('.pairwise-rationale-textarea');
+            if (ta && (jdata.rationale || ta.value)) {
+                ta.value = jdata.rationale || '';
+                updatePairwiseRationaleCounter(ta);
             }
         } catch(e) {
             debugLog('[PAIRWISE] Error restoring justification:', e);
@@ -6473,6 +6587,7 @@ function restoreBwsAnnotations() {
                 const savedValue = currentAnnotations[schema]['best'];
                 bestInput.value = savedValue;
                 bestInput.setAttribute('data-modified', 'true');
+                form.querySelectorAll('.bws-best-tile').forEach(t => t.classList.remove('selected'));
                 const tile = form.querySelector(`.bws-best-tile[data-value="${savedValue}"]`);
                 if (tile) tile.classList.add('selected');
                 debugLog(`[BWS] Restored best: ${schema}/best = ${savedValue}`);
@@ -6487,6 +6602,7 @@ function restoreBwsAnnotations() {
                 const savedValue = currentAnnotations[schema]['worst'];
                 worstInput.value = savedValue;
                 worstInput.setAttribute('data-modified', 'true');
+                form.querySelectorAll('.bws-worst-tile').forEach(t => t.classList.remove('selected'));
                 const tile = form.querySelector(`.bws-worst-tile[data-value="${savedValue}"]`);
                 if (tile) tile.classList.add('selected');
                 debugLog(`[BWS] Restored worst: ${schema}/worst = ${savedValue}`);

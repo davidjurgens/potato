@@ -517,5 +517,40 @@
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
+    /* Live collaborative sessions: the teammate's answer is already in the
+       hidden input; it replaces this page's answer and the controls are
+       redrawn in place (playback, position and loop settings untouched).
+       What this browser has heard stays heard, and samples the answer says
+       were played count as heard, as on a reload. Nothing is saved. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state || (state.root && state.root.querySelector('.lt-error'))) { return false; }
+        state.answer = readStored(form);
+        if (!state.player || !state.view) {
+            // Still loading: setup() draws state.answer once the audio is in.
+            return true;
+        }
+        (state.answer.played || []).forEach(function (slot) {
+            if (state.player.buffers[slot]) { state.player.completed[slot] = true; }
+        });
+        var r = state.answer.ratings || {};
+        state.root.querySelectorAll('.lt-slider').forEach(function (input) {
+            var slot = input.getAttribute('data-slot');
+            var min = parseFloat(input.min), max = parseFloat(input.max);
+            var rated = r[slot] !== undefined;
+            input.value = String(rated ? r[slot] : (min + max) / 2);
+            input.classList.toggle('lt-rated', rated);
+            var out = input.closest('.lt-row') && input.closest('.lt-row').querySelector('.lt-value');
+            if (out) { out.textContent = rated ? String(r[slot]) : '–'; }
+        });
+        refresh(state);
+        declare(state);
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.listening_test = {apply: applyLive};
+
     window.PotatoListeningTest = {init: init};
 })();

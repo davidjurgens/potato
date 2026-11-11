@@ -9,9 +9,9 @@ and the integral over that range computed on every original point::
 
 The spectrum display calls it when the annotator zooms in and when a region
 is dragged for integration. It needs a signed-in annotator, and the item must
-be one assigned to them; the field must be a ``spectrum`` display in
-``instance_display``. The file is resolved the same way the page resolved it,
-so nothing outside the media directory is read.
+be one assigned to them or held by a live session they are in; the field must
+be a ``spectrum`` display in ``instance_display``. The file is resolved the
+same way the page resolved it, so nothing outside the media directory is read.
 """
 
 from __future__ import annotations
@@ -58,9 +58,12 @@ def _may_read(username: str, instance_id: str) -> bool:
     except Exception:
         pass
     try:
-        return state.get_current_instance_id() == instance_id
+        if state.get_current_instance_id() == instance_id:
+            return True
     except Exception:
-        return False
+        pass
+    from potato.collab.context import session_covers
+    return session_covers(instance_id)
 
 
 def spectrum_range():

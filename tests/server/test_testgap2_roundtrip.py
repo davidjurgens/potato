@@ -7,8 +7,6 @@ cleared the last checkbox, and never put an entity, a tag or a doubled space
 in front of a span.
 """
 
-import re
-
 import pytest
 import requests
 
@@ -138,18 +136,33 @@ class TestSpanOffsets:
         assert body["text"][start:end] == "TARGET"
         assert [sp["text"] for sp in body["spans"]] == ["TARGET"]
 
-    def test_the_reloaded_page_keeps_the_markup_intact(self, server):
+    @staticmethod
+    def _text_of(s, server, needle):
+        """The rendered #text-content of the item whose text holds `needle`."""
+        from bs4 import BeautifulSoup
+        for _ in range(len(TEXTS)):
+            page = s.get(server.base_url + "/annotate").text
+            node = BeautifulSoup(page, "html.parser").find(id="text-content")
+            if node is not None and needle in node.get_text():
+                return page, node.decode_contents()
+            s.post(server.base_url + "/annotate", data={"action": "next_instance"})
+        raise AssertionError(f"no item showing {needle!r}")
+
+    def test_a_reloaded_page_renders_its_text_as_an_unannotated_one_does(self, server):
+        """span-core.js draws every span as an overlay from /api/spans. The
+        server also wrapped each stored span inline in a padded `.span-highlight`,
+        so a reload drew the spans twice and shifted the text (and every link
+        and event arc) against a page whose spans were drawn client-side."""
         s = _user(server, "span_page")
         _save(s, server, "tag", {}, span_annotations=[
             {"schema": "ent", "name": "X", "start": 10, "end": 16, "value": "TARGET"}])
-        page = ""
-        for _ in range(len(TEXTS)):
-            page = s.get(server.base_url + "/annotate").text
-            if "then TARGET" in page and "<b>bold</b>" in page:
-                break
-            s.post(server.base_url + "/annotate", data={"action": "next_instance"})
-        # The highlight wraps TARGET and nothing leaks out of the <b> tag.
-        assert re.search(r'<span class="span-highlight[^>]*>TARGET</span>', page)
+        page, annotated = self._text_of(s, server, "then TARGET")
+        _, plain = self._text_of(_user(server, "span_page_blank"), server, "then TARGET")
+
+        assert "span-highlight" not in annotated
+        assert annotated == plain
+        # Nothing leaks out of the <b> tag.
+        assert "<b>bold</b>" in annotated
         assert "bold&gt;" not in page and "bold>" not in page
 
     def test_deleting_a_span_by_id_leaves_its_twin_in_another_field(self, server):

@@ -274,6 +274,10 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list,
                 # so, which is what makes an agreement statistic over two
                 # members of one room a measure of the discussion.
                 "_room": _room_provenance(user_state, instance_id),
+                # A live collaborative session's team answer: which session,
+                # and who on the team changed it how many times.
+                "_collab": (user_state.get("instance_id_to_collab_provenance")
+                            or {}).get(instance_id) or {},
                 # Whether this rater was a person or a declared tool or model,
                 # with its version. An agreement number computed over a mix of
                 # the two measures neither group, and nothing else in the

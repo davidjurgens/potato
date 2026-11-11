@@ -1806,6 +1806,87 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "with neither present, rooms disable themselves",
         type="string", category=FEATURES,
     ),
+    "collab": _D(
+        "Live collaborative sessions at /collab: a team labels the same items "
+        "together, sharing one answer stored under a team user",
+        type="object", category=FEATURES, see_also=("rooms",),
+    ),
+    "collab.enabled": _D(
+        "Register the /collab surface and start configured teams",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "collab.who_can_create": _D(
+        "Who may start a session from the lobby: any signed-in user, or admin only",
+        type="string", default="any", category=FEATURES,
+    ),
+    "collab.max_members": _D(
+        "Members allowed in one lobby session. Clamped to 2-50",
+        type="integer", default=8, category=FEATURES, minimum=2, maximum=50,
+    ),
+    "collab.default_mode": _D(
+        "follow: members go where the leader goes until they move on their own; "
+        "free: no leader, everyone moves independently",
+        type="string", default="follow", category=FEATURES,
+    ),
+    "collab.conflict_policy": _D(
+        "What happens when two members change the same thing: lww keeps the "
+        "later save and tells the member it replaced; reject keeps the earlier "
+        "value, saves the rest of the later save, and shows that member the "
+        "teammate's value",
+        type="string", default="lww", category=FEATURES,
+    ),
+    "collab.require_signoff": _D(
+        "An item counts as done only when every active member has marked it "
+        "ready; any later change to the item clears the marks",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "collab.blind_first": _D(
+        "Members answer each item on their own (stored under their own user) "
+        "before the team's shared answer opens; schemes everyone agreed on "
+        "start the team answer",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "collab.sync_view": _D(
+        "In follow mode, followers on the leader's item also follow the "
+        "leader's scroll position and audio/video playhead",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "collab.exclude_members_from_solo": _D(
+        "Keep a team's items out of its members' own annotation queues, so one "
+        "person does not give both a solo and a team answer for an item",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "collab.transport": _D(
+        "poll: pages ask for new events on a timer; sse: the server pushes them "
+        "over a held connection (each holds a server thread)",
+        type="string", default="poll", category=FEATURES,
+    ),
+    "collab.poll_interval_ms": _D(
+        "How often a visible session page polls for events. Clamped to 250-30000",
+        type="integer", default=1000, category=FEATURES, minimum=250, maximum=30000,
+    ),
+    "collab.hidden_poll_interval_ms": _D(
+        "How often a page in a background tab polls. Clamped to 1000-120000",
+        type="integer", default=5000, category=FEATURES, minimum=1000, maximum=120000,
+    ),
+    "collab.sse": _D(
+        "Server push limits: max_streams open at once (over it, pages poll) and "
+        "max_stream_seconds before a stream is closed and reopened",
+        type="object", category=FEATURES,
+        example={"max_streams": 3, "max_stream_seconds": 25},
+    ),
+    "collab.max_items": _D(
+        "Most items one session may hold. Clamped to 1-100000",
+        type="integer", default=500, category=FEATURES, minimum=1, maximum=100000,
+    ),
+    "collab.teams": _D(
+        "Teams the study sets up: each has an id, members, an optional leader, "
+        "items as a list of ids, {count: N} or {group: <batch group>}, and "
+        "optional blind_first / require_signoff overrides",
+        type="array", category=FEATURES,
+        example=[{"id": "red", "members": ["ana", "ben"], "leader": "ana",
+                  "items": {"count": 20}}],
+    ),
     "pocket": _D(
         "Pocket Mode: the phone-sized annotation surface at /pocket, served as "
         "a PWA with an offline queue",

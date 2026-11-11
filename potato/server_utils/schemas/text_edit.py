@@ -142,7 +142,10 @@ def _generate_text_edit_layout_internal(annotation_scheme):
 
     <script>
     (function() {{
-        window.textEditOnInput = function(schemaName) {{
+        // ``options.restore``: redraw the stats and diff for an answer the
+        // page is showing (its own on load, or a teammate's), without
+        // marking it this annotator's edit or firing the save listeners.
+        window.textEditOnInput = function(schemaName, options) {{
             var editor = document.getElementById(schemaName + '-editor');
             var sourceText = document.getElementById(schemaName + '-source-text').textContent || '';
             var editedText = editor.value;
@@ -174,6 +177,7 @@ def _generate_text_edit_layout_internal(annotation_scheme):
             }});
             var hiddenInput = document.getElementById(schemaName).querySelector('.text-edit-data-input');
             hiddenInput.value = data;
+            if (options && options.restore) return;
             hiddenInput.setAttribute('data-modified', 'true');
             hiddenInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
         }};

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live sessions (admin) · {{ task_name }}</title>
+  {% include '_theme_head.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=43">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/collab.css') }}?v=3">
+  <style>
+    [hidden] { display: none !important; }
+    body { background: var(--background); color: var(--foreground); margin: 0; }
+    .admin-header {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md);
+      padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border); background: var(--card);
+    }
+    .admin-header h1 { font-size: var(--text-xl, 20px); margin: 0; }
+    .admin-header .spacer { flex: 1; }
+    .admin-wrap { max-width: 1200px; margin: 0 auto; padding: var(--space-lg) var(--space-md) var(--space-xl); }
+    .admin-intro { color: var(--muted-foreground); max-width: 70ch; margin: 0 0 var(--space-lg); }
+    .session-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+                    padding: var(--space-md); margin-bottom: var(--space-md); }
+    .session-card h2 { font-size: var(--text-lg, 18px); margin: 0; }
+    .session-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md);
+                    margin-bottom: var(--space-sm); }
+    .session-head .meta { color: var(--muted-foreground); font-size: var(--text-dense, 14px); }
+    .session-head .actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+    .stats { display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg); margin: 0 0 var(--space-sm); padding: 0; list-style: none; }
+    .stats li { display: flex; flex-direction: column; }
+    .stats .n { font-size: var(--text-lg, 18px); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stats .k { color: var(--muted-foreground); font-size: var(--text-xs, 12px); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    /* Short cells: scroll the table sideways rather than break "away" into "aw / ay". */
+    .session-card .collab-table th, .session-card .collab-table td { white-space: nowrap; overflow-wrap: normal; }
+    a.collab-button { display: inline-flex; align-items: center; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="admin-header">
+    <h1>Live sessions</h1>
+    <span class="collab-muted">{{ task_name }}</span>
+    <span class="spacer"></span>
+    <span class="collab-muted">{{ username }}</span>
+    <a class="collab-button collab-button-quiet" href="{{ request.script_root }}/collab/">Lobby</a>
+    <a class="collab-button collab-button-quiet" href="{{ request.script_root }}/admin">Admin dashboard</a>
+  </header>
+  <main class="admin-wrap">
+    <p class="admin-intro">
+      Every session on this server, refreshed every few seconds. <strong>Watch</strong> joins a
+      session read-only: you see its pages and panel as members do, and members see you listed as
+      an observer. <strong>Replay</strong> steps through an item's history.
+    </p>
+    <div id="sessions" aria-live="polite"><p class="collab-muted">Loading…</p></div>
+  </main>
+  <script>
+  (function () {
+    var base = {{ request.script_root | tojson }};
+    var root = document.getElementById('sessions');
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+      });
+    }
+    function pct(x) { return x == null ? '—' : Math.round(x * 100) + '%'; }
+    function mins(sec) { return sec < 60 ? Math.round(sec) + 's' : Math.round(sec / 60) + 'm'; }
+
+    function card(s) {
+      var m = s.metrics, online = {};
+      (s.presence || []).forEach(function (p) { online[p.user] = p; });
+      var link = base + '/collab/s/' + encodeURIComponent(s.session_id);
+      var rows = s.members.map(function (mem) {
+        var r = m.members[mem.username] || {};
+        var p = online[mem.username];
+        return '<tr><th scope="row">' + esc(mem.username) + (mem.username === s.leader ? ' (leader)' : '') + '</th>' +
+          '<td>' + esc(mem.active ? mem.role : 'left') + '</td>' +
+          '<td>' + (p ? 'online · item ' + esc(p.instance_id || '—') : 'away') + '</td>' +
+          '<td class="num">' + (r.edits || 0) + '</td>' +
+          '<td class="num">' + (r.overwrote || 0) + ' / ' + (r.overwritten || 0) + '</td>' +
+          '<td class="num">' + (r.undid || 0) + '</td>' +
+          '<td class="num">' + ((r.messages || 0) + (r.discussion || 0)) + '</td>' +
+          '<td class="num">' + (r.signoffs || 0) + '</td>' +
+          '<td class="num">' + pct(r.blind_kept) + '</td>' +
+          '<td class="num">' + mins(r.seconds_on_items || 0) + '</td></tr>';
+      }).join('');
+      var stats = [
+        [m.answered + ' / ' + m.items, 'items answered'],
+        [s.require_signoff ? m.signed_off + ' / ' + m.items : '—', 'signed off'],
+        [m.edits, 'changes'],
+        [m.conflicts, 'replaced a teammate'],
+        [s.blind_first ? pct(m.blind_agreement) : '—', 'agreement before discussion'],
+      ].map(function (x) { return '<li><span class="n">' + esc(x[0]) + '</span><span class="k">' + esc(x[1]) + '</span></li>'; }).join('');
+      return '<section class="session-card" aria-labelledby="h-' + esc(s.session_id) + '">' +
+        '<div class="session-head"><h2 id="h-' + esc(s.session_id) + '">' + esc(s.name) + '</h2>' +
+        '<span class="meta">' + esc(s.session_id) + ' · ' + esc(s.status) + ' · ' + esc(s.mode) +
+          (s.blind_first ? ' · blind first' : '') + (s.require_signoff ? ' · sign-off' : '') + '</span>' +
+        '<span class="actions">' +
+          (s.status === 'open' ? '<a class="collab-button" href="' + link + '/observe">Watch</a>' : '') +
+          '<a class="collab-button collab-button-quiet" href="' + link + '/replay">Replay</a></span></div>' +
+        '<ul class="stats">' + stats + '</ul>' +
+        '<div class="collab-table-wrap"><table class="collab-table"><thead><tr>' +
+          '<th scope="col">Member</th><th scope="col">Role</th><th scope="col">Now</th>' +
+          '<th scope="col" class="num">Edits</th>' +
+          '<th scope="col" class="num" title="Times they replaced a teammate\'s value / had theirs replaced">Replaced / replaced by</th>' +
+          '<th scope="col" class="num">Undos</th><th scope="col" class="num">Messages</th>' +
+          '<th scope="col" class="num">Ready marks</th>' +
+          '<th scope="col" class="num" title="Share of their own (blind) answers the team kept">Own answer kept</th>' +
+          '<th scope="col" class="num">Time on items</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div></section>';
+    }
+
+    function load() {
+      fetch(base + '/collab/api/admin/overview', {credentials: 'same-origin'})
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var sessions = data.sessions || [];
+          root.innerHTML = sessions.length ? sessions.map(card).join('')
+            : '<p class="collab-muted">No sessions yet. Configured teams appear here once the server starts; lobby sessions once someone starts one.</p>';
+        })
+        .catch(function (e) { root.innerHTML = '<p class="collab-muted">Could not load sessions: ' + esc(e.message) + '</p>'; });
+    }
+    load();
+    setInterval(load, {{ [poll_interval_ms * 5, 5000] | max }});
+  })();
+  </script>
+</body>
+</html>

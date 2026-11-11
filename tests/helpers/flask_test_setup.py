@@ -44,6 +44,7 @@ def clear_all_global_state():
     # otherwise, making a mode-disabled server report enabled.
     for _mode_mod, _clear_fn in (
         ("potato.qda_mode", "clear_qda_mode_manager"),
+        ("potato.collab", "clear_collab_manager"),
         ("potato.solo_mode", "clear_solo_mode_manager"),
         ("potato.search", "clear_search"),
         # RBAC + per-cohort schema resolver: their lazy singletons would
@@ -789,6 +790,16 @@ class FlaskTestServer:
                         print("[DEBUG] Rooms manager initialized successfully")
                 except Exception as e:
                     print(f"[DEBUG] Error initializing Rooms manager: {e}")
+                # Live collaborative sessions: cleared unconditionally for the
+                # same reason, and because a leaked manager keeps its
+                # /updateinstance interceptor and assignment exclusions.
+                try:
+                    from potato.collab import init_collab_manager, clear_collab_manager
+                    clear_collab_manager()
+                    if (config.get('collab') or {}).get('enabled', False):
+                        init_collab_manager(config)
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing collab manager: {e}")
                 # Reset + (re)initialize Pocket Mode config holder. The clear
                 # runs unconditionally so a leaked config from a prior
                 # in-process test server cannot enable /pocket unexpectedly.

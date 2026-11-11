@@ -189,8 +189,24 @@
 
     function readStored(input) {
         if (!input || !input.value || input.getAttribute('data-server-set') !== 'true') { return []; }
+        return parseBoxes(input.value);
+    }
+
+    /* The boxes an unanswered item opens with (its pre-annotations), as the
+       answer JSON, or '' for none. The server writes a pre-annotation into
+       the input only while the item has no answer, so a page that loaded
+       with the item unlabelled shows exactly that; one that loaded with an
+       answer cannot tell its prefill from it. */
+    function loadedSeed(input) {
+        var badge = document.querySelector('#annotation-status .status-badge');
+        if (!badge || !badge.classList.contains('unlabeled')) { return ''; }
+        return input && input.value && input.getAttribute('data-server-set') === 'true' ? input.value : '';
+    }
+
+    function parseBoxes(text) {
+        if (!text) { return []; }
         try {
-            var parsed = JSON.parse(input.value);
+            var parsed = JSON.parse(text);
             if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.boxes)) { parsed = parsed.boxes; }
             return Array.isArray(parsed) ? parsed.filter(function (b) {
                 return b && isFinite(parseFloat(b.start_s)) && isFinite(parseFloat(b.end_s));
@@ -497,8 +513,13 @@
         return true;
     }
 
+    // A stored id per box, kept across reloads (readStored copies every
+    // key), so a live session can merge teammates' boxes box by box.
+    var ID_NONCE = Math.random().toString(36).slice(2, 8);
+
     function add(state, box) {
         box._id = nextId++;
+        if (!box.id) { box.id = 'box_' + ID_NONCE + '_' + box._id; }
         box.source = 'human';
         state.boxes.push(box);
         state.selected = box._id;
@@ -852,7 +873,8 @@
         var root = form.querySelector('.sg-root');
         var input = form.querySelector('.spectrogram-input');
         var state = {instance: instanceId(), cfg: cfg, form: form, root: root, input: input,
-                     boxes: readStored(input), selected: null, zoom: 1, offset: 0, source: null,
+                     boxes: readStored(input), seed: loadedSeed(input),
+                     selected: null, zoom: 1, offset: 0, source: null,
                      activeLabel: (cfg.labels[0] || {}).name || '', buffer: null};
         STATES.set(form, state);
         declare(state);
@@ -896,11 +918,58 @@
         document.querySelectorAll('form.spectrogram-annotation').forEach(setup);
     }
 
+    /* Show `value` (the answer JSON, or null for none) in place of this
+       form's boxes, without saving: a teammate's answer in a live session.
+       init() cannot do it, since setup() keeps the state of an instance it
+       has already set up. Before the audio has decoded nothing is drawn yet,
+       and the decode draws state.boxes, so replacing them is enough.
+       No answer shows what the unanswered item showed on load, its
+       pre-annotations, put back in the input as a reload would put them,
+       still without saving. */
+    function restore(form, value) {
+        var state = STATES.get(form);
+        if (!state || state.instance !== instanceId()) { return false; }
+        var keep = selected(state), keepId = keep ? keep.id : null;
+        if (state.drag) {
+            if (state.drag.ghost) { state.drag.ghost.remove(); }
+            state.drag = null;
+        }
+        if (!value && state.seed && state.input) {
+            value = state.seed;
+            state.input.value = value;
+            state.input.setAttribute('value', value);
+            state.input.setAttribute('data-server-set', 'true');
+            state.input.removeAttribute('data-modified');
+        }
+        state.boxes = parseBoxes(value);
+        state.selected = null;
+        if (keepId) {
+            state.boxes.forEach(function (b) { if (b.id === keepId) { state.selected = b._id; } });
+        }
+        declare(state);
+        if (state.layer) { drawBoxes(state); }
+        return true;
+    }
+
     document.addEventListener('keydown', onKey, true);
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { init(); }
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
-    window.PotatoSpectrogram = {init: init, _fft: fft, _fftTables: fftTables};
+    window.PotatoSpectrogram = {init: init, restore: restore, _fft: fft, _fftTables: fftTables};
+
+    // Live collaborative sessions: show a teammate's answer without a reload
+    // (see collab.js applyWidget). collab.js has already written the answer
+    // into the hidden input; this redraws from it without saving.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets['spectrogram_annotation'] = {
+        apply: function (ctx) {
+            var form = ctx.form && ctx.form.matches && ctx.form.matches('form.spectrogram-annotation')
+                ? ctx.form : null;
+            if (!form) { return false; }
+            var value = ctx.value !== undefined ? ctx.value : (ctx.input ? ctx.input.value : null);
+            return restore(form, value) === true;
+        }
+    };
 })();

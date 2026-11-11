@@ -488,5 +488,34 @@
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
+    /* Live collaborative sessions: the teammate's answer is already in the
+       hidden input. Hand it to the spectrum as the whole selection (a missing
+       or null answer is no peaks and no rejected suggestions); the viewer
+       repaints the plot and reports an 'api' change, which redraws these
+       tables without saving. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state) { return false; }
+        if (!state.viewer) {
+            // attach() reads the hidden input when the spectrum registers.
+            declare(state, readStored(state.input) || {items: []});
+            return true;
+        }
+        var stored = readStored(state.input) || {};
+        var next = JSON.parse(JSON.stringify(stored));
+        next.items = Array.isArray(stored.items) ? next.items : [];
+        next.rejected = Array.isArray(stored.rejected) ? next.rejected : [];
+        state.quiet = false;
+        state.viewer.setSelection(next);      // source 'api': clears the message, no save
+        state.last = state.viewer.getSelection();
+        render(state, state.last);
+        declare(state, state.last);
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.peak_picking = {apply: applyLive};
+
     window.PotatoPeakPicking = {init: init};
 })();

@@ -480,6 +480,13 @@ KNOWN_CONFIG_KEYS = {
     # Multiplayer Rooms: live norming sessions, adjudication huddles, shadowing.
     "rooms": {"enabled", "who_can_create", "persist_votes", "poll_interval_ms",
               "max_members", "schema"},
+    # Live collaborative sessions: teams annotating the same items together.
+    # Validated in depth by potato.collab.config.validate_collab_block().
+    "collab": {"enabled", "who_can_create", "max_members", "default_mode",
+               "conflict_policy", "require_signoff", "blind_first", "sync_view",
+               "exclude_members_from_solo", "transport",
+               "poll_interval_ms", "hidden_poll_interval_ms", "sse", "max_items",
+               "teams"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid
@@ -3959,7 +3966,17 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         _validate_turn_level_bindings(config_data, all_schemes)
         _validate_session_level_schemes(config_data, all_schemes)
         _validate_rooms_block(config_data)
+        _validate_collab_block(config_data)
         _validate_pocket_block(config_data)
+
+
+def _validate_collab_block(config_data: Dict[str, Any]) -> None:
+    """The ``collab`` block: modes, transport, and each configured team."""
+    from potato.collab.config import validate_collab_block
+    try:
+        validate_collab_block(config_data)
+    except ValueError as exc:
+        raise ConfigValidationError(str(exc)) from exc
 
 
 def _validate_pocket_block(config_data: Dict[str, Any]) -> None:
@@ -10356,6 +10373,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
 
     # Check for deprecation warning: using annotation schemas for display-only
     _check_display_only_deprecation(config_data)
+    _check_span_scheme_has_a_target(config_data)
 
 
 #: Options the resizable WRAPPER reads, for every display type, rather than any
@@ -11013,6 +11031,29 @@ def validate_adjudication_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError(
                 "adjudication.similarity.model must be a non-empty string"
             )
+
+
+def _check_span_scheme_has_a_target(config_data: Dict[str, Any]) -> None:
+    """Warn when a span scheme has no field to work on.
+
+    With ``instance_display`` fields the page hides ``#instance-text`` and
+    shows the item through those fields, and only a field marked
+    ``span_target: true`` takes a selection or draws span overlays. A span
+    scheme with no such field loads without complaint, but no span can be made
+    and stored spans are drawn nowhere. ``examples/span/coreference`` shipped
+    that way.
+    """
+    fields = (config_data.get("instance_display") or {}).get("fields") or []
+    if not fields or any(isinstance(f, dict) and f.get("span_target") for f in fields):
+        return
+    span_schemes = [s.get("name") for s in _collect_all_annotation_schemes(config_data)
+                    if isinstance(s, dict) and s.get("annotation_type") == "span"]
+    if span_schemes:
+        logger.warning(
+            f"Span scheme(s) {span_schemes} have no field to annotate: no "
+            f"instance_display field sets span_target: true, so no span can be "
+            f"made or shown. Add span_target: true to the field holding the text."
+        )
 
 
 def _check_display_only_deprecation(config_data: Dict[str, Any]) -> None:

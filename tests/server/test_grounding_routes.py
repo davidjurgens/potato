@@ -119,6 +119,143 @@ class TestTheRoute:
         assert response.status_code == 404
 
 
+class TestNamedInstance:
+    """
+    The page names the item it shows. A live-session member has no current
+    instance of their own, so the route has to read the item the page names --
+    but only one this annotator may see.
+    """
+
+    @pytest.fixture(scope="class")
+    def two_items(self):
+        test_dir = create_test_directory("grounding_named")
+        config_path = _build(test_dir, items=[
+            {"id": "i0", "text": "a picture", "expressions": ["the red cup"]},
+            {"id": "i1", "text": "another", "expressions": ["the green door"]},
+        ])
+        with open(config_path, encoding="utf-8") as handle:
+            config = yaml.safe_load(handle)
+        # One item each, so the other is never this annotator's.
+        config["max_annotations_per_user"] = 1
+        with open(config_path, "w", encoding="utf-8") as handle:
+            yaml.safe_dump(config, handle)
+        srv = FlaskTestServer(port=find_free_port(), config_file=config_path)
+        if not srv.start():
+            pytest.fail("Failed to start the grounding test server")
+        yield srv
+        srv.stop()
+        cleanup_test_directory(test_dir)
+
+    def _ask(self, server, session, instance_id):
+        return session.get(f"{server.base_url}/api/grounding/expressions",
+                           params={"schema": SCHEMA, "instance_id": instance_id})
+
+    def test_an_assigned_item_is_served(self, two_items):
+        session = _login(two_items, "named_dana")
+        mine = session.get(f"{two_items.base_url}/api/grounding/expressions",
+                           params={"schema": SCHEMA}).json()["instance_id"]
+        response = self._ask(two_items, session, mine)
+        assert response.status_code == 200, response.text
+        assert response.json()["instance_id"] == mine
+
+    def test_an_unassigned_item_is_refused(self, two_items):
+        session = _login(two_items, "named_eli")
+        mine = session.get(f"{two_items.base_url}/api/grounding/expressions",
+                           params={"schema": SCHEMA}).json()["instance_id"]
+        other = "i1" if mine == "i0" else "i0"
+        response = self._ask(two_items, session, other)
+        assert response.status_code == 403
+        assert "expressions" not in response.json()
+
+    def test_an_unknown_item_is_refused_not_found(self, two_items):
+        """An id that names nothing is not this annotator's either."""
+        session = _login(two_items, "named_fay")
+        assert self._ask(two_items, session, "no-such-item").status_code == 403
+
+
+class TestLiveSession:
+    """
+    In a live session the item is assigned to the team user, not the member,
+    and the member has no current instance: the phrase list was a 404 and the
+    widget showed nothing. A request naming the session (the
+    ``X-Potato-Collab`` header collab.js adds) reads a session item; a
+    stranger naming it is still refused.
+    """
+
+    HEADER = {"X-Potato-Collab": "LAB"}
+
+    @pytest.fixture(scope="class")
+    def team(self):
+        test_dir = create_test_directory("grounding_collab")
+        config_path = _build(test_dir, items=[
+            {"id": "i0", "text": "a picture", "expressions": ["the red cup"]},
+            {"id": "i1", "text": "another", "expressions": ["the green door"]},
+            {"id": "i2", "text": "a third", "expressions": ["the old dog"]},
+            {"id": "i3", "text": "a fourth", "expressions": ["the tall tree"]},
+        ])
+        with open(config_path, encoding="utf-8") as handle:
+            config = yaml.safe_load(handle)
+        config["user_config"] = {"allow_all_users": True, "users": []}
+        config["require_password"] = False
+        # A stranger gets one item, so some session item is never theirs.
+        config["max_annotations_per_user"] = 1
+        config["collab"] = {"enabled": True, "default_mode": "free", "teams": [
+            {"id": "lab", "members": ["ana", "ben"], "leader": "ana",
+             "items": ["i0", "i1"]}]}
+        with open(config_path, "w", encoding="utf-8") as handle:
+            yaml.safe_dump(config, handle, sort_keys=False)
+        srv = FlaskTestServer(port=find_free_port(), config_file=config_path)
+        if not srv.start():
+            pytest.fail("Failed to start the grounding session server")
+        yield srv
+        srv.stop()
+        cleanup_test_directory(test_dir)
+
+    @staticmethod
+    def _member(server, name):
+        session = requests.Session()
+        session.post(f"{server.base_url}/auth",
+                     data={"email": name, "pass": ""}, timeout=5)
+        return session
+
+    def _url(self, server, instance_id):
+        return (f"{server.base_url}/api/grounding/expressions"
+                f"?schema={SCHEMA}&instance_id={instance_id}")
+
+    def test_a_member_gets_the_phrases_of_a_session_item(self, team):
+        ana = self._member(team, "ana")
+        for instance_id, phrase in (("i0", "the red cup"), ("i1", "the green door")):
+            response = ana.get(self._url(team, instance_id),
+                               headers=self.HEADER, timeout=10)
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["instance_id"] == instance_id
+            assert [e["text"] for e in body["expressions"]] == [phrase]
+
+    def test_refusals_stand_outside_the_session(self, team):
+        ana = self._member(team, "ana")
+        # Without naming the session the item is not hers.
+        assert ana.get(self._url(team, "i0"), timeout=10).status_code == 403
+        # Naming the session does not open an item outside it.
+        outside = [i for i in ("i2", "i3")
+                   if ana.get(self._url(team, i), timeout=10).status_code == 403]
+        assert outside, "every item outside the session is assigned to ana"
+        for instance_id in outside:
+            assert ana.get(self._url(team, instance_id), headers=self.HEADER,
+                           timeout=10).status_code == 403
+
+    def test_a_stranger_naming_the_session_is_refused(self, team):
+        carl = self._member(team, "carl")
+        refused = [i for i in ("i0", "i1")
+                   if carl.get(self._url(team, i), timeout=10).status_code == 403]
+        assert refused, "every session item is assigned to carl"
+        for instance_id in refused:
+            response = carl.get(self._url(team, instance_id),
+                                headers=self.HEADER, timeout=10)
+            assert response.status_code == 403
+            assert "expressions" not in response.json()
+
+
 class TestExpressionShapes:
     """
     A benchmark may ship strings, objects, or a mapping. Normalizing on the

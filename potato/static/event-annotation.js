@@ -76,6 +76,9 @@ class EventAnnotationManager {
         // Redraw once, when the spans arrive.
         document.addEventListener('potato:spansRendered', () => {
             if (this.hasArgumentMissingText()) this.updateEventList();
+            // Arcs drawn before the spans arrived had nothing to anchor to,
+            // and a re-render of the spans replaces the overlays they used.
+            if (this.events.length > 0) this.renderArcsWhenReady();
         });
 
         console.log(`[EventAnnotationManager] Initialization complete for schema: ${this.schemaName}`);
@@ -724,7 +727,13 @@ class EventAnnotationManager {
         return null;
     }
 
-    async loadExistingEvents() {
+    /** Show the events stored now (a teammate's change in a live session). */
+    reload() {
+        return this.loadExistingEvents({ force: true });
+    }
+
+    async loadExistingEvents(options) {
+        const force = !!(options && options.force);
         const instanceId = window.currentInstanceId || this.getInstanceId();
         if (!instanceId) {
             console.warn('[EventAnnotationManager] No instance ID for loading events');
@@ -732,7 +741,7 @@ class EventAnnotationManager {
         }
 
         // Prevent loading if we've already loaded for this instance
-        if (this._loadedForInstance === instanceId && this.events.length > 0) {
+        if (!force && this._loadedForInstance === instanceId && this.events.length > 0) {
             console.log(`[EventAnnotationManager] Already loaded events for instance ${instanceId}, skipping`);
             return;
         }
@@ -771,8 +780,15 @@ class EventAnnotationManager {
                     console.log(`[EventAnnotationManager] Loaded ${this.events.length} unique events`);
                 } else {
                     console.log(`[EventAnnotationManager] No events returned from server`);
+                    const had = this.events.length > 0;
                     this.events = [];
                     this._loadedForInstance = instanceId;
+                    if (had) {
+                        // A reload after the last event was removed elsewhere.
+                        this.updateEventDataInput();
+                        this.updateUI();
+                        this.renderArcs();
+                    }
                 }
             } else {
                 console.log(`[EventAnnotationManager] Server returned status: ${response.status}`);

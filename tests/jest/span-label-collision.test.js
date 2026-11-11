@@ -116,6 +116,61 @@ describe('applying the plan to rendered chips', () => {
     test('an absent overlay container is not an error', () => {
         expect(() => manager().applyControlCompaction(null)).not.toThrow();
     });
+
+    test('a collapsed dot is moved off the kept chip, whose delete button it covered', () => {
+        // "alice works": the "works" chip collides with the "alice" chip and
+        // collapses to a dot at its own span start, 40px in -- on top of the
+        // kept chip's delete button.
+        document.body.innerHTML = '<div id="span-overlays"></div>';
+        const host = document.getElementById('span-overlays');
+        const kept = document.createElement('div');
+        kept.className = 'span-controls';
+        kept.style.left = '0px';
+        kept.getBoundingClientRect = () => box(0, 100, 60);
+        const later = document.createElement('div');
+        later.className = 'span-controls';
+        later.style.left = '40px';
+        later.getBoundingClientRect = () => (later.classList.contains('is-compact')
+            ? box(parseFloat(later.style.left), 100, 12)
+            : box(parseFloat(later.style.left), 100, 60));
+        host.append(kept, later);
+
+        const m = manager();
+        m.applyControlCompaction(host);
+        expect(later.classList.contains('is-compact')).toBe(true);
+        expect(later.style.left).toBe('62px');
+
+        // A second pass measures from where the chip was drawn, not the nudge.
+        m.applyControlCompaction(host);
+        expect(later.style.left).toBe('62px');
+    });
+});
+
+describe('moving collapsed dots clear of the kept chips', () => {
+    test('a dot inside a kept chip moves just past its right edge', () => {
+        const boxes = [box(0, 100, 60), box(40, 100)];
+        expect(SpanManager.planCompactNudges(boxes, [false, true], [null, box(40, 100, 12)]))
+            .toEqual([0, 22]);
+    });
+
+    test('a dot that clears every kept chip stays put', () => {
+        const boxes = [box(0, 100, 60), box(40, 100)];
+        expect(SpanManager.planCompactNudges(boxes, [false, true], [null, box(70, 100, 12)]))
+            .toEqual([0, 0]);
+    });
+
+    test('a dot pushed into a second kept chip clears that one too', () => {
+        const boxes = [box(0, 100, 60), box(62, 100, 40), box(10, 100)];
+        expect(SpanManager.planCompactNudges(
+            boxes, [false, false, true], [null, null, box(10, 100, 12)]))
+            .toEqual([0, 0, 94]);
+    });
+
+    test('a chip on another line is not in the way', () => {
+        const boxes = [box(0, 100, 60), box(40, 200)];
+        expect(SpanManager.planCompactNudges(boxes, [false, true], [null, box(40, 200, 12)]))
+            .toEqual([0, 0]);
+    });
 });
 
 describe('the gutter the chips live in', () => {

@@ -27,6 +27,16 @@
     var SVGNS = 'http://www.w3.org/2000/svg';
     var TOOL_NAMES = {pan: 'Pan / select cell', bbox: 'Rectangle', polygon: 'Polygon', landmark: 'Point'};
     var TOOL_KEYS = {pan: 'v', bbox: 'r', polygon: 'p', landmark: 'o'};
+    // This page's id nonce. In a live session the server merges the shared
+    // answer region by region by id; two members' browsers each numbering
+    // their first region 1 must not produce one id.
+    var ID_NONCE = Math.random().toString(36).slice(2, 8) || 'x';
+    var idCounter = 0;
+
+    function newRoiId() {
+        idCounter += 1;
+        return 'roi_' + ID_NONCE + '_' + idCounter;
+    }
 
     function el(tag, attrs, children) {
         var node = document.createElement(tag);
@@ -646,6 +656,7 @@
     }
 
     function addRoi(state, roi) {
+        if (roi.id === undefined || roi.id === null || roi.id === '') { roi.id = newRoiId(); }
         roi.label = state.label;
         roi.color = labelColour(state, state.label);
         roi.z = state.z;
@@ -862,7 +873,10 @@
             existing.z = state.z;
             existing.t = state.t;
         } else {
-            state.cells.push({label_id: id, 'class': className, z: state.z, t: state.t});
+            // Keyed by the cell itself: two members classifying one cell is
+            // one element (their classes merge as one change), two cells are
+            // two, whichever browser classified them.
+            state.cells.push({id: 'cell_' + id, label_id: id, 'class': className, z: state.z, t: state.t});
         }
         save(state);
         selectCell(state, id, false);
@@ -957,6 +971,37 @@
         else { state.form.removeAttribute('data-incomplete-reason'); }
     }
 
+    /**
+     * Replace the regions and cells with what the hidden input now holds,
+     * and redraw. A teammate's answer in a live session arrives this way.
+     * Nothing is saved: no change event, no data-modified. The plane, view,
+     * tool and selected cell stay; the selected region follows its id; a
+     * region being drawn is dropped. Returns false before the image has
+     * loaded (the arrays are still replaced, so the load shows the new answer).
+     */
+    function applyStored(state) {
+        var stored = readStored(state.form);
+        var prev = state.rois[state.selectedRoi];
+        state.rois = Array.isArray(stored.rois) ? stored.rois.slice() : [];
+        state.cells = Array.isArray(stored.cells) ? stored.cells.slice() : [];
+        state.selectedRoi = -1;
+        if (prev && prev.id !== undefined && prev.id !== null && prev.id !== '') {
+            state.rois.forEach(function (roi, i) { if (roi.id === prev.id) { state.selectedRoi = i; } });
+        }
+        cancelDrawing(state);
+        if (!state.info) { return false; }
+        drawRois(state);
+        listRois(state);
+        listCells(state);
+        if (state.selectedCell && state.root.querySelector('.mic-selected')) {
+            selectCell(state, state.selectedCell, false);   // redraws the cells too
+        } else {
+            drawCells(state);
+        }
+        declare(state);
+        return true;
+    }
+
     function init() {
         document.querySelectorAll('form.microscopy').forEach(setup);
     }
@@ -968,6 +1013,25 @@
 
     window.PotatoMicroscopy = {
         init: init,
-        state: function (form) { return STATES.get(form || document.querySelector('form.microscopy')); }
+        state: function (form) { return STATES.get(form || document.querySelector('form.microscopy')); },
+        /** Redraw ``form`` from its hidden input (see applyStored). */
+        reload: function (form) {
+            var state = STATES.get(form || document.querySelector('form.microscopy'));
+            return state ? applyStored(state) : false;
+        },
+        newRoiId: newRoiId
+    };
+
+    // Live collaborative sessions (collab.js): it has put the teammate's
+    // answer in this scheme's hidden input already.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.microscopy = {
+        apply: function (ctx) {
+            var form = ctx.form && ctx.form.classList && ctx.form.classList.contains('microscopy')
+                ? ctx.form : null;
+            var state = form && STATES.get(form);
+            if (!state || !state.input) { return false; }
+            return applyStored(state) === true;
+        }
     };
 })();

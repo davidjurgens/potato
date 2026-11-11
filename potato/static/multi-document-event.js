@@ -175,7 +175,12 @@
       this.refresh();
     }
 
-    async refresh() {
+    // `quiet`: a redraw for a teammate's change (live collaborative
+    // session). The registry is re-read and drawn, but the hidden input keeps
+    // the team's answer collab.js wrote into it: nothing is stamped, no
+    // `change` fires, so the redraw cannot be saved as this annotator's edit.
+    async refresh(opts) {
+      const quiet = !!(opts && opts.quiet);
       const docId = this.getDocId();
       if (!docId) return;
       try {
@@ -190,7 +195,7 @@
       }
       this.renderList();
       this.renderEditor();
-      this.syncHidden();
+      if (!quiet) this.syncHidden();
     }
 
     renderList() {
@@ -479,4 +484,18 @@
   } else {
     initAll();
   }
+
+  // Live collaborative sessions. The events themselves live in the shared
+  // Event Registry, so a teammate's change is already there: re-read it and
+  // redraw. The hidden input (this scheme's answer, a list of event ids) was
+  // written by collab.js before this runs and is left as it is.
+  window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+  window.potatoCollabWidgets.multi_document_event = {
+    apply(ctx) {
+      const manager = ctx && window.mdeManagers[ctx.schema];
+      if (!manager || typeof manager.refresh !== "function") return false;
+      manager.refresh({ quiet: true }).catch(() => {});
+      return true;
+    },
+  };
 })();

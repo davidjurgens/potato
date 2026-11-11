@@ -419,6 +419,42 @@
                         target.focus();
                     });
                 });
+
+                // Live collaborative sessions. A per-turn rating scheme has no
+                // form of its own (no data-annotation-type), so collab.js can
+                // reach it only through the per-schema hook, which it calls
+                // after writing the teammate's JSON into this hidden input.
+                // The answer replaces this schema's ratings and every turn is
+                // repainted; nothing is written back or saved.
+                const applyLive = (schema, value) => {
+                    let parsed = {};
+                    if (value) {
+                        try { parsed = JSON.parse(value); } catch (e) { return false; }
+                        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+                    }
+                    ratingValuesBySchema[schema] = parsed;
+                    const own = hiddenInputs[schema];
+                    if (own && own.value !== (value || '')) own.value = value || '';
+                    const turns = new Set();
+                    container.querySelectorAll('.ptr-value').forEach(v => {
+                        if ((v.dataset.schema || '') === schema) turns.add(v.dataset.turn);
+                    });
+                    turns.forEach(turn => paintTurn(schema, turn));
+                    return true;
+                };
+                window.potatoCollabAppliers = window.potatoCollabAppliers || {};
+                Object.keys(hiddenInputs).forEach((schemaName) => {
+                    const previous = window.potatoCollabAppliers[schemaName];
+                    // One schema can be rated in two dialogue fields; each
+                    // container repaints its own turns.
+                    const appliers = (previous && previous._ptrAppliers) || [];
+                    appliers.push(applyLive);
+                    const hook = (schema, value) => appliers.map(fn => fn(schema, value)).every(Boolean);
+                    hook._ptrAppliers = appliers;
+                    if (!previous || previous._ptrAppliers) {
+                        window.potatoCollabAppliers[schemaName] = hook;
+                    }
+                });
             });
         }
 

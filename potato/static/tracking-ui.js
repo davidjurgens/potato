@@ -51,6 +51,10 @@
             this.tracks = {};  // objectId -> track data
             this.activeTrackId = null;
             this.nextTrackId = 1;
+            // Per-page part of new track ids. The counter restarts at 1 on
+            // every page, so two annotators in one live session each made a
+            // `track_1`, and the server's merge (by id) kept only one.
+            this.idNonce = Math.random().toString(36).slice(2, 8);
             // tracking_options.auto_advance_frames: frames to step forward after
             // a box is drawn, so the next keyframe is one drag away. 0 stays put.
             this.autoAdvanceFrames = Math.max(0, Number(this.config.autoAdvanceFrames) || 0);
@@ -76,7 +80,8 @@
          * Create a new track.
          */
         createTrack(label, color) {
-            var id = 'track_' + this.nextTrackId++;
+            var id = 'track_' + this.idNonce + '_' + this.nextTrackId++;
+            while (this.tracks[id]) { id = 'track_' + this.idNonce + '_' + this.nextTrackId++; }
             this.tracks[id] = {
                 id: id,
                 label: label || 'object',
@@ -895,14 +900,38 @@
         loadTrackingData(data) {
             if (!data) return;
             this._loading = true;
+            // Replaces the tracks (a teammate's answer in a live session
+            // arrives here too), so a selection on a track that is gone, and
+            // a drag in progress on it, go with it.
             this.tracks = data;
-            // Update nextTrackId
+            // Update nextTrackId past the restored ids: `track_<n>` (before
+            // ids carried a nonce) and this page's own `track_<nonce>_<n>`.
+            var pattern = /^track_(?:([a-z0-9]+)_)?(\d+)$/;
             for (var id in this.tracks) {
-                var num = parseInt(id.replace('track_', ''), 10);
-                if (!isNaN(num) && num >= this.nextTrackId) {
+                var m = pattern.exec(id);
+                if (!m || (m[1] && m[1] !== this.idNonce)) continue;
+                var num = parseInt(m[2], 10);
+                if (num >= this.nextTrackId) {
                     this.nextTrackId = num + 1;
                 }
             }
+            if (this.activeTrackId && !this.tracks[this.activeTrackId]) this.activeTrackId = null;
+            var sel = this.selectedKeyframe;
+            if (sel && !(this.tracks[sel.trackId] && this.tracks[sel.trackId].keyframes
+                         && this.tracks[sel.trackId].keyframes[sel.frame])) {
+                this.selectedKeyframe = null;
+            }
+            if (this.mode !== 'idle') {
+                this.mode = 'idle';
+                this.drawStart = null;
+                this.dragStart = null;
+                this.resizeHandle = null;
+                this.originalBbox = null;
+            }
+            this._updateCanvasPointerEvents();
+            var deleteBtn = this.root && this.root.querySelector
+                ? this.root.querySelector('[data-action="delete-track"]') : null;
+            if (deleteBtn) deleteBtn.disabled = !this.activeTrackId;
             this._renderTrackPanel();
             this.renderOverlay();
             this._loading = false;

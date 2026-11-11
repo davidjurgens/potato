@@ -51,6 +51,15 @@ class SpanLinkManager {
         // Set up observer to re-render arcs when spans are added/removed
         this.setupSpanObserver();
 
+        // The links and the spans load separately (/api/links, /api/spans).
+        // A list drawn before the spans arrived names every span "unknown";
+        // redraw it once they are in.
+        document.addEventListener('potato:spansRendered', () => {
+            if (this.links.length > 0 && document.contains(this.container)) {
+                this.updateLinkList();
+            }
+        });
+
         // Load existing links if any
         this.loadExistingLinks();
 
@@ -519,6 +528,20 @@ class SpanLinkManager {
         return match || raw || 'unknown';
     }
 
+    /**
+     * A span's label by id: its overlay's, else the span manager's record of
+     * it (the overlay may not be drawn yet), else whatever the id says.
+     */
+    spanLabelById(id) {
+        const overlay = this.overlayById(id);
+        if (overlay) return this.resolveSpanLabel(overlay);
+        const spans = (window.spanManager && typeof window.spanManager.getSpans === 'function')
+            ? window.spanManager.getSpans() : [];
+        const span = spans.find(s => s && s.id === id);
+        if (span && span.label) return span.label;
+        return this.resolveSpanLabel({dataset: {annotationId: id}});
+    }
+
     handleSpanClick(spanOverlay) {
         const spanId = spanOverlay.dataset.spanId || spanOverlay.dataset.annotationId;
         const spanLabel = this.resolveSpanLabel(spanOverlay);
@@ -788,6 +811,14 @@ class SpanLinkManager {
         // Update UI
         this.updateLinkList();
         this.renderArcs();
+    }
+
+    /** Show the links stored now (a teammate's change in a live session). */
+    async reload() {
+        const had = this.links.length > 0;
+        await this.loadExistingLinks();
+        // The loader only draws when there are links; clear what was drawn.
+        if (had && this.links.length === 0) this.renderArcs();
     }
 
     async loadExistingLinks() {
@@ -1192,7 +1223,7 @@ class SpanLinkManager {
 
             // One chip per linked span: role dot + label + quoted snippet.
             const chips = ids.map((id, i) => {
-                const label = labels[i] || this.resolveSpanLabel(this.overlayById(id) || {dataset: {}}) || 'span';
+                const label = labels[i] || this.spanLabelById(id) || 'span';
                 const text = (texts[i] || '').trim();
                 const snippet = text ? `<span class="link-chip-text">“${this.truncateText(text, 26)}”</span>` : '';
                 const roleCls = directed ? (i === 0 ? 'is-source' : 'is-target') : '';

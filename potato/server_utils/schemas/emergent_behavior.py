@@ -23,6 +23,8 @@ from .identifier_utils import (
     generate_validation_attribute, escape_html_content, generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -149,9 +151,11 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
         function paint(b) {{
             var n = STATE[b].turns.length;
-            var block = document.querySelector('.eb-block[data-b="' + cssEsc(b) + '"]');
+            // This scheme's block: two emergent_behavior schemes share behavior names.
+            var root = document.getElementById(SCHEMA);
+            var block = root && root.querySelector('.eb-block[data-b="' + cssEsc(b) + '"]');
             if (block) block.classList.toggle('eb-active', n > 0);
-            var c = document.querySelector('.eb-count[data-b="' + cssEsc(b) + '"]');
+            var c = root && root.querySelector('.eb-count[data-b="' + cssEsc(b) + '"]');
             if (c) c.textContent = n ? (n + ' turn' + (n>1?'s':'')) : '';
         }}
 
@@ -175,6 +179,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('emergent_behavior', 'build')}
     }})();
     </script>
 

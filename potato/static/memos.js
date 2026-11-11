@@ -215,7 +215,7 @@
         if (m.can_assign) actions.push('<button type="button" data-act="assign" data-id="' + esc(m.id) + '">Assign</button>');
         if (m.can_edit) actions.push('<button type="button" data-act="edit" data-id="' + esc(m.id) + '">Edit</button>');
         if (m.can_delete) actions.push('<button type="button" data-act="del" data-id="' + esc(m.id) + '">Delete</button>');
-        var vis = m.visibility === "shared" ? "shared" : "private";
+        var vis = m.visibility === "shared" || m.visibility === "personal" ? m.visibility : "private";
         var assignee = m.assignee
             ? '<span class="memo-assignee">assigned to ' + esc(m.assignee) + "</span>" : "";
         var resolved = m.status === "resolved" && m.resolved_by

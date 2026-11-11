@@ -25,6 +25,8 @@ from .identifier_utils import (
     generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,7 +172,8 @@ def _generate_internal(
             if (existing.decisive_step !== undefined && existing.decisive_step !== null)
                 stepSel.value = String(existing.decisive_step);
             var reason = document.getElementById(SCHEMA + '-reason');
-            if (reason && existing.reason) reason.value = existing.reason;
+            // Always written: rebuilding for an empty answer clears the box.
+            if (reason) reason.value = existing.reason || '';
 
             [agentSel, stepSel, reason].forEach(function(el) {{
                 if (el && !el.getAttribute('data-fa-bound')) {{
@@ -238,6 +241,7 @@ def _generate_internal(
             document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('failure_attribution', 'build')}
     }})();
     </script>
 

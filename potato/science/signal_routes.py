@@ -8,9 +8,9 @@
 ``GET /api/signals/preannotations?instance_id=&field=&schema=``
     The pre-annotations an ``interval_label`` scheme starts from.
 
-Both need a signed-in annotator who has been assigned the instance. The
-signal file is taken from the item's own field, never from the request, so a
-request cannot name a path.
+Both need a signed-in annotator who has been assigned the instance, or a
+member of a live session that holds it. The signal file is taken from the
+item's own field, never from the request, so a request cannot name a path.
 """
 
 from __future__ import annotations
@@ -60,7 +60,9 @@ def _context():
         except Exception:
             ids = None
         if ids is not None and str(instance_id) not in {str(i) for i in ids}:
-            abort(403)
+            from potato.collab.context import session_covers
+            if not session_covers(instance_id):
+                abort(403)
     try:
         item = get_item_state_manager().get_item(instance_id)
     except Exception:

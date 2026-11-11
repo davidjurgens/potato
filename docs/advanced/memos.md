@@ -31,7 +31,7 @@ annotation_ui:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `annotation_ui.memos` | off in standard mode; **on** when `qda_mode.enabled` or `solo_mode.enabled` | Shows the Notes sidebar and enables `/api/memos`. |
+| `annotation_ui.memos` | off in standard mode; **on** when `qda_mode.enabled`, `solo_mode.enabled` or `collab.enabled` | Shows the Notes sidebar and enables `/api/memos`. |
 | `annotation_ui.visibility` | `private` | Visibility the composer starts on, and returns to after each note is added or edited. Also the default for an API `POST` that leaves `visibility` out. |
 
 When disabled the `/api/memos` endpoints return `503` and no sidebar
@@ -43,6 +43,17 @@ toggle is shown — the standard annotation page is unchanged.
 |------------|:------:|:-----------:|:----------------:|
 | `private`  | ✅ | ✅ (always) | ❌ |
 | `shared`   | ✅ | ✅ (always) | ✅ |
+| `personal` | ✅ | ❌ | ❌ |
+
+`personal` is a note to yourself: no other user can open it in the interface,
+adjudicators included. It is still a row in `project.sqlite` and is included
+in exports that read the memo store. Whoever holds the server's files can
+read it, and so can whoever downloads the admin data archive
+(`potato deploy pull`, or `GET /admin/api/data/archive` with the admin API key):
+the archive carries the whole of `project.sqlite`. Tell annotators this if
+their notes may be sensitive. The composer offers it as **Only me**. A
+personal note cannot be an issue, since nobody else could see it to resolve
+it, and an issue cannot be made personal.
 
 "Adjudicator" here means a user listed in `adjudication.adjudicator_users`
 while `adjudication.enabled` is true. Nobody else gets the extra rights:
@@ -50,8 +61,8 @@ RBAC admins and requests carrying the admin API key cannot read, edit or
 delete other people's memos. The admin key can list issues, private ones
 included, through `GET /admin/api/memo_issues`, but it cannot list memos.
 
-- Adjudicators can **always** read every memo regardless of visibility
-  (oversight/QC).
+- Adjudicators can read every `private` and `shared` memo (oversight/QC), but
+  not `personal` ones.
 - Only the **author** may edit a memo's body or visibility. Adjudicators
   cannot edit other people's memos either.
 - The **author or an adjudicator** may delete a memo (moderation).
@@ -59,6 +70,14 @@ included, through `GET /admin/api/memo_issues`, but it cannot list memos.
 - A reply takes its thread's visibility, and follows it if the first note's
   visibility changes: anyone who can read the first note can read and reply
   to the whole thread.
+
+### Team threads
+
+In a [live collaborative session](collaborative_sessions.md), the session
+panel's **Discussion** tab writes `shared` memos that carry the session's team.
+Those reach the team's members (and adjudicators), not every annotator on the
+project. `POST /api/memos` takes the team as `team_id` and answers 403 to a
+user who is not on that team. The panel's **My notes** tab writes `personal` memos.
 
 ## Threads and issues
 

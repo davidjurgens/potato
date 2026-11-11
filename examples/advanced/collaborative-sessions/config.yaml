@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Live collaborative sessions: a team labels the same item at the same time,
+# sharing one answer. Run from the repository root:
+#
+#   python potato/flask_server.py start examples/advanced/collaborative-sessions/config.yaml -p 8000
+#
+# Sign in as `ana` in one browser and as `ben` in another (or in a private
+# window), then open /collab. Both are on team "red", led by ana: when ana
+# moves to another item, ben follows until he moves on his own. Anyone signed
+# in can also start a session of their own from the same page.
+#
+# Team "blue" (dana and eli) shows two more ways of working: each answers an
+# item on their own first and the answers are compared when both are done,
+# and an item is finished only when both mark it ready.
+#
+# See docs/advanced/collaborative_sessions.md.
+port: 8000
+annotation_task_name: "Collaborative Sessions — News Framing"
+task_dir: .
+output_annotation_dir: annotation_output/collaborative-sessions/
+data_files:
+- data/collaborative-sessions-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+# Sign in with a username alone, so trying a team is quick.
+require_password: false
+
+annotation_schemes:
+- annotation_type: radio
+  name: stance
+  description: What stance does the article take toward its main subject?
+  labels: [supportive, neutral, critical]
+  sequential_key_binding: true
+- annotation_type: multiselect
+  name: frames
+  description: Which framings does the article use?
+  labels: [economic, health, conflict, human interest, accountability]
+- annotation_type: span
+  name: entities
+  description: Mark the people, organizations and places.
+  labels: [PERSON, ORG, PLACE]
+- annotation_type: text
+  name: rationale
+  description: Why did the team pick this stance?
+
+collab:
+  enabled: true
+  who_can_create: any
+  default_mode: follow          # members go where the leader goes
+  exclude_members_from_solo: true
+  teams:
+  - id: red
+    name: Team Red
+    members: [ana, ben, chen]
+    leader: ana
+    items: [cs01, cs02, cs03, cs04, cs05]
+  - id: blue
+    name: Team Blue
+    members: [dana, eli]
+    leader: dana
+    items: [cs06, cs07, cs08]
+    blind_first: true           # answer on your own, then compare
+    require_signoff: true       # done when everyone marks it ready

@@ -38,6 +38,12 @@
     const EDGE_TOLERANCE = 5;
     /** Shortest segment worth keeping, in seconds. Below this it is a click. */
     const MIN_SEGMENT = 0.05;
+    /**
+     * Per-page part of a new phase's id. In a live session the server merges
+     * two annotators' phase lists element by element, by id; a counter alone
+     * would give both browsers "phase_1" and one would overwrite the other.
+     */
+    const ID_NONCE = Math.random().toString(36).slice(2, 8);
 
     // -----------------------------------------------------------------
     // Pure arithmetic
@@ -754,9 +760,10 @@
                     const start = Math.min(drag.start, t);
                     const end = Math.max(drag.start, t);
                     if (end - start >= MIN_SEGMENT) {
-                        this.phases = insertSegment(
+                        this.phases = this._uniqueIds(insertSegment(
                             this.phases,
-                            { start, end, label: this.currentPhase });
+                            { id: this._newPhaseId(), start, end,
+                              label: this.currentPhase }));
                         this.selectedPhase = this.phases.findIndex(
                             (s) => s.start === start && s.end === end);
                     }
@@ -1069,6 +1076,52 @@
             if (cause) { cause.value = ''; cause.disabled = true; }
         }
 
+        /** A phase id no other browser in a live session will mint. */
+        _newPhaseId() {
+            this._phaseSeq = (this._phaseSeq || 0) + 1;
+            return `phase_${ID_NONCE}_${this._phaseSeq}`;
+        }
+
+        /**
+         * Give the right-hand piece of a split phase its own id.
+         *
+         * insertSegment copies a phase it cuts in two, id and all, and two
+         * elements sharing an id would be merged into one on the server.
+         * Phases without an id (stored before ids existed) are left alone.
+         */
+        _uniqueIds(phases) {
+            const seen = new Set();
+            return phases.map((seg) => {
+                if (!seg.id) return seg;
+                if (!seen.has(seg.id)) { seen.add(seg.id); return seg; }
+                const copy = Object.assign({}, seg, { id: this._newPhaseId() });
+                seen.add(copy.id);
+                return copy;
+            });
+        }
+
+        /**
+         * Put a teammate's answer on screen (live sessions).
+         *
+         * collab.js has already written it into the hidden input. Every field
+         * is replaced, an empty input meaning an empty answer, and the canvas,
+         * outcome radios and relabel box redrawn. Nothing is saved.
+         */
+        applyRemote() {
+            if (!this.container) return false;
+            this.phases = [];
+            this.reward = [];
+            this.outcome = { result: '', cause: '' };
+            this.instructions = [];
+            this._drag = null;
+            this._restoreFromInput();
+            if (this.selectedPhase >= this.phases.length) this.selectedPhase = -1;
+            this._applyOutcomeToInputs();
+            this._applyInstructionToInputs();
+            this.draw();
+            return true;
+        }
+
         _restoreFromInput() {
             const input = document.getElementById(`input-${this.schema}`);
             if (!input || !input.value) return;
@@ -1146,6 +1199,19 @@
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = EpisodeAnnotationManager;
     }
-    if (root) root.EpisodeAnnotationManager = EpisodeAnnotationManager;
+    if (root) {
+        root.EpisodeAnnotationManager = EpisodeAnnotationManager;
+        // Live sessions: redraw a scheme from a teammate's answer.
+        root.potatoCollabWidgets = root.potatoCollabWidgets || {};
+        root.potatoCollabWidgets.episode_annotation = {
+            apply(ctx) {
+                const box = root.document && root.document.querySelector(
+                    `.episode-annotation-container[data-schema="${cssEscape(ctx.schema)}"]`);
+                const manager = box && box.annotationManager;
+                if (!manager || typeof manager.applyRemote !== 'function') return false;
+                return manager.applyRemote() === true;
+            },
+        };
+    }
 })(typeof window !== 'undefined' ? window
     : (typeof globalThis !== 'undefined' ? globalThis : null));

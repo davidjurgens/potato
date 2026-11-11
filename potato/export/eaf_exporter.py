@@ -228,11 +228,11 @@ class EAFExporter(BaseExporter):
 
         # TIME_ORDER - collect all unique time slots
         time_order = ET.SubElement(root, "TIME_ORDER")
-        time_slots = tiered_data.get("time_slots", {})
-
-        if not time_slots:
-            # Generate from annotations
-            time_slots = self._generate_time_slots(tiered_data.get("annotations", {}))
+        # Always from the annotations, which carry their own times. The stored
+        # ``time_slots`` is a derived index, and one merged from two
+        # annotators' saves (a live session) or renumbered by an older page
+        # can name a time twice or miss one an annotation uses.
+        time_slots = self._generate_time_slots(tiered_data.get("annotations", {}))
 
         # Sort and add time slots
         slot_items = sorted(time_slots.items(), key=lambda x: x[1])
@@ -368,8 +368,12 @@ class EAFExporter(BaseExporter):
         if time_ms in time_to_slot:
             return time_to_slot[time_ms]
 
-        # Create new slot
-        slot_id = f"ts{len(time_to_slot) + 1}"
+        # Create new slot, under a name no other slot has
+        taken = set(time_to_slot.values())
+        n = len(time_to_slot) + 1
+        while f"ts{n}" in taken:
+            n += 1
+        slot_id = f"ts{n}"
         time_to_slot[time_ms] = slot_id
         return slot_id
 
@@ -382,10 +386,12 @@ class EAFExporter(BaseExporter):
 
         for tier_anns in annotations.values():
             for ann in tier_anns:
+                # Rounded as the tiers look them up, so every time an
+                # annotation uses has exactly one slot.
                 if ann.get("start_time") is not None:
-                    times.add(int(ann["start_time"]))
+                    times.add(int(round(float(ann["start_time"]))))
                 if ann.get("end_time") is not None:
-                    times.add(int(ann["end_time"]))
+                    times.add(int(round(float(ann["end_time"]))))
 
         return {
             f"ts{i+1}": time

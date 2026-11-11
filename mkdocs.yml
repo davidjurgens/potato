@@ -237,6 +237,7 @@ nav:
         - Search: advanced/search.md
         - Psychometrics: advanced/psychometrics.md
         - Multi-Document Events: advanced/multi_document_events.md
+        - Live Collaborative Sessions: advanced/collaborative_sessions.md
         - Multiplayer Rooms: advanced/multiplayer_rooms.md
         - Per-Cohort Schemas: advanced/per_cohort_schemas.md
         - Heterogeneous Coverage: advanced/heterogeneous_coverage.md

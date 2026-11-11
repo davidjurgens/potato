@@ -56,7 +56,7 @@ over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use them, with editor setup and CI validation
 - [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 80 annotation types and 31 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 557 HTTP paths, with per-operation auth and config gating
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 589 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -137,6 +137,7 @@ over prose when writing a config or calling the API.
 - **[Think-Aloud Mode](advanced/think_aloud.md)** - Voice rationales with fully-local STT and rule-based spoken-label commitment; verbatim reasoning streams, no LLM
 - **[Pocket Mode](advanced/pocket_mode.md)** - Mobile-first card-stack annotation PWA: thumb-zone labels, swipe navigation, offline queue with auto-sync
 - **[Psychometrics](advanced/psychometrics.md)** - Labels with error bars: live IRT (ability + difficulty, no gold, no LLM), information-gain adaptive routing, codebook-bug detection, and pre-study power analysis
+- **[Live Collaborative Sessions](advanced/collaborative_sessions.md)** - A team annotates the same items together with one shared answer: live updates on every member's page, follow-the-leader navigation, a per-item change history with undo, personal notes and team discussion
 - **[Multiplayer Rooms](advanced/multiplayer_rooms.md)** - Live group annotation: blind-vote norming sessions with a real-time agreement meter and conformity logging, adjudication huddles, and expert shadowing
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
 - [MACE](advanced/mace.md) - Multi-Annotator Competence Estimation via variational inference

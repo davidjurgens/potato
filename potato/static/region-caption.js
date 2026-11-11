@@ -49,7 +49,7 @@
                 if (element.annotationManager) {
                     this.imageManager = element.annotationManager;
                     this._wireCapture();
-                    this.sync();
+                    this._syncOnLoad();
                     return;
                 }
             }
@@ -60,6 +60,26 @@
                 return;
             }
             setTimeout(() => this._findImageManager(attempt + 1), 250);
+        }
+
+        /**
+         * The first sync, once the canvas is found: saved only if it changed
+         * the answer.
+         *
+         * Reading the canvas on load reproduces what was restored, so saving
+         * it unconditionally wrote `{"captions":[]}` over an unanswered item
+         * and announced a load as an edit. Regions the canvas has that the
+         * stored answer lacks (a prelabel, shapes drawn before this schema
+         * attached) do change it, and are saved as before.
+         */
+        _syncOnLoad() {
+            const signature = () => JSON.stringify(
+                this.entries.map((entry) => [entry.key, entry.caption]));
+            const before = signature();
+            this.sync({ quiet: true });
+            if (signature() !== before && !this.imageManager._hydrating) {
+                this._save();
+            }
         }
 
         /**
@@ -126,8 +146,12 @@
          * deleted region contributes nothing to the saved value; they only
          * exist to survive the round trip.
          */
-        sync() {
+        sync(options) {
             if (!this.imageManager) return;
+            // A canvas restoring stored shapes (page load, relayout, a
+            // teammate's regions arriving) is not the annotator editing:
+            // follow it on screen without saving.
+            const quiet = !!(options && options.quiet) || !!this.imageManager._hydrating;
             let regions = [];
             try {
                 const parsed = JSON.parse(
@@ -157,8 +181,29 @@
                 }
             }
 
-            this._save();
+            if (!quiet) this._save();
             this._render();
+        }
+
+        /**
+         * Put a teammate's answer on screen (live sessions).
+         *
+         * collab.js has already written it into the hidden input. The entries
+         * are replaced by it (an empty input clears them, orphans included),
+         * then matched to the regions on the canvas the way sync() does, so
+         * the list keeps following the canvas. A caption whose region is not
+         * on the canvas yet waits in the orphan pool for it. Nothing is saved.
+         */
+        applyRemote() {
+            this.entries = [];
+            if (this._orphans) this._orphans.clear();
+            this._restoreFromInput();
+            if (this.imageManager) {
+                this.sync({ quiet: true });
+            } else {
+                this._render();
+            }
+            return true;
         }
 
         setCaption(index, value) {
@@ -396,4 +441,16 @@
     }
 
     global.RegionCaptionManager = RegionCaptionManager;
+
+    // Live sessions: redraw a scheme from a teammate's answer.
+    global.potatoCollabWidgets = global.potatoCollabWidgets || {};
+    global.potatoCollabWidgets.region_caption = {
+        apply(ctx) {
+            const box = document.querySelector('.region-caption-container[data-schema="'
+                + CSS.escape(ctx.schema) + '"]');
+            const manager = box && box.regionCaptionManager;
+            if (!manager || typeof manager.applyRemote !== 'function') return false;
+            return manager.applyRemote() === true;
+        },
+    };
 })(typeof window !== 'undefined' ? window : globalThis);

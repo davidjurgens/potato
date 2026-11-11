@@ -145,14 +145,36 @@
             .filter(Boolean);
     }
 
-    /** The next unused track id: t1, t2, ... */
+    /**
+     * This page's id nonce. In a live session two members' browsers each
+     * number their first track 1; the nonce keeps "t1" drawn here apart from
+     * "t1" drawn there, which would otherwise merge into one track.
+     */
+    const NONCE = Math.random().toString(36).slice(2, 8) || 'x';
+    let idCounter = 0;
+
+    /**
+     * A fresh element id, unique on this page and across pages. The server
+     * merges a shared answer element by element by `id`; a stored keyframe is
+     * one element, so each gets its own.
+     */
+    function newId(prefix) {
+        idCounter += 1;
+        return `${prefix || 'pc'}_${NONCE}_${idCounter}`;
+    }
+
+    /**
+     * The next unused track id: t1_<nonce>, t2_<nonce>, ... Numbered past
+     * every restored id, the old bare `t7` included, so tracks still read in
+     * order. Restored ids are never renamed.
+     */
     function nextTrackId(store) {
         let n = 0;
         (store || []).forEach((obj) => {
-            const m = /^t(\d+)$/.exec(String(obj && obj.track_id));
+            const m = /^t(\d+)(?:_[a-z0-9]+)?$/.exec(String(obj && obj.track_id));
             if (m) n = Math.max(n, parseInt(m[1], 10));
         });
-        return `t${n + 1}`;
+        return `t${n + 1}_${NONCE}`;
     }
 
     /**
@@ -179,6 +201,7 @@
         view.forEach((obj) => {
             if (obj.track_id === undefined || obj.track_id === null) {
                 obj.track_id = nextTrackId(merged.concat(view));
+                if (obj.id === undefined || obj.id === null || obj.id === '') obj.id = newId('pc');
             }
             obj.frame = frame;
             if (obj.interpolated) {
@@ -186,6 +209,9 @@
                 delete obj.interpolated;
                 delete obj._from;
                 delete obj._fromAttrs;
+                // A new keyframe: the id it was cloned with belongs to the
+                // keyframe it was interpolated from.
+                obj.id = newId('pc');
             }
             merged.push(storedCopy(obj));
         });
@@ -214,6 +240,11 @@
         const next = frame + 1;
         const copy = storedCopy(obj);
         copy.frame = next;
+        // Its own element: the replaced keyframe's id if there was one, else
+        // a new one, never the id of the keyframe it was copied from.
+        const replaced = (store || []).find((k) => k && k.track_id === obj.track_id && k.frame === next);
+        copy.id = (replaced && replaced.id !== undefined && replaced.id !== null && replaced.id !== '')
+            ? replaced.id : newId('pc');
         return (store || []).filter((k) => !(k.track_id === obj.track_id && k.frame === next))
             .concat([copy]);
     }
@@ -224,7 +255,7 @@
 
     const api = {
         framesOf, objectAt, viewAt, tracksOf, mergeView, copyForward, deleteTrack,
-        nextTrackId, sameCoordinates, slerp,
+        nextTrackId, newId, sameCoordinates, slerp,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     if (root) root.PointCloudSequence = api;

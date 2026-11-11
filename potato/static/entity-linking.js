@@ -340,10 +340,19 @@
     }
 
     /**
+     * A linked span. Spans are span-core overlays; the label chip is the part
+     * that takes the pointer. This listened for the inline `.span-highlight`
+     * the server used to wrap stored spans in, so the tooltip showed only on
+     * a reloaded page and never for a link just made.
+     */
+    const LINKED_SPAN_SELECTOR =
+        '.span-overlay-pure.has-entity-link, .span-highlight.has-entity-link';
+
+    /**
      * Handle hover over a span with entity link
      */
     function handleSpanHover(event) {
-        const span = event.target.closest('.span-highlight.has-entity-link');
+        const span = event.target.closest(LINKED_SPAN_SELECTOR);
         if (!span) return;
 
         const kbId = span.getAttribute('data-kb-id');
@@ -360,7 +369,7 @@
      * Handle hover out from span
      */
     function handleSpanHoverOut(event) {
-        const span = event.target.closest('.span-highlight.has-entity-link');
+        const span = event.target.closest(LINKED_SPAN_SELECTOR);
         if (!span) return;
 
         hideEntityTooltip();
@@ -384,8 +393,10 @@
             <div class="el-tooltip-label">${escapeHtml(kbLabel || 'Loading...')}</div>
         `;
 
-        // Position tooltip near the span
-        const rect = span.getBoundingClientRect();
+        // Position tooltip near the span. An overlay's own box is 0x0 at the
+        // corner of the text; its first segment is the span.
+        const anchor = span.querySelector('.span-highlight-segment') || span;
+        const rect = anchor.getBoundingClientRect();
         tooltip.style.position = 'fixed';
         tooltip.style.left = `${rect.left}px`;
         tooltip.style.top = `${rect.bottom + 5}px`;

@@ -44,7 +44,8 @@ def test_both_save_paths_send_a_client_timestamp(annotation_js):
 
 def test_the_server_reads_the_field_rather_than_deriving_one():
     routes = ROUTES_PY.read_text(encoding="utf-8")
-    assert 'request.json.get("response_time_seconds")' in routes
+    # The route hands its JSON body to _update_instance_core as `data`.
+    assert 'data.get("response_time_seconds")' in routes
     assert "datetime.datetime.now() - client_timestamp" not in routes, (
         "that subtraction measures network latency, not reading time"
     )

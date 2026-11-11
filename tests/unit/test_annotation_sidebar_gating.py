@@ -75,8 +75,15 @@ class TestTheGateAgreesWithTheBlueprints:
             "memos_enabled": False,
             "codebook_ui_enabled": False,
             "search_claim_enabled": False,
+            "collab_lobby_enabled": False,
             "memo_default_visibility": "private",
         }
+
+    def test_live_sessions_link_and_notes_follow_collab(self):
+        flags = _flags({"collab": {"enabled": True}})
+        assert flags["collab_lobby_enabled"] is True
+        # The session panel keeps its notes in the memos store.
+        assert flags["memos_enabled"] is True
 
     @pytest.mark.parametrize("value,expected", [
         ("shared", "shared"), ("private", "private"),

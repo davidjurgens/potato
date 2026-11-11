@@ -58,7 +58,9 @@ describe('pc-sequence', () => {
         delete fresh.track_id;
         const merged = seq.mergeView(store, 0, seq.viewAt(store, 0).concat([fresh]));
         expect(merged.find((k) => k.coordinates.center[0] === 9))
-            .toMatchObject({ frame: 0, track_id: 't8' });
+            // Numbered past the highest, with this page's nonce so another
+            // page's eighth track is a different one.
+            .toMatchObject({ frame: 0, track_id: expect.stringMatching(/^t8_[a-z0-9]+$/) });
     });
 
     test('label and attributes set on one frame apply to the whole track', () => {
@@ -141,10 +143,11 @@ describe('viewer on a sequence', () => {
         m.goToFrame(1);
         m.selectedIndex = 0;
         m.deleteAnnotation(0);
-        m.goToFrame(1, 't1');
+        const track = stored()[0].track_id;
+        m.goToFrame(1, track);
         expect(m.annotations[0].interpolated).toBe(true);
         expect(m.annotations[0].coordinates.center[0]).toBeCloseTo(3);
-        expect(stored().map((k) => [k.frame, k.track_id])).toEqual([[0, 't1'], [2, 't1']]);
+        expect(stored().map((k) => [k.frame, k.track_id])).toEqual([[0, track], [2, track]]);
         expect(stored()[0]).not.toHaveProperty('interpolated');
     });
 

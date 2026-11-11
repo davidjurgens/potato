@@ -415,7 +415,10 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                     var parentNode = parent.closest('.hier-node');
                     if (parentNode) {{
                         var tog = parentNode.querySelector(':scope > .hier-node-row .hier-toggle');
-                        if (tog) tog.innerHTML = '&#9660;';
+                        if (tog) {{
+                            tog.innerHTML = '&#9660;';
+                            tog.setAttribute('aria-expanded', 'true');
+                        }}
                     }}
                     var grandparent = parentNode ? parentNode.parentElement : null;
                     parent = grandparent ? grandparent.closest('.hier-children') : null;

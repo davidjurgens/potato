@@ -24,6 +24,8 @@ from .identifier_utils import (
     generate_validation_attribute, escape_html_content, generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -121,8 +123,13 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
             var vWrap = document.getElementById(SCHEMA + '-video');
             var src = d[CONFIG.video_key];
-            vWrap.innerHTML = src ? '<video controls preload="metadata" src="' + esc(src) +
-                '" style="width:100%;max-height:360px;border-radius:6px;"></video>' : '';
+            // Keep the player when the source is unchanged: a rebuild for a
+            // teammate's edit must not stop playback or lose the playhead.
+            var curVideo = vWrap.querySelector('video');
+            if (!(src && curVideo && curVideo.getAttribute('src') === String(src))) {{
+                vWrap.innerHTML = src ? '<video controls preload="metadata" src="' + esc(src) +
+                    '" style="width:100%;max-height:360px;border-radius:6px;"></video>' : '';
+            }}
 
             var list = document.getElementById(SCHEMA + '-list');
             var empty = document.getElementById(SCHEMA + '-empty');
@@ -181,7 +188,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         function captureFromVideo(i, field) {{
             var v = video();
             var t = v ? +v.currentTime.toFixed(1) : 0;
-            var inp = document.querySelector('.tg-' + field + '[data-idx="' + i + '"]');
+            var inp = document.getElementById(SCHEMA).querySelector('.tg-' + field + '[data-idx="' + i + '"]');
             if (inp) inp.value = t;
             setField(i, field, t);
         }}
@@ -197,7 +204,8 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         function paint(i) {{
             var e = _events.filter(function(x) {{ return x.i == i; }})[0];
             var g = STATE.events[i];
-            var card = document.querySelector('.tg-card[data-idx="' + i + '"]');
+            // This scheme's card: two temporal_grounding schemes share the indexes.
+            var card = document.getElementById(SCHEMA).querySelector('.tg-card[data-idx="' + i + '"]');
             if (!card) return;
             var gold = (g && g.start !== undefined && g.end !== undefined && g.end >= g.start) ? g : null;
             card.classList.toggle('tg-set', !!gold);
@@ -278,6 +286,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('temporal_grounding', 'build')}
     }})();
     </script>
 

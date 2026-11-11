@@ -83,6 +83,11 @@ TOOL_LABELS = {
 #: How a cloud is coloured when no per-point RGB is present.
 VALID_COLOR_MODES = ("height", "intensity", "rgb", "uniform")
 
+# What the attribute panel's hint calls the thing to select. The page renders
+# it and pc-viewer.js reads it from the config each time it redraws the panel,
+# so the hint does not change wording on the first selection.
+ATTRIBUTE_NOUN = "box or point"
+
 #: Brush radius for painting points, in screen pixels. The bounds match
 #: BRUSH_MIN / BRUSH_MAX in pc-viewer.js.
 DEFAULT_BRUSH_SIZE = 10
@@ -209,6 +214,7 @@ def _generate_internal(annotation_scheme):
         "minAnnotations": annotation_scheme.get("min_annotations", 0),
         "maxAnnotations": annotation_scheme.get("max_annotations"),
         "attributes": attributes,
+        "attributeNoun": ATTRIBUTE_NOUN,
         "brushSize": brush_size,
     }
 
@@ -303,7 +309,7 @@ def _generate_internal(annotation_scheme):
                  saw the object is checkable at a glance. -->
             <div class="pc-cameras" data-schema="{escaped_name}"
                  role="group" aria-label="Camera verification views"></div>
-            {panel_html(escaped_name, attributes, "box or point")}
+            {panel_html(escaped_name, attributes, ATTRIBUTE_NOUN)}
 
             <input type="hidden"
                    name="{escaped_name}"

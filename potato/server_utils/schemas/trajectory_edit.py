@@ -297,7 +297,9 @@ def _generate_internal(
             return card.querySelector('.' + cls + '[data-step="' + idx + '"][data-field="' + field + '"]');
         }}
 
-        function onEdit(textarea) {{
+        // ``restoring``: redraw for a stored answer (on load, or a
+        // teammate's) without rewriting it or saving.
+        function onEdit(textarea, restoring) {{
             var isFinal = textarea.getAttribute('data-final') === 'true';
             var card = textarea.closest('.trajedit-step-card');
             var originalEl = blockSelector(textarea, 'trajedit-original-text');
@@ -329,6 +331,7 @@ def _generate_internal(
             // Auto-grow to fit content (capped via CSS max-height).
             textarea.style.height = 'auto';
             textarea.style.height = Math.min(textarea.scrollHeight, 400) + 'px';
+            if (restoring) return;
 
             var state = getState();
             if (isFinal) {{
@@ -401,7 +404,7 @@ def _generate_internal(
         }}
 
         /* ---- persistence ---- */
-        function saveState() {{
+        function saveState(restoring) {{
             var state = getState();
             var steps = [];
             var nEdited = 0, totalDist = 0;
@@ -431,7 +434,7 @@ def _generate_internal(
                 total_edit_distance: totalDist
             }});
             var input = document.getElementById(SCHEMA).querySelector('.trajectory-edit-data-input');
-            if (input) {{
+            if (input && !restoring) {{
                 input.value = data;
                 input.setAttribute('data-modified', 'true');
                 input.dispatchEvent(new Event('change', {{ bubbles: true }}));
@@ -474,8 +477,9 @@ def _generate_internal(
                     var r = blockSelector(ta, 'trajedit-reason');
                     if (r) r.value = saved.reason;
                 }}
-                onEdit(ta);
+                onEdit(ta, true);
             }});
+            saveState(true);   // the counters, from the stored answer
         }}
 
         /* ---- diff helpers (from text_edit) ---- */

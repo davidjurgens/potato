@@ -484,5 +484,36 @@
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
+    /* Live collaborative sessions: the teammate's answer is already in the
+       hidden input. It replaces this page's answer; with none, the cells go
+       back to what a fresh item shows (the words, and any imported analysis,
+       which is not written back as an answer). paint() changes only cells
+       whose value differs, so the caret stays in an unchanged cell; a
+       different word list is drawn again. Nothing is saved. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state) { return false; }
+        var current = state.hidden.value || '';
+        var stored = parseStored(current);
+        var wordsOf = function (a) { return a.words.map(function (w) { return w.word; }).join('\u0000'); };
+        var before = wordsOf(state.answer);
+        if (stored) {
+            state.answer = normalize(stored, state.cfg);
+            state.written = current;
+        } else {
+            state.answer = initialAnswer(fieldsOf(), state.cfg);
+            state.written = '';
+            state.dirty = false;
+            state.prefilled = false;
+        }
+        if (state.columns && state.answer.words.length && wordsOf(state.answer) === before) { paint(state); }
+        else { render(state); }
+        return true;
+    }
+
+    root.potatoCollabWidgets = root.potatoCollabWidgets || {};
+    root.potatoCollabWidgets.interlinear_gloss = {apply: applyLive};
+
     root.PotatoInterlinearGloss = {init: init, core: core};
 })(typeof window !== 'undefined' ? window : this);

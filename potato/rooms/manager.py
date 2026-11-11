@@ -47,6 +47,15 @@ class RoomsManager:
         self.rooms: Dict[str, Room] = {}
         # room_id -> deque of ephemeral presence events (not persisted)
         self.presence: Dict[str, deque] = {}
+        # room_id -> last presence sequence number. Presence has its own
+        # counter: stamping it with len(room.events) gave every selection made
+        # between two room events the same number, and a poller whose cursor
+        # had moved past that number never saw the later ones.
+        self.presence_seq: Dict[str, int] = {}
+        # Counted up from the boot time in milliseconds, not from 0: an open
+        # room page keeps its cursor across a server restart, and a counter
+        # restarted at 1 stays below it until it catches up (potato-skill).
+        self._presence_epoch = int(time.time() * 1000)
         self.lock = threading.RLock()
 
         output_dir = config.get("output_annotation_dir", "")
@@ -204,15 +213,20 @@ class RoomsManager:
 
     def record_presence(self, room: Room, username: str,
                         data: Dict[str, Any]) -> None:
-        buffer = self.presence.setdefault(room.room_id, deque(maxlen=_PRESENCE_BUFFER))
-        buffer.append({"user": username, "data": data,
-                       "seq": len(room.events)})
+        with self.lock:
+            buffer = self.presence.setdefault(
+                room.room_id, deque(maxlen=_PRESENCE_BUFFER))
+            seq = self.presence_seq.get(room.room_id, self._presence_epoch) + 1
+            self.presence_seq[room.room_id] = seq
+            buffer.append({"user": username, "data": data, "seq": seq})
 
     def presence_since(self, room: Room, since: int) -> List[Dict[str, Any]]:
-        buffer = self.presence.get(room.room_id)
-        if not buffer:
-            return []
-        return [p for p in buffer if p["seq"] >= since]
+        """Presence entries with seq >= since (clients send last seq + 1)."""
+        with self.lock:
+            buffer = self.presence.get(room.room_id)
+            if not buffer:
+                return []
+            return [p for p in buffer if p["seq"] >= since]
 
     # ------------------------------------------------------------------
     # Events for pollers

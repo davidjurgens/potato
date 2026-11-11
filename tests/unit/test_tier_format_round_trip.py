@@ -273,3 +273,25 @@ def test_time_aligned_dependent_tiers_are_alignable():
     word = next(t for t in root.iter("TIER") if t.get("TIER_ID") == "word")
     assert word.find("ANNOTATION/ALIGNABLE_ANNOTATION") is not None
     assert word.find("ANNOTATION/REF_ANNOTATION") is None
+
+
+def test_eaf_slots_come_from_the_annotations_not_a_stored_index():
+    # Two annotators' saves merged in a live session can leave the stored
+    # time_slots naming one slot with another's time, or missing a time an
+    # annotation uses. Each annotation must still point at its own times.
+    d, result = _import("eaf_rt_slots", "rec01.eaf", EAF)
+    stored = json.loads(json.dumps(result.items[0].predictions["tiers"]))
+    stored["time_slots"] = {"ts1": 999999, "ts2": 0, "ts3": 0}
+    res = EAFExporter().export(_context(result, d, {"alice": stored}), str(d / "out"))
+    assert res.success, res.errors
+    root = ET.parse(res.files_written[0]).getroot()
+    slot_time = {ts.get("TIME_SLOT_ID"): int(ts.get("TIME_VALUE")) for ts in root.iter("TIME_SLOT")}
+    assert len(slot_time) == len(set(slot_time))
+    assert 999999 not in slot_time.values()
+    times = {ann["label"]: (round(ann["start_time"]), round(ann["end_time"]))
+             for ann in stored["annotations"]["tx@A"]}
+    for ann in root.iter("ALIGNABLE_ANNOTATION"):
+        value = ann.find("ANNOTATION_VALUE").text
+        if value in times:
+            assert (slot_time[ann.get("TIME_SLOT_REF1")],
+                    slot_time[ann.get("TIME_SLOT_REF2")]) == times[value]

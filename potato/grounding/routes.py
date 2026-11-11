@@ -1,5 +1,7 @@
 """
-``GET /api/grounding/expressions?schema=<name>`` — the current item's phrases.
+``GET /api/grounding/expressions?schema=<name>[&instance_id=<id>]`` — the
+item's phrases: the named item (assigned to the annotator, or held by a live
+session they are in), or without ``instance_id`` the annotator's current one.
 
 Fetched rather than rendered into the page for the same reason the rollout
 manifest is: the schema generator runs without the item, so it cannot know what
@@ -76,6 +78,30 @@ def normalize_expressions(raw):
     return expressions
 
 
+def _named_instance(user_state, instance_id):
+    """The item ``instance_id`` names, or a refusal response.
+
+    Readable when it is assigned to this annotator, or when the request names
+    a live session this annotator is in that holds the item.
+    """
+    from flask import jsonify
+    from potato.item_state_management import get_item_state_manager
+
+    assigned = getattr(user_state, "get_assigned_instance_ids", None)
+    try:
+        ids = assigned() if callable(assigned) else None
+    except Exception:  # noqa: BLE001 - no assignment record, no access
+        ids = None
+    if ids is None or str(instance_id) not in {str(i) for i in ids}:
+        from potato.collab.context import session_covers
+        if not session_covers(instance_id):
+            return jsonify({"error": "This item is not assigned to you"}), 403
+    instance = get_item_state_manager().find_item(instance_id)
+    if instance is None:
+        return jsonify({"error": f"No item '{instance_id}'"}), 404
+    return instance
+
+
 def grounding_expressions():
     """The current item's referring expressions, and any model predictions."""
     from flask import jsonify, request, session
@@ -100,7 +126,16 @@ def grounding_expressions():
     user_state = get_user_state(username)
     if not user_state:
         return jsonify({"error": "User state not found"}), 404
-    instance = user_state.get_current_instance()
+    instance_id = request.args.get("instance_id") or ""
+    if instance_id:
+        # The page names the item it shows. In a live session that item is
+        # assigned to the team user, not to the member, and the member has
+        # no current instance of their own, so the session vouches for it.
+        instance = _named_instance(user_state, instance_id)
+        if isinstance(instance, tuple):
+            return instance
+    else:
+        instance = user_state.get_current_instance()
     if not instance:
         return jsonify({"error": "No current instance"}), 404
 

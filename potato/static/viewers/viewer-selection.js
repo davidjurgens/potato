@@ -288,5 +288,39 @@
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
+    /* Live collaborative sessions: the teammate's answer is already in the
+       hidden input. It becomes the viewer's whole selection (a null answer
+       selects nothing); the viewer repaints and reports an 'api' change,
+       which redraws this list without saving. A context value the answer
+       does not carry keeps the viewer's current one when it is a view
+       position (a locus), and is emptied when it is a list. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state) { return false; }
+        if (!state.viewer) {
+            // attach() reads the hidden input when the viewer registers.
+            declare(state, readStored(state.input) || {items: []});
+            return true;
+        }
+        var stored = readStored(state.input) || {};
+        var next = JSON.parse(JSON.stringify(stored));
+        next.items = Array.isArray(stored.items) ? next.items : [];
+        var current = state.viewer.getSelection();
+        Object.keys(current).forEach(function (k) {
+            if (k !== 'viewer' && k !== 'items' && next[k] == null && Array.isArray(current[k])) {
+                next[k] = [];
+            }
+        });
+        state.viewer.setSelection(next);
+        state.last = state.viewer.getSelection();
+        render(state, state.last);
+        declare(state, state.last);
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.viewer_selection = {apply: applyLive};
+
     window.PotatoViewerSelection = {init: init};
 })();

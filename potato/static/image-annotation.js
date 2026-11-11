@@ -65,6 +65,55 @@ function carryProvenance(target, src) {
  * shape in this file goes through here; one that skipped it dropped them on
  * the first save, so an import -> export round trip lost them silently.
  */
+function carryId(target, src) {
+    // A shape keeps its id across save and reload. In a live collaborative
+    // session the server merges teammates' drawings shape by shape, by id;
+    // a shape that got a new id on every reload would read as deleted and
+    // redrawn, and two people moving it at once would leave two copies.
+    if (!target || !src) return target;
+    if (src.id !== undefined && src.id !== null && src.id !== '') target.id = String(src.id);
+    return target;
+}
+
+/**
+ * Give shapes stored before ids existed an id taken from their content.
+ *
+ * The same on every page that loads the same answer, so two teammates whose
+ * pages both re-save an old shape agree it is one shape; a fresh random id
+ * per page would make the merge keep both copies. A shape stored twice
+ * verbatim gets `_2`, `_3`, ... in stored order.
+ */
+function assignLegacyIds(annotations) {
+    if (!Array.isArray(annotations)) return annotations;
+    const seen = {};
+    annotations.forEach((ann) => {
+        if (!ann || typeof ann !== 'object' || ann.type === 'mask') return;
+        if (ann.id !== undefined && ann.id !== null && ann.id !== '') return;
+        const base = `legacy_${fnv1a(canonicalJson(ann))}`;
+        seen[base] = (seen[base] || 0) + 1;
+        ann.id = seen[base] === 1 ? base : `${base}_${seen[base]}`;
+    });
+    return annotations;
+}
+
+function canonicalJson(value) {
+    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    if (value && typeof value === 'object') {
+        return `{${Object.keys(value).sort()
+            .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+}
+
+function fnv1a(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(36);
+}
+
 function carryAttributes(target, src) {
     if (!target || !src) return target;
     const attrs = src.attributes;
@@ -171,6 +220,9 @@ class ImageAnnotationManager {
         // Set while server-stored annotations are being restored, so hydration
         // is not reported as the annotator having drawn anything.
         this._hydrating = false;
+        // New shape ids: unique to this page, so two pages never mint the same.
+        this._idNonce = Math.random().toString(36).slice(2, 8);
+        this._idCounter = 0;
         // Per-object attributes (occlusion, truncation, ...), edited in a panel
         // under the canvas for whichever shape is selected. Normalized and
         // validated server-side by schemas/object_attributes.py.
@@ -4119,12 +4171,20 @@ class ImageAnnotationManager {
         });
     }
 
+    _newElementId() {
+        if (!this._idNonce) this._idNonce = Math.random().toString(36).slice(2, 8);
+        this._idCounter = (this._idCounter || 0) + 1;
+        return `${this._idNonce}_${Date.now().toString(36)}_${this._idCounter.toString(36)}`;
+    }
+
     _serializeAnnotationsFlat() {
         const annotations = [];
 
         this.canvas.getObjects().forEach(obj => {
             if (obj.annotationData) {
+                if (!obj.annotationData.id) obj.annotationData.id = this._newElementId();
                 const ann = {
+                    id: obj.annotationData.id,
                     type: obj.annotationData.type,
                     label: obj.annotationData.label,
                     color: obj.annotationData.color,
@@ -4167,6 +4227,9 @@ class ImageAnnotationManager {
             if (!mask || !mask.buffer || !mask.buffer.hasAny()) continue;
             const counts = mask.buffer.encodeRLE();
             const entry = {
+                // From the store key, so two members painting one label's
+                // mask are painting one element (the later save wins).
+                id: `mask:${key}`,
                 type: 'mask',
                 // NOT the store key. An imported per-instance mask is keyed
                 // "label#instance" so two instances of one class stay apart,
@@ -4204,6 +4267,7 @@ class ImageAnnotationManager {
     _deserializeAnnotations(json) {
         const annotations = JSON.parse(json);
         let restoredMask = false;
+        assignLegacyIds(annotations);
 
         annotations.forEach(ann => {
             if (ann && ann.type === 'mask') {
@@ -4520,13 +4584,13 @@ class ImageAnnotationManager {
                 });
                 // Carried through so the serializer can rebuild the ordered
                 // list; the Group itself cannot supply it.
-                obj.annotationData = carryAttributes(carryProvenance({
+                obj.annotationData = carryId(carryAttributes(carryProvenance({
                     type: 'keypoint_set',
                     label: ann.label,
                     color: ann.color,
                     skeleton: ann.skeleton || '',
                     keypoints: kps,
-                }, ann), ann);
+                }, ann), ann), ann);
                 this.canvas.add(obj);
                 return;
             }
@@ -4555,10 +4619,10 @@ class ImageAnnotationManager {
                 obj = new fabric.Group(parts, {
                     selectable: true, hasControls: true,
                 });
-                obj.annotationData = carryAttributes(carryProvenance({
+                obj.annotationData = carryId(carryAttributes(carryProvenance({
                     type: 'cuboid_2d', label: ann.label, color: ann.color,
                     front: front, back: back,
-                }, ann), ann);
+                }, ann), ann), ann);
                 this.canvas.add(obj);
                 return;
             }
@@ -4630,11 +4694,11 @@ class ImageAnnotationManager {
         }
 
         if (obj) {
-            obj.annotationData = carryAttributes(carryProvenance({
+            obj.annotationData = carryId(carryAttributes(carryProvenance({
                 type: ann.type,
                 label: ann.label,
                 color: ann.color,
-            }, ann), ann);
+            }, ann), ann), ann);
             this.canvas.add(obj);
         }
     }
@@ -4944,14 +5008,30 @@ class ImageAnnotationManager {
         // history in _loadExistingAnnotations already covers first load; this
         // flag covers a restore into a session that has history, which would
         // otherwise report every restored shape as freshly created in 0ms.
+        //
+        // The input write stays inside the flag too: written after it, it
+        // fired an unsuppressed `change`, and a companion listening to this
+        // canvas (region_caption) saved a teammate's live answer as this
+        // member's own.
         this._hydrating = true;
         try {
             this._deserializeAnnotations(json);
             this._saveState();
+            this._updateAnnotationData();
         } finally {
             this._hydrating = false;
         }
-        this._updateAnnotationData();
+    }
+
+    /**
+     * Show a teammate's answer (a live session) in place of this page's:
+     * every shape and mask replaced by the stored JSON, or cleared for null.
+     */
+    applyRemoteAnswer(value) {
+        this._hydrating = true;
+        try { this.clearAnnotations(); } finally { this._hydrating = false; }
+        this.deserialize(value || '[]');
+        return true;
     }
 
     // ------------------------------------------------------------------
@@ -5214,9 +5294,28 @@ if (typeof module !== 'undefined' && module.exports) {
     // claims to carry rather than restating the list and agreeing with itself.
     module.exports.PROVENANCE_KEYS = PROVENANCE_KEYS;
     module.exports.carryAttributes = carryAttributes;
+    module.exports.carryId = carryId;
+    module.exports.assignLegacyIds = assignLegacyIds;
 }
 
 // Make available in browser environments
 if (typeof window !== 'undefined') {
     window.ImageAnnotationManager = ImageAnnotationManager;
+
+    // Live sessions (collab.js): show a teammate's shapes without a reload.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.image_annotation = {
+        apply(ctx) {
+            // A canvas another scheme draws on (grounding_eval's) shows that
+            // scheme's active phrase; the teammate's copy is of theirs. The
+            // owning scheme redraws it from its own answer.
+            if (ctx.input && ctx.input.dataset.companionCanvas === 'true') return true;
+            const scope = ctx.form || document;
+            const box = scope.querySelector('.image-annotation-container')
+                || document.querySelector(`.image-annotation-container[data-schema="${ctx.schema}"]`);
+            const manager = box && box.annotationManager;
+            if (!manager || typeof manager.applyRemoteAnswer !== 'function') return false;
+            return manager.applyRemoteAnswer(ctx.value);
+        },
+    };
 }

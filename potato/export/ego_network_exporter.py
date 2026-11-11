@@ -24,7 +24,7 @@ and degree are all alter-alter measures).
 Alter names are personal data about people who did not consent to the study.
 They are left out unless the export is run with ``export_names=true``
 (``--option export_names=true``); without it every file carries the
-pseudonymous alter ids (``a1``, ``a2``, ...) only. The raw annotation output
+pseudonymous alter ids (``a1``, ``a2_k3x9q``, ...) only. The raw annotation output
 (``annotation_output/``) and the general-purpose exports still hold the
 names as typed.
 """

@@ -164,6 +164,10 @@
     // Setup
     // ------------------------------------------------------------------
 
+    function idcodeOf(mol) {
+        try { return mol && mol.getAllAtoms() ? mol.getIDCode() : ''; } catch (e) { return null; }
+    }
+
     function setMolecule(state, mol) {
         state.applying = true;
         try {
@@ -172,6 +176,17 @@
         } finally {
             state.applying = false;
         }
+        // The editor reports some redraws (clearAll) later, as user events;
+        // a change that leaves this structure in place is not an edit.
+        state.appliedIdcode = idcodeOf(state.editor.getMolecule());
+    }
+
+    function isEdit(state) {
+        if (state.appliedIdcode === undefined || state.appliedIdcode === null) { return true; }
+        var now = idcodeOf(state.editor.getMolecule());
+        if (now === state.appliedIdcode) { return false; }
+        state.appliedIdcode = undefined;
+        return true;
     }
 
     /* Wired once per form; each handler acts on the form's current state
@@ -269,7 +284,7 @@
             else { showReadout(state, null); declare(state, null); }
             var timer = null;
             state.editor.setOnChangeListener(function (event) {
-                if (state.applying || !event || !event.isUserEvent) { return; }
+                if (state.applying || !event || !event.isUserEvent || !isEdit(state)) { return; }
                 clearTimeout(timer);
                 timer = setTimeout(function () {
                     state.storedChanged = undefined;
@@ -319,6 +334,40 @@
     else { setTimeout(init, 0); }
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
+
+    /* Live collaborative sessions: show the structure a teammate saved, which
+       is already in the hidden input. The editor's change listener ignores
+       the redraw (setMolecule sets state.applying), and refresh() runs quiet,
+       so nothing is written back or saved. A null answer shows what an
+       unanswered item loads with: the prefill if there is one (unsaved, as
+       an answer it is not), else an empty canvas. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state || state.failed) { return false; }
+        if (!state.editor) {
+            // Still loading: start() reads the hidden input once the editor
+            // exists, so the teammate's answer is what it will draw.
+            return true;
+        }
+        var stored = readStored(state.input);
+        if (stored && !stored.molfile) { return false; }
+        var mol = null;
+        if (stored) {
+            try { mol = parse(state, stored.molfile, 'molfile'); } catch (e) { return false; }
+            if (!mol) { return false; }
+        } else if (state.prefillText) {
+            try { mol = parse(state, state.prefillText, state.cfg.prefillFormat); } catch (e) { mol = null; }
+        }
+        setMolecule(state, mol);
+        state.storedChanged = stored ? stored.changed : undefined;
+        state.keepMessage = false;
+        refresh(state, false, true);
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.chemical_structure = {apply: applyLive};
 
     window.PotatoChemicalStructure = {init: init, _states: STATES};
 })();

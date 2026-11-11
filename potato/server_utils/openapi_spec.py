@@ -108,6 +108,7 @@ OPTIONAL_BLUEPRINTS: List[Tuple[str, str, str]] = [
      "trace_ingestion configured"),
     ("potato.training.routes", "training_bp", "model_training.enabled: true"),
     ("potato.training.protocol", "training_api_bp", "model_training.enabled: true"),
+    ("potato.collab.routes", "collab_bp", "collab.enabled: true"),
     ("potato.mcp_server.routes", "mcp_bp",
      "mcp.enabled: true, and every tool named in mcp.tools"),
 ]

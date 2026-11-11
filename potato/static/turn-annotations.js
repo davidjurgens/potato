@@ -43,30 +43,33 @@
 
     function seedState() {
         stateBySchema = {};
-        hiddenInputs().forEach(function (input) {
-            const schema = input.dataset.schemaName;
-            if (!schema) return;
-            let cfg = {};
-            try { cfg = JSON.parse(input.dataset.taConfig || '{}'); } catch (e) { /* noop */ }
-            let turns = {};
-            // Seed from the server-restored value BEFORE any default init
-            // (persistence contract). Prefer the HTML attribute when the
-            // server flagged it, falling back to the live property (covers
-            // same-page state after our own writes).
-            const serverSet = input.getAttribute('data-server-set') === 'true';
-            const raw = serverSet ? (input.getAttribute('value') || input.value) : input.value;
-            if (raw) {
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && typeof parsed === 'object' && parsed.turns) {
-                        turns = parsed.turns;
-                    }
-                } catch (e) {
-                    console.warn('[turn-annotations] Could not parse stored value for', schema, e);
+        hiddenInputs().forEach(seedOne);
+    }
+
+    /** Seed one schema's state from its hidden input. */
+    function seedOne(input) {
+        const schema = input.dataset.schemaName;
+        if (!schema) return;
+        let cfg = {};
+        try { cfg = JSON.parse(input.dataset.taConfig || '{}'); } catch (e) { /* noop */ }
+        let turns = {};
+        // Seed from the server-restored value BEFORE any default init
+        // (persistence contract). Prefer the HTML attribute when the
+        // server flagged it, falling back to the live property (covers
+        // same-page state after our own writes).
+        const serverSet = input.getAttribute('data-server-set') === 'true';
+        const raw = serverSet ? (input.getAttribute('value') || input.value) : input.value;
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object' && parsed.turns) {
+                    turns = parsed.turns;
                 }
+            } catch (e) {
+                console.warn('[turn-annotations] Could not parse stored value for', schema, e);
             }
-            stateBySchema[schema] = { schemaType: cfg.schema_type || '', turns: turns };
-        });
+        }
+        stateBySchema[schema] = { schemaType: cfg.schema_type || '', turns: turns };
     }
 
     function serialize(schema) {
@@ -297,6 +300,29 @@
         seedState();
         paintAll();
     }
+
+    /**
+     * Live sessions: redraw ONE schema from a teammate's answer.
+     *
+     * collab.js has written the answer into the schema's hidden input (value,
+     * attribute and data-server-set). Only this schema is re-read and
+     * repainted, not every turn scheme on the page as refresh() does. A text
+     * box being typed in keeps its text (paintSchema skips the focused box)
+     * and its pending edit still lands on top. Nothing is saved.
+     */
+    function applyRemote(schema, input) {
+        const hidden = input || hiddenFor(schema);
+        if (!hidden || !hidden.classList.contains('turn-anno-hidden')) return false;
+        seedOne(hidden);
+        paintSchema(schema);
+        updateProgress();
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.turn_level = {
+        apply: function (ctx) { return applyRemote(ctx.schema, ctx.input); }
+    };
 
     window.turnAnnotations = {
         /** Re-seed from hidden inputs and repaint (called by clearAllFormInputs). */

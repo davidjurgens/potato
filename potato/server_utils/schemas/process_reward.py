@@ -30,6 +30,8 @@ from .identifier_utils import (
     generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -411,7 +413,10 @@ def _generate_internal(
             }});
 
             var resetBtn = document.getElementById(SCHEMA + '-reset');
-            if (resetBtn) {{
+            // Once: every rebuild calls attachHandlers, and an unguarded
+            // listener here stacked one Reset handler per rebuild.
+            if (resetBtn && resetBtn.getAttribute('data-prm-bound') !== '1') {{
+                resetBtn.setAttribute('data-prm-bound', '1');
                 resetBtn.addEventListener('click', function() {{
                     _steps.forEach(function(s) {{
                         // Return AI-labeled steps to their pending suggestion
@@ -515,7 +520,11 @@ def _generate_internal(
         }}
 
         function updateStepVisual(idx) {{
-            var card = document.querySelector('.prm-step-card[data-step-index="' + idx + '"]');
+            // This scheme's card list first (two card-mode schemes share the
+            // indexes); inline cards live in the trace, outside the form.
+            var own = document.getElementById(SCHEMA + '-steps');
+            var cardSel = '.prm-step-card[data-step-index="' + idx + '"]';
+            var card = (own && own.querySelector(cardSel)) || document.querySelector(cardSel + '.prm-inline');
             if (!card) return;
             var status = document.getElementById(SCHEMA + '-st-' + idx);
             var s = _steps[idx];
@@ -638,8 +647,8 @@ def _generate_internal(
             var btn = document.getElementById(SCHEMA + '-ai-prelabel');
             var acceptBtn = document.getElementById(SCHEMA + '-ai-accept');
             var statusEl = document.getElementById(SCHEMA + '-ai-status');
-            // Reveal Accept-all when suggestions already exist (batch pre-label).
-            if (acceptBtn && anyAiSuggestions()) acceptBtn.style.display = '';
+            // Accept-all shows only while there are suggestions to accept.
+            if (acceptBtn) acceptBtn.style.display = anyAiSuggestions() ? '' : 'none';
 
             if (btn && btn.getAttribute('data-prm-bound') !== '1') {{
                 btn.setAttribute('data-prm-bound', '1');
@@ -720,6 +729,7 @@ def _generate_internal(
 
         // Re-build when instance changes (annotation.js fires this)
         document.addEventListener('instanceChanged', buildWithRetry);
+        {collab_rebuild_js('process_reward', 'build')}
 
         // Expose addStep for live agent integration
         window['_prm_addStep_' + SCHEMA] = function(stepData) {{

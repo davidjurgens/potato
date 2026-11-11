@@ -93,7 +93,6 @@ from potato.qda_mode import init_qda_mode_manager
 
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
-from potato.server_utils.schemas.span import render_span_annotations
 from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.mturk_apis import init_mturk_hit, get_mturk_hit
 from potato.server_utils.json import easy_json
@@ -3385,6 +3384,8 @@ def get_current_page_html(config, username):
     # annotation template must carry every variable that template reads, or
     # the next person to widen that condition gets a silent no-op.
     context.update(_annotation_sidebar_flags(config))
+    # Phase pages are never a live session's page (see render_page_with_annotations).
+    context['collab_context'] = None
 
     if phase == UserPhase.TRAINING:
         context.update(_training_page_context(user_state))
@@ -3731,6 +3732,8 @@ def _annotation_sidebar_flags(cfg) -> dict:
         "memos_enabled": gate("memos", memos),
         "codebook_ui_enabled": gate("codebook", codebook),
         "search_claim_enabled": gate("search", search_claim),
+        # The navbar's link to /collab (live collaborative sessions).
+        "collab_lobby_enabled": bool((cfg.get("collab") or {}).get("enabled")),
     }
     # The memo composer's starting visibility (annotation_ui.visibility).
     # The select always sends its value, so the default in post_memo only
@@ -3846,27 +3849,58 @@ def mark_arrival_values(soup) -> None:
     attribute, so a widget that wrote an empty answer while it set itself up
     (region_caption, before its canvas loaded) replaced the arrival value,
     and the prelabel filling it in then read as an edit and was stored.
+
+    Other hidden answer inputs get it too: in a live session, a widget that
+    writes a default while it sets itself up (table_grid) must not count as
+    an unsaved edit (collab.js).
     """
     for element in soup.find_all("input", class_="annotation-data-input"):
         element["data-arrived-value"] = element.get("value", "") or ""
+    for element in soup.find_all("input", attrs={"type": "hidden"}, class_="annotation-input"):
+        if not element.has_attr("data-arrived-value"):
+            element["data-arrived-value"] = element.get("value", "") or ""
 
 
-def render_page_with_annotations(username: str):
+def render_page_with_annotations(username: str, *, instance_id: str = None,
+                                 viewer: str = None, collab: dict = None):
     '''
     When annotating, shows the current instance to the user with any annotations
     they may have made. This method is called when the user is in the annotation
     phase and is currently annotating.
+
+    ``username`` is whose annotations the page shows and saves. On an ordinary
+    page that is the person viewing it. A live collaborative session passes the
+    team user here, with:
+
+    - ``instance_id``: the item to show, in place of the owner's own cursor
+      (each member has their own position in the team's items);
+    - ``viewer``: the person looking at the page, for the identity the
+      template shows and checks (adjudicator link, header name);
+    - ``collab``: the session context for the template. Per-person extras keyed
+      on the session user server-side (AI assistance, chat, agent proxy,
+      Boundary Lab, Truth Serum, Think-Aloud, timed trials) are off on these
+      pages, and the item is not stamped as served to the team.
     '''
 
     # Hacky nonsense
     global emphasis_corpus_to_schemas
+
+    viewer = viewer or username
+    is_collab = collab is not None
 
     user_state = get_user_state_manager().get_user_state(username)
     phase, page = user_state.get_current_phase_and_page()
 
     is_annotation_page = phase == UserPhase.ANNOTATION
 
-    item = user_state.get_current_instance()
+    if instance_id is not None:
+        item = (get_item_state_manager().get_item(instance_id)
+                if get_item_state_manager().has_item(instance_id) else None)
+        if item is None:
+            logger.warning(f"Cannot render unknown instance {instance_id} for {username}")
+            return redirect(url_for("home"))
+    else:
+        item = user_state.get_current_instance()
     if item is None:
         logger.warning(
             f"User {username} has no valid current instance after loading state"
@@ -3876,12 +3910,16 @@ def render_page_with_annotations(username: str):
         return redirect(url_for("home"))
 
     instance_id = item.get_id()
+    if instance_id in user_state.instance_id_ordering:
+        instance_index = user_state.instance_id_ordering.index(instance_id)
+    else:
+        instance_index = user_state.get_current_instance_index()
 
     # Stamp when the SERVER handed this item over. `min_response_time` used to
     # be checked against a number the annotator's own client reported, which is
     # the one number in the exchange the party being measured has a motive to
     # change. Recorded here because this is the moment the item reaches them.
-    if is_annotation_page:
+    if is_annotation_page and not is_collab:
         _qc = get_quality_control_manager()
         if _qc is not None:
             _qc.record_item_served(username, instance_id)
@@ -3980,39 +4018,16 @@ def render_page_with_annotations(username: str):
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
 
-    # If the user has labeled spans within this instance before, replace the
-    # current instance text with pre-annotated mark-up. We do this here before
-    # the render_template call so that we can directly insert the span-marked-up
-    # HTML into the template.
-    #
-    # NOTE: This currently requires a very tight (and kludgy) binding between
-    # the UI code for how Potato represents span annotations and how the
-    # back-end displays these. Future work when we are better programmers will
-    # pass this info to client side for rendering, rather than doing
-    # pre-rendering here. This also means that any changes to the UI code for
-    # rendering need to be updated here too.
-    #
-    # NOTE2: We have to this here to account for any keyword highlighting before
-    # the instance text gets marked up in the post-processing below
-    span_annotations = get_span_annotations_for_user_on(username, instance_id)
-    if not span_annotations and not user_state.prelabels_resolved(instance_id):
-        # Span pre-annotations have to be applied HERE, not in the soup walk
-        # below that handles every other schema type. Spans are not an input
-        # value: they are markup baked into the instance text, and by the time
-        # that walk runs the text has already been rendered. Without this a
-        # config with `pre_annotation.enabled` and a span scheme fell through
-        # to "not yet supported" and showed the annotator nothing -- which is
-        # exactly what an imported brat/CoNLL/QDPX project produces. Once
-        # the annotator has taken the prelabels over, an item they emptied
-        # stays empty.
-        span_annotations = _span_annotations_from_pre_annotations(
-            pre_annotation_data, config)
-    if span_annotations is not None and len(span_annotations) > 0:
-        # Mark up the instance text where the annotated spans were. Offsets
-        # count rendered characters, so the markup is placed in the sanitized
-        # HTML by mapping each offset past tags and entities.
-        from potato.server_utils.html_sanitizer import sanitize_html as _sanitize
-        text = render_span_annotations(str(_sanitize(text)), span_annotations, markup=True)
+    # Stored spans (and span prelabels) are NOT marked up in the instance text
+    # here. span-core.js draws every span as an overlay from /api/spans, which
+    # serves the stored spans and, while the annotator has none, the prelabels.
+    # This used to also wrap each span inline in a padded, coloured
+    # `.span-highlight`, so a reloaded page drew its spans twice and its text
+    # sat ~10px further right per preceding span than the same page after a
+    # span was drawn client-side: link and event arcs moved on reload, and a
+    # teammate's span applied live in a collaborative session never matched
+    # what the next reload showed. The page now renders the text one way,
+    # annotated or not.
 
     # If the admin has specified that certain keywords need to be highlighted,
     # post-process the selected instance so that it now also has colored span
@@ -4085,7 +4100,13 @@ def render_page_with_annotations(username: str):
     # replacing {{variable_name}} with the associated text for keyword arguments
 
         # Calculate progress counter values
-    finished_count, total_count = progress_counts(username)
+    if is_collab and collab.get("item_ids") is not None:
+        # A team works through its session's items, not the open pool.
+        finished_count = sum(1 for iid in collab["item_ids"]
+                             if user_state.has_annotated(iid))
+        total_count = len(collab["item_ids"])
+    else:
+        finished_count, total_count = progress_counts(username)
 
     # Determine annotation status for the status badge (three-state)
     annotation_status = "unlabeled"
@@ -4165,6 +4186,11 @@ def render_page_with_annotations(username: str):
             or assist_held_out:
         # The chat assistant can be asked for the answer, so it is off too.
         chat_enabled = False
+    if is_collab:
+        # These keep per-person state server-side, keyed on the session user,
+        # and a collaborative page saves under the team. Off until each is
+        # taught which of the two it belongs to.
+        ai_enabled = chat_enabled = agent_proxy_enabled = False
 
     # Boundary Lab (counterfactual boundary probing): conditional assets + JS config
     boundary_client_config = None
@@ -4179,6 +4205,8 @@ def render_page_with_annotations(username: str):
                 "debounce_ms": bc.debounce_ms,
                 "rationale_on_flip": bc.rationale_on_flip,
             }
+    if is_collab:
+        boundary_client_config = None
     boundary_enabled = boundary_client_config is not None
     # Keystroke logging (typing dynamics on free-text fields): conditional asset
     # + JS config. Detection thresholds stay server-side; see
@@ -4213,7 +4241,7 @@ def render_page_with_annotations(username: str):
     # Timed trials (trial_timing): this item's timing, and when it was served.
     from potato import trial_timing as _trial_timing
     trial_timing_client_config = None
-    if is_annotation_page:
+    if is_annotation_page and not is_collab:
         trial_timing_client_config = _trial_timing.client_config(config, item.get_data())
         if trial_timing_client_config is not None:
             _trial_timing.record_served(user_state, instance_id)
@@ -4227,6 +4255,8 @@ def render_page_with_annotations(username: str):
                 "schema": ts_manager.ts_config.schema,
                 "question": ts_manager.ts_config.question,
             }
+    if is_collab:
+        truth_serum_client_config = None
     truth_serum_enabled = truth_serum_client_config is not None
     # Think-Aloud (voice rationales): conditional assets + JS config
     thinkaloud_client_config = None
@@ -4240,6 +4270,8 @@ def render_page_with_annotations(username: str):
                 "chunk_seconds": ta.chunk_seconds,
                 "require_spoken_label": ta.require_spoken_label,
             }
+    if is_collab:
+        thinkaloud_client_config = None
     thinkaloud_enabled = thinkaloud_client_config is not None
 
     # Check if live agent is enabled (for conditional loading of live-agent assets)
@@ -4286,7 +4318,8 @@ def render_page_with_annotations(username: str):
 
     # Warm the HTTP cache for the next instance's media while the annotator
     # works on this one, so Next does not begin with a blank wait.
-    prefetch_urls = _next_instance_prefetch_urls(user_state)
+    # Follows the owner's cursor, which a collaborative page does not use.
+    prefetch_urls = [] if is_collab else _next_instance_prefetch_urls(user_state)
 
     # Get IBWS round info if active
     ibws_round_info = None
@@ -4298,7 +4331,7 @@ def render_page_with_annotations(username: str):
 
     rendered_html = render_template(
         html_file,
-        username=username,
+        username=viewer,
         # This is what instance the user is currently on (may contain span HTML)
         instance=text,
         # Original plain text without span HTML (for data-original-text attribute)
@@ -4320,7 +4353,7 @@ def render_page_with_annotations(username: str):
             config, base_dir=config.get("task_dir")
         ),
         instance_id=instance_id,
-        instance_index=user_state.get_current_instance_index(),
+        instance_index=instance_index,
         # The counter the annotator reads. It must be the same count the
         # denominator is built from -- `get_annotation_count()` includes the
         # injected quality-control items, which are absent from `total_count`,
@@ -4394,7 +4427,7 @@ def render_page_with_annotations(username: str):
         annotation_instructions=render_annotation_instructions(
             config.get("annotation_instructions", "")),
         # Adjudication: show link for adjudicators
-        is_adjudicator=_is_user_adjudicator(username),
+        is_adjudicator=_is_user_adjudicator(viewer),
         # Annotator progress dashboard nav link (opt-in, off by default)
         annotator_dashboard_enabled=_annotator_dashboard_enabled(),
         annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
@@ -4406,9 +4439,10 @@ def render_page_with_annotations(username: str):
         # IBWS round info (for round banner)
         ibws_round_info=ibws_round_info,
         # Hide back button when on first instance with no previous phase
-        can_go_back=(get_user_state_manager().can_user_go_back(username)
-                     and not (trial_timing_client_config is not None
-                              and _trial_timing.back_navigation_disabled(config))),
+        can_go_back=((instance_index > 0) if is_collab else
+                     (get_user_state_manager().can_user_go_back(username)
+                      and not (trial_timing_client_config is not None
+                               and _trial_timing.back_navigation_disabled(config)))),
         trial_timing_client_config=trial_timing_client_config,
         # Hide jump-to-ID navigation controls when disabled
         jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
@@ -4417,6 +4451,8 @@ def render_page_with_annotations(username: str):
         # Universal sidebars (memos / search-and-claim / codebook tray). Off
         # unless the task enables them; see _annotation_sidebar_flags.
         **_annotation_sidebar_flags(config),
+        # Live collaborative session context (None on an ordinary page).
+        collab_context=collab,
         # ai=ai_hints,
         **kwargs
     )
@@ -4659,10 +4695,9 @@ def render_page_with_annotations(username: str):
                         f"'{schema_name}' is not A, B, tie or neither; nothing "
                         f"will be pre-selected")
             elif scheme['annotation_type'] == 'span':
-                # Already applied, further up, by
-                # _span_annotations_from_pre_annotations(). Spans are markup in
-                # the instance text rather than an input value, so they cannot
-                # be set by this DOM walk -- the text was rendered before it.
+                # Not an input value, so nothing for this DOM walk to set.
+                # /api/spans hands span prelabels to span-core.js (through
+                # _span_annotations_from_pre_annotations()), which draws them.
                 pass
             else:
                 logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
@@ -4854,6 +4889,13 @@ def render_page_with_annotations(username: str):
     # If the admin has turned on AI hints, add them to the page
     soup = add_ai_hints(soup, instance_id)
     mark_arrival_values(soup)
+    if collab:
+        # A browser restores form fields when a page is reloaded, hidden
+        # ones included. On a session page that restored value can be
+        # another owner's (a member's own answer, before the item opened to
+        # the team) and would be saved as an edit to the team's answer.
+        for element in soup.find_all(["input", "textarea", "select"]):
+            element["autocomplete"] = "off"
 
     rendered_html = str(soup)
 
@@ -6417,6 +6459,22 @@ def _apply_proxy_fix_from_env(flask_app):
     )
 
 
+def _init_collab_if_enabled(config):
+    """Start live collaborative sessions (``collab.enabled``).
+
+    After the item and user stores are loaded: configured teams are set up
+    here, which assigns their items to the team users.
+    """
+    if not (config.get("collab") or {}).get("enabled", False):
+        return None
+    logger.info("Initializing live collaborative sessions...")
+    from potato.collab import init_collab_manager
+    manager = init_collab_manager(config)
+    if manager is None:
+        logger.warning("Live collaborative sessions are disabled; /collab will 404")
+    return manager
+
+
 def _init_rooms_if_enabled(config):
     """Start Multiplayer Rooms, and say so only if they actually started.
 
@@ -6616,6 +6674,7 @@ def _initialize_from_config(config_file):
         logger.info("Psychometrics initialized successfully")
     # Initialize Multiplayer Rooms if enabled (parity with run_server()).
     _init_rooms_if_enabled(config)
+    _init_collab_if_enabled(config)
 
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
@@ -7055,6 +7114,7 @@ def run_server(args):
         logger.info("Psychometrics initialized successfully")
     # Initialize Multiplayer Rooms if enabled
     _init_rooms_if_enabled(config)
+    _init_collab_if_enabled(config)
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

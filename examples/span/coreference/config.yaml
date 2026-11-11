@@ -20,6 +20,9 @@ instance_display:
     - key: text
       type: text
       label: "Text"
+      # The mentions are drawn on this field. Without it no text on the page
+      # takes a span, so no mention can be made.
+      span_target: true
 
 annotation_schemes:
   # First, a span schema for identifying mentions

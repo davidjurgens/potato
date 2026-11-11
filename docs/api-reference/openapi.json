@@ -9064,6 +9064,963 @@
         ]
       }
     },
+    "/collab/": {
+      "get": {
+        "operationId": "get_collab_lobby",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/admin": {
+      "get": {
+        "operationId": "get_collab_admin_page",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/admin/overview": {
+      "get": {
+        "operationId": "get_collab_admin_overview",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required"
+        ]
+      }
+    },
+    "/collab/api/create": {
+      "post": {
+        "operationId": "post_collab_create_session",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/list": {
+      "get": {
+        "operationId": "get_collab_list_sessions",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/blind_done": {
+      "post": {
+        "operationId": "post_collab_blind_done",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/close": {
+      "post": {
+        "operationId": "post_collab_close",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/discuss": {
+      "post": {
+        "operationId": "post_collab_discuss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required"
+        ]
+      }
+    },
+    "/collab/api/{sid}/events": {
+      "get": {
+        "operationId": "get_collab_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/item/{instance_id}": {
+      "get": {
+        "operationId": "get_collab_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The team's current answer for one item, its revision and history.",
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/join": {
+      "post": {
+        "operationId": "post_collab_join",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/leader": {
+      "post": {
+        "operationId": "post_collab_leader",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/leave": {
+      "post": {
+        "operationId": "post_collab_leave",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/message": {
+      "post": {
+        "operationId": "post_collab_message",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/metrics": {
+      "get": {
+        "operationId": "get_collab_metrics",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/mode": {
+      "post": {
+        "operationId": "post_collab_mode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/navigate": {
+      "post": {
+        "operationId": "post_collab_navigate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/poll": {
+      "post": {
+        "operationId": "post_collab_open_poll",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/poll/{pid}/close": {
+      "post": {
+        "operationId": "post_collab_close_poll",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/poll/{pid}/vote": {
+      "post": {
+        "operationId": "post_collab_vote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/presence": {
+      "post": {
+        "operationId": "post_collab_presence",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/replay": {
+      "get": {
+        "operationId": "get_collab_replay_api",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/reveal": {
+      "post": {
+        "operationId": "post_collab_reveal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/revert": {
+      "post": {
+        "operationId": "post_collab_revert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/signoff": {
+      "post": {
+        "operationId": "post_collab_signoff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/state": {
+      "get": {
+        "operationId": "get_collab_state",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/stream": {
+      "get": {
+        "operationId": "get_collab_stream",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Server-sent events, capped: each open stream holds a server thread.",
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/api/{sid}/summon": {
+      "post": {
+        "operationId": "post_collab_summon",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "api_login_required",
+          "same_origin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/s/{sid}": {
+      "get": {
+        "operationId": "get_collab_session_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/s/{sid}/i/{instance_id}": {
+      "get": {
+        "operationId": "get_collab_item_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/s/{sid}/observe": {
+      "get": {
+        "operationId": "get_collab_observe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "An admin joins read-only (configured teams too), then sees the session.",
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/collab/s/{sid}/replay": {
+      "get": {
+        "operationId": "get_collab_replay_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "collab"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/consent": {
       "get": {
         "operationId": "get_consent",

@@ -5,7 +5,15 @@ Visibility model (decided 2026-05-18):
 - ``private`` (default): visible to the author and to admins/adjudicators.
 - ``shared``: visible to the author, admins/adjudicators, AND peer
   annotators on the same project.
-- Admins/adjudicators can ALWAYS read every memo regardless of setting.
+- ``personal``: visible to the author ONLY. Adjudicators cannot read it
+  either; it is a note to oneself (stored in the project DB and exports like
+  every other memo). A personal memo cannot be an issue, since nobody else
+  could resolve it.
+- Admins/adjudicators can read every memo except personal ones.
+
+Team scope (live collaborative sessions): a memo written in a team's
+discussion carries ``team_id``. When it is ``shared``, "peer annotators"
+means the members of that team, as reported by ``team_membership_resolver``.
 
 Permissions:
 - Read: per the visibility rule above.
@@ -29,11 +37,25 @@ from __future__ import annotations
 
 import time
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from . import store
 
-VALID_VISIBILITY = ("private", "shared")
+VALID_VISIBILITY = ("private", "shared", "personal")
+
+# Teams the user belongs to, for team-scoped memos. Installed by the collab
+# package at boot; with nothing installed, a team memo is readable only by its
+# author and adjudicators.
+team_membership_resolver: Optional[Callable[[str], Iterable[str]]] = None
+
+
+def _teams_of(username: str) -> set:
+    if team_membership_resolver is None:
+        return set()
+    try:
+        return set(team_membership_resolver(username) or ())
+    except Exception:  # noqa: BLE001 - a broken resolver must not open memos up
+        return set()
 VALID_STATUS = ("open", "resolved")
 
 
@@ -54,13 +76,22 @@ def _can_read(memo: Dict[str, Any], requester: str, is_privileged: bool) -> bool
 
     The assignee of an issue can read it, private or not: an issue assigned
     to someone who cannot see it is an issue nobody can resolve.
+
+    A personal memo is checked first, before the privileged tier: only its
+    author reads it.
     """
-    return (
-        is_privileged
-        or memo["created_by"] == requester
-        or memo["visibility"] == "shared"
-        or bool(memo.get("assignee")) and memo["assignee"] == requester
-    )
+    if memo["created_by"] == requester:
+        return True
+    if memo["visibility"] == "personal":
+        return False
+    if is_privileged:
+        return True
+    if bool(memo.get("assignee")) and memo["assignee"] == requester:
+        return True
+    if memo["visibility"] == "shared":
+        team_id = memo.get("team_id")
+        return not team_id or team_id in _teams_of(requester)
+    return False
 
 
 def create_memo(
@@ -74,6 +105,7 @@ def create_memo(
     visibility: str = "private",
     issue: bool = False,
     assignee: Optional[str] = None,
+    team_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     body = (body or "").strip()
     if not body:
@@ -83,6 +115,8 @@ def create_memo(
             f"visibility must be one of {VALID_VISIBILITY} (got {visibility!r})"
         )
     _check_anchor(anchor)
+    if issue and visibility == "personal":
+        raise MemoError("A personal note cannot be an issue: nobody else could see it")
     if issue and assignee is not None and not str(assignee).strip():
         assignee = None
     return store.create(
@@ -90,6 +124,7 @@ def create_memo(
         created_by=created_by, anchor=anchor, visibility=visibility,
         status="open" if issue else None,
         assignee=str(assignee).strip() if issue and assignee else None,
+        team_id=team_id or None,
     )
 
 
@@ -176,6 +211,7 @@ def reply_to(
     return store.create(
         task_dir, project=root["project"], instance_id=root["instance_id"], body=body,
         created_by=requester, visibility=root["visibility"], parent_id=root["id"],
+        team_id=root.get("team_id"),
     )
 
 
@@ -221,6 +257,8 @@ def set_assignee(
         raise MemoError("Only the first memo of a thread can be assigned")
     if not memo.get("status"):
         raise MemoError("Only an issue can be assigned; raise it as an issue first")
+    if memo["visibility"] == "personal":
+        raise MemoError("A personal note cannot be assigned")
     if not (is_privileged or memo["created_by"] == requester):
         raise MemoPermissionError("Only the issue's author or an adjudicator may assign it")
     assignee = (assignee or "").strip() or None
@@ -285,6 +323,8 @@ def update_memo(
         raise MemoError(
             f"visibility must be one of {VALID_VISIBILITY} (got {visibility!r})"
         )
+    if visibility == "personal" and memo.get("status"):
+        raise MemoError("An issue cannot be made personal: others are expected to resolve it")
     return store.update(
         task_dir, memo_id,
         body=body.strip() if body is not None else None,

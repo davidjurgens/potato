@@ -574,6 +574,9 @@
 
         _shape(view, type, screenPoints) {
             return {
+                // An id the server merges a shared answer by, unique across
+                // browsers (see newShapeId).
+                id: newShapeId(),
                 label: this.label, axis: view.axis, index: this._index(view.axis), type,
                 points: screenPoints.map(([c, r]) => {
                     const [i, j, k] = this._toVoxel(view, c, r);
@@ -739,26 +742,37 @@
             this._save();
         }
 
-        async _prefill() {
+        /**
+         * Start from the item's RTSTRUCT. ``stillWanted`` (live sessions)
+         * says whether the masks are still wanted once the fetch returns: a
+         * teammate's answer, or the annotator's own paint, may have arrived
+         * meanwhile. Those masks are only
+         * shown, never written, since the team's answer is still none.
+         * Returns whether masks were loaded.
+         */
+        async _prefill(stillWanted) {
             const rtstruct = this._record()[this.config.prefillField];
-            if (typeof rtstruct !== 'string' || !rtstruct) return;
+            if (typeof rtstruct !== 'string' || !rtstruct) return false;
             const query = new URLSearchParams({volume: this.path, rtstruct,
                                                schema: this.config.schema});
             const response = await fetch(`/media/volume-tools/prefill?${query}`);
             const body = await response.json().catch(() => ({}));
+            if (stillWanted && !stillWanted()) return false;
             if (!response.ok) {
                 this._status(body.error || 'The RTSTRUCT could not be loaded.', 'error');
-                return;
+                return false;
             }
             this._loadMasks(body.masks || {});
             this.prefilledFrom = 'rtstruct';
             const note = (body.unmatched || []).length
                 ? ` Not loaded (no label of that name): ${body.unmatched.join(', ')}.` : '';
             this._status(`Started from the item's RTSTRUCT.${note}`);
+            if (stillWanted) return true;
             // Written but not announced: opening an item is not answering it.
             // The value goes with the next save (Next, or any edit).
             this._hydrating = true;
             try { this._save(); } finally { this._hydrating = false; }
+            return true;
         }
 
         // -- persistence ---------------------------------------------------
@@ -794,6 +808,56 @@
             }
         }
 
+        /**
+         * Replace every mask and shape with ``value`` (the stored JSON, or
+         * null for none) and redraw. A teammate's answer in a live session
+         * arrives this way. Unlike ``_restoreFromInput`` it drops what is
+         * here first: masks load label by label, so a label the new answer
+         * lacks (or a null answer) would otherwise keep its old paint. It
+         * neither writes the input nor fires change, so nothing is saved.
+         * The slice, window and tool stay; a stroke or box in progress and
+         * the undo history are dropped (undo would revert the teammate).
+         * The status line goes, as on a reload of the answer; an empty
+         * answer shows what an unanswered item shows, the RTSTRUCT prefill,
+         * once it has been fetched. Returns false before the volume has
+         * loaded.
+         */
+        replaceFromValue(value) {
+            if (!this.info || !this.nI) return false;
+            const replaced = this._replaced = (this._replaced || 0) + 1;
+            let data = {};
+            if (value) {
+                try {
+                    data = JSON.parse(value);
+                } catch (err) {
+                    return false;
+                }
+                if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+            }
+            this._hydrating = true;
+            try {
+                this.masks = {};
+                this._loadMasks(data.masks || {});
+                this.shapes = Array.isArray(data.shapes) ? data.shapes : [];
+                this.prefilledFrom = data.prefilled_from || null;
+                this.history = [];
+                this._painting = null;
+                this._box = null;
+                this._polygon = null;
+            } finally {
+                this._hydrating = false;
+            }
+            this._status('');
+            this._renderShapeList();
+            this._refreshOverlays();
+            if (!this._hasAnything() && this.config.prefillField) {
+                this._prefill(() => this._replaced === replaced && !this._hasAnything()).then((loaded) => {
+                    if (loaded) this._refreshOverlays();
+                }).catch(() => { /* no prefill: the cleared answer stays empty */ });
+            }
+            return true;
+        }
+
         serialize() {
             const masks = {};
             for (const [label, map] of Object.entries(this.masks)) {
@@ -819,6 +883,32 @@
         }
     }
 
+    /**
+     * This page's id nonce. Two members' browsers each numbering their first
+     * box 1 must not produce one id, or the server's element-by-element merge
+     * of the shared answer keeps one box and drops the other.
+     */
+    const ID_NONCE = Math.random().toString(36).slice(2, 8) || 'x';
+    let idCounter = 0;
+    function newShapeId() {
+        idCounter += 1;
+        return `vol_${ID_NONCE}_${idCounter}`;
+    }
+
     root.VolumeAnnotationManager = VolumeAnnotationManager;
     root.VolumeAnnotationRLE = {encode: rleEncode, decode: rleDecode};
+    VolumeAnnotationManager.newShapeId = newShapeId;
+
+    // Live collaborative sessions (collab.js): a teammate's saved answer is
+    // already in the hidden input; replace this scheme's masks and shapes.
+    root.potatoCollabWidgets = root.potatoCollabWidgets || {};
+    root.potatoCollabWidgets.volume_annotation = {
+        apply(ctx) {
+            const box = Array.from(document.querySelectorAll('.volume-annotation-container'))
+                .find((el) => el.getAttribute('data-schema') === ctx.schema);
+            const manager = box && box.annotationManager;
+            if (!manager || typeof manager.replaceFromValue !== 'function') return false;
+            return manager.replaceFromValue(ctx.value) === true;
+        },
+    };
 })(typeof window !== 'undefined' ? window : globalThis);

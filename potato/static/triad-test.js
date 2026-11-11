@@ -76,7 +76,8 @@
         if (prior && prior.timer) { clearTimeout(prior.timer); }
         var cfg = JSON.parse(form.getAttribute('data-triad-config') || '{}');
         var state = {instance: instanceId(), cfg: cfg, form: form, root: form.querySelector('.tt-root'),
-                     triads: null, design: null, current: 0, timer: null};
+                     triads: null, design: null, current: 0, timer: null,
+                     planned: null, rebuilding: null};
         STATES.set(form, state);
         var stored = readStored(form);
         if (stored) {
@@ -88,13 +89,10 @@
             render(state);
             return;
         }
-        var domain = cfg.labels ? Promise.resolve(cfg.labels) : domainFromItem(cfg);
-        domain.then(function (items) {
+        ownPlan(state).then(function (plan) {
             if (STATES.get(form) !== state) { return; }
-            var plan = window.PotatoTriadDesign.plan(items, cfg.schema, userId(), state.instance,
-                                                     cfg.design, cfg.max_triads);
             state.design = plan.design;
-            state.triads = plan.triads.map(function (t) { return t.concat([null]); });
+            state.triads = plan.triads;
             state.current = 0;
             render(state);
         }).catch(function (err) {
@@ -103,6 +101,25 @@
             state.root.appendChild(el('p', {className: 'tt-error', role: 'alert',
                 text: 'The triads for this item could not be built (' + err.message +
                       '). Tell the researcher.'}));
+        });
+    }
+
+    /* This participant's own plan for the item, unanswered. Built once per
+       state; each call returns fresh triads. */
+    function ownPlan(state) {
+        var cfg = state.cfg;
+        if (!state.planned) {
+            var domain = cfg.labels ? Promise.resolve(cfg.labels) : domainFromItem(cfg);
+            state.planned = domain.then(function (items) {
+                return window.PotatoTriadDesign.plan(items, cfg.schema, userId(), state.instance,
+                                                     cfg.design, cfg.max_triads);
+            });
+            // A failed build may be asked for again.
+            state.planned.catch(function () { state.planned = null; });
+        }
+        return state.planned.then(function (plan) {
+            return {design: plan.design,
+                    triads: plan.triads.map(function (t) { return t.concat([null]); })};
         });
     }
 
@@ -125,6 +142,7 @@
     }
 
     function save(state) {
+        state.rebuilding = null;    // an answer here keeps the triads it was given on
         var h = state.form.querySelector('.triad-test-input');
         var any = answered(state) > 0;
         h.value = any ? JSON.stringify({design: state.design, triads: state.triads}) : '';
@@ -247,6 +265,57 @@
     else { init(); }
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
+
+    function show(state) {
+        if (state.progress && state.options) {
+            refresh(state);
+            declare(state);
+        } else {
+            render(state);
+        }
+    }
+
+    /* Live collaborative sessions: the teammate's answer is already in the
+       hidden input. With one, its triads (and choices) replace this page's,
+       and the triad on screen stays where it is. With none, the page shows
+       what an unanswered item shows on load: this participant's own plan
+       (seeded by their username, not the teammate's), from the first triad.
+       The choices clear at once; the plan follows when it is built. Nothing
+       is written back. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state || !state.triads) { return false; }    // still building the plan
+        if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+        state.rebuilding = null;
+        var stored = readStored(form);
+        if (stored) {
+            state.triads = stored.triads.map(function (t) {
+                return [String(t[0]), String(t[1]), String(t[2]), t[3] == null ? null : String(t[3])];
+            });
+            state.design = stored.design || state.design;
+            if (state.current >= state.triads.length) { state.current = firstOpen(state); }
+            show(state);
+            return true;
+        }
+        state.triads.forEach(function (t) { t[3] = null; });
+        if (state.current >= state.triads.length) { state.current = firstOpen(state); }
+        show(state);
+        var token = state.rebuilding = {};
+        ownPlan(state).then(function (plan) {
+            // A later answer (a teammate's or this participant's) wins.
+            if (STATES.get(form) !== state || state.rebuilding !== token) { return; }
+            state.rebuilding = null;
+            state.design = plan.design;
+            state.triads = plan.triads;
+            state.current = 0;
+            show(state);
+        }).catch(function (err) { console.error('[triad-test]', err); });
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.triad_test = {apply: applyLive};
 
     window.PotatoTriadTest = {init: init};
 })();

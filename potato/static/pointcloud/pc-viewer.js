@@ -1555,7 +1555,9 @@
                 label: obj ? obj.label : null,
                 values: obj ? obj.attributes : {},
                 idPrefix: 'pc-attr-' + (this.config.schema || 'pc'),
-                noun: 'object',
+                // The server's word (spatial_annotation.py ATTRIBUTE_NOUN),
+                // so the hint reads as it did when the page loaded.
+                noun: this.config.attributeNoun,
                 frameNote: this.frames
                     ? `From frame ${this.frameIndex + 1} until the next keyframe that changes it` : '',
                 onChange: () => {
@@ -2464,6 +2466,12 @@
                              obj.type);
                 return false;
             }
+            // A new object gets an id the server can merge it by in a live
+            // session; one it arrives with (an import, a suggestion) stays.
+            // Not a painted segment: a stroke rebuilds it, and keyed by
+            // content two members' strokes on one class merge as a union,
+            // where under one id they would conflict and one would be lost.
+            if (!hasId(obj) && obj.type !== 'segment_3d') obj.id = newObjectId();
             this.annotations.push(obj);
             this._buildMesh(obj);
             if (obj.type === 'segment_3d') this._refreshPaint();
@@ -2686,6 +2694,51 @@
             this._rebuildMeshes();
         }
 
+        /**
+         * Replace every annotation with `value` (the stored JSON, or null for
+         * none) and redraw. A teammate's answer in a live session arrives this
+         * way. It does not write the input, mark it modified, or fire change,
+         * so nothing is saved. The selection follows its object (by id, or by
+         * track on a sequence) and the frame stays; undo history is dropped,
+         * since undoing past a teammate's edit would revert it. Returns false
+         * when the viewer was never built (three.js missing) or the value is
+         * not a list.
+         */
+        replaceFromValue(value) {
+            if (!this.scene) return false;
+            let parsed = [];
+            if (value) {
+                try {
+                    parsed = JSON.parse(value);
+                } catch (err) {
+                    return false;
+                }
+                if (!Array.isArray(parsed)) return false;
+            }
+            parsed = parsed.filter((obj) => obj && typeof obj === 'object');
+            const prev = this.annotations[this.selectedIndex];
+            this._drag = null;
+            this._slabDrag = null;
+            this._paintStroke = null;
+            this._clearPreview();
+            this.history = [];
+            this.historyIndex = -1;
+            this._attributePanelKey = undefined;
+            if (this.frames) {
+                this.sequenceStore = parsed;
+                this._buildFrameView(prev ? prev.track_id : undefined);
+                return true;
+            }
+            this.annotations = wire.toLocal(parsed, this.origin);
+            this.selectedIndex = prev && hasId(prev)
+                ? this.annotations.findIndex((obj) => obj.id === prev.id) : -1;
+            this._rebuildMeshes();
+            this._highlightSelection();
+            this._drawOverlays();
+            this._updateAttributeRequirement();
+            return true;
+        }
+
         _rebuildMeshes() {
             this.meshes.forEach((m) => { if (m) this.scene.remove(m); });
             this.meshes = [];
@@ -2851,6 +2904,7 @@
                 const local = this.annotations[i];
                 local.track_id = obj.track_id;
                 local.frame = obj.frame;
+                if (hasId(obj)) local.id = obj.id;
                 if (local.interpolated && !obj.interpolated) {
                     // Edited, so now a keyframe: draw it solid.
                     delete local.interpolated;
@@ -3194,6 +3248,23 @@
         return { c: Math.cos(-yaw), s: Math.sin(-yaw) };
     }
 
+    /**
+     * This page's id nonce: two members' browsers each numbering their first
+     * object 1 must not produce the same id, or the server's element-by-element
+     * merge of the shared answer keeps one and drops the other.
+     */
+    const ID_NONCE = Math.random().toString(36).slice(2, 8) || 'x';
+    let idCounter = 0;
+
+    function newObjectId() {
+        idCounter += 1;
+        return `pc_${ID_NONCE}_${idCounter}`;
+    }
+
+    function hasId(obj) {
+        return !!obj && obj.id !== undefined && obj.id !== null && obj.id !== '';
+    }
+
     /** A brush radius in whole pixels within [BRUSH_MIN, BRUSH_MAX]. */
     function clampBrush(px) {
         const n = Math.round(Number(px));
@@ -3303,9 +3374,27 @@
     PointCloudAnnotationManager.withParam = withParam;
     PointCloudAnnotationManager.clampBrush = clampBrush;
 
+    PointCloudAnnotationManager.newObjectId = newObjectId;
+
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = PointCloudAnnotationManager;
     }
     if (root) root.PointCloudAnnotationManager = PointCloudAnnotationManager;
+
+    // Live collaborative sessions (collab.js): a teammate's saved answer is
+    // already in the hidden input; replace this scheme's objects with it.
+    if (root) {
+        root.potatoCollabWidgets = root.potatoCollabWidgets || {};
+        root.potatoCollabWidgets.spatial_annotation = {
+            apply(ctx) {
+                const box = Array.from(root.document
+                    ? root.document.querySelectorAll('.pointcloud-annotation-container') : [])
+                    .find((el) => el.getAttribute('data-schema') === ctx.schema);
+                const manager = box && box.annotationManager;
+                if (!manager || typeof manager.replaceFromValue !== 'function') return false;
+                return manager.replaceFromValue(ctx.value) === true;
+            },
+        };
+    }
 })(typeof window !== 'undefined' ? window
     : (typeof globalThis !== 'undefined' ? globalThis : null));

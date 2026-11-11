@@ -180,6 +180,44 @@ class TestPresence:
         with open(path) as f:
             assert all("presence" not in line for line in f)
 
+    def test_cursor_sees_every_selection_between_room_events(self):
+        # The client advances its cursor to the last seq + 1. With no room
+        # event in between, each later selection must still be newer than
+        # that cursor, or observers only ever see the first one.
+        tmp_dir = create_test_directory("rooms_presence_cursor")
+        manager = make_manager(tmp_dir)
+        room = manager.create_room("alice", "shadow", ["s1"], LABELS)
+        manager.record_presence(room, "alice", {"start": 0, "end": 4})
+        first = manager.presence_since(room, 0)
+        assert [p["data"]["start"] for p in first] == [0]
+        cursor = first[-1]["seq"] + 1
+
+        manager.record_presence(room, "alice", {"start": 10, "end": 14})
+        manager.record_presence(room, "alice", {"start": 20, "end": 24})
+        later = manager.presence_since(room, cursor)
+        assert [p["data"]["start"] for p in later] == [10, 20]
+        assert manager.presence_since(room, later[-1]["seq"] + 1) == []
+
+    def test_a_page_open_across_a_restart_still_sees_presence(self):
+        # The room page keeps its cursor while the server restarts; presence
+        # is not persisted, so the counter starts again. It must start above
+        # any cursor the old process handed out.
+        import time
+        tmp_dir = create_test_directory("rooms_presence_restart")
+        before = make_manager(tmp_dir)
+        room = before.create_room("alice", "shadow", ["s1"], LABELS)
+        for start in (0, 10, 20):
+            before.record_presence(room, "alice", {"start": start, "end": start + 4})
+        cursor = before.presence_since(room, 0)[-1]["seq"] + 1
+
+        time.sleep(0.01)
+        after = make_manager(tmp_dir)          # the restarted process
+        reloaded = after.get_room(room.room_id)
+        assert reloaded is not None
+        after.record_presence(reloaded, "alice", {"start": 30, "end": 34})
+        seen = after.presence_since(reloaded, cursor)
+        assert [p["data"]["start"] for p in seen] == [30]
+
 
 class TestMetrics:
     def seeded_room(self, manager):

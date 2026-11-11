@@ -216,10 +216,10 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 261 examples, generated from the configs themselves.
+All 262 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
-### advanced/ (77)
+### advanced/ (78)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -241,6 +241,7 @@ The `Types` column lists the annotation types each one uses.
 | [`codebook-example/`](advanced/codebook-example/) | Codebook Example | `multiselect` |
 | [`codebook-invivo-example/`](advanced/codebook-invivo-example/) | Codebook In-Vivo Example | `span` |
 | [`codebook-sidebar/`](advanced/codebook-sidebar/) | Politeness — Codebook Sidebar | `radio` |
+| [`collaborative-sessions/`](advanced/collaborative-sessions/) | Collaborative Sessions — News Framing | `multiselect`, `radio`, `span`, `text` |
 | [`conditional-logic/`](advanced/conditional-logic/) | Conditional Logic Demo - PII Detection | `multiselect`, `radio`, `slider`, `text` |
 | [`cultural-domain/`](advanced/cultural-domain/) | Cultural domain analysis (fruit) | `card_sort`, `triad_test` |
 | [`dataset-publishing/`](advanced/dataset-publishing/) | Movie Review Sentiment | `multiselect`, `radio` |

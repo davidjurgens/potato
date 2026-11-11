@@ -65,12 +65,40 @@ _THREADS_MIGRATION = Migration(
     """,
 )
 
+# Who beyond the visibility rule may read a memo. Another side table, for the
+# reason above and one more: rebuilding `memos` to widen its CHECK constraint
+# would mean DROP TABLE, and with foreign keys on that cascades into
+# memo_threads.
+#
+#   scope    'personal': the author alone, adjudicators included in "others"
+#            (the row's visibility is stored as 'private' underneath);
+#            'team': the members of team_id, for a live session's threads
+#   team_id  the collaborative team a 'team' memo belongs to
+_SCOPE_MIGRATION = Migration(
+    name="0003_memo_scope",
+    sql="""
+    CREATE TABLE IF NOT EXISTS memo_scope (
+        memo_id  TEXT PRIMARY KEY REFERENCES memos(id) ON DELETE CASCADE,
+        scope    TEXT NOT NULL CHECK (scope IN ('personal', 'team')),
+        team_id  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_memo_scope_team ON memo_scope (team_id);
+    """,
+)
+
 # Registered at import so the tables exist on the first get_db() call.
 register_migration(_MEMOS_MIGRATION)
 register_migration(_THREADS_MIGRATION)
+register_migration(_SCOPE_MIGRATION)
 
-_SELECT = """SELECT m.*, t.parent_id, t.status, t.assignee, t.resolved_by, t.resolved_at
-             FROM memos m LEFT JOIN memo_threads t ON t.memo_id = m.id"""
+_SELECT = """SELECT m.*, t.parent_id, t.status, t.assignee, t.resolved_by, t.resolved_at,
+                    s.scope, s.team_id
+             FROM memos m LEFT JOIN memo_threads t ON t.memo_id = m.id
+                          LEFT JOIN memo_scope s ON s.memo_id = m.id"""
+
+# The visibility the rest of the code sees for a personal memo. Stored as
+# 'private' plus a scope row, so the column's CHECK constraint still holds.
+PERSONAL = "personal"
 
 
 def _db(task_dir: str):
@@ -81,13 +109,30 @@ def _db(task_dir: str):
     the first get_db() for this task_dir opens the connection."""
     register_migration(_MEMOS_MIGRATION)
     register_migration(_THREADS_MIGRATION)
+    register_migration(_SCOPE_MIGRATION)
     return get_db(task_dir)
 
 
 def _row_to_dict(row) -> Dict[str, Any]:
     d = dict(row)
     d["anchor"] = json.loads(d["anchor"]) if d["anchor"] else None
+    if d.get("scope") == PERSONAL:
+        d["visibility"] = PERSONAL
     return d
+
+
+def _write_scope(conn, memo_id: str, visibility: str,
+                 team_id: Optional[str]) -> str:
+    """Record the memo's scope and return the visibility to store on the row."""
+    conn.execute("DELETE FROM memo_scope WHERE memo_id = ?", (memo_id,))
+    if visibility == PERSONAL:
+        conn.execute("INSERT INTO memo_scope (memo_id, scope, team_id) VALUES (?, ?, NULL)",
+                     (memo_id, PERSONAL))
+        return "private"
+    if team_id:
+        conn.execute("INSERT INTO memo_scope (memo_id, scope, team_id) VALUES (?, 'team', ?)",
+                     (memo_id, team_id))
+    return visibility
 
 
 def create(
@@ -102,11 +147,16 @@ def create(
     parent_id: Optional[str] = None,
     status: Optional[str] = None,
     assignee: Optional[str] = None,
+    team_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Insert a memo row (and its thread row, if any) and return it."""
+    """Insert a memo row (and its thread and scope rows, if any) and return it.
+
+    ``visibility='personal'`` stores a private row plus a personal scope row.
+    """
     memo_id = uuid.uuid4().hex
     now = time.time()
     conn = _db(task_dir)
+    stored_visibility = "private" if visibility == PERSONAL else visibility
     conn.execute(
         """INSERT INTO memos
            (id, project, instance_id, anchor, body, created_by,
@@ -115,9 +165,10 @@ def create(
         (
             memo_id, project, instance_id,
             json.dumps(anchor) if anchor else None,
-            body, created_by, now, now, visibility,
+            body, created_by, now, now, stored_visibility,
         ),
     )
+    _write_scope(conn, memo_id, visibility, team_id)
     if parent_id or status or assignee:
         conn.execute(
             "INSERT INTO memo_threads (memo_id, parent_id, status, assignee) VALUES (?, ?, ?, ?)",
@@ -190,15 +241,16 @@ def update(
     if body is not None:
         sets.append("body = ?")
         params.append(body)
+    conn = _db(task_dir)
     if visibility is not None:
+        current = get(task_dir, memo_id) or {}
         sets.append("visibility = ?")
-        params.append(visibility)
+        params.append(_write_scope(conn, memo_id, visibility, current.get("team_id")))
     if not sets:
         return get(task_dir, memo_id)
     sets.append("updated_at = ?")
     params.append(time.time())
     params.append(memo_id)
-    conn = _db(task_dir)
     conn.execute(f"UPDATE memos SET {', '.join(sets)} WHERE id = ?", params)
     conn.commit()
     return get(task_dir, memo_id)
@@ -211,8 +263,10 @@ def delete(task_dir: str, memo_id: str) -> bool:
         "SELECT memo_id FROM memo_threads WHERE parent_id = ?", (memo_id,)).fetchall()]
     for reply in replies:
         conn.execute("DELETE FROM memo_threads WHERE memo_id = ?", (reply,))
+        conn.execute("DELETE FROM memo_scope WHERE memo_id = ?", (reply,))
         conn.execute("DELETE FROM memos WHERE id = ?", (reply,))
     conn.execute("DELETE FROM memo_threads WHERE memo_id = ?", (memo_id,))
+    conn.execute("DELETE FROM memo_scope WHERE memo_id = ?", (memo_id,))
     cur = conn.execute("DELETE FROM memos WHERE id = ?", (memo_id,))
     conn.commit()
     return cur.rowcount > 0

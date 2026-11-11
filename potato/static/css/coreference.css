@@ -275,6 +275,31 @@
     border-bottom-width: 4px;
 }
 
+/* A mention is a span-core overlay: a 0x0 box whose segments carry the
+ * geometry, so the chain colour goes on the segments. The segments' fill and
+ * edge are inline styles, hence !important. */
+.coref-mention-highlight-background .span-highlight-segment {
+    background-color: color-mix(in srgb, var(--chain-color, #6E56CF) 19%, transparent) !important;
+}
+
+.coref-mention-highlight-bracket .span-highlight-segment {
+    border: 1px solid transparent !important;
+    border-left: 2px solid var(--chain-color, #6E56CF) !important;
+    border-right: 2px solid var(--chain-color, #6E56CF) !important;
+    border-bottom: 2px solid var(--chain-color, #6E56CF) !important;
+}
+
+/* The "[" "]" glyphs would land at the overlay's origin, the corner of the
+ * text, not around the mention. */
+.span-overlay-pure.coref-mention-highlight-bracket::before,
+.span-overlay-pure.coref-mention-highlight-bracket::after {
+    content: none;
+}
+
+.coref-mention-highlight-underline .span-highlight-segment {
+    border-bottom: 3px solid var(--chain-color, #6E56CF) !important;
+}
+
 /* Mention selection.
  *
  * Overlays carry `pointer-events: none` from span-styles.css so they do not

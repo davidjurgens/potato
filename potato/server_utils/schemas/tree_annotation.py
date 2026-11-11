@@ -22,6 +22,11 @@ from .identifier_utils import (
 
 logger = logging.getLogger(__name__)
 
+# What the path box says while no node is on the path. The page renders it and
+# conversation-tree.js reads it from the config whenever the path empties, so
+# a cleared path reads the same as one that was never built.
+NO_PATH_TEXT = "No path selected. Click on nodes in the tree to build a path."
+
 
 def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=False):
     """
@@ -58,6 +63,7 @@ def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=Fals
         "pathSelection": {
             "enabled": path_enabled,
             "description": path_desc,
+            "emptyText": NO_PATH_TEXT,
         },
         "branchComparison": {
             "enabled": branch_enabled,
@@ -72,7 +78,7 @@ def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=Fals
             <h5 class="tree-ann-section-title">Path Selection</h5>
             <p class="tree-ann-path-desc">{escape_html_content(path_desc)}</p>
             <div class="tree-ann-selected-path" id="{escape_html_content(scheme_name)}_selected_path">
-                <span class="tree-ann-no-path">No path selected. Click on nodes in the tree to build a path.</span>
+                <span class="tree-ann-no-path">{escape_html_content(NO_PATH_TEXT)}</span>
             </div>
             <button type="button" class="tree-ann-btn tree-ann-clear-path"
                     id="{escape_html_content(scheme_name)}_clear_path">Clear Path</button>

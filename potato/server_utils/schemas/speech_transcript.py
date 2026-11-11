@@ -23,6 +23,8 @@ from .identifier_utils import (
     generate_validation_attribute, escape_html_content, generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -123,7 +125,12 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             // A transcript can name its own media (an EAF media descriptor, a
             // SPoRC mp3_url), so fall back to that when no audio field is set.
             var src = d[CONFIG.audio_key] || (norm && norm.audio) || '';
-            audWrap.innerHTML = src ? '<audio controls preload="metadata" src="' + esc(src) + '" style="width:100%"></audio>' : '';
+            // Keep the player when the source is unchanged: a rebuild for a
+            // teammate's edit must not stop playback or lose the playhead.
+            var curAudio = audWrap.querySelector('audio');
+            if (!(src && curAudio && curAudio.getAttribute('src') === String(src))) {{
+                audWrap.innerHTML = src ? '<audio controls preload="metadata" src="' + esc(src) + '" style="width:100%"></audio>' : '';
+            }}
 
             if (!segs.length) {{ list.innerHTML = ''; if (empty) empty.style.display = ''; return; }}
             if (empty) empty.style.display = 'none';
@@ -198,6 +205,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('speech_transcript', 'build')}
     }})();
     </script>
 

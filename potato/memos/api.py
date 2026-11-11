@@ -49,6 +49,8 @@ def memos_enabled(config: dict) -> bool:
     return bool(
         (config.get("qda_mode") or {}).get("enabled")
         or (config.get("solo_mode") or {}).get("enabled")
+        # A live session's rail keeps personal notes and team threads here.
+        or (config.get("collab") or {}).get("enabled")
     )
 
 
@@ -186,6 +188,12 @@ def post_memo(task_dir, project, username, priv):
         # A typo'd id made a note nobody could ever reach.
         return jsonify({"error": f"No item with instance_id {instance_id!r}"}), 400
     visibility = data.get("visibility") or _default_visibility(_config())
+    # A team thread from a live session: only a member may write into it.
+    team_id = data.get("team_id") or None
+    if team_id is not None:
+        from potato.memos import service as _memo_service
+        if str(team_id) not in _memo_service._teams_of(username):
+            return jsonify({"error": "You are not on that team"}), 403
 
     def _do():
         memo = create_memo(
@@ -193,6 +201,7 @@ def post_memo(task_dir, project, username, priv):
             body=data.get("body", ""), created_by=username,
             anchor=data.get("anchor"), visibility=visibility,
             issue=bool(data.get("issue")), assignee=data.get("assignee"),
+            team_id=str(team_id) if team_id is not None else None,
         )
         _announce_assignment(memo, None, username)
         return jsonify({"memo": memo})

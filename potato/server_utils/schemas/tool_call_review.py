@@ -22,6 +22,8 @@ from .identifier_utils import (
     generate_validation_attribute, escape_html_content, generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -147,7 +149,8 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
         function paint() {{
             _calls.forEach(function(c) {{
-                var card = document.querySelector('.tcr-card[data-idx="' + c.index + '"]');
+                // This scheme's card: two schemes on a page share the indexes.
+                var card = document.getElementById(SCHEMA + '-list').querySelector('.tcr-card[data-idx="' + c.index + '"]');
                 if (!card) return;
                 card.classList.toggle('tcr-judged', !!c.verdict);
                 card.querySelectorAll('.tcr-vbtn').forEach(function(b) {{
@@ -176,6 +179,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('tool_call_review', 'build')}
     }})();
     </script>
 

@@ -78,8 +78,14 @@
         // -- data ------------------------------------------------------------
 
         _fetchExpressions() {
+            // Name the item on screen: in a live session it is the team's,
+            // and this annotator has no current instance of their own.
+            const idInput = document.getElementById('instance_id');
+            const instanceId = idInput ? idInput.value : '';
             const url = '/api/grounding/expressions?schema='
-                + encodeURIComponent(this.schemaName);
+                + encodeURIComponent(this.schemaName)
+                + (instanceId
+                    ? '&instance_id=' + encodeURIComponent(instanceId) : '');
             fetch(url, { credentials: 'same-origin' })
                 .then((response) => response.json())
                 .then((payload) => {
@@ -499,6 +505,38 @@
             }
         }
 
+        /**
+         * Put a teammate's answer on screen (live sessions).
+         *
+         * collab.js has already written it into the hidden input. The answers
+         * are replaced, not merged as the page-load restore does: an
+         * expression the teammate cleared must come back unanswered. The
+         * active expression stays active if it still exists; its regions are
+         * put back on the canvas with the capture and the canvas's own change
+         * event held off, so nothing is saved.
+         */
+        applyRemote() {
+            this.answers = {};
+            this._restoredSpans = [];
+            this._restoreFromInput();
+            if (this.config.expressionSource === 'spans' && this.caption !== undefined) {
+                this.expressions = this._expressionsFromAnswers();
+            }
+            if (this.activeId && !this._expression(this.activeId)) {
+                this.activeId = this.expressions.length ? this.expressions[0].id : null;
+            }
+            const manager = this.imageManager;
+            const wasHydrating = manager ? manager._hydrating : false;
+            if (manager) manager._hydrating = true;
+            try {
+                this._restoreActive();
+            } finally {
+                if (manager) manager._hydrating = wasHydrating;
+            }
+            this._render();
+            return true;
+        }
+
         clearAnnotations() {
             this.answers = {};
             this.activeId = null;
@@ -566,6 +604,14 @@
             this._renderProgress();
             if (this.config.expressionSource === 'spans') {
                 this._highlightGroundedSpans();
+            }
+            // The verdict control shows the active expression's verdict. It
+            // was only ever written by the annotator, so a stored verdict came
+            // back as "not judged".
+            const verdict = this.container.querySelector('.grounding-verdict-select');
+            if (verdict) {
+                const answer = this.answers[this.activeId];
+                verdict.value = (answer && answer.verdict) || '';
             }
         }
 
@@ -664,6 +710,12 @@
             this._captureWired = true;
             this.imageManager.addAnnotationChangeListener(() => {
                 if (this._restoring) return;
+                // The canvas putting stored shapes back (a relayout, or the
+                // image scheme's own live update from a teammate, whose canvas
+                // showed their active phrase) is not the annotator drawing:
+                // capturing it would file those shapes under this page's
+                // active phrase and save them.
+                if (this.imageManager._hydrating) return;
                 this._captureActive();
                 this._render();
             });
@@ -699,4 +751,16 @@
     }
 
     global.GroundingEvalManager = GroundingEvalManager;
+
+    // Live sessions: redraw a scheme from a teammate's answer.
+    global.potatoCollabWidgets = global.potatoCollabWidgets || {};
+    global.potatoCollabWidgets.grounding_eval = {
+        apply(ctx) {
+            const box = document.querySelector('.grounding-eval-container[data-schema="'
+                + CSS.escape(ctx.schema) + '"]');
+            const manager = box && box.groundingManager;
+            if (!manager || typeof manager.applyRemote !== 'function') return false;
+            return manager.applyRemote() === true;
+        },
+    };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -76,6 +76,7 @@
             var schemaName = config.schemaName;
             var nodeAnnotations = {};
             var selectedPath = [];
+            var openNodeId = null;      // the node whose panel is showing
 
             // Make tree nodes selectable
             var treeContainer = document.querySelector('.conv-tree-root');
@@ -116,6 +117,7 @@
                     n.classList.remove('selected');
                 });
                 nodeElement.classList.add('selected');
+                openNodeId = nodeId;
 
                 // Show panel
                 var speaker = nodeElement.querySelector('.conv-tree-speaker');
@@ -144,6 +146,15 @@
             function renderNodeQuestions(nodeId) {
                 var body = document.getElementById(schemaName + '_node_panel_body');
                 if (!body) return;
+                // SegmentQuestions.render binds its change/input listeners on
+                // the container it is given. Reusing one body for every node
+                // stacked a listener per node shown, and each kept writing the
+                // panel's answers into ITS node: answering node B after
+                // opening node A also saved B's answers under A. A fresh,
+                // listener-free body per render keeps one node per panel.
+                var fresh = body.cloneNode(false);
+                body.parentNode.replaceChild(fresh, body);
+                body = fresh;
 
                 if (!nodeAnnotations[nodeId]) nodeAnnotations[nodeId] = {};
 
@@ -237,6 +248,7 @@
                 closeBtn.addEventListener('click', function() {
                     var panel = document.getElementById(schemaName + '_node_panel');
                     if (panel) panel.style.display = 'none';
+                    openNodeId = null;
                     document.querySelectorAll('.conv-tree-node.selected').forEach(function(n) {
                         n.classList.remove('selected');
                     });
@@ -260,7 +272,12 @@
                 var display = document.getElementById(schemaName + '_selected_path');
                 if (!display) return;
                 if (selectedPath.length === 0) {
-                    display.innerHTML = '<span class="tree-ann-no-path">No path selected.</span>';
+                    // The text is the server's (tree_annotation.py NO_PATH_TEXT),
+                    // so an emptied path reads as it does on a fresh load.
+                    var empty = document.createElement('span');
+                    empty.className = 'tree-ann-no-path';
+                    empty.textContent = (config.pathSelection && config.pathSelection.emptyText) || '';
+                    display.replaceChildren(empty);
                 } else {
                     display.textContent = selectedPath.join(' → ');
                 }
@@ -320,6 +337,43 @@
 
             restoreFromServer();
 
+            /**
+             * Live collaborative sessions: show a teammate's answer, which
+             * collab.js has already written into both hidden inputs. Unlike
+             * restoreFromServer() it replaces: nodes no longer on the path or
+             * no longer answered lose their classes, an empty input means
+             * none, and an open node panel is rebuilt from the new answers.
+             * Nothing is written back and no change event fires.
+             */
+            function applyFromInputs() {
+                var root = document.querySelector('.conv-tree-root') || document;
+                var parse = function (inputId, isValid, empty) {
+                    var input = document.getElementById(inputId);
+                    if (!input || !input.value) return empty;
+                    try {
+                        var v = JSON.parse(input.value);
+                        return isValid(v) ? v : empty;
+                    } catch (e) { return empty; }
+                };
+                selectedPath = parse(schemaName + '_selected_path_data', Array.isArray, []).map(String);
+                nodeAnnotations = parse(schemaName + '_node_annotations', function (v) {
+                    return !!v && typeof v === 'object' && !Array.isArray(v);
+                }, {});
+                root.querySelectorAll('.conv-tree-node[data-node-id]').forEach(function (node) {
+                    var id = node.dataset.nodeId;
+                    var answers = nodeAnnotations[id];
+                    node.classList.toggle('on-path', selectedPath.indexOf(id) !== -1);
+                    node.classList.toggle('has-annotation', !!(answers && Object.keys(answers).length));
+                });
+                updatePathDisplay();
+                var panel = document.getElementById(schemaName + '_node_panel');
+                if (openNodeId !== null && panel && panel.style.display !== 'none') {
+                    renderNodeQuestions(openNodeId);
+                }
+                return true;
+            }
+            container._treeAnnApplyLive = applyFromInputs;
+
             // Clear path button
             var clearBtn = document.getElementById(schemaName + '_clear_path');
             if (clearBtn) {
@@ -340,4 +394,13 @@
     } else {
         initConversationTrees();
     }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.tree_annotation = {
+        apply: function (ctx) {
+            var form = ctx && ctx.form;
+            if (!form || typeof form._treeAnnApplyLive !== 'function') return false;
+            return form._treeAnnApplyLive() === true;
+        }
+    };
 })();

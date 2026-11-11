@@ -950,6 +950,40 @@ class AssignmentStrategy(Enum):
         raise ValueError(f"Unknown phase: {phase}")
 
 
+# Items a user must never be handed through normal assignment, from features
+# that give them the item another way. A member of a live collaborative team
+# works the team's items on the team's page; a solo copy of the same item
+# would be a second, non-independent judgement from the same person.
+#
+# Each provider maps a username to the item ids to keep from them.
+_assignment_exclusion_providers: List = []
+
+
+def register_assignment_exclusion(provider) -> None:
+    """Add ``provider(username) -> iterable of item ids`` (idempotent)."""
+    if provider not in _assignment_exclusion_providers:
+        _assignment_exclusion_providers.append(provider)
+
+
+def unregister_assignment_exclusion(provider) -> None:
+    if provider in _assignment_exclusion_providers:
+        _assignment_exclusion_providers.remove(provider)
+
+
+def excluded_items_for(username) -> Set[str]:
+    """Union of every provider's exclusions for ``username``."""
+    if not username or not _assignment_exclusion_providers:
+        return set()
+    excluded: Set[str] = set()
+    for provider in list(_assignment_exclusion_providers):
+        try:
+            excluded.update(provider(str(username)) or ())
+        except Exception as exc:  # noqa: BLE001 - one feature must not stop assignment
+            logging.getLogger(__name__).warning(
+                "Assignment exclusion provider %r failed: %s", provider, exc)
+    return excluded
+
+
 class ItemStateManager:
     """
     A class for maintaining state on the ordering and metadata of items that are being annotated.
@@ -2180,7 +2214,19 @@ class ItemStateManager:
         task hands an annotator three items and then nothing, with the progress
         counter simply stopping early and no warning anywhere.
         """
-        return iid in user_state.get_assigned_instance_ids() or user_state.has_annotated(iid)
+        return (iid in user_state.get_assigned_instance_ids()
+                or user_state.has_annotated(iid)
+                or self._excluded_for_user(user_state, iid))
+
+    def _excluded_for_user(self, user_state, iid) -> bool:
+        """True when a feature has claimed this item for the user elsewhere."""
+        if not _assignment_exclusion_providers:
+            return False
+        username = getattr(user_state, 'user_id', None)
+        cache = getattr(self, '_exclusion_cache', None)
+        if cache is not None and username in cache:
+            return iid in cache[username]
+        return iid in excluded_items_for(username)
 
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
@@ -2222,10 +2268,35 @@ class ItemStateManager:
         username = getattr(user_state, 'user_id', None)
         existing_assignments = set(user_state.get_assigned_instance_ids())
 
-        result = self._assign_instances_to_user_inner(user_state)
+        # Strategies ask about exclusions once per candidate item; work the
+        # set out once per pass. Keyed by user because passes for different
+        # users can run on different request threads.
+        if _assignment_exclusion_providers and username:
+            if getattr(self, '_exclusion_cache', None) is None:
+                self._exclusion_cache = {}
+            self._exclusion_cache[username] = excluded_items_for(username)
+        try:
+            result = self._assign_instances_to_user_inner(user_state)
+        finally:
+            cache = getattr(self, '_exclusion_cache', None)
+            if cache is not None:
+                cache.pop(username, None)
 
         new_assignments = (set(user_state.get_assigned_instance_ids())
                            - existing_assignments)
+        # Strategies filter candidates their own way, and some (engine, LLM
+        # confidence, category) pick through code that never asks
+        # `_already_with_user`. Whatever they picked, an excluded item does not
+        # stay with the user.
+        excluded = new_assignments & excluded_items_for(username)
+        for iid in excluded:
+            user_state.unassign_instance(iid)
+        if excluded:
+            self.logger.info("Withheld %d item(s) from %s that another feature "
+                             "gives them: %s", len(excluded), username,
+                             sorted(excluded)[:5])
+            new_assignments -= excluded
+            result = max(0, result - len(excluded))
         if username and new_assignments:
             # Recorded, but NOT retired from `remaining_instance_ids`. A hold is
             # not a completed annotation: the strategies already skip a
@@ -2387,6 +2458,8 @@ class ItemStateManager:
                             and iid in self.remaining_instance_ids):
                         self.remaining_instance_ids.remove(iid)
                     continue
+                if self._excluded_for_user(user_state, iid):
+                    continue
                 if iid not in user_state.get_assigned_instance_ids():
                     candidates.append((iid, annotation_count))
             if not candidates:
@@ -2407,6 +2480,8 @@ class ItemStateManager:
                         self.remaining_instance_ids.remove(iid)
                     continue
                 if self._item_is_saturated(iid):
+                    continue
+                if self._excluded_for_user(user_state, iid):
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
                     user_state.assign_instance(self._store.get(iid))
@@ -2656,6 +2731,8 @@ class ItemStateManager:
                     continue
                 if user_state.has_annotated(iid):
                     continue
+                if self._excluded_for_user(user_state, iid):
+                    continue
                 candidates.append(iid)
             if not candidates:
                 return 0
@@ -2686,6 +2763,8 @@ class ItemStateManager:
                         self.remaining_instance_ids.remove(iid)
                     continue
                 if self._item_is_saturated(iid):
+                    continue
+                if self._excluded_for_user(user_state, iid):
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
                     user_state.assign_instance(self._store.get(iid))
@@ -2729,6 +2808,8 @@ class ItemStateManager:
             if item_id in already_assigned:
                 continue
             if user_state.has_annotated(item_id):
+                continue
+            if self._excluded_for_user(user_state, item_id):
                 continue
 
             user_state.assign_instance(self._store.get(item_id))

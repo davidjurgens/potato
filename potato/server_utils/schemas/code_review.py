@@ -23,6 +23,8 @@ from .identifier_utils import (
     generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CATEGORIES = ["bug", "style", "suggestion", "security", "question"]
@@ -149,30 +151,68 @@ def _generate_internal(
         var SCHEMA = '{esc_schema}';
         var CONFIG = {config_json};
         var _state = {{ verdict: '', comments: [], file_ratings: {{}} }};
+        // New comments get an id unique to this page: in a live session two
+        // annotators adding their first comment must not collide when the
+        // server merges the lists by id. Restored ids are kept as they are.
+        var NONCE = Math.random().toString(36).slice(2, 8);
+        var _commentSeq = 0;
+        var _handlersAttached = false;
 
-        function init() {{
-            // Check for existing value (persistence)
+        function newCommentId() {{
+            _commentSeq += 1;
+            return 'c_' + NONCE + '_' + _commentSeq;
+        }}
+
+        /** The stored answer, or an empty one: an empty input is no answer. */
+        function readInput() {{
             var input = document.getElementById(SCHEMA).querySelector('.code-review-data-input');
+            var state = {{ verdict: '', comments: [], file_ratings: {{}} }};
             if (input && input.value) {{
                 try {{
-                    _state = JSON.parse(input.value);
-                    if (!_state.comments) _state.comments = [];
-                    if (!_state.file_ratings) _state.file_ratings = {{}};
+                    var parsed = JSON.parse(input.value);
+                    if (parsed && typeof parsed === 'object') {{
+                        state.verdict = parsed.verdict || '';
+                        state.comments = Array.isArray(parsed.comments) ? parsed.comments : [];
+                        state.file_ratings = (parsed.file_ratings && typeof parsed.file_ratings === 'object')
+                            ? parsed.file_ratings : {{}};
+                    }}
                 }} catch(e) {{}}
             }}
+            return state;
+        }}
 
+        function init() {{
+            _state = readInput();
             restoreState();
-            attachHandlers();
+            // Once: the radios, the add button and the page-wide diff-line
+            // listener outlive a rebuild, so binding them again doubled
+            // every comment and save.
+            if (!_handlersAttached) {{
+                _handlersAttached = true;
+                attachHandlers();
+            }}
+            detectFiles();
+        }}
+
+        // Redraw from the hidden input (a teammate's answer in a live
+        // session): replace the state, rebuild the comment cards, the verdict
+        // and the ratings. Binds nothing that already exists; never saves.
+        function applyFromInput() {{
+            _state = readInput();
+            restoreState();
             detectFiles();
         }}
 
         function restoreState() {{
-            // Restore verdict
-            if (_state.verdict) {{
-                var radio = document.querySelector(
-                    '#' + SCHEMA + '-verdicts input[value="' + _state.verdict + '"]'
-                );
-                if (radio) radio.checked = true;
+            // Restore verdict (and clear it when the answer has none)
+            var verdicts = document.getElementById(SCHEMA + '-verdicts');
+            if (verdicts) {{
+                verdicts.querySelectorAll('input[type="radio"]').forEach(function(r) {{
+                    r.checked = !!_state.verdict && r.value === _state.verdict;
+                }});
+                verdicts.querySelectorAll('.cr-verdict-option').forEach(function(opt) {{
+                    opt.classList.toggle('cr-checked', opt.querySelector('input:checked') !== null);
+                }});
             }}
 
             // Restore comments
@@ -202,7 +242,7 @@ def _generate_internal(
             var addBtn = document.getElementById(SCHEMA + '-add-comment');
             if (addBtn) {{
                 addBtn.addEventListener('click', function() {{
-                    var comment = {{ category: CONFIG.categories[0], file: '', line: null, text: '' }};
+                    var comment = {{ id: newCommentId(), category: CONFIG.categories[0], file: '', line: null, text: '' }};
                     _state.comments.push(comment);
                     addCommentCard(comment);
                     saveState();
@@ -221,7 +261,7 @@ def _generate_internal(
                 var numEl = line.querySelector('.ct-line-num');
                 if (numEl) lineNum = numEl.textContent;
 
-                var comment = {{ category: CONFIG.categories[0], file: file, line: lineNum ? parseInt(lineNum) : null, text: '' }};
+                var comment = {{ id: newCommentId(), category: CONFIG.categories[0], file: file, line: lineNum ? parseInt(lineNum) : null, text: '' }};
                 _state.comments.push(comment);
                 addCommentCard(comment);
                 saveState();
@@ -393,6 +433,13 @@ def _generate_internal(
             init();
         }}
         document.addEventListener('instanceChanged', init);
+        // annotation.js clears every text input and radio on the page
+        // (clearAllFormInputs) after init() has drawn the answer, and these
+        // controls are not annotation inputs, so nothing restores them: the
+        // verdict and each comment's file path came back blank. Redraw once
+        // the item is loaded; the hidden input still holds the answer.
+        document.addEventListener('potato:instance-ready', applyFromInput);
+        {collab_rebuild_js('code_review', 'applyFromInput')}
     }})();
     </script>
 

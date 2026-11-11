@@ -58,6 +58,28 @@ test('the panel edits the selected object; a blank required value is reported', 
         .toBe('1 object still needs required attributes');
 });
 
+test("the hint keeps the server's noun through select and deselect", () => {
+    // spatial_annotation.py renders "Select a box or point ..." and hands the
+    // same noun over in the config; the redraw used to say "an object".
+    const m = new Manager('pc-canvas-objects', 'input-objects',
+                          { schema: 'objects', labels: [{ name: 'car', color: '#f00' }],
+                            attributes: DEFS, attributeNoun: 'box or point' });
+    Object.assign(m, {
+        container: document.querySelector('.pointcloud-annotation-container'),
+        attributePanel: document.querySelector('.object-attribute-panel'),
+        scene: { add() {}, remove() {} }, _render: () => {}, _drawOverlays: () => {},
+        _buildMesh(obj) { this.meshes.push({ obj, material: {} }); },
+        currentLabel: 'car', currentColor: '#f00',
+    });
+    const hint = () => document.querySelector('.attribute-panel-hint').textContent;
+    m._placePoint([1, 2, 3]);
+    m.selectedIndex = 0;
+    m._highlightSelection();
+    m.selectedIndex = -1;
+    m._highlightSelection();
+    expect(hint()).toBe('Select a box or point to set its attributes.');
+});
+
 test('a restored object without attributes is not given defaults', () => {
     const m = makeManager();
     m.addAnnotation({ type: 'point_3d', label: 'car', coordinates: [0, 0, 0] });

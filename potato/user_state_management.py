@@ -1732,6 +1732,9 @@ class UserState:
         # instance_id_to_room_provenance in __init__.
         d['instance_id_to_room_provenance'] = getattr(
             self, 'instance_id_to_room_provenance', {})
+        # Who in a live collaborative session contributed to a team answer.
+        d['instance_id_to_collab_provenance'] = getattr(
+            self, 'instance_id_to_collab_provenance', {})
 
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
@@ -1879,6 +1882,8 @@ class UserState:
             user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
         if 'instance_id_to_room_provenance' in j:
             user_state.instance_id_to_room_provenance = j['instance_id_to_room_provenance']
+        if 'instance_id_to_collab_provenance' in j:
+            user_state.instance_id_to_collab_provenance = j['instance_id_to_collab_provenance']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:
@@ -2323,6 +2328,9 @@ class InMemoryUserState(UserState):
         # instance_id_to_presentation_order is: `update_annotation_state`
         # replaces instance_id_to_behavioral_data wholesale on every save.
         self.instance_id_to_room_provenance: Dict[str, Dict[str, Any]] = {}
+        # instance_id -> {session_id, team_id, contributors: {user: n_changes},
+        # last_change_at}: set on a team user's answers by potato/collab.
+        self.instance_id_to_collab_provenance: Dict[str, Dict[str, Any]] = {}
 
         # Span link annotations - stores relationships between spans
         # Maps instance_id -> {link_id -> SpanLink}
@@ -2390,6 +2398,20 @@ class InMemoryUserState(UserState):
     def get_room_provenance(self, instance_id: str) -> Dict[str, Any]:
         """Which room, if any, produced this user's answers on this instance."""
         return self.instance_id_to_room_provenance.get(instance_id, {})
+
+    def record_collab_contribution(self, instance_id: str, session_id: str,
+                                   team_id: str, username: str, at: float) -> None:
+        """Count one change by ``username`` to this team answer.
+
+        A team answer is a group product: the export names who shaped it, so
+        an agreement statistic over it is read as one team, not N people.
+        """
+        if not hasattr(self, "instance_id_to_collab_provenance"):
+            self.instance_id_to_collab_provenance = {}
+        record = self.instance_id_to_collab_provenance.setdefault(instance_id, {
+            "session_id": session_id, "team_id": team_id, "contributors": {}})
+        record["contributors"][username] = record["contributors"].get(username, 0) + 1
+        record["last_change_at"] = at
 
     def record_room_provenance(self, instance_id: str, scheme_name: str,
                                record: Dict[str, Any]) -> None:
@@ -3432,6 +3454,9 @@ class InMemoryUserState(UserState):
         # instance_id_to_room_provenance in __init__.
         d['instance_id_to_room_provenance'] = getattr(
             self, 'instance_id_to_room_provenance', {})
+        # Who in a live collaborative session contributed to a team answer.
+        d['instance_id_to_collab_provenance'] = getattr(
+            self, 'instance_id_to_collab_provenance', {})
 
         # Save span link annotations
         d['instance_id_to_link_to_value'] = {}
@@ -3655,6 +3680,8 @@ class InMemoryUserState(UserState):
             user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
         if 'instance_id_to_room_provenance' in j:
             user_state.instance_id_to_room_provenance = j['instance_id_to_room_provenance']
+        if 'instance_id_to_collab_provenance' in j:
+            user_state.instance_id_to_collab_provenance = j['instance_id_to_collab_provenance']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:

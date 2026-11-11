@@ -28,6 +28,9 @@
 
             this.chains = [];  // Array of chain objects
             this.nextChainId = 1;
+            // Part of every new chain id, so two pages on one item (a live
+            // session) cannot both make "chain_3" and overwrite each other.
+            this.idNonce = Math.random().toString(36).slice(2, 8);
             this.activeChainId = null;
             this.selectedSpanIds = [];
 
@@ -150,6 +153,15 @@
             };
             document.addEventListener('click', this._clickHandler, true);
 
+            // The chains and the spans load separately (/api/links,
+            // /api/spans), so the chain list can be drawn before the mentions
+            // it names exist, and each re-render of the spans replaces the
+            // overlays the chain colours were put on. Redraw once they are in.
+            this._spansRenderedHandler = function() {
+                if (self.chains.length) self._render();
+            };
+            document.addEventListener('potato:spansRendered', this._spansRenderedHandler);
+
             this._makeSpansSelectable();
 
             // Overlays are re-rendered on every span change and on instance
@@ -231,6 +243,10 @@
                 document.removeEventListener('click', this._clickHandler, true);
                 this._clickHandler = null;
             }
+            if (this._spansRenderedHandler) {
+                document.removeEventListener('potato:spansRendered', this._spansRenderedHandler);
+                this._spansRenderedHandler = null;
+            }
             if (this._overlayObserver) {
                 this._overlayObserver.disconnect();
                 this._overlayObserver = null;
@@ -243,6 +259,11 @@
             // The hidden input is not populated server-side, so on a revisit it
             // reads "[]" while the chains sit in the user's link annotations.
             // Ask the server, the way span_link does.
+            this._loadFromServer();
+        }
+
+        /** Show the chains stored now (a teammate's change in a live session). */
+        reload() {
             this._loadFromServer();
         }
 
@@ -270,7 +291,17 @@
                     var mine = payload.links.filter(function(link) {
                         return link.schema === self.schemaName;
                     });
-                    if (!mine.length) return;
+                    if (!mine.length) {
+                        // Nothing stored. On a reload (a teammate removed the
+                        // last chain) the page still shows the old ones.
+                        if (self.chains.length) {
+                            self.chains = [];
+                            self._savedChainIds = [];
+                            if (self.chainData) self.chainData.value = '[]';
+                            self._render();
+                        }
+                        return;
+                    }
                     self.chains = [];
                     self._adoptLinks(mine);
                 })
@@ -383,7 +414,7 @@
             var entityType = this._entityTypeForSelection();
 
             var chain = {
-                id: 'chain_' + this.nextChainId++,
+                id: 'chain_' + this.idNonce + '_' + this.nextChainId++,
                 entityType: entityType,
                 spanIds: this.selectedSpanIds.slice(),
                 color: this.colorPalette[(this.chains.length) % this.colorPalette.length]
@@ -686,8 +717,13 @@
          * words.
          *
          * An overlay is a positioned box, not the text, so the text comes from
-         * slicing the canonical string by the overlay's offsets -- by code
-         * point, the way the offsets are stored.
+         * the span manager's own record of the span (the server's slice, or
+         * the selection it was drawn from), else from slicing the canonical
+         * string by the overlay's offsets -- by code point, the way the
+         * offsets are stored. It used to fall back to the element's own text,
+         * which only a reloaded page had: the server wrapped each stored span
+         * inline, so the list read "John Smith, He" after a reload and
+         * "(span sw_m1), (span sw_m2)" when the same spans arrived live.
          */
         _getMentionTexts(spanIds) {
             var texts = [];
@@ -698,6 +734,15 @@
         }
 
         _mentionText(spanId) {
+            var manager = window.spanManager;
+            var spans = (manager && typeof manager.getSpans === 'function')
+                ? manager.getSpans() : [];
+            for (var i = 0; i < spans.length; i++) {
+                if (spans[i] && spans[i].id === spanId &&
+                        typeof spans[i].text === 'string' && spans[i].text.trim()) {
+                    return spans[i].text.trim();
+                }
+            }
             var el = this._findSpanElement(spanId);
             if (el && el.dataset && el.dataset.start !== undefined) {
                 var start = parseInt(el.dataset.start, 10);
@@ -714,8 +759,6 @@
                     if (slice && slice.trim()) return slice.trim();
                 }
             }
-            var inline = el ? (el.textContent || el.innerText || '').trim() : '';
-            if (inline) return inline;
             return '(span ' + spanId + ')';
         }
 

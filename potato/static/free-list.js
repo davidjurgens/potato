@@ -66,7 +66,7 @@
 
     // ------------------------------------------------------------------
 
-    function setup(form) {
+    function setup(form, live) {
         var prior = STATES.get(form);
         if (prior && prior.instance === instanceId()) { return; }
         if (prior) { stopClock(prior); }
@@ -88,6 +88,9 @@
         }
         STATES.set(form, state);
         render(state);
+        // A live redraw must not save: the clock's first tick saves unless
+        // the current five-second slot is already marked saved.
+        if (live) { state.savedSlot = Math.floor(state.elapsedBefore / 5000); }
         if (state.started && cfg.time_limit_s && !state.timeUp) { startClock(state); }
         declare(state);
     }
@@ -318,7 +321,7 @@
     }
 
     function init() {
-        document.querySelectorAll('form.free-list').forEach(setup);
+        document.querySelectorAll('form.free-list').forEach(function (form) { setup(form); });
     }
 
     // Leaving the page (or the tab) pauses the clock; elapsed_ms is saved.
@@ -339,6 +342,31 @@
     else { init(); }
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
+
+    /* Live collaborative sessions: rebuild this form's state from the hidden
+       input (already holding the teammate's answer), as a fresh page would.
+       The old state's clock stops, and its ticker sees it is no longer the
+       form's state; setup() writes nothing. What the annotator is typing in
+       the entry box, and its focus, survive the redraw. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var prior = form && STATES.get(form);
+        if (!prior) { return false; }
+        var typing = prior.entry ? prior.entry.value : '';
+        var focused = !!(prior.entry && document.activeElement === prior.entry);
+        stopClock(prior);
+        STATES.delete(form);
+        setup(form, true);
+        var state = STATES.get(form);
+        if (state && state.entry) {
+            if (typing && !state.entry.disabled) { state.entry.value = typing; }
+            if (focused && !state.entry.disabled) { state.entry.focus(); }
+        }
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.free_list = {apply: applyLive};
 
     window.PotatoFreeList = {init: init};
 })();

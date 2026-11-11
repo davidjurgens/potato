@@ -134,6 +134,13 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
         row[f"{schema_name}._room_id"] = prov.get("room_id", "")
         row[f"{schema_name}._room"] = json.dumps(prov)
 
+    # A team answer from a live collaborative session: the session gets its
+    # own column for the same reason, and the contributors ride beside it.
+    collab = ann.get("_collab")
+    if isinstance(collab, dict) and collab:
+        row["_collab_session"] = collab.get("session_id", "")
+        row["_collab"] = json.dumps(collab)
+
     # Cloze answers scored against the key in the config, which never went to
     # the browser: one 0/1 column per keyed blank and a total.
     if context is not None:

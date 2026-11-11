@@ -1585,6 +1585,22 @@ def _incoming_schema_names(annotations: dict) -> set:
     return names
 
 
+def _annotation_owner(instance_id=None, write=False):
+    """``(owner, collab_session, refusal)``: whose annotations this request is about.
+
+    The session user, unless the page belongs to a live collaborative session
+    (see ``potato.collab.context``); then the team user, with the member's
+    membership and the item checked, and a refusal to return when they fail.
+    """
+    from potato.collab.context import annotation_owner
+    return annotation_owner(instance_id, write=write)
+
+
+def _collab_viewing_item(collab_session):
+    from potato.collab.context import viewing_item
+    return viewing_item(collab_session)
+
+
 def _preclear_exclusive_schemas(user_state, username, instance_id, schema_names,
                                 *, complete_set: bool) -> None:
     """Drop stale labels for schemas whose incoming state supersedes what's stored.
@@ -6219,6 +6235,10 @@ def get_annotations():
         instance_id = request.args.get('instance_id')
         if not instance_id:
             return jsonify({"error": "No instance_id provided"}), 400
+        # On a live session page this is the team's answer (potato/collab).
+        username, _collab, _refusal = _annotation_owner(instance_id)
+        if _refusal is not None:
+            return _refusal
 
         # Get user state
         user_state = get_user_state_manager().get_user_state(username)
@@ -6301,12 +6321,22 @@ def get_previous_image_annotations():
         if not schema:
             return jsonify({"error": "No schema provided"}), 400
 
-        user_state = get_user_state_manager().get_user_state(session['username'])
+        _owner, _collab, _refusal = _annotation_owner()
+        if _refusal is not None:
+            return _refusal
+        user_state = get_user_state_manager().get_user_state(_owner)
         if not user_state:
             return jsonify({"error": "User not found"}), 404
 
-        index = user_state.get_current_instance_index()
-        ordering = getattr(user_state, 'instance_id_ordering', []) or []
+        if _collab is not None:
+            # The member's own place in the session's items, not the team's.
+            ordering = list(_collab.item_ids)
+            _viewing = _collab_viewing_item(_collab)
+            index = (ordering.index(_viewing.get_id())
+                     if _viewing is not None and _viewing.get_id() in ordering else None)
+        else:
+            index = user_state.get_current_instance_index()
+            ordering = getattr(user_state, 'instance_id_ordering', []) or []
         if index is None or index <= 0 or index > len(ordering):
             return jsonify({"instance_id": None, "schema": schema,
                             "objects": [], "count": 0,
@@ -6747,6 +6777,10 @@ def get_current_instance():
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(None)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -6760,7 +6794,9 @@ def get_current_instance():
             logger.debug(f"User {username} not in annotation phase, no current instance")
             return jsonify({"error": "Not in annotation phase"}), 404
 
-        current_instance = user_state.get_current_instance()
+        # A session member's current item is theirs, within the team's items.
+        current_instance = (_collab_viewing_item(_collab) if _collab is not None
+                            else user_state.get_current_instance())
         if not current_instance:
             logger.error(f"No current instance for user: {username}")
             return jsonify({"error": "No current instance"}), 404
@@ -6787,8 +6823,11 @@ def get_current_instance():
 
         return jsonify({
             "instance_id": instance_id,
-            "current_index": user_state.get_current_instance_index(),
-            "total_instances": len(user_state.instance_id_ordering),
+            "current_index": (list(_collab.item_ids).index(instance_id)
+                              if _collab is not None and instance_id in _collab.item_ids
+                              else user_state.get_current_instance_index()),
+            "total_instances": (len(_collab.item_ids) if _collab is not None
+                                else len(user_state.instance_id_ordering)),
             "data": raw_data  # Include full instance data
         })
 
@@ -6811,6 +6850,10 @@ def get_instance_data():
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(None)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -6824,7 +6867,9 @@ def get_instance_data():
             logger.debug(f"User {username} not in annotation phase, no instance data")
             return jsonify({"error": "Not in annotation phase"}), 404
 
-        current_instance = user_state.get_current_instance()
+        # A session member's current item is theirs, within the team's items.
+        current_instance = (_collab_viewing_item(_collab) if _collab is not None
+                            else user_state.get_current_instance())
         if not current_instance:
             logger.error(f"No current instance for user: {username}")
             return jsonify({"error": "No current instance"}), 404
@@ -6880,6 +6925,10 @@ def get_span_data(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     # Item text is for participants who have reached the items: not before a
@@ -7107,13 +7156,10 @@ def update_instance():
     Supports two formats:
     1. Frontend format: {"instance_id": "...", "annotations": {...}, "span_annotations": [...]}
     2. Backend format: {"instance_id": "...", "schema": "...", "state": [...], "type": "..."}
+
+    The work is done by ``_update_instance_core``; an installed interceptor
+    (see ``set_update_instance_interceptor``) may take the save first.
     """
-    import time
-    import datetime
-    from potato.annotation_history import AnnotationHistoryManager
-
-    start_time = time.time()
-
     logger.debug("=== UPDATEINSTANCE ROUTE START ===")
     logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
@@ -7131,219 +7177,588 @@ def update_instance():
         return jsonify({"status": "error", "message": "No active session"}), 401
 
     if request.is_json:
-        logger.debug("Received JSON keys: %s", _logged_keys(request.get_json(silent=True)))
-        raw_instance_id = request.json.get("instance_id")
-        if raw_instance_id is None or str(raw_instance_id).strip() == "":
-            logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
-            return jsonify({"status": "error", "message": "Missing instance_id"}), 400
-        instance_id = str(raw_instance_id)  # Normalize to string
         username = session['username']
-        user_state = get_user_state(username)
-        if not user_state:
-            logger.error(f"User state not found for user: {username}")
-            return jsonify({"status": "error", "message": "User state not found"}), 401
+        data = request.json
+        interceptor = _update_instance_interceptor
+        if interceptor is not None:
+            response = interceptor(username, data)
+            if response is not None:
+                return response
+        return _update_instance_core(username, get_user_state(username), data)
+    else:
+        logger.warning("Update instance called without JSON data")
+        return jsonify({"status": "error", "message": "JSON data required"})
 
-        # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
-        # They should be routed by the current user phase instead of assignment checks.
-        is_phase_page_update = instance_id == "__phase_page__"
 
-        # A participant an exit_when screened out has left the study; nothing
-        # they post afterwards is stored.
-        from potato.server_utils.phase_flow import screened_out as _screened_out
-        if _screened_out(user_state):
-            return jsonify({"status": "error",
-                            "message": "You have left this study."}), 403
+def _update_instance_core(username, user_state, data, actor=None, collab=None,
+                          allow_unassigned=False):
+    """Store one ``/updateinstance`` payload for ``username``.
 
-        # A user already blocked by attention checks stores no more annotations.
-        # The save that crosses the threshold is still taken and answered with
-        # status "blocked" below; it is the ones after it that are refused.
-        if not is_phase_page_update and _qc_blocked(username):
-            from potato.quality_control import get_quality_control_manager as _qc_manager
-            return jsonify({
-                "status": "blocked",
-                "message": _qc_manager().qc_config.attention_block_message,
-            }), 403
+    The body of the route, taking the payload instead of reading the request,
+    so that a live collaborative session can run the same write for its team
+    user (``username``/``user_state``) on behalf of a member (``actor``).
+    ``collab`` is that session's context; it is None on an ordinary save, and
+    with it set, quality-control grading is skipped. ``allow_unassigned``
+    takes a save for an item not in ``username``'s queue: a member's own
+    answer to a team item in a blind-first session, which must not put the
+    item into their solo queue.
 
-        # machine_annotators.require_declaration: refuse dataset writes from a
-        # participant who is neither a declared machine nor a listed person.
-        #
-        # Enforced here rather than at login, and never from a request header.
-        # A header saying "I am a machine" is asserted by the caller, so
-        # honouring it would let anyone opt out of being counted as human --
-        # the opposite of the guarantee. Origin is declared by the study or it
-        # is not declared at all.
-        #
-        # Phase-page saves are exempt: consent and survey answers are not
-        # dataset annotations, and a rater that never reaches an item has
-        # nothing to contaminate.
-        if not is_phase_page_update:
-            _ma = config.get("machine_annotators") or {}
-            if _ma.get("enabled") and _ma.get("require_declaration"):
-                from potato.annotator_origin import (
-                    parse_machine_annotators, undeclared_participant,
-                )
-                from potato.authentication import (
-                    UserAuthenticator, _parse_authorized_users,
-                )
+    Called inside the request: request headers still feed the history
+    metadata.
+    """
+    import time
+    import datetime
+    from potato.annotation_history import AnnotationHistoryManager
 
-                try:
-                    _listed = list(UserAuthenticator.get_instance().authorized_users)
-                except (ValueError, AttributeError):
-                    _listed = _parse_authorized_users(config.get("user_config") or {})
+    start_time = time.time()
 
-                if undeclared_participant(
-                        username, parse_machine_annotators(config), _listed):
-                    logger.warning(
-                        "Refused an annotation from '%s': machine_annotators."
-                        "require_declaration is on and this participant is "
-                        "neither a declared machine rater nor a listed person. "
-                        "Declare it under machine_annotators.annotators, or add "
-                        "it to the human roster.", username)
-                    return jsonify({
-                        "status": "error",
-                        "message": (
-                            "This account is not declared for this study. Ask "
-                            "the administrator to add it to the annotator "
-                            "roster, or to declare it as a machine annotator."
-                        ),
-                    }), 403
+    logger.debug("Received JSON keys: %s", _logged_keys(data))
+    raw_instance_id = data.get("instance_id")
+    if raw_instance_id is None or str(raw_instance_id).strip() == "":
+        logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
+        return jsonify({"status": "error", "message": "Missing instance_id"}), 400
+    instance_id = str(raw_instance_id)  # Normalize to string
+    if not user_state:
+        logger.error(f"User state not found for user: {username}")
+        return jsonify({"status": "error", "message": "User state not found"}), 401
 
-        # Guard: reject updates for instances not assigned to this user.
-        # Skip this for synthetic phase-page updates so non-annotation page autosaves
-        # do not get treated like dataset item writes.
-        if user_state.get_phase() == UserPhase.ANNOTATION and not is_phase_page_update:
-            assigned_ids = user_state.get_assigned_instance_ids()
-            if assigned_ids and instance_id not in assigned_ids:
-                logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
-                return jsonify({"status": "error", "message": "Instance not assigned to user"}), 403
-            # Before the first assignment the check above does not apply, and
-            # a save to an id that is not in the dataset (the string "None",
-            # say) was stored and exported as a row (potato-skill).
-            if not assigned_ids and not get_item_state_manager().has_item(instance_id):
-                logger.warning(f"User {username} tried to update unknown instance {instance_id}")
-                return jsonify({"status": "error", "message": "No such instance"}), 404
+    # The person behind the request. On an ordinary save that is the owner of
+    # the annotations; on a live collaborative page the owner is the team and
+    # the actor is the member, and the guards about a *person* (screened out,
+    # blocked by attention checks, undeclared) are about the member.
+    actor = actor or username
+    actor_state = user_state if actor == username else get_user_state(actor)
+    if not actor_state:
+        logger.error(f"User state not found for user: {actor}")
+        return jsonify({"status": "error", "message": "User state not found"}), 401
 
-        # If a synthetic phase-page save arrives while the backend still thinks the user
-        # is in annotation, acknowledge it without writing item state. This avoids a
-        # noisy warning/error path during end-of-annotation transitions.
-        if user_state.get_phase() == UserPhase.ANNOTATION and is_phase_page_update:
-            logger.info(
-                f"Ignoring synthetic phase-page update for user {username} while still in annotation phase"
+    # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
+    # They should be routed by the current user phase instead of assignment checks.
+    is_phase_page_update = instance_id == "__phase_page__"
+
+    # A participant an exit_when screened out has left the study; nothing
+    # they post afterwards is stored.
+    from potato.server_utils.phase_flow import screened_out as _screened_out
+    if _screened_out(actor_state):
+        return jsonify({"status": "error",
+                        "message": "You have left this study."}), 403
+
+    # A user already blocked by attention checks stores no more annotations.
+    # The save that crosses the threshold is still taken and answered with
+    # status "blocked" below; it is the ones after it that are refused.
+    if not is_phase_page_update and _qc_blocked(actor):
+        from potato.quality_control import get_quality_control_manager as _qc_manager
+        return jsonify({
+            "status": "blocked",
+            "message": _qc_manager().qc_config.attention_block_message,
+        }), 403
+
+    # machine_annotators.require_declaration: refuse dataset writes from a
+    # participant who is neither a declared machine nor a listed person.
+    #
+    # Enforced here rather than at login, and never from a request header.
+    # A header saying "I am a machine" is asserted by the caller, so
+    # honouring it would let anyone opt out of being counted as human --
+    # the opposite of the guarantee. Origin is declared by the study or it
+    # is not declared at all.
+    #
+    # Phase-page saves are exempt: consent and survey answers are not
+    # dataset annotations, and a rater that never reaches an item has
+    # nothing to contaminate.
+    if not is_phase_page_update:
+        _ma = config.get("machine_annotators") or {}
+        if _ma.get("enabled") and _ma.get("require_declaration"):
+            from potato.annotator_origin import (
+                parse_machine_annotators, undeclared_participant,
             )
-            return jsonify({"status": "ok", "message": "Ignored synthetic phase-page update"})
+            from potato.authentication import (
+                UserAuthenticator, _parse_authorized_users,
+            )
 
-        # Debug: Log user phase for debugging annotation storage issues
-        logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
-
-        # Track session
-        if not user_state.session_start_time:
-            user_state.start_session(session.get('session_id', str(uuid.uuid4())))
-
-        # Get client timestamp if provided
-        client_timestamp = None
-        if request.json.get("client_timestamp"):
             try:
-                client_timestamp = datetime.datetime.fromisoformat(request.json["client_timestamp"])
-            except ValueError:
-                logger.warning(f"Invalid client timestamp format: {request.json['client_timestamp']}")
+                _listed = list(UserAuthenticator.get_instance().authorized_users)
+            except (ValueError, AttributeError):
+                _listed = _parse_authorized_users(config.get("user_config") or {})
 
-        # Prepare metadata
-        metadata = {
-            "request_id": request.json.get("request_id"),
-            "user_agent": request.headers.get("User-Agent"),
-            "ip_address": request.remote_addr,
-            "content_type": request.content_type,
-            "request_size": len(request.get_data()) if request.get_data() else 0
-        }
-
-        # Capture whether this instance already had annotations BEFORE we mutate
-        # state, so the webhook below can correctly distinguish annotation.created
-        # from annotation.updated. F-032.
-        _had_prior_annotation = bool(
-            getattr(user_state, "instance_id_to_label_to_value", {}).get(instance_id)
-        )
-
-        # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
-        if "annotations" in request.json or "span_annotations" in request.json or "link_annotations" in request.json or "event_annotations" in request.json:
-            logger.debug("Processing frontend format (annotations, span_annotations)")
-
-            # Handle label annotations from frontend format
-            annotations = request.json.get("annotations", {})
-
-            # Guard against malformed payloads: `annotations` must be a mapping.
-            # A non-dict (e.g. a JSON string or list) would crash the .items()
-            # loop below with AttributeError → an unhandled HTTP 500 (F-046).
-            # Reject cleanly instead.
-            if not isinstance(annotations, dict):
+            if undeclared_participant(
+                    actor, parse_machine_annotators(config), _listed):
                 logger.warning(
-                    f"Rejected /updateinstance from {username}: 'annotations' is "
-                    f"{type(annotations).__name__}, expected object")
-                return jsonify({"status": "error",
-                                "message": "'annotations' must be an object"}), 400
-
-            # Refuse a payload whose every key is unreadable, before anything
-            # is cleared or recorded. Keys are `schema:::label` (or the legacy
-            # `schema:label`); a key with neither names no label, so it stored
-            # nothing while the route answered 200 -- and a caller who cannot
-            # read the server log had no way to tell. The browser always sends
-            # the right shape, so this only ever reached the MCP tools, the
-            # simulator and evaluation harnesses.
-            #
-            # Decided here rather than after the write loop so a refusal is a
-            # true no-op: the pre-clear below drops stale labels, and running
-            # it for a request we are about to reject would be a half-write.
-            #
-            # Phase pages are exempt. A consent or survey question posts
-            # `{"age_consent": "Yes"}` -- the schema name with the answer as
-            # the value, because a phase question has no label to name. That
-            # shape is correct there, and refusing it would break every
-            # consent, instruction and post-study page.
-            _unreadable = [key for key in annotations
-                           if ":::" not in key and ":" not in key]
-            if (annotations and not is_phase_page_update
-                    and len(_unreadable) == len(annotations)):
-                shown = ", ".join(repr(k) for k in _unreadable[:5])
-                if len(_unreadable) > 5:
-                    shown += f", and {len(_unreadable) - 5} more"
-                logger.warning(
-                    "Rejected /updateinstance from %s: no annotation key named "
-                    "a schema and a label (%s)", username, shown)
+                    "Refused an annotation from '%s': machine_annotators."
+                    "require_declaration is on and this participant is "
+                    "neither a declared machine rater nor a listed person. "
+                    "Declare it under machine_annotators.annotators, or add "
+                    "it to the human roster.", actor)
                 return jsonify({
                     "status": "error",
-                    "message": ("No annotation was stored: every key must name "
-                                "a schema and a label as 'schema:::label'. "
-                                f"Got: {shown}")}), 400
+                    "message": (
+                        "This account is not declared for this study. Ask "
+                        "the administrator to add it to the annotator "
+                        "roster, or to declare it as a machine annotator."
+                    ),
+                }), 403
 
-            # Pre-clear stale labels before re-writing. The client sends the COMPLETE
-            # current state for these schemas, so any label not in the incoming set
-            # should be removed.
-            # A multiselect with every box unticked sends no key at all, so it
-            # is named in `cleared_schemas`; without that the last box to be
-            # unticked could never be removed.
-            cleared = request.json.get("cleared_schemas") or []
-            cleared = {c for c in cleared if isinstance(c, str)} if isinstance(cleared, list) else set()
+    # Guard: reject updates for instances not assigned to this user.
+    # Skip this for synthetic phase-page updates so non-annotation page autosaves
+    # do not get treated like dataset item writes.
+    if user_state.get_phase() == UserPhase.ANNOTATION and not is_phase_page_update:
+        assigned_ids = user_state.get_assigned_instance_ids()
+        if assigned_ids and instance_id not in assigned_ids and not allow_unassigned:
+            logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
+            return jsonify({"status": "error", "message": "Instance not assigned to user"}), 403
+        # Before the first assignment the check above does not apply, and
+        # a save to an id that is not in the dataset (the string "None",
+        # say) was stored and exported as a row (potato-skill).
+        if not assigned_ids and not get_item_state_manager().has_item(instance_id):
+            logger.warning(f"User {username} tried to update unknown instance {instance_id}")
+            return jsonify({"status": "error", "message": "No such instance"}), 404
+
+    # If a synthetic phase-page save arrives while the backend still thinks the user
+    # is in annotation, acknowledge it without writing item state. This avoids a
+    # noisy warning/error path during end-of-annotation transitions.
+    if user_state.get_phase() == UserPhase.ANNOTATION and is_phase_page_update:
+        logger.info(
+            f"Ignoring synthetic phase-page update for user {username} while still in annotation phase"
+        )
+        return jsonify({"status": "ok", "message": "Ignored synthetic phase-page update"})
+
+    # Debug: Log user phase for debugging annotation storage issues
+    logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
+
+    # Track session
+    if not user_state.session_start_time:
+        user_state.start_session(session.get('session_id', str(uuid.uuid4())))
+
+    # Get client timestamp if provided
+    client_timestamp = None
+    if data.get("client_timestamp"):
+        try:
+            client_timestamp = datetime.datetime.fromisoformat(data["client_timestamp"])
+        except ValueError:
+            logger.warning(f"Invalid client timestamp format: {data['client_timestamp']}")
+
+    # Prepare metadata
+    metadata = {
+        "request_id": data.get("request_id"),
+        "user_agent": request.headers.get("User-Agent"),
+        "ip_address": request.remote_addr,
+        "content_type": request.content_type,
+        "request_size": len(request.get_data()) if request.get_data() else 0
+    }
+
+    # Capture whether this instance already had annotations BEFORE we mutate
+    # state, so the webhook below can correctly distinguish annotation.created
+    # from annotation.updated. F-032.
+    _had_prior_annotation = bool(
+        getattr(user_state, "instance_id_to_label_to_value", {}).get(instance_id)
+    )
+
+    # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
+    if "annotations" in data or "span_annotations" in data or "link_annotations" in data or "event_annotations" in data:
+        logger.debug("Processing frontend format (annotations, span_annotations)")
+
+        # Handle label annotations from frontend format
+        annotations = data.get("annotations", {})
+
+        # Guard against malformed payloads: `annotations` must be a mapping.
+        # A non-dict (e.g. a JSON string or list) would crash the .items()
+        # loop below with AttributeError → an unhandled HTTP 500 (F-046).
+        # Reject cleanly instead.
+        if not isinstance(annotations, dict):
+            logger.warning(
+                f"Rejected /updateinstance from {username}: 'annotations' is "
+                f"{type(annotations).__name__}, expected object")
+            return jsonify({"status": "error",
+                            "message": "'annotations' must be an object"}), 400
+
+        # Refuse a payload whose every key is unreadable, before anything
+        # is cleared or recorded. Keys are `schema:::label` (or the legacy
+        # `schema:label`); a key with neither names no label, so it stored
+        # nothing while the route answered 200 -- and a caller who cannot
+        # read the server log had no way to tell. The browser always sends
+        # the right shape, so this only ever reached the MCP tools, the
+        # simulator and evaluation harnesses.
+        #
+        # Decided here rather than after the write loop so a refusal is a
+        # true no-op: the pre-clear below drops stale labels, and running
+        # it for a request we are about to reject would be a half-write.
+        #
+        # Phase pages are exempt. A consent or survey question posts
+        # `{"age_consent": "Yes"}` -- the schema name with the answer as
+        # the value, because a phase question has no label to name. That
+        # shape is correct there, and refusing it would break every
+        # consent, instruction and post-study page.
+        _unreadable = [key for key in annotations
+                       if ":::" not in key and ":" not in key]
+        if (annotations and not is_phase_page_update
+                and len(_unreadable) == len(annotations)):
+            shown = ", ".join(repr(k) for k in _unreadable[:5])
+            if len(_unreadable) > 5:
+                shown += f", and {len(_unreadable) - 5} more"
+            logger.warning(
+                "Rejected /updateinstance from %s: no annotation key named "
+                "a schema and a label (%s)", username, shown)
+            return jsonify({
+                "status": "error",
+                "message": ("No annotation was stored: every key must name "
+                            "a schema and a label as 'schema:::label'. "
+                            f"Got: {shown}")}), 400
+
+        # Pre-clear stale labels before re-writing. The client sends the COMPLETE
+        # current state for these schemas, so any label not in the incoming set
+        # should be removed.
+        # A multiselect with every box unticked sends no key at all, so it
+        # is named in `cleared_schemas`; without that the last box to be
+        # unticked could never be removed.
+        cleared = data.get("cleared_schemas") or []
+        cleared = {c for c in cleared if isinstance(c, str)} if isinstance(cleared, list) else set()
+        _preclear_exclusive_schemas(
+            user_state, username, instance_id,
+            _incoming_schema_names(annotations) | cleared, complete_set=True)
+
+        for key, value in annotations.items():
+            # "schema:label" from the page, "schema:::label" for the
+            # image/audio/video "_data" blobs; split_annotation_key reads
+            # both and uses the configured schema names to find where the
+            # schema ends.
+            parsed = split_annotation_key(key)
+            if parsed is None:
+                logger.warning(f"Skipping annotation with no separator: {key}")
+                continue
+            schema_name, label_name = parsed
+            label = Label(schema_name, label_name)
+
+            # An emptied text box or number field posts "". That is the
+            # absence of an answer: storing it made the item count as
+            # annotated with nothing in it.
+            if value == "" or value is None:
+                user_state.remove_label_annotation(instance_id, label)
+                continue
+
+            # Get old value for comparison. Go through the accessor rather than
+            # the dict: MysqlUserState has no instance_id_to_label_to_value.
+            old_value = (user_state.get_label_annotations(instance_id) or {}).get(label)
+
+            # Determine action type
+            action_type = "add_label" if old_value is None else "update_label"
+
+            # Create annotation action
+            action = AnnotationHistoryManager.create_action(
+                user_id=username,
+                instance_id=instance_id,
+                action_type=action_type,
+                schema_name=schema_name,
+                label_name=label_name,
+                old_value=old_value,
+                new_value=value,
+                session_id=user_state.current_session_id,
+                client_timestamp=client_timestamp,
+                metadata=metadata
+            )
+
+            # Add to history
+            user_state.add_annotation_action(action)
+
+            # Update annotation
+            user_state.add_label_annotation(instance_id, label, value)
+            logger.debug("Added label annotation: %s:%s", schema_name, label_name)
+
+        # Record human↔judge comparison for the alignment loop (inline mode).
+        _record_judge_comparison_if_enabled(username, instance_id)
+
+        # Handle span annotations from frontend format
+        span_annotations = data.get("span_annotations", [])
+        for span_data in span_annotations:
+            if isinstance(span_data, dict) and "schema" in span_data:
+                # Skip an entry that names no span: a display overlay (AI
+                # keyword highlights) read off the page carries schema and
+                # offsets of null. It used to raise here, after the labels
+                # were applied but before the save, so the request 500'd
+                # and the annotator could not move on.
+                try:
+                    int(span_data.get("start")), int(span_data.get("end"))
+                    bad = not span_data.get("schema") or not span_data.get("name")
+                except (TypeError, ValueError):
+                    bad = True
+                if bad:
+                    logger.warning("Ignoring span entry without schema, label or "
+                                   "offsets on %s: %r", instance_id, span_data)
+                    continue
+                _warn_if_span_exceeds_text(instance_id, span_data)
+                # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
+                # etc). Previously dropped here, so PDF anchor geometry never
+                # persisted. anchor_kind/page are folded into the deterministic
+                # ID so a text span and a region anchor at the same char offsets
+                # (start==end==0 for regions) don't collide.
+                fc = span_data.get("format_coords") or {}
+                span_id = span_data.get("id") or span_data.get("span_id") or \
+                          (f"{span_data['schema']}_{span_data['name']}_"
+                           f"{fc.get('anchor_kind', '')}_{fc.get('page', '')}_"
+                           f"{span_data['start']}_{span_data['end']}")
+
+                span = SpanAnnotation(
+                    span_data["schema"],
+                    span_data["name"],
+                    span_data.get("title", span_data["name"]),
+                    int(span_data["start"]),
+                    int(span_data["end"]),
+                    id=span_id,
+                    target_field=span_data.get("target_field"),
+                    format_coords=span_data.get("format_coords"),
+                )
+                value = span_data.get("value")
+
+                if value is not None:
+                    # Get old value for comparison
+                    old_value = None
+                    if instance_id in user_state.instance_id_to_span_to_value:
+                        old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+
+                    # Determine action type
+                    action_type = "add_span" if old_value is None else "update_span"
+
+                    # Create annotation action
+                    action = AnnotationHistoryManager.create_action(
+                        user_id=username,
+                        instance_id=instance_id,
+                        action_type=action_type,
+                        schema_name=span_data["schema"],
+                        label_name=span_data["name"],
+                        old_value=old_value,
+                        new_value=value,
+                        span_data={
+                            "start": span_data["start"],
+                            "end": span_data["end"],
+                            "title": span_data.get("title", span_data["name"])
+                        },
+                        session_id=user_state.current_session_id,
+                        client_timestamp=client_timestamp,
+                        metadata=metadata
+                    )
+
+                    # Add to history
+                    user_state.add_annotation_action(action)
+
+                    # Update annotation
+                    user_state.add_span_annotation(instance_id, span, value)
+                    logger.debug(f"Added span annotation: {span_data}")
+                else:
+                    # value is None -> delete this span BY ID. PDF region
+                    # anchors are zero-length (start==end==0), so matching on
+                    # schema/name/offsets (as the nested-annotations path does)
+                    # would delete the wrong anchor. Match on the exact id and
+                    # cascade orphaned links/events, mirroring that path.
+                    spans_by_id = user_state.instance_id_to_span_to_value.get(instance_id, {})
+                    to_delete = [s for s in spans_by_id.keys() if s.get_id() == span_id]
+                    for s in to_delete:
+                        del user_state.instance_id_to_span_to_value[instance_id][s]
+                        if instance_id in user_state.instance_id_to_link_to_value:
+                            orphaned = [
+                                lid for lid, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                if span_id in link.get_span_ids()
+                            ]
+                            for lid in orphaned:
+                                del user_state.instance_id_to_link_to_value[instance_id][lid]
+                        logger.debug(f"Deleted span annotation by id: {span_id}")
+
+        # Handle link annotations from frontend format
+        link_annotations = data.get("link_annotations", [])
+        for link_data in link_annotations:
+            if isinstance(link_data, dict) and "schema" in link_data and "link_type" in link_data:
+                from potato.item_state_management import SpanLink
+                link = SpanLink(
+                    schema=link_data["schema"],
+                    link_type=link_data["link_type"],
+                    span_ids=link_data.get("span_ids", []),
+                    direction=link_data.get("direction", "undirected"),
+                    id=link_data.get("id"),
+                    properties=link_data.get("properties", {})
+                )
+
+                # Add or update the link annotation
+                user_state.add_link_annotation(instance_id, link)
+                logger.debug(f"Added link annotation: {link}")
+
+        # Handle event annotations from frontend format
+        event_annotations = data.get("event_annotations", [])
+        logger.debug(f"Processing {len(event_annotations)} event annotations")
+        for event_data in event_annotations:
+            logger.debug(f"Processing event data: {event_data}")
+            if isinstance(event_data, dict) and "schema" in event_data and "event_type" in event_data:
+                from potato.item_state_management import EventAnnotation
+
+                # Log the incoming ID
+                incoming_id = event_data.get("id")
+                logger.debug(f"Incoming event ID: {incoming_id}")
+
+                event = EventAnnotation(
+                    schema=event_data["schema"],
+                    event_type=event_data["event_type"],
+                    trigger_span_id=event_data.get("trigger_span_id", ""),
+                    arguments=event_data.get("arguments", []),
+                    id=incoming_id,
+                    properties=event_data.get("properties", {})
+                )
+
+                # Log the actual ID assigned
+                logger.debug(f"Event object ID after creation: {event.get_id()}")
+
+                # Add or update the event annotation
+                user_state.add_event_annotation(instance_id, event)
+
+                # Log current events count
+                current_events = user_state.get_event_annotations(instance_id)
+                logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
+                logger.debug(f"Current event IDs: {list(current_events.keys())}")
+
+        # A model's spans, links and events are offered until the
+        # annotator takes them over: by storing a link or event, or by
+        # moving on from a page that showed them, so that deleting every
+        # one of them is kept as "nothing here".
+        if (data.get("prelabels_reviewed") or link_annotations
+                or event_annotations):
+            user_state.resolve_prelabels(instance_id)
+
+    # Check if this is the backend format (schema, state, type)
+    elif "schema" in data and "state" in data and "type" in data:
+        logger.debug("Processing backend format (schema, state, type)")
+
+        schema_name = data.get("schema")
+        schema_state = data.get("state")
+        annotation_type = data.get("type")
+
+        if annotation_type == "span":
+            logger.debug(f"Processing span annotation state: {schema_state}")
+            user_state.resolve_prelabels(instance_id)
+            for sv in schema_state:
+                # Validate and correct negative offsets
+                start_offset = int(sv["start"])
+                end_offset = int(sv["end"])
+
+                # Correct negative offsets to 0
+                if start_offset < 0:
+                    start_offset = 0
+                    logger.warning(f"Corrected negative start offset {sv['start']} to 0")
+                if end_offset < 0:
+                    end_offset = 0
+                    logger.warning(f"Corrected negative end offset {sv['end']} to 0")
+
+                # Ensure end is not less than start
+                if end_offset < start_offset:
+                    end_offset = start_offset
+                    logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
+
+                # Get span_id or generate one if not provided
+                span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
+
+                # Get additional_parts for discontinuous spans
+                additional_parts = sv.get("additional_parts", [])
+
+                span = SpanAnnotation(
+                    schema_name,
+                    sv["name"],
+                    sv.get("title", sv["name"]),
+                    start_offset,
+                    end_offset,
+                    span_id,
+                    target_field=sv.get("target_field"),
+                    additional_parts=additional_parts
+                )
+
+                value = sv.get("value")
+
+                # Get old value for comparison
+                old_value = None
+                if instance_id in user_state.instance_id_to_span_to_value:
+                    old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+
+                # Determine action type
+                if value is None:
+                    action_type = "delete_span"
+                else:
+                    action_type = "add_span" if old_value is None else "update_span"
+
+                # Create annotation action
+                action = AnnotationHistoryManager.create_action(
+                    user_id=username,
+                    instance_id=instance_id,
+                    action_type=action_type,
+                    schema_name=schema_name,
+                    label_name=sv["name"],
+                    old_value=old_value,
+                    new_value=value,
+                    span_data={
+                        "start": start_offset,
+                        "end": end_offset,
+                        "title": sv.get("title", sv["name"])
+                    },
+                    session_id=user_state.current_session_id,
+                    client_timestamp=client_timestamp,
+                    metadata=metadata
+                )
+
+                # Add to history
+                user_state.add_annotation_action(action)
+
+                # Handle span deletion vs creation/update
+                if value is None:
+                    # Delete the span - find and remove the matching span
+                    if instance_id in user_state.instance_id_to_span_to_value:
+                        # Find the span to delete by matching properties
+                        spans_to_delete = []
+                        requested_id = sv.get("span_id") or sv.get("id")
+                        for existing_span in user_state.instance_id_to_span_to_value[instance_id].keys():
+                            if requested_id:
+                                # The id names one span. Matching on label and
+                                # offsets also removed same-shaped spans in
+                                # other fields of a multi-field page.
+                                if existing_span.get_id() == requested_id:
+                                    spans_to_delete.append(existing_span)
+                            elif (existing_span.get_schema() == span.get_schema() and
+                                  existing_span.get_name() == span.get_name() and
+                                  existing_span.get_start() == span.get_start() and
+                                  existing_span.get_end() == span.get_end() and
+                                  (sv.get("target_field") is None or
+                                   existing_span.get_target_field() == sv.get("target_field"))):
+                                spans_to_delete.append(existing_span)
+
+                        for span_to_delete in spans_to_delete:
+                            del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
+                            logger.debug(f"Deleted span annotation: {span_to_delete}")
+
+                            # Clean up orphaned links and events referencing this span
+                            deleted_span_id = span_to_delete.get_id()
+                            if instance_id in user_state.instance_id_to_link_to_value:
+                                orphaned_links = [
+                                    link_id for link_id, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                    if deleted_span_id in link.get_span_ids()
+                                ]
+                                for link_id in orphaned_links:
+                                    del user_state.instance_id_to_link_to_value[instance_id][link_id]
+                                    logger.debug(f"Removed orphaned link {link_id} referencing deleted span {deleted_span_id}")
+                            if instance_id in user_state.instance_id_to_event_to_value:
+                                orphaned_events = [
+                                    evt_id for evt_id, evt in user_state.instance_id_to_event_to_value[instance_id].items()
+                                    if deleted_span_id in evt.get_all_span_ids()
+                                ]
+                                for evt_id in orphaned_events:
+                                    del user_state.instance_id_to_event_to_value[instance_id][evt_id]
+                                    logger.debug(f"Removed orphaned event {evt_id} referencing deleted span {deleted_span_id}")
+                else:
+                    # Add or update the span annotation
+                    user_state.add_span_annotation(instance_id, span, value)
+                    logger.debug("Added span annotation: %s", span)
+        elif annotation_type == "label":
+            # Legacy v1 template posts ONE input per request (base_template.html
+            # registerAnnotation), so this is not a complete-set payload: clearing
+            # a multiselect here would wipe the user's other checkboxes. Only
+            # single-select schemas are cleared.
             _preclear_exclusive_schemas(
-                user_state, username, instance_id,
-                _incoming_schema_names(annotations) | cleared, complete_set=True)
+                user_state, username, instance_id, {schema_name},
+                complete_set=False)
 
-            for key, value in annotations.items():
-                # "schema:label" from the page, "schema:::label" for the
-                # image/audio/video "_data" blobs; split_annotation_key reads
-                # both and uses the configured schema names to find where the
-                # schema ends.
-                parsed = split_annotation_key(key)
-                if parsed is None:
-                    logger.warning(f"Skipping annotation with no separator: {key}")
-                    continue
-                schema_name, label_name = parsed
-                label = Label(schema_name, label_name)
-
-                # An emptied text box or number field posts "". That is the
-                # absence of an answer: storing it made the item count as
-                # annotated with nothing in it.
-                if value == "" or value is None:
-                    user_state.remove_label_annotation(instance_id, label)
-                    continue
+            for sv in schema_state:
+                label = Label(schema_name, sv["name"])
+                value = sv["value"]
 
                 # Get old value for comparison. Go through the accessor rather than
                 # the dict: MysqlUserState has no instance_id_to_label_to_value.
@@ -7352,13 +7767,14 @@ def update_instance():
                 # Determine action type
                 action_type = "add_label" if old_value is None else "update_label"
 
+
                 # Create annotation action
                 action = AnnotationHistoryManager.create_action(
                     user_id=username,
                     instance_id=instance_id,
                     action_type=action_type,
                     schema_name=schema_name,
-                    label_name=label_name,
+                    label_name=sv["name"],
                     old_value=old_value,
                     new_value=value,
                     session_id=user_state.current_session_id,
@@ -7371,706 +7787,389 @@ def update_instance():
 
                 # Update annotation
                 user_state.add_label_annotation(instance_id, label, value)
-                logger.debug("Added label annotation: %s:%s", schema_name, label_name)
+    else:
+        logger.warning("Unknown data format in /updateinstance")
+        return jsonify({"status": "error", "message": "Unknown data format"}), 400
 
-            # Record human↔judge comparison for the alignment loop (inline mode).
-            _record_judge_comparison_if_enabled(username, instance_id)
+    # Collect all annotations for this instance. Used by both QC validation
+    # and the webhook payload below — must be defined unconditionally, since
+    # webhooks can be enabled without quality control (otherwise the webhook
+    # emit block raises UnboundLocalError and every save 500s). F-030.
+    all_annotations = {}
+    #: schema -> the label the annotator settled on, for `final_annotation`.
+    final_by_schema = {}
+    if "annotations" in data:
+        all_annotations, final_by_schema = _qc_answer_payload(
+            data.get("annotations", {}))
+    elif "schema" in data:
+        schema_name = data.get("schema")
+        schema_state = data.get("state", [])
+        # Convert state list to dict for validation
+        for sv in schema_state:
+            if "value" in sv:
+                all_annotations[schema_name] = sv.get("value")
 
-            # Handle span annotations from frontend format
-            span_annotations = request.json.get("span_annotations", [])
-            for span_data in span_annotations:
-                if isinstance(span_data, dict) and "schema" in span_data:
-                    # Skip an entry that names no span: a display overlay (AI
-                    # keyword highlights) read off the page carries schema and
-                    # offsets of null. It used to raise here, after the labels
-                    # were applied but before the save, so the request 500'd
-                    # and the annotator could not move on.
-                    try:
-                        int(span_data.get("start")), int(span_data.get("end"))
-                        bad = not span_data.get("schema") or not span_data.get("name")
-                    except (TypeError, ValueError):
-                        bad = True
-                    if bad:
-                        logger.warning("Ignoring span entry without schema, label or "
-                                       "offsets on %s: %r", instance_id, span_data)
-                        continue
-                    _warn_if_span_exceeds_text(instance_id, span_data)
-                    # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
-                    # etc). Previously dropped here, so PDF anchor geometry never
-                    # persisted. anchor_kind/page are folded into the deterministic
-                    # ID so a text span and a region anchor at the same char offsets
-                    # (start==end==0 for regions) don't collide.
-                    fc = span_data.get("format_coords") or {}
-                    span_id = span_data.get("id") or span_data.get("span_id") or \
-                              (f"{span_data['schema']}_{span_data['name']}_"
-                               f"{fc.get('anchor_kind', '')}_{fc.get('page', '')}_"
-                               f"{span_data['start']}_{span_data['end']}")
+    # Quality control validation (attention checks and gold standards)
+    qc_manager = get_quality_control_manager()
+    qc_result = None
 
-                    span = SpanAnnotation(
-                        span_data["schema"],
-                        span_data["name"],
-                        span_data.get("title", span_data["name"]),
-                        int(span_data["start"]),
-                        int(span_data["end"]),
-                        id=span_id,
-                        target_field=span_data.get("target_field"),
-                        format_coords=span_data.get("format_coords"),
-                    )
-                    value = span_data.get("value")
+    # Stamp what was actually saved onto this instance's AI usage
+    # events. `final_annotation` is what the AI-usage subsystem exists to
+    # answer and was never assigned -- `suggestion_accepted` records the
+    # click, so an annotator who accepted a suggestion and then changed
+    # their mind before saving left a record saying they accepted it and
+    # nothing saying what they submitted.
+    if final_by_schema:
+        _bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+        if _bd is not None and hasattr(_bd, "record_final_annotations"):
+            _bd.record_final_annotations(final_by_schema)
+            # ...and what the saved answer did with each suggestion.
+            _bd.record_decisions(_chosen_labels(
+                data.get("annotations", {}),
+                {sc.get("name"): sc.get("annotation_type")
+                 for sc in config.get("annotation_schemes") or [] if isinstance(sc, dict)}))
 
-                    if value is not None:
-                        # Get old value for comparison
-                        old_value = None
-                        if instance_id in user_state.instance_id_to_span_to_value:
-                            old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+    # A grid save carries the item's share of the page's active time; the
+    # item has no interaction events of its own (see grid-view.js).
+    # A timed trial's record (trial_timing): checked against the server's
+    # own clock, kept beside the labels, mirrored onto behavioural data.
+    trial_payload = data.get("trial")
+    if isinstance(trial_payload, dict) and not is_phase_page_update:
+        from potato import trial_timing as _tt
+        # The item's own data, so item_overrides (a per-item deadline,
+        # say) are the timing the record is checked against.
+        _tt_item = None
+        try:
+            _tt_ism = get_item_state_manager()
+            if _tt_ism.has_item(instance_id):
+                _tt_item = _tt_ism.get_item(instance_id).get_data()
+        except Exception:
+            _tt_item = None
+        _tt_cfg = _tt.client_config(config, _tt_item)
+        if _tt_cfg is not None:
+            _rec, _flags = _tt.validate_record(
+                trial_payload, _tt.served_at(user_state, instance_id), _tt_cfg)
+            if _rec is not None:
+                # The label the record claims must be the one this save stores.
+                if _rec.get("outcome") == "response" and _rec.get("label") is not None:
+                    _schema = _tt_cfg.get("schema")
+                    _saved = set()
+                    for _k, _v in (data.get("annotations") or {}).items():
+                        _parts = str(_k).replace(":::", ":").split(":", 1)
+                        if len(_parts) == 2 and _parts[0] == _schema and _v not in (None, "", False):
+                            _saved.add(_parts[1])
+                    if _rec["label"] not in _saved:
+                        _rec["flags"].append("label_not_saved")
+                        _flags = _rec["flags"]
+                _tt.store_record(user_state, instance_id, _rec)
+                if _flags:
+                    logger.info("Trial record for %s on %s flagged: %s",
+                                username, instance_id, _flags)
+                from potato.interaction_tracking import get_or_create_behavioral_data
+                _bd = get_or_create_behavioral_data(
+                    user_state.instance_id_to_behavioral_data, instance_id)
+                _bd.trial = _rec
 
-                        # Determine action type
-                        action_type = "add_span" if old_value is None else "update_span"
+    grid_timing = data.get("grid_timing")
+    if (isinstance(grid_timing, dict) and data.get("source_view") == "grid"
+            and (config.get("grid_view") or {}).get("enabled")
+            and not is_phase_page_update):
+        from potato.interaction_tracking import get_or_create_behavioral_data
+        get_or_create_behavioral_data(
+            user_state.instance_id_to_behavioral_data, instance_id
+        ).record_bulk_time(grid_timing)
 
-                        # Create annotation action
-                        action = AnnotationHistoryManager.create_action(
+    # Consent, survey and other phase pages are not items: grading them
+    # as attention checks or gold, counting them toward check frequency,
+    # or pooling two people's "I agree" into an auto-promoted gold item
+    # (which every later participant was then scored against) is wrong.
+    # Quality control grades a person, and a collaborative save is the team's.
+    if qc_manager and not is_phase_page_update and collab is None:
+        # How long the annotator had the item on screen, as measured by the
+        # client. This used to be derived from `client_timestamp`, which is
+        # the moment the request was *sent* -- so the subtraction measured
+        # network latency, not reading time, and nothing on this path sent
+        # the field at all, which left `min_response_time` unreachable.
+        # Measured by the SERVER, from when it served the item. It used
+        # to be `response_time_seconds` out of this request body -- a
+        # number reported by the annotator's own client. Two annotators
+        # answering identically, milliseconds apart in a scripted loop,
+        # got opposite outcomes purely from what they claimed: 0.4s was
+        # blocked, 600s passed, and only the honest one appeared in the
+        # log. `min_response_time` exists to catch someone clicking
+        # through without reading, so asking them how long they took is
+        # the one thing it cannot do.
+        response_time = qc_manager.measured_response_time(
+            username, instance_id)
+
+        claimed = data.get("response_time_seconds")
+        if response_time is None:
+            # Not served by this process -- a restart between serve and
+            # save. It used to fail open in silence; an unmeasurable check
+            # is not a passed one, so it says so.
+            logger.warning(
+                "No server-side serve time for %s on %s, so "
+                "min_response_time cannot be checked for this answer.",
+                username, instance_id)
+        elif claimed is not None:
+            try:
+                claimed_seconds = float(claimed)
+            except (TypeError, ValueError):
+                claimed_seconds = None
+            # A large gap is not proof of anything, but it is the only
+            # signal that the two clocks disagree, and it costs a
+            # comparison.
+            if (claimed_seconds is not None
+                    and abs(claimed_seconds - response_time) > 30):
+                logger.warning(
+                    "%s reported %.1fs on %s; the server measured %.1fs. "
+                    "The server measurement is what min_response_time "
+                    "uses.", username, claimed_seconds, instance_id,
+                    response_time)
+
+        # Check if this is an attention check. A timed trial that ran out
+        # (trial_timing) carries no answer to grade: it is neither a pass
+        # nor a failure, and stays visible as a timeout in trials.csv.
+        from potato.trial_timing import excuses_required_answer as _timed_out
+        _trial_rec = (getattr(user_state, "instance_id_to_trial", None) or {}).get(str(instance_id))
+        if _timed_out(_trial_rec):
+            attention_result = None
+        else:
+            attention_result = qc_manager.validate_attention_response(
+                username, instance_id, all_annotations, response_time
+            )
+
+        if attention_result is not None:
+            qc_result = {"type": "attention_check", **attention_result}
+
+            # Handle blocking
+            if attention_result.get("blocked"):
+                logger.warning(f"User {username} blocked by attention check")
+                reclaimed = _reclaim_blocked_user_assignments(
+                    username,
+                    user_state,
+                    current_instance_id=instance_id,
+                )
+
+                # Emit webhook for attention check failure
+                from potato.webhooks import get_webhook_emitter
+                from potato.webhooks.events import (
+                    build_attention_check_failed_payload,
+                    QUALITY_ATTENTION_CHECK_FAILED,
+                )
+                _wh = get_webhook_emitter()
+                if _wh:
+                    _wh.emit(
+                        QUALITY_ATTENTION_CHECK_FAILED,
+                        build_attention_check_failed_payload(
                             user_id=username,
                             instance_id=instance_id,
-                            action_type=action_type,
-                            schema_name=span_data["schema"],
-                            label_name=span_data["name"],
-                            old_value=old_value,
-                            new_value=value,
-                            span_data={
-                                "start": span_data["start"],
-                                "end": span_data["end"],
-                                "title": span_data.get("title", span_data["name"])
-                            },
-                            session_id=user_state.current_session_id,
-                            client_timestamp=client_timestamp,
-                            metadata=metadata
-                        )
-
-                        # Add to history
-                        user_state.add_annotation_action(action)
-
-                        # Update annotation
-                        user_state.add_span_annotation(instance_id, span, value)
-                        logger.debug(f"Added span annotation: {span_data}")
-                    else:
-                        # value is None -> delete this span BY ID. PDF region
-                        # anchors are zero-length (start==end==0), so matching on
-                        # schema/name/offsets (as the nested-annotations path does)
-                        # would delete the wrong anchor. Match on the exact id and
-                        # cascade orphaned links/events, mirroring that path.
-                        spans_by_id = user_state.instance_id_to_span_to_value.get(instance_id, {})
-                        to_delete = [s for s in spans_by_id.keys() if s.get_id() == span_id]
-                        for s in to_delete:
-                            del user_state.instance_id_to_span_to_value[instance_id][s]
-                            if instance_id in user_state.instance_id_to_link_to_value:
-                                orphaned = [
-                                    lid for lid, link in user_state.instance_id_to_link_to_value[instance_id].items()
-                                    if span_id in link.get_span_ids()
-                                ]
-                                for lid in orphaned:
-                                    del user_state.instance_id_to_link_to_value[instance_id][lid]
-                            logger.debug(f"Deleted span annotation by id: {span_id}")
-
-            # Handle link annotations from frontend format
-            link_annotations = request.json.get("link_annotations", [])
-            for link_data in link_annotations:
-                if isinstance(link_data, dict) and "schema" in link_data and "link_type" in link_data:
-                    from potato.item_state_management import SpanLink
-                    link = SpanLink(
-                        schema=link_data["schema"],
-                        link_type=link_data["link_type"],
-                        span_ids=link_data.get("span_ids", []),
-                        direction=link_data.get("direction", "undirected"),
-                        id=link_data.get("id"),
-                        properties=link_data.get("properties", {})
+                            message=attention_result.get("message"),
+                            blocked=True,
+                        ),
                     )
 
-                    # Add or update the link annotation
-                    user_state.add_link_annotation(instance_id, link)
-                    logger.debug(f"Added link annotation: {link}")
-
-            # Handle event annotations from frontend format
-            event_annotations = request.json.get("event_annotations", [])
-            logger.debug(f"Processing {len(event_annotations)} event annotations")
-            for event_data in event_annotations:
-                logger.debug(f"Processing event data: {event_data}")
-                if isinstance(event_data, dict) and "schema" in event_data and "event_type" in event_data:
-                    from potato.item_state_management import EventAnnotation
-
-                    # Log the incoming ID
-                    incoming_id = event_data.get("id")
-                    logger.debug(f"Incoming event ID: {incoming_id}")
-
-                    event = EventAnnotation(
-                        schema=event_data["schema"],
-                        event_type=event_data["event_type"],
-                        trigger_span_id=event_data.get("trigger_span_id", ""),
-                        arguments=event_data.get("arguments", []),
-                        id=incoming_id,
-                        properties=event_data.get("properties", {})
-                    )
-
-                    # Log the actual ID assigned
-                    logger.debug(f"Event object ID after creation: {event.get_id()}")
-
-                    # Add or update the event annotation
-                    user_state.add_event_annotation(instance_id, event)
-
-                    # Log current events count
-                    current_events = user_state.get_event_annotations(instance_id)
-                    logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
-                    logger.debug(f"Current event IDs: {list(current_events.keys())}")
-
-            # A model's spans, links and events are offered until the
-            # annotator takes them over: by storing a link or event, or by
-            # moving on from a page that showed them, so that deleting every
-            # one of them is kept as "nothing here".
-            if (request.json.get("prelabels_reviewed") or link_annotations
-                    or event_annotations):
-                user_state.resolve_prelabels(instance_id)
-
-        # Check if this is the backend format (schema, state, type)
-        elif "schema" in request.json and "state" in request.json and "type" in request.json:
-            logger.debug("Processing backend format (schema, state, type)")
-
-            schema_name = request.json.get("schema")
-            schema_state = request.json.get("state")
-            annotation_type = request.json.get("type")
-
-            if annotation_type == "span":
-                logger.debug(f"Processing span annotation state: {schema_state}")
-                user_state.resolve_prelabels(instance_id)
-                for sv in schema_state:
-                    # Validate and correct negative offsets
-                    start_offset = int(sv["start"])
-                    end_offset = int(sv["end"])
-
-                    # Correct negative offsets to 0
-                    if start_offset < 0:
-                        start_offset = 0
-                        logger.warning(f"Corrected negative start offset {sv['start']} to 0")
-                    if end_offset < 0:
-                        end_offset = 0
-                        logger.warning(f"Corrected negative end offset {sv['end']} to 0")
-
-                    # Ensure end is not less than start
-                    if end_offset < start_offset:
-                        end_offset = start_offset
-                        logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
-
-                    # Get span_id or generate one if not provided
-                    span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
-
-                    # Get additional_parts for discontinuous spans
-                    additional_parts = sv.get("additional_parts", [])
-
-                    span = SpanAnnotation(
-                        schema_name,
-                        sv["name"],
-                        sv.get("title", sv["name"]),
-                        start_offset,
-                        end_offset,
-                        span_id,
-                        target_field=sv.get("target_field"),
-                        additional_parts=additional_parts
-                    )
-
-                    value = sv.get("value")
-
-                    # Get old value for comparison
-                    old_value = None
-                    if instance_id in user_state.instance_id_to_span_to_value:
-                        old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
-
-                    # Determine action type
-                    if value is None:
-                        action_type = "delete_span"
-                    else:
-                        action_type = "add_span" if old_value is None else "update_span"
-
-                    # Create annotation action
-                    action = AnnotationHistoryManager.create_action(
-                        user_id=username,
-                        instance_id=instance_id,
-                        action_type=action_type,
-                        schema_name=schema_name,
-                        label_name=sv["name"],
-                        old_value=old_value,
-                        new_value=value,
-                        span_data={
-                            "start": start_offset,
-                            "end": end_offset,
-                            "title": sv.get("title", sv["name"])
-                        },
-                        session_id=user_state.current_session_id,
-                        client_timestamp=client_timestamp,
-                        metadata=metadata
-                    )
-
-                    # Add to history
-                    user_state.add_annotation_action(action)
-
-                    # Handle span deletion vs creation/update
-                    if value is None:
-                        # Delete the span - find and remove the matching span
-                        if instance_id in user_state.instance_id_to_span_to_value:
-                            # Find the span to delete by matching properties
-                            spans_to_delete = []
-                            requested_id = sv.get("span_id") or sv.get("id")
-                            for existing_span in user_state.instance_id_to_span_to_value[instance_id].keys():
-                                if requested_id:
-                                    # The id names one span. Matching on label and
-                                    # offsets also removed same-shaped spans in
-                                    # other fields of a multi-field page.
-                                    if existing_span.get_id() == requested_id:
-                                        spans_to_delete.append(existing_span)
-                                elif (existing_span.get_schema() == span.get_schema() and
-                                      existing_span.get_name() == span.get_name() and
-                                      existing_span.get_start() == span.get_start() and
-                                      existing_span.get_end() == span.get_end() and
-                                      (sv.get("target_field") is None or
-                                       existing_span.get_target_field() == sv.get("target_field"))):
-                                    spans_to_delete.append(existing_span)
-
-                            for span_to_delete in spans_to_delete:
-                                del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
-                                logger.debug(f"Deleted span annotation: {span_to_delete}")
-
-                                # Clean up orphaned links and events referencing this span
-                                deleted_span_id = span_to_delete.get_id()
-                                if instance_id in user_state.instance_id_to_link_to_value:
-                                    orphaned_links = [
-                                        link_id for link_id, link in user_state.instance_id_to_link_to_value[instance_id].items()
-                                        if deleted_span_id in link.get_span_ids()
-                                    ]
-                                    for link_id in orphaned_links:
-                                        del user_state.instance_id_to_link_to_value[instance_id][link_id]
-                                        logger.debug(f"Removed orphaned link {link_id} referencing deleted span {deleted_span_id}")
-                                if instance_id in user_state.instance_id_to_event_to_value:
-                                    orphaned_events = [
-                                        evt_id for evt_id, evt in user_state.instance_id_to_event_to_value[instance_id].items()
-                                        if deleted_span_id in evt.get_all_span_ids()
-                                    ]
-                                    for evt_id in orphaned_events:
-                                        del user_state.instance_id_to_event_to_value[instance_id][evt_id]
-                                        logger.debug(f"Removed orphaned event {evt_id} referencing deleted span {deleted_span_id}")
-                    else:
-                        # Add or update the span annotation
-                        user_state.add_span_annotation(instance_id, span, value)
-                        logger.debug("Added span annotation: %s", span)
-            elif annotation_type == "label":
-                # Legacy v1 template posts ONE input per request (base_template.html
-                # registerAnnotation), so this is not a complete-set payload: clearing
-                # a multiselect here would wipe the user's other checkboxes. Only
-                # single-select schemas are cleared.
-                _preclear_exclusive_schemas(
-                    user_state, username, instance_id, {schema_name},
-                    complete_set=False)
-
-                for sv in schema_state:
-                    label = Label(schema_name, sv["name"])
-                    value = sv["value"]
-
-                    # Get old value for comparison. Go through the accessor rather than
-                    # the dict: MysqlUserState has no instance_id_to_label_to_value.
-                    old_value = (user_state.get_label_annotations(instance_id) or {}).get(label)
-
-                    # Determine action type
-                    action_type = "add_label" if old_value is None else "update_label"
-                
-                   
-                    # Create annotation action
-                    action = AnnotationHistoryManager.create_action(
-                        user_id=username,
-                        instance_id=instance_id,
-                        action_type=action_type,
-                        schema_name=schema_name,
-                        label_name=sv["name"],
-                        old_value=old_value,
-                        new_value=value,
-                        session_id=user_state.current_session_id,
-                        client_timestamp=client_timestamp,
-                        metadata=metadata
-                    )
-
-                    # Add to history
-                    user_state.add_annotation_action(action)
-
-                    # Update annotation
-                    user_state.add_label_annotation(instance_id, label, value)
+                return jsonify({
+                    "status": "blocked",
+                    "message": attention_result.get("message", "You have been blocked."),
+                    "qc_result": qc_result,
+                    "reclaimed_assignments": reclaimed,
+                })
         else:
-            logger.warning("Unknown data format in /updateinstance")
-            return jsonify({"status": "error", "message": "Unknown data format"}), 400
+            # Check if this is a gold standard
+            gold_result = qc_manager.validate_gold_response(
+                username, instance_id, all_annotations
+            )
 
-        # Collect all annotations for this instance. Used by both QC validation
-        # and the webhook payload below — must be defined unconditionally, since
-        # webhooks can be enabled without quality control (otherwise the webhook
-        # emit block raises UnboundLocalError and every save 500s). F-030.
-        all_annotations = {}
-        #: schema -> the label the annotator settled on, for `final_annotation`.
-        final_by_schema = {}
-        if "annotations" in request.json:
-            all_annotations, final_by_schema = _qc_answer_payload(
-                request.json.get("annotations", {}))
-        elif "schema" in request.json:
-            schema_name = request.json.get("schema")
-            schema_state = request.json.get("state", [])
-            # Convert state list to dict for validation
-            for sv in schema_state:
-                if "value" in sv:
-                    all_annotations[schema_name] = sv.get("value")
+            if gold_result is not None:
+                qc_result = {"type": "gold_standard", **gold_result}
 
-        # Quality control validation (attention checks and gold standards)
-        qc_manager = get_quality_control_manager()
-        qc_result = None
+        # Record regular item for attention check frequency tracking.
+        # An auto-promoted item is served as ordinary work, so it counts
+        # here; only the configured pool is injected and must not.
+        if (not qc_manager.is_attention_check(instance_id)
+                and not qc_manager.is_configured_gold_standard(instance_id)):
+            qc_manager.record_regular_item(username, instance_id)
 
-        # Stamp what was actually saved onto this instance's AI usage
-        # events. `final_annotation` is what the AI-usage subsystem exists to
-        # answer and was never assigned -- `suggestion_accepted` records the
-        # click, so an annotator who accepted a suggestion and then changed
-        # their mind before saving left a record saying they accepted it and
-        # nothing saying what they submitted.
-        if final_by_schema:
-            _bd = user_state.instance_id_to_behavioral_data.get(instance_id)
-            if _bd is not None and hasattr(_bd, "record_final_annotations"):
-                _bd.record_final_annotations(final_by_schema)
-                # ...and what the saved answer did with each suggestion.
-                _bd.record_decisions(_chosen_labels(
-                    request.json.get("annotations", {}),
-                    {sc.get("name"): sc.get("annotation_type")
-                     for sc in config.get("annotation_schemes") or [] if isinstance(sc, dict)}))
+            # Track for gold standard auto-promotion
+            promotion_result = qc_manager.record_item_annotation(
+                instance_id, username, all_annotations,
+                origin=getattr(user_state, "origin", None),
+            )
+            if promotion_result and promotion_result.get("promoted"):
+                logger.info(f"Item {instance_id} auto-promoted to gold standard")
 
-        # A grid save carries the item's share of the page's active time; the
-        # item has no interaction events of its own (see grid-view.js).
-        # A timed trial's record (trial_timing): checked against the server's
-        # own clock, kept beside the labels, mirrored onto behavioural data.
-        trial_payload = request.json.get("trial")
-        if isinstance(trial_payload, dict) and not is_phase_page_update:
-            from potato import trial_timing as _tt
-            # The item's own data, so item_overrides (a per-item deadline,
-            # say) are the timing the record is checked against.
-            _tt_item = None
-            try:
-                _tt_ism = get_item_state_manager()
-                if _tt_ism.has_item(instance_id):
-                    _tt_item = _tt_ism.get_item(instance_id).get_data()
-            except Exception:
-                _tt_item = None
-            _tt_cfg = _tt.client_config(config, _tt_item)
-            if _tt_cfg is not None:
-                _rec, _flags = _tt.validate_record(
-                    trial_payload, _tt.served_at(user_state, instance_id), _tt_cfg)
-                if _rec is not None:
-                    # The label the record claims must be the one this save stores.
-                    if _rec.get("outcome") == "response" and _rec.get("label") is not None:
-                        _schema = _tt_cfg.get("schema")
-                        _saved = set()
-                        for _k, _v in (request.json.get("annotations") or {}).items():
-                            _parts = str(_k).replace(":::", ":").split(":", 1)
-                            if len(_parts) == 2 and _parts[0] == _schema and _v not in (None, "", False):
-                                _saved.add(_parts[1])
-                        if _rec["label"] not in _saved:
-                            _rec["flags"].append("label_not_saved")
-                            _flags = _rec["flags"]
-                    _tt.store_record(user_state, instance_id, _rec)
-                    if _flags:
-                        logger.info("Trial record for %s on %s flagged: %s",
-                                    username, instance_id, _flags)
-                    from potato.interaction_tracking import get_or_create_behavioral_data
-                    _bd = get_or_create_behavioral_data(
-                        user_state.instance_id_to_behavioral_data, instance_id)
-                    _bd.trial = _rec
+    # Calculate processing time
+    processing_time_ms = int((time.time() - start_time) * 1000)
 
-        grid_timing = request.json.get("grid_timing")
-        if (isinstance(grid_timing, dict) and request.json.get("source_view") == "grid"
-                and (config.get("grid_view") or {}).get("enabled")
-                and not is_phase_page_update):
-            from potato.interaction_tracking import get_or_create_behavioral_data
-            get_or_create_behavioral_data(
-                user_state.instance_id_to_behavioral_data, instance_id
-            ).record_bulk_time(grid_timing)
+    # Update the last action's processing time
+    if user_state.annotation_history:
+        user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
 
-        # Consent, survey and other phase pages are not items: grading them
-        # as attention checks or gold, counting them toward check frequency,
-        # or pooling two people's "I agree" into an auto-promoted gold item
-        # (which every later participant was then scored against) is wrong.
-        if qc_manager and not is_phase_page_update:
-            # How long the annotator had the item on screen, as measured by the
-            # client. This used to be derived from `client_timestamp`, which is
-            # the moment the request was *sent* -- so the subtraction measured
-            # network latency, not reading time, and nothing on this path sent
-            # the field at all, which left `min_response_time` unreachable.
-            # Measured by the SERVER, from when it served the item. It used
-            # to be `response_time_seconds` out of this request body -- a
-            # number reported by the annotator's own client. Two annotators
-            # answering identically, milliseconds apart in a scripted loop,
-            # got opposite outcomes purely from what they claimed: 0.4s was
-            # blocked, 600s passed, and only the honest one appeared in the
-            # log. `min_response_time` exists to catch someone clicking
-            # through without reading, so asking them how long they took is
-            # the one thing it cannot do.
-            response_time = qc_manager.measured_response_time(
-                username, instance_id)
+    # Both sides of the record, the save, and the labeling engine.
+    from potato.annotation_commit import finish_annotation_write
+    finish_annotation_write(user_state, instance_id, username)
+    logger.debug(f"User state saved for {username}")
 
-            claimed = request.json.get("response_time_seconds")
-            if response_time is None:
-                # Not served by this process -- a restart between serve and
-                # save. It used to fail open in silence; an unmeasurable check
-                # is not a passed one, so it says so.
-                logger.warning(
-                    "No server-side serve time for %s on %s, so "
-                    "min_response_time cannot be checked for this answer.",
-                    username, instance_id)
-            elif claimed is not None:
-                try:
-                    claimed_seconds = float(claimed)
-                except (TypeError, ValueError):
-                    claimed_seconds = None
-                # A large gap is not proof of anything, but it is the only
-                # signal that the two clocks disagree, and it costs a
-                # comparison.
-                if (claimed_seconds is not None
-                        and abs(claimed_seconds - response_time) > 30):
-                    logger.warning(
-                        "%s reported %.1fs on %s; the server measured %.1fs. "
-                        "The server measurement is what min_response_time "
-                        "uses.", username, claimed_seconds, instance_id,
-                        response_time)
-
-            # Check if this is an attention check. A timed trial that ran out
-            # (trial_timing) carries no answer to grade: it is neither a pass
-            # nor a failure, and stays visible as a timeout in trials.csv.
-            from potato.trial_timing import excuses_required_answer as _timed_out
-            _trial_rec = (getattr(user_state, "instance_id_to_trial", None) or {}).get(str(instance_id))
-            if _timed_out(_trial_rec):
-                attention_result = None
-            else:
-                attention_result = qc_manager.validate_attention_response(
-                    username, instance_id, all_annotations, response_time
-                )
-
-            if attention_result is not None:
-                qc_result = {"type": "attention_check", **attention_result}
-
-                # Handle blocking
-                if attention_result.get("blocked"):
-                    logger.warning(f"User {username} blocked by attention check")
-                    reclaimed = _reclaim_blocked_user_assignments(
-                        username,
-                        user_state,
-                        current_instance_id=instance_id,
-                    )
-
-                    # Emit webhook for attention check failure
-                    from potato.webhooks import get_webhook_emitter
-                    from potato.webhooks.events import (
-                        build_attention_check_failed_payload,
-                        QUALITY_ATTENTION_CHECK_FAILED,
-                    )
-                    _wh = get_webhook_emitter()
-                    if _wh:
-                        _wh.emit(
-                            QUALITY_ATTENTION_CHECK_FAILED,
-                            build_attention_check_failed_payload(
-                                user_id=username,
-                                instance_id=instance_id,
-                                message=attention_result.get("message"),
-                                blocked=True,
-                            ),
-                        )
-
-                    return jsonify({
-                        "status": "blocked",
-                        "message": attention_result.get("message", "You have been blocked."),
-                        "qc_result": qc_result,
-                        "reclaimed_assignments": reclaimed,
-                    })
-            else:
-                # Check if this is a gold standard
-                gold_result = qc_manager.validate_gold_response(
-                    username, instance_id, all_annotations
-                )
-
-                if gold_result is not None:
-                    qc_result = {"type": "gold_standard", **gold_result}
-
-            # Record regular item for attention check frequency tracking.
-            # An auto-promoted item is served as ordinary work, so it counts
-            # here; only the configured pool is injected and must not.
-            if (not qc_manager.is_attention_check(instance_id)
-                    and not qc_manager.is_configured_gold_standard(instance_id)):
-                qc_manager.record_regular_item(username, instance_id)
-
-                # Track for gold standard auto-promotion
-                promotion_result = qc_manager.record_item_annotation(
-                    instance_id, username, all_annotations,
-                    origin=getattr(user_state, "origin", None),
-                )
-                if promotion_result and promotion_result.get("promoted"):
-                    logger.info(f"Item {instance_id} auto-promoted to gold standard")
-
-        # Calculate processing time
-        processing_time_ms = int((time.time() - start_time) * 1000)
-
-        # Update the last action's processing time
-        if user_state.annotation_history:
-            user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
-
-        # Both sides of the record, the save, and the labeling engine.
-        from potato.annotation_commit import finish_annotation_write
-        finish_annotation_write(user_state, instance_id, username)
-        logger.debug(f"User state saved for {username}")
-
-        # Emit webhook events for annotation save
-        from potato.webhooks import get_webhook_emitter
-        from potato.webhooks.events import (
-            ANNOTATION_CREATED, ANNOTATION_UPDATED,
-            ITEM_FULLY_ANNOTATED,
-            build_annotation_payload, build_item_fully_annotated_payload,
+    # Emit webhook events for annotation save
+    from potato.webhooks import get_webhook_emitter
+    from potato.webhooks.events import (
+        ANNOTATION_CREATED, ANNOTATION_UPDATED,
+        ITEM_FULLY_ANNOTATED,
+        build_annotation_payload, build_item_fully_annotated_payload,
+    )
+    _wh = get_webhook_emitter()
+    if _wh:
+        _evt = ANNOTATION_UPDATED if _had_prior_annotation else ANNOTATION_CREATED
+        _wh.emit(
+            _evt,
+            build_annotation_payload(
+                event_type=_evt,
+                user_id=username,
+                instance_id=instance_id,
+                annotations=all_annotations,
+            ),
         )
-        _wh = get_webhook_emitter()
-        if _wh:
-            _evt = ANNOTATION_UPDATED if _had_prior_annotation else ANNOTATION_CREATED
+
+        # Check if item is now fully annotated. Use the canonical resolver
+        # for num_annotators_per_item (int or dict.default form); the prior
+        # code read annotation_task_name (a string) and always fell back to
+        # 3, ignoring the configured annotator count. F-031.
+        ism = get_item_state_manager()
+        annotators = ism.get_annotators_for_item(instance_id)
+        try:
+            from potato.server_utils.config_module import resolve_num_annotators_per_item
+            num_annotators = resolve_num_annotators_per_item(config)
+        except Exception:
+            num_annotators = config.get("num_annotators_per_item", 3)
+        if not isinstance(num_annotators, int) or num_annotators < 1:
+            num_annotators = 3
+        if len(annotators) >= num_annotators:
             _wh.emit(
-                _evt,
-                build_annotation_payload(
-                    event_type=_evt,
-                    user_id=username,
+                ITEM_FULLY_ANNOTATED,
+                build_item_fully_annotated_payload(
                     instance_id=instance_id,
-                    annotations=all_annotations,
+                    annotator_count=len(annotators),
+                    required_count=num_annotators,
                 ),
             )
 
-            # Check if item is now fully annotated. Use the canonical resolver
-            # for num_annotators_per_item (int or dict.default form); the prior
-            # code read annotation_task_name (a string) and always fell back to
-            # 3, ignoring the configured annotator count. F-031.
-            ism = get_item_state_manager()
-            annotators = ism.get_annotators_for_item(instance_id)
-            try:
-                from potato.server_utils.config_module import resolve_num_annotators_per_item
-                num_annotators = resolve_num_annotators_per_item(config)
-            except Exception:
-                num_annotators = config.get("num_annotators_per_item", 3)
-            if not isinstance(num_annotators, int) or num_annotators < 1:
-                num_annotators = 3
-            if len(annotators) >= num_annotators:
-                _wh.emit(
-                    ITEM_FULLY_ANNOTATED,
-                    build_item_fully_annotated_payload(
-                        instance_id=instance_id,
-                        annotator_count=len(annotators),
-                        required_count=num_annotators,
-                    ),
-                )
-
-            # Emit task.completed once, when this save annotates the user's LAST
-            # remaining assigned item. The documented event had a payload builder
-            # but zero emit sites. Fire-once is guarded by _had_prior_annotation:
-            # a re-save of an already-annotated item won't re-trigger it. F-033.
-            try:
-                assigned = set(user_state.get_assigned_instance_ids() or [])
-                if assigned and not _had_prior_annotation:
-                    annotated = (
-                        set(getattr(user_state, "instance_id_to_label_to_value", {}).keys())
-                        | set(getattr(user_state, "instance_id_to_span_to_value", {}).keys())
-                    ) & assigned
-                    if assigned.issubset(annotated):
-                        from potato.webhooks.events import (
-                            TASK_COMPLETED, build_task_completed_payload,
-                        )
-                        _wh.emit(
-                            TASK_COMPLETED,
-                            build_task_completed_payload(
-                                user_id=username,
-                                total_annotations=len(annotated),
-                            ),
-                        )
-            except Exception as _e:
-                logger.debug(f"task.completed webhook check skipped: {_e}")
-
-        # Trigger MACE competence estimation check
-        from potato.mace_manager import get_mace_manager
-        mace_mgr = get_mace_manager()
-        if mace_mgr and mace_mgr.mace_config.enabled:
-            total = mace_mgr.count_total_annotations()
-            mace_mgr.check_and_run(total)
-
-        # Trigger active-learning retraining check. When enough new annotations
-        # have accumulated, this queues a background train + reorder of the
-        # unlabeled pool; never allowed to break the save. Match the startup
-        # gate so a disabled feature does not import sklearn on the first save.
-        if config.get('active_learning', {}).get('enabled', False):
-            try:
-                from potato.active_learning_manager import get_active_learning_manager
-                al_mgr = get_active_learning_manager()
-                if al_mgr and al_mgr.config.enabled:
-                    al_mgr.check_and_trigger_training()
-            except Exception as e:
-                logger.debug("Active learning trigger skipped: %s", e)
-
-        # Same trigger point for the model-training subsystem's auto-retrain.
-        # Kept separate from active learning on purpose: one answers "what
-        # should this annotator see next", the other "what model do we have".
-        # Never allowed to break the save, and cheap enough for the request
-        # thread — the debounce check is a counter comparison, and the run
-        # itself happens in a subprocess.
+        # Emit task.completed once, when this save annotates the user's LAST
+        # remaining assigned item. The documented event had a payload builder
+        # but zero emit sites. Fire-once is guarded by _had_prior_annotation:
+        # a re-save of an already-annotated item won't re-trigger it. F-033.
         try:
-            from potato.training.manager import get_training_manager
-            training_mgr = get_training_manager()
-            if training_mgr is not None:
-                training_mgr.maybe_auto_retrain()
-        except Exception as e:
-            logger.debug("Auto-retrain check skipped: %s", e)
+            assigned = set(user_state.get_assigned_instance_ids() or [])
+            if assigned and not _had_prior_annotation:
+                annotated = (
+                    set(getattr(user_state, "instance_id_to_label_to_value", {}).keys())
+                    | set(getattr(user_state, "instance_id_to_span_to_value", {}).keys())
+                ) & assigned
+                if assigned.issubset(annotated):
+                    from potato.webhooks.events import (
+                        TASK_COMPLETED, build_task_completed_payload,
+                    )
+                    _wh.emit(
+                        TASK_COMPLETED,
+                        build_task_completed_payload(
+                            user_id=username,
+                            total_annotations=len(annotated),
+                        ),
+                    )
+        except Exception as _e:
+            logger.debug(f"task.completed webhook check skipped: {_e}")
 
-        # Stamp this annotation with the codebook revision in effect so
-        # an instance labeled before later code additions can be softly
-        # flagged for review. No-op unless the project uses a codebook;
-        # never allowed to break the save.
+    # Trigger MACE competence estimation check
+    from potato.mace_manager import get_mace_manager
+    mace_mgr = get_mace_manager()
+    if mace_mgr and mace_mgr.mace_config.enabled:
+        total = mace_mgr.count_total_annotations()
+        mace_mgr.check_and_run(total)
+
+    # Trigger active-learning retraining check. When enough new annotations
+    # have accumulated, this queues a background train + reorder of the
+    # unlabeled pool; never allowed to break the save. Match the startup
+    # gate so a disabled feature does not import sklearn on the first save.
+    if config.get('active_learning', {}).get('enabled', False):
         try:
-            if not is_phase_page_update:
-                from potato.codebook.api import codebook_enabled
-                if codebook_enabled(config):
-                    from potato.codebook import record_annotation
-                    record_annotation(
-                        config.get("task_dir", "."),
-                        config.get("annotation_task_name") or "default",
-                        instance_id, username)
+            from potato.active_learning_manager import get_active_learning_manager
+            al_mgr = get_active_learning_manager()
+            if al_mgr and al_mgr.config.enabled:
+                al_mgr.check_and_trigger_training()
         except Exception as e:
-            logger.warning(f"Codebook provenance stamp skipped: {e}")
+            logger.debug("Active learning trigger skipped: %s", e)
 
-        # Link the saved codes to their code ids. Merge, split and the
-        # review restamp all read these links; with nothing writing them, a
-        # merge re-pointed no codings. Never allowed to break the save.
-        try:
-            if not is_phase_page_update:
-                from potato.codebook.saved_labels import sync_saved_annotation
-                sync_saved_annotation(config, user_state, instance_id, username)
-        except Exception as e:
-            logger.warning(f"Codebook link sync skipped: {e}")
+    # Same trigger point for the model-training subsystem's auto-retrain.
+    # Kept separate from active learning on purpose: one answers "what
+    # should this annotator see next", the other "what model do we have".
+    # Never allowed to break the save, and cheap enough for the request
+    # thread — the debounce check is a counter comparison, and the run
+    # itself happens in a subprocess.
+    try:
+        from potato.training.manager import get_training_manager
+        training_mgr = get_training_manager()
+        if training_mgr is not None:
+            training_mgr.maybe_auto_retrain()
+    except Exception as e:
+        logger.debug("Auto-retrain check skipped: %s", e)
 
-        # Get performance metrics for response
-        performance_metrics = user_state.get_performance_metrics()
+    # Stamp this annotation with the codebook revision in effect so
+    # an instance labeled before later code additions can be softly
+    # flagged for review. No-op unless the project uses a codebook;
+    # never allowed to break the save.
+    try:
+        if not is_phase_page_update:
+            from potato.codebook.api import codebook_enabled
+            if codebook_enabled(config):
+                from potato.codebook import record_annotation
+                record_annotation(
+                    config.get("task_dir", "."),
+                    config.get("annotation_task_name") or "default",
+                    instance_id, username)
+    except Exception as e:
+        logger.warning(f"Codebook provenance stamp skipped: {e}")
 
-        response_data = {
-            "status": "success",
-            "processing_time_ms": processing_time_ms,
-            "performance_metrics": performance_metrics
-        }
+    # Link the saved codes to their code ids. Merge, split and the
+    # review restamp all read these links; with nothing writing them, a
+    # merge re-pointed no codings. Never allowed to break the save.
+    try:
+        if not is_phase_page_update:
+            from potato.codebook.saved_labels import sync_saved_annotation
+            sync_saved_annotation(config, user_state, instance_id, username)
+    except Exception as e:
+        logger.warning(f"Codebook link sync skipped: {e}")
 
-        # Include quality control result if present
-        if qc_result:
-            response_data["qc_result"] = qc_result
+    # Get performance metrics for response
+    performance_metrics = user_state.get_performance_metrics()
 
-            # Add warning message if needed
-            if qc_result.get("warning"):
-                response_data["warning"] = True
-                response_data["warning_message"] = qc_result.get("message")
+    response_data = {
+        "status": "success",
+        "processing_time_ms": processing_time_ms,
+        "performance_metrics": performance_metrics
+    }
 
-        return jsonify(response_data)
-    else:
-        logger.warning("Update instance called without JSON data")
-        return jsonify({"status": "error", "message": "JSON data required"})
+    # Include quality control result if present
+    if qc_result:
+        response_data["qc_result"] = qc_result
+
+        # Add warning message if needed
+        if qc_result.get("warning"):
+            response_data["warning"] = True
+            response_data["warning_message"] = qc_result.get("message")
+
+    return jsonify(response_data)
+
+
+# A feature that owns some writes (a live collaborative session) installs
+# ``interceptor(username, payload) -> response or None`` here. None means
+# "not mine": the save goes through as an ordinary one.
+_update_instance_interceptor = None
+
+
+def set_update_instance_interceptor(interceptor):
+    """Install (or, with None, remove) the /updateinstance interceptor."""
+    global _update_instance_interceptor
+    _update_instance_interceptor = interceptor
 
 @app.route("/poststudy", methods=["GET", "POST"])
 def poststudy():
@@ -10572,6 +10671,10 @@ def clear_span_annotations(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id, write=True)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -10660,6 +10763,10 @@ def get_link_annotations(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -10718,6 +10825,10 @@ def delete_link_annotation(instance_id, link_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id, write=True)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -10774,6 +10885,10 @@ def get_event_annotations(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -10840,6 +10955,10 @@ def delete_event_annotation(instance_id, event_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id, write=True)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -11079,6 +11198,10 @@ def entity_linking_update_span():
             if field_val is not None and (not isinstance(field_val, str) or len(field_val) > MAX_FIELD_LEN):
                 return jsonify({"error": f"Invalid {field_name}"}), 400
 
+        # On a live session page this is the team's answer (potato/collab).
+        username, _collab, _refusal = _annotation_owner(str(instance_id), write=True)
+        if _refusal is not None:
+            return _refusal
         user_state = get_user_state(username)
         if not user_state:
             return jsonify({"error": "User state not found"}), 404
@@ -12244,6 +12367,15 @@ def configure_routes(flask_app, app_config):
         try:
             from potato.psychometrics.routes import psychometrics_bp
             app.register_blueprint(psychometrics_bp)
+        except ImportError:
+            pass
+
+    # Live collaborative sessions (/collab). Its after-request hooks log the
+    # writes made through the item data routes on a session page.
+    if 'collab' not in app.blueprints:
+        try:
+            from potato.collab.routes import collab_bp
+            app.register_blueprint(collab_bp)
         except ImportError:
             pass
 

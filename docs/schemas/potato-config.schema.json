@@ -4600,6 +4600,115 @@
       ],
       "type": "string"
     },
+    "collab": {
+      "additionalProperties": true,
+      "description": "Live collaborative sessions at /collab: a team labels the same items together, sharing one answer stored under a team user",
+      "properties": {
+        "blind_first": {
+          "default": false,
+          "description": "Members answer each item on their own (stored under their own user) before the team's shared answer opens; schemes everyone agreed on start the team answer",
+          "type": "boolean"
+        },
+        "conflict_policy": {
+          "default": "lww",
+          "description": "What happens when two members change the same thing: lww keeps the later save and tells the member it replaced; reject keeps the earlier value, saves the rest of the later save, and shows that member the teammate's value",
+          "type": "string"
+        },
+        "default_mode": {
+          "default": "follow",
+          "description": "follow: members go where the leader goes until they move on their own; free: no leader, everyone moves independently",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Register the /collab surface and start configured teams",
+          "type": "boolean"
+        },
+        "exclude_members_from_solo": {
+          "default": true,
+          "description": "Keep a team's items out of its members' own annotation queues, so one person does not give both a solo and a team answer for an item",
+          "type": "boolean"
+        },
+        "hidden_poll_interval_ms": {
+          "default": 5000,
+          "description": "How often a page in a background tab polls. Clamped to 1000-120000",
+          "maximum": 120000,
+          "minimum": 1000,
+          "type": "integer"
+        },
+        "max_items": {
+          "default": 500,
+          "description": "Most items one session may hold. Clamped to 1-100000",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_members": {
+          "default": 8,
+          "description": "Members allowed in one lobby session. Clamped to 2-50",
+          "maximum": 50,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "poll_interval_ms": {
+          "default": 1000,
+          "description": "How often a visible session page polls for events. Clamped to 250-30000",
+          "maximum": 30000,
+          "minimum": 250,
+          "type": "integer"
+        },
+        "require_signoff": {
+          "default": false,
+          "description": "An item counts as done only when every active member has marked it ready; any later change to the item clears the marks",
+          "type": "boolean"
+        },
+        "sse": {
+          "description": "Server push limits: max_streams open at once (over it, pages poll) and max_stream_seconds before a stream is closed and reopened",
+          "examples": [
+            {
+              "max_stream_seconds": 25,
+              "max_streams": 3
+            }
+          ],
+          "type": "object"
+        },
+        "sync_view": {
+          "default": true,
+          "description": "In follow mode, followers on the leader's item also follow the leader's scroll position and audio/video playhead",
+          "type": "boolean"
+        },
+        "teams": {
+          "description": "Teams the study sets up: each has an id, members, an optional leader, items as a list of ids, {count: N} or {group: <batch group>}, and optional blind_first / require_signoff overrides",
+          "examples": [
+            [
+              {
+                "id": "red",
+                "items": {
+                  "count": 20
+                },
+                "leader": "ana",
+                "members": [
+                  "ana",
+                  "ben"
+                ]
+              }
+            ]
+          ],
+          "type": "array"
+        },
+        "transport": {
+          "default": "poll",
+          "description": "poll: pages ask for new events on a timer; sse: the server pushes them over a held connection (each holds a server thread)",
+          "type": "string"
+        },
+        "who_can_create": {
+          "default": "any",
+          "description": "Who may start a session from the lobby: any signed-in user, or admin only",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "completion_code": {
       "description": "Code shown when an annotator finishes, for crowdsourcing payout",
       "type": "string"

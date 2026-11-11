@@ -1,0 +1,136 @@
+{#- Live collaborative session chrome: the session bar, the side rail, the
+    toast and the live region. Rendered only on a page served for a session
+    (collab_context set by potato/collab/routes.py); collab.js drives it. -#}
+<div id="collab-bar" class="collab-bar" role="region" aria-label="Live session">
+    <span class="collab-bar-session">
+        <span class="collab-dot" aria-hidden="true"></span>
+        <strong id="collab-bar-name">{{ collab_context.name }}</strong>
+        <span id="collab-bar-where" class="collab-muted"></span>
+    </span>
+    <span id="collab-bar-follow" class="collab-bar-follow"></span>
+    <span id="collab-bar-stage" class="collab-bar-stage" hidden></span>
+    <span id="collab-bar-here" class="collab-bar-here" role="img" aria-label="No one else on this item"></span>
+    <span class="collab-bar-actions">
+        <button type="button" id="collab-bar-return" class="collab-button" hidden></button>
+        <button type="button" id="collab-blind-done" class="collab-button" hidden
+                title="Your answer stays private until everyone is done">I'm done with my answer</button>
+        <button type="button" id="collab-reveal" class="collab-button collab-button-quiet" hidden
+                title="Show everyone's answers now and open the team's">Reveal now</button>
+        <button type="button" id="collab-signoff" class="collab-button" aria-pressed="false" hidden>Mark ready</button>
+        <button type="button" id="collab-bar-summon" class="collab-button collab-button-quiet" hidden
+                title="Ask everyone in the session to come to this item">Bring the team here</button>
+        <button type="button" id="collab-rail-toggle" class="collab-button collab-button-quiet"
+                aria-controls="collab-rail" aria-expanded="false">Session panel</button>
+    </span>
+</div>
+
+<div id="collab-offline" class="collab-stale" role="status" hidden>
+    <span data-role="text"></span>
+    <a data-role="signin" class="collab-button" href="{{ request.script_root }}/" hidden>Sign in again</a>
+</div>
+
+<section id="collab-revealed" class="collab-revealed" aria-labelledby="collab-revealed-title" hidden>
+    <div class="collab-revealed-head">
+        <h2 id="collab-revealed-title" class="collab-subhead">Answers before discussion</h2>
+        <span id="collab-revealed-agreement" class="collab-muted"></span>
+        <button type="button" id="collab-revealed-toggle" class="collab-link" aria-expanded="true"
+                aria-controls="collab-revealed-body">Hide</button>
+    </div>
+    <div id="collab-revealed-body" class="collab-table-wrap"></div>
+</section>
+
+<section id="collab-poll" class="collab-poll" aria-live="polite" hidden></section>
+
+<div id="collab-stale" class="collab-stale" role="status" hidden>
+    <span data-role="text"></span>
+    <button type="button" id="collab-stale-reload" class="collab-button">Reload this item</button>
+</div>
+
+<aside id="collab-rail" class="collab-rail" hidden aria-label="Session panel">
+    <div class="collab-rail-header">
+        <span>Session panel</span>
+        <button type="button" id="collab-rail-close" class="collab-icon-button" aria-label="Close the session panel">&times;</button>
+    </div>
+    <div class="collab-tabs" role="tablist" aria-label="Session panel sections">
+        <button type="button" role="tab" id="collab-tab-activity" data-tab="activity" aria-controls="collab-pane-activity" aria-selected="true">Activity</button>
+        <button type="button" role="tab" id="collab-tab-team" data-tab="team" aria-controls="collab-pane-team" aria-selected="false" tabindex="-1">Team</button>
+        <button type="button" role="tab" id="collab-tab-notes" data-tab="notes" aria-controls="collab-pane-notes" aria-selected="false" tabindex="-1">My notes</button>
+        <button type="button" role="tab" id="collab-tab-discussion" data-tab="discussion" aria-controls="collab-pane-discussion" aria-selected="false" tabindex="-1">Discussion</button>
+    </div>
+
+    <section id="collab-pane-activity" class="collab-pane" role="tabpanel" aria-labelledby="collab-tab-activity">
+        <label class="collab-field">Show
+            <select id="collab-activity-scope">
+                <option value="item">This item</option>
+                <option value="all">All items</option>
+            </select>
+        </label>
+        <ul id="collab-activity-list" class="collab-list"></ul>
+        <a id="collab-replay-link" class="collab-link" href="#">Replay this item's history</a>
+    </section>
+
+    <section id="collab-pane-team" class="collab-pane" role="tabpanel" aria-labelledby="collab-tab-team" hidden>
+        <label class="collab-field">Mode
+            <select id="collab-mode">
+                <option value="follow">Follow the leader</option>
+                <option value="free">Everyone moves freely</option>
+            </select>
+        </label>
+        <label class="collab-check" id="collab-sync-wrap" hidden>
+            <input type="checkbox" id="collab-sync" checked>
+            Follow the leader's scrolling and playback
+        </label>
+        <ul id="collab-team-list" class="collab-list"></ul>
+        <details id="collab-poll-start" class="collab-details">
+            <summary>Ask the team (quick poll)</summary>
+            <form id="collab-poll-form" class="collab-composer collab-composer-stack">
+                <label class="collab-field">About
+                    <select id="collab-poll-schema"></select>
+                </label>
+                <div id="collab-poll-custom" hidden>
+                    <label class="collab-field">Question
+                        <input type="text" id="collab-poll-question" maxlength="200">
+                    </label>
+                    <label class="collab-field">Options, comma-separated
+                        <input type="text" id="collab-poll-options" maxlength="800">
+                    </label>
+                </div>
+                <button type="submit" class="collab-button">Start the poll</button>
+            </form>
+        </details>
+        <h3 class="collab-subhead">Chat</h3>
+        <ul id="collab-chat-list" class="collab-list collab-chat"><li class="collab-empty">No messages yet.</li></ul>
+        <form id="collab-chat-form" class="collab-composer">
+            <label for="collab-chat-input" class="collab-visually-hidden">Message the team</label>
+            <input type="text" id="collab-chat-input" maxlength="2000" placeholder="Message the team (@name to mention)" autocomplete="off">
+            <button type="submit" class="collab-button">Send</button>
+        </form>
+    </section>
+
+    <section id="collab-pane-notes" class="collab-pane" role="tabpanel" aria-labelledby="collab-tab-notes" hidden>
+        <p class="collab-muted">Only you can see these, on this item.</p>
+        <ul id="collab-notes-list" class="collab-list"></ul>
+        <form id="collab-note-form" class="collab-composer collab-composer-stack">
+            <label for="collab-note-input" class="collab-visually-hidden">A note to yourself</label>
+            <textarea id="collab-note-input" rows="3" placeholder="A note to yourself about this item"></textarea>
+            <button type="submit" class="collab-button">Save note</button>
+        </form>
+    </section>
+
+    <section id="collab-pane-discussion" class="collab-pane" role="tabpanel" aria-labelledby="collab-tab-discussion" hidden>
+        <p class="collab-muted">Visible to everyone on the team.</p>
+        <ul id="collab-discussion-list" class="collab-list"></ul>
+        <form id="collab-discussion-form" class="collab-composer collab-composer-stack">
+            <label for="collab-discussion-input" class="collab-visually-hidden">A comment for the team</label>
+            <textarea id="collab-discussion-input" rows="3" placeholder="A comment for the team about this item (@name to mention)"></textarea>
+            <button type="submit" class="collab-button">Post</button>
+        </form>
+    </section>
+</aside>
+
+<div id="collab-toast" class="collab-toast" role="status" hidden>
+    <span data-role="text"></span>
+    <button type="button" data-role="action" class="collab-button" hidden></button>
+    <button type="button" data-role="close" class="collab-icon-button" aria-label="Dismiss">&times;</button>
+</div>
+<div id="collab-live" class="collab-visually-hidden" aria-live="polite"></div>

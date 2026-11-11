@@ -59,6 +59,9 @@ class VideoAnnotationManager {
         this.activeLabelColor = null;
         this.isPlaying = false;
         this.annotationCounter = 0;
+        // Ids unique to this page (see audio-annotation.js): the counter
+        // restarts at 1 on every load.
+        this.idNonce = Math.random().toString(36).slice(2, 8);
 
         // Video metadata
         this.videoMetadata = {
@@ -617,7 +620,7 @@ class VideoAnnotationManager {
             return null;
         }
 
-        const segmentId = id || `segment_${++this.annotationCounter}`;
+        const segmentId = id || `segment_${this.idNonce}_${++this.annotationCounter}`;
         const segmentLabel = label || this.activeLabel || 'unlabeled';
         const segmentColor = color || this.activeLabelColor || '#4ECDC4';
 
@@ -788,7 +791,7 @@ class VideoAnnotationManager {
         const keyframeLabel = label || this.activeLabel || 'keyframe';
 
         const keyframe = {
-            id: `keyframe_${++this.annotationCounter}`,
+            id: `keyframe_${this.idNonce}_${++this.annotationCounter}`,
             frame: frame,
             time: time,
             label: keyframeLabel,
@@ -836,7 +839,7 @@ class VideoAnnotationManager {
         const frame = this.getCurrentFrame();
 
         if (!objectId) {
-            objectId = `object_${++this.annotationCounter}`;
+            objectId = `object_${this.idNonce}_${++this.annotationCounter}`;
         }
 
         if (!this.trackingData[objectId]) {
@@ -868,6 +871,7 @@ class VideoAnnotationManager {
         if (!this.trackingCanvas) return;
 
         const ctx = this.trackingCanvas.getContext('2d');
+        if (!ctx) return;
         ctx.clearRect(0, 0, this.trackingCanvas.width, this.trackingCanvas.height);
 
         const currentFrame = this.getCurrentFrame();
@@ -1382,6 +1386,9 @@ class VideoAnnotationManager {
 
     _saveData() {
         this._declareCompleteness();
+        // Restoring a stored answer writes nothing: the input already holds
+        // it, and a rewrite partway through the restore held only part of it.
+        if (this._hydrating) return;
         const data = {
             video_metadata: this.videoMetadata,
             segments: this.segments.map(s => ({
@@ -1415,11 +1422,7 @@ class VideoAnnotationManager {
             // Assigning `.value` fires nothing; without this the shared
             // autosave in annotation.js cannot see the timeline change and the
             // work reaches the server only when the annotator navigates.
-            // Suppressed while hydrating so restoring the server's own answer
-            // does not mark an untouched instance as answered.
-            if (!this._hydrating) {
-                this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
             console.error('[VideoAnnotation] ERROR: inputEl is null, cannot save data!');
         }
@@ -1456,107 +1459,171 @@ class VideoAnnotationManager {
         else form.removeAttribute('data-incomplete-reason');
     }
 
-    _loadExistingAnnotations() {
-        // Always log to help debug loading issues
-        console.log('[VideoAnnotation] _loadExistingAnnotations called');
+    /**
+     * Put the hidden input's answer on screen, replacing whatever is drawn.
+     *
+     * It used to append: a second call (the stored answer re-read, or a
+     * teammate's answer in a live session) drew every segment twice. It also
+     * saved partway through: each restored segment went through
+     * createSegment -> _saveData, which wrote the input with the segments so
+     * far and NO keyframes or frame classifications (those load after the
+     * segments), then fired `change`. The autosave then stored that partial
+     * answer, so reloading an item with keyframes lost them. Restoring now
+     * writes nothing (`_hydrating`): the input keeps the answer it arrived
+     * with until a real edit.
+     *
+     * @param {Object} [options]
+     * @param {boolean} [options.trusted] - the value is known to belong to
+     *     this item (a live-session apply), so skip the bfcache duration check
+     */
+    _loadExistingAnnotations(options = {}) {
+        this._annotationsLoaded = true;
 
         // Re-fetch the input element in case it was replaced during page render
         if (!this.inputEl) {
             this.inputEl = document.getElementById(this.inputId);
-            console.log('[VideoAnnotation] Re-fetched inputEl:', this.inputEl);
         }
 
-        console.log('[VideoAnnotation] inputEl:', this.inputEl);
-        console.log('[VideoAnnotation] inputEl id:', this.inputEl ? this.inputEl.id : 'N/A');
-        console.log('[VideoAnnotation] inputEl value length:', this.inputEl && this.inputEl.value ? this.inputEl.value.length : 0);
-
-        // Log first 200 chars of value for debugging
+        let data = null;
         if (this.inputEl && this.inputEl.value) {
-            console.log('[VideoAnnotation] inputEl value (first 200 chars):', this.inputEl.value.substring(0, 200));
+            try {
+                data = JSON.parse(this.inputEl.value);
+            } catch (e) {
+                console.warn('[VideoAnnotation] Failed to parse stored annotations:', e);
+                return;
+            }
         }
 
-        if (!this.inputEl || !this.inputEl.value) {
-            console.log('[VideoAnnotation] _loadExistingAnnotations: No input element or empty value, returning');
-            return;
+        // Validate that the stored data is for this video by checking video
+        // metadata. This protects against browser form restoration (bfcache)
+        // loading data from a different video.
+        if (data && data.video_metadata && !options.trusted) {
+            const storedDuration = data.video_metadata.duration;
+            const currentDuration = this.videoMetadata.duration;
+            // Allow 0.5 second tolerance for floating point differences
+            if (Math.abs(storedDuration - currentDuration) > 0.5) {
+                console.warn('[VideoAnnotation] Stored duration', storedDuration,
+                    'does not match this video\'s', currentDuration,
+                    '- browser-cached data from a different video; clearing it.');
+                this.inputEl.value = '';
+                data = null;
+            }
         }
 
+        this._hydrating = true;
         try {
-            const data = JSON.parse(this.inputEl.value);
-            console.log('[VideoAnnotation] _loadExistingAnnotations: Parsed data:', data);
-            console.log('[VideoAnnotation] Found', data.segments ? data.segments.length : 0, 'segments to load');
-
-            // Validate that the stored data is for this video by checking video metadata
-            // This protects against browser form restoration (bfcache) loading data from a different video
-            if (data.video_metadata) {
-                const storedDuration = data.video_metadata.duration;
-                const currentDuration = this.videoMetadata.duration;
-
-                // Allow 0.5 second tolerance for floating point differences
-                if (Math.abs(storedDuration - currentDuration) > 0.5) {
-                    console.warn('[VideoAnnotation] Video metadata mismatch detected!');
-                    console.warn('[VideoAnnotation] Stored duration:', storedDuration, 'Current duration:', currentDuration);
-                    console.warn('[VideoAnnotation] This appears to be browser-cached data from a different video. Clearing stale data.');
-
-                    // Clear the stale data
-                    this.inputEl.value = '';
-                    return;
-                }
-
-                console.log('[VideoAnnotation] Video metadata validated - data is for current video');
-            }
-
-            // Load segments
-            if (data.segments) {
-                for (const segment of data.segments) {
-                    this.createSegment(
-                        segment.start_time,
-                        segment.end_time,
-                        segment.label,
-                        segment.color,
-                        segment.id
-                    );
-                }
-            }
-
-            // Load frame annotations
-            if (data.frame_annotations) {
-                for (const frame in data.frame_annotations) {
-                    const fa = data.frame_annotations[frame];
-                    this.frameAnnotations[frame] = fa;
-                    this._addFrameMarker(parseInt(frame), fa.label, fa.color);
-                }
-            }
-
-            // Load keyframes
-            if (data.keyframes) {
-                for (const kf of data.keyframes) {
-                    this.keyframes.push(kf);
-                    this.peaks.points.add({
-                        id: kf.id,
-                        time: kf.time,
-                        labelText: `KF: ${kf.label}`,
-                        color: kf.color,
-                        editable: true
-                    });
-                }
-            }
-
-            // Load tracking data
-            if (data.tracking) {
-                this.trackingData = data.tracking;
-            }
-            // Object tracks, handed to TrackingUIManager when it starts.
-            if (data.tracks && typeof data.tracks === 'object') {
-                this.loadedTracks = data.tracks;
-                if (this.trackingManager) this.trackingManager.loadTrackingData(data.tracks);
-            }
-
-            this._updateAnnotationList();
-            videoDebugLog('Loaded existing annotations:', data);
-
+            this._clearAllAnnotations();
+            if (data) this._restoreFrom(data);
         } catch (e) {
             console.warn('Failed to load existing annotations:', e);
+        } finally {
+            this._hydrating = false;
         }
+
+        if (this.activeAnnotationId && !this._hasAnnotation(this.activeAnnotationId)) {
+            this.activeAnnotationId = null;
+        }
+        this._declareCompleteness();
+        this._updateAnnotationList();
+        this._updateSegmentCount();
+        this._updateDeleteButton();
+        // The tracker (tracking-ui.js) owns the canvas when it is there, and
+        // redrew it when it loaded the tracks; this one would clear its boxes.
+        if (!this.trackingManager) this._renderTrackingOverlay();
+        videoDebugLog('Loaded existing annotations:', data);
+    }
+
+    /** Drop every segment, keyframe, frame label and track, on screen too. */
+    _clearAllAnnotations() {
+        if (this.peaks) {
+            const drop = (collection, id) => {
+                try { collection.removeById(id); } catch (e) { /* not drawn */ }
+            };
+            this.segments.forEach(s => drop(this.peaks.segments, s.id));
+            this.keyframes.forEach(k => drop(this.peaks.points, k.id));
+            Object.keys(this.frameAnnotations).forEach(f => drop(this.peaks.points, `frame_${f}`));
+        }
+        this.segments = [];
+        this.keyframes = [];
+        this.frameAnnotations = {};
+        this.trackingData = {};
+        this.loadedTracks = {};
+        if (this.trackingManager) this.trackingManager.loadTrackingData({});
+    }
+
+    /** Rebuild the state from one stored answer (state already cleared). */
+    _restoreFrom(data) {
+        for (const segment of (data.segments || [])) {
+            const created = this.createSegment(
+                segment.start_time,
+                segment.end_time,
+                segment.label,
+                segment.color || this._labelColor(segment.label),
+                segment.id
+            );
+            // createSegment starts every segment with no answers; the
+            // per-segment questions' answers were dropped on every reload.
+            if (created && segment.annotations) created.annotations = segment.annotations;
+        }
+
+        const frames = data.frame_annotations || {};
+        for (const frame in frames) {
+            const fa = frames[frame];
+            this.frameAnnotations[frame] = fa;
+            this._addFrameMarker(parseInt(frame, 10), fa.label, fa.color);
+        }
+
+        for (const kf of (data.keyframes || [])) {
+            this.keyframes.push(kf);
+            if (this.peaks) {
+                this.peaks.points.add({
+                    id: kf.id,
+                    time: kf.time,
+                    labelText: `KF: ${kf.label}`,
+                    color: kf.color,
+                    editable: true
+                });
+            }
+        }
+
+        if (data.tracking && typeof data.tracking === 'object') {
+            this.trackingData = data.tracking;
+        }
+        // Object tracks, handed to TrackingUIManager when it starts.
+        if (data.tracks && typeof data.tracks === 'object') {
+            this.loadedTracks = data.tracks;
+            if (this.trackingManager) this.trackingManager.loadTrackingData(data.tracks);
+        }
+    }
+
+    _hasAnnotation(id) {
+        return this.segments.some(s => s.id === id)
+            || this.keyframes.some(k => k.id === id)
+            || Object.values(this.frameAnnotations).some(f => f && f.id === id);
+    }
+
+    /** A label's configured colour; segments are saved without one. */
+    _labelColor(label) {
+        const labels = this.config.labels || [];
+        const found = labels.find(l => l && l.name === label);
+        return found ? found.color : null;
+    }
+
+    /**
+     * Show a teammate's answer (live sessions): replace everything drawn
+     * with ``value`` (the answer JSON, or null for none) without saving.
+     * Before the video has loaded there is nothing drawn yet, and the first
+     * load reads the input, so writing the input is enough.
+     */
+    applyRemoteAnswer(value) {
+        if (!this.inputEl) this.inputEl = document.getElementById(this.inputId);
+        if (!this.inputEl) return false;
+        const json = value || '';
+        if (this.inputEl.value !== json) this.inputEl.value = json;
+        this._cachedInputValue = null;
+        if (!this._annotationsLoaded) return true;
+        this._loadExistingAnnotations({ trusted: true });
+        return true;
     }
 
     serialize() {
@@ -1635,6 +1702,23 @@ class VideoAnnotationManager {
             this.peaks = null;
         }
     }
+}
+
+// Live collaborative sessions: show a teammate's answer without a reload
+// (see collab.js applyWidget). collab.js has already written the answer into
+// the hidden input; the manager redraws from it without saving.
+if (typeof window !== 'undefined') {
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets['video_annotation'] = {
+        apply(ctx) {
+            const sel = (window.CSS && CSS.escape) ? CSS.escape(ctx.schema) : ctx.schema;
+            const box = (ctx.form && ctx.form.querySelector('.video-annotation-container'))
+                || document.querySelector(`.video-annotation-container[data-schema="${sel}"]`);
+            const m = box && box.videoAnnotationManager;
+            if (!m || typeof m.applyRemoteAnswer !== 'function') return false;
+            return m.applyRemoteAnswer(ctx.value) === true;
+        }
+    };
 }
 
 // Export for use in modules

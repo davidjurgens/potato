@@ -336,10 +336,14 @@ class SpanSeleniumHelpers:
 
     @staticmethod
     def verify_span_highlight_present(driver, label: str = None) -> bool:
-        """Verify span highlight element is present in DOM."""
+        """Verify a span overlay (drawn by span-core.js) is present in the DOM.
+
+        The server no longer wraps stored spans in inline `.span-highlight`
+        elements; every span, restored or new, is a `.span-overlay-pure`.
+        """
         from selenium.webdriver.common.by import By
 
-        highlights = driver.find_elements(By.CLASS_NAME, "span-highlight")
+        highlights = driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         if not highlights:
             return False
 
@@ -356,10 +360,11 @@ class SpanSeleniumHelpers:
         """Get the background color of a span with given label."""
         from selenium.webdriver.common.by import By
 
-        highlights = driver.find_elements(By.CLASS_NAME, "span-highlight")
+        highlights = driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         for h in highlights:
             if h.get_attribute("data-label") == label:
-                return h.value_of_css_property("background-color")
+                segments = h.find_elements(By.CSS_SELECTOR, ".span-highlight-segment")
+                return (segments[0] if segments else h).value_of_css_property("background-color")
         return None
 
 

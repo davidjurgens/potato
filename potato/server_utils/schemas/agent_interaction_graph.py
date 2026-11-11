@@ -31,6 +31,8 @@ from .identifier_utils import (
     generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -291,6 +293,7 @@ def _generate_internal(
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('agent_interaction_graph', 'build')}
     }})();
     </script>
 

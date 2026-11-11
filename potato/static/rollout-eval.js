@@ -44,6 +44,13 @@
      */
     const MARK_MERGE_WINDOW = 0.25;
     /**
+     * Per-page part of a new mark's id. In a live session the server merges
+     * two annotators' marks element by element, by id; a counter alone would
+     * give both browsers the same first id and one mark would overwrite the
+     * other.
+     */
+    const ID_NONCE = Math.random().toString(36).slice(2, 8);
+    /**
      * How long to wait for a video to report its length before saying it has
      * not. Six seconds: long enough that a normal load on a slow link is not
      * accused of failing, short enough that nobody sits in front of a dead
@@ -716,7 +723,9 @@
                 return;
             }
             const t = snapToFrame(this.currentTime, this.fps);
-            const incoming = { stream: this.selectedStream, t,
+            this._markSeq = (this._markSeq || 0) + 1;
+            const incoming = { id: `mark_${ID_NONCE}_${this._markSeq}`,
+                               stream: this.selectedStream, t,
                                type: this._defaultType(),
                                severity: this._defaultSeverity(), note: '' };
             this.violations = insertViolation(this.violations, incoming);
@@ -1352,6 +1361,32 @@
             if (cfNote) cfNote.value = '';
         }
 
+        /**
+         * Put a teammate's answer on screen (live sessions).
+         *
+         * collab.js has already written it into the hidden input. Every field
+         * is replaced, an empty input meaning an empty answer; the selected
+         * mark stays selected if the answer still has it. Nothing is saved.
+         */
+        applyRemote() {
+            if (!this.container) return false;
+            const was = this.violations[this.selectedViolation];
+            this.violations = [];
+            this.clean = [];
+            this.preference = { winner: '', confidence: '', rubric: {} };
+            this.counterfactual = { verdict: '', t: null, note: '' };
+            this._restoreFromInput();
+            this.selectedViolation = was
+                ? this.violations.findIndex((v) => (was.id
+                    ? v.id === was.id
+                    : v.stream === was.stream && v.t === was.t))
+                : -1;
+            this._resetFormInputs();
+            this._applyRestoredState();
+            this.draw();
+            return true;
+        }
+
         _restoreFromInput() {
             const input = document.getElementById(`input-${this.schema}`);
             if (!input || !input.value) return;
@@ -1468,6 +1503,19 @@
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = RolloutEvaluationManager;
     }
-    if (root) root.RolloutEvaluationManager = RolloutEvaluationManager;
+    if (root) {
+        root.RolloutEvaluationManager = RolloutEvaluationManager;
+        // Live sessions: redraw a scheme from a teammate's answer.
+        root.potatoCollabWidgets = root.potatoCollabWidgets || {};
+        root.potatoCollabWidgets.rollout_evaluation = {
+            apply(ctx) {
+                const box = root.document && root.document.querySelector(
+                    `.rollout-eval-container[data-schema="${cssEscape(ctx.schema)}"]`);
+                const manager = box && box.annotationManager;
+                if (!manager || typeof manager.applyRemote !== 'function') return false;
+                return manager.applyRemote() === true;
+            },
+        };
+    }
 })(typeof window !== 'undefined' ? window
     : (typeof globalThis !== 'undefined' ? globalThis : null));

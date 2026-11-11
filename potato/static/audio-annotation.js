@@ -584,6 +584,10 @@ class AudioAnnotationManager {
         this.activeLabelColor = null;
         this.isPlaying = false;
         this.segmentCounter = 0;
+        // Ids unique to this page: a counter alone restarts at 1 on every
+        // load, so a page reopened over segment_1..N, or a teammate's page in
+        // a live session, would mint an id that is already taken.
+        this.idNonce = Math.random().toString(36).slice(2, 8);
 
         // Spectrogram renderer
         this.spectrogramRenderer = null;
@@ -1388,13 +1392,15 @@ class AudioAnnotationManager {
     createSegment(startTime, endTime, label = null, color = null, id = null) {
         if (!this.peaks) return null;
 
-        // Check max segments
-        if (this.config.maxSegments && this.segments.length >= this.config.maxSegments) {
+        // Check max segments (a teammate's answer being shown is not a new
+        // segment of this annotator's)
+        if (!this._restoring && this.config.maxSegments
+                && this.segments.length >= this.config.maxSegments) {
             this._updateStatus(`Maximum ${this.config.maxSegments} segments allowed`);
             return null;
         }
 
-        const segmentId = id || `segment_${++this.segmentCounter}`;
+        const segmentId = id || `segment_${this.idNonce}_${++this.segmentCounter}`;
         const segmentLabel = label || this.activeLabel || 'unlabeled';
         const segmentColor = color || this.activeLabelColor || '#4ECDC4';
 
@@ -1418,13 +1424,15 @@ class AudioAnnotationManager {
         };
         this.segments.push(segmentData);
 
-        // Update UI
-        this._updateSegmentList();
-        this._updateSegmentCount();
-        this._saveData();
+        // Update UI (once, after the whole answer, when restoring)
+        if (!this._restoring) {
+            this._updateSegmentList();
+            this._updateSegmentCount();
+            this._saveData();
 
-        // Select the new segment
-        this.selectSegment(segmentId);
+            // Select the new segment
+            this.selectSegment(segmentId);
+        }
 
         audioDebugLog('Created segment:', segmentData);
         return segmentData;
@@ -1781,7 +1789,7 @@ class AudioAnnotationManager {
      * Save segment data to hidden input
      */
     _saveData() {
-        if (!this.inputEl) return;
+        if (!this.inputEl || this._restoring) return;
         this._declareCompleteness();
 
         const data = this.serialize();
@@ -1862,6 +1870,58 @@ class AudioAnnotationManager {
         } catch (e) {
             console.warn('Failed to load existing annotations:', e);
         }
+    }
+
+    /**
+     * Show a teammate's answer (a live session) in place of this page's.
+     *
+     * Replaces every segment, with its per-segment answers and provenance,
+     * without saving: the answer shown is already the team's. Keeps the
+     * selected segment when it is still there. ``value`` is the stored JSON,
+     * or null for no answer.
+     */
+    applyRemoteAnswer(value) {
+        let segments = [];
+        if (value) {
+            try {
+                const data = JSON.parse(value);
+                segments = data && Array.isArray(data.segments) ? data.segments : [];
+            } catch (e) {
+                return false;
+            }
+        }
+        if (this.inputEl) this.inputEl.value = value || '';
+        // Not drawn yet: the first load reads the input just set.
+        if (!this.peaks) return true;
+
+        const keep = this.activeSegmentId;
+        this._restoring = true;
+        try {
+            this.segments.forEach((s) => {
+                try { this.peaks.segments.removeById(s.id); } catch (e) { /* gone */ }
+            });
+            this.segments = [];
+            for (const seg of segments) {
+                const created = this.createSegment(seg.start_time, seg.end_time, seg.label,
+                                                   this._getLabelColor(seg.label), seg.id);
+                if (!created) continue;
+                if (seg.annotations) created.annotations = seg.annotations;
+                copySegmentProvenance(created, seg);
+            }
+        } finally {
+            this._restoring = false;
+        }
+        this._declareCompleteness();
+        this._updateSegmentList();
+        this._updateSegmentCount();
+        if (keep && this.segments.some((s) => s.id === keep)) {
+            this.selectSegment(keep);
+        } else {
+            this.activeSegmentId = null;
+            if (typeof this._hideQuestionsPanel === 'function') this._hideQuestionsPanel();
+            this._updateDeleteButton();
+        }
+        return true;
     }
 
     /**
@@ -1973,3 +2033,16 @@ class AudioAnnotationManager {
 
 // Export for use
 window.AudioAnnotationManager = AudioAnnotationManager;
+
+// Live sessions (collab.js): show a teammate's segments without a reload.
+window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+window.potatoCollabWidgets.audio_annotation = {
+    apply(ctx) {
+        const scope = ctx.form || document;
+        const box = scope.querySelector('.audio-annotation-container')
+            || document.querySelector(`.audio-annotation-container[data-schema="${ctx.schema}"]`);
+        const manager = box && box.audioAnnotationManager;
+        if (!manager || typeof manager.applyRemoteAnswer !== 'function') return false;
+        return manager.applyRemoteAnswer(ctx.value);
+    },
+};

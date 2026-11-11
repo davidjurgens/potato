@@ -38,6 +38,14 @@
 
     function emptyValue() { return {intervals: [], events: []}; }
 
+    // Ids for entries made on this page. The server merges a live session's
+    // saves entry by entry, by id (else by content): without one, two
+    // members relabelling one interval read as two different intervals and
+    // both were kept. The nonce keeps two pages' counters apart.
+    var ID_NONCE = Math.random().toString(36).slice(2, 8);
+    var nextId = 1;
+    function newId(prefix) { return prefix + '_' + ID_NONCE + '_' + (nextId++); }
+
     function parseValue(text) {
         if (!text) { return emptyValue(); }
         try {
@@ -131,7 +139,7 @@
         if (!lab) { say(state, 'Pick a label first, then drag across the plot.'); return; }
         if (lab.kind === 'event') { say(state, '"' + lab.name + '" marks a point: click on the plot instead.'); return; }
         if (!(b.end - b.start > EPS)) { return; }
-        var iv = {start: round6(b.start), end: round6(b.end), label: lab.name,
+        var iv = {id: newId('iv'), start: round6(b.start), end: round6(b.end), label: lab.name,
                   channel: scopeChannel(state, b.pointerChannel)};
         if (!state.cfg.allowOverlap) { carve(state, iv.start, iv.end, iv.channel); }
         state.value.intervals.push(iv);
@@ -149,8 +157,14 @@
                 out.push(iv);
                 return;
             }
-            if (iv.start < start - EPS) { out.push(Object.assign({}, iv, {end: start, source: undefined})); }
-            if (iv.end > end + EPS) { out.push(Object.assign({}, iv, {start: end, source: undefined})); }
+            var left = iv.start < start - EPS;
+            if (left) { out.push(Object.assign({}, iv, {end: start, source: undefined})); }
+            if (iv.end > end + EPS) {
+                // Split in two: the right part is a new entry, and must not
+                // share the left part's id.
+                out.push(Object.assign({}, iv, {start: end, source: undefined},
+                                       left && iv.id ? {id: newId('iv')} : {}));
+            }
         });
         state.value.intervals = out.map(clean);
     }
@@ -164,7 +178,7 @@
     function onClick(state, c) {
         var lab = labelOf(state, state.active);
         if (lab && lab.kind === 'event') {
-            var ev = {time: round6(c.time), label: lab.name, channel: scopeChannel(state, c.channel)};
+            var ev = {id: newId('ev'), time: round6(c.time), label: lab.name, channel: scopeChannel(state, c.channel)};
             state.value.events.push(ev);
             sortValue(state);
             state.selected = null;
@@ -268,7 +282,10 @@
             delete existing.source;
         } else {
             if (!state.cfg.allowOverlap) { carve(state, b.start, b.end, null); }
-            state.value.intervals.push({start: round6(b.start), end: round6(b.end), label: lab.name, channel: null});
+            // Named by the epoch, not the page: two members labelling one
+            // epoch edit one entry, so the merge keeps one label for it.
+            state.value.intervals.push({id: 'epoch_' + round6(b.start), start: round6(b.start), end: round6(b.end),
+                                        label: lab.name, channel: null});
             sortValue(state);
         }
         state.selected = null;
@@ -317,11 +334,13 @@
     function serialize(state) {
         var v = {intervals: state.value.intervals.map(function (iv) {
                     var o = {start: iv.start, end: iv.end, label: iv.label, channel: iv.channel || null};
+                    if (iv.id) { o.id = iv.id; }
                     if (iv.source) { o.source = iv.source; }
                     return o;
                  }),
                  events: state.value.events.map(function (ev) {
                     var o = {time: ev.time, label: ev.label, channel: ev.channel || null};
+                    if (ev.id) { o.id = ev.id; }
                     if (ev.source) { o.source = ev.source; }
                     return o;
                  })};
@@ -583,22 +602,28 @@
         if (state.cfg.mode === 'epoch') { plot.setEpochMode(state.cfg.epochLength); }
         if (!h.owner && state.cfg.mode === 'free') { h.owner = state; }
         render(state);
-        var stored = state.value.intervals.length + state.value.events.length;
-        if (!stored && state.cfg.preAnnotations) {
-            var url = '/api/signals/preannotations?instance_id=' + encodeURIComponent(state.instance) +
-                '&field=' + encodeURIComponent(state.cfg.signalField) + '&schema=' + encodeURIComponent(state.cfg.schema);
-            fetch(url, {credentials: 'same-origin'}).then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (pre) {
-                    if (!pre || STATES.get(state.form) !== state) { return; }
-                    if (state.value.intervals.length + state.value.events.length) { return; }
-                    if (!(pre.intervals || []).length && !(pre.events || []).length) { return; }
-                    state.value = {intervals: pre.intervals || [], events: pre.events || []};
-                    if (state.cfg.mode === 'epoch') { state.value.intervals = toEpochs(state, state.value.intervals); }
-                    state.pending = true;
-                    render(state);
-                }).catch(function () { /* no pre-annotations */ });
-        }
+        loadPreAnnotations(state);
         state.form.setAttribute('data-il-ready', 'true');
+    }
+
+    /* An item with no entries shows the file's (or the model's) annotations
+       as a pending suggestion, kept or discarded with the prompt; nothing is
+       saved until the annotator does one or the other. */
+    function loadPreAnnotations(state) {
+        var stored = state.value.intervals.length + state.value.events.length;
+        if (stored || !state.cfg.preAnnotations) { return; }
+        var url = '/api/signals/preannotations?instance_id=' + encodeURIComponent(state.instance) +
+            '&field=' + encodeURIComponent(state.cfg.signalField) + '&schema=' + encodeURIComponent(state.cfg.schema);
+        fetch(url, {credentials: 'same-origin'}).then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (pre) {
+                if (!pre || STATES.get(state.form) !== state) { return; }
+                if (state.value.intervals.length + state.value.events.length) { return; }
+                if (!(pre.intervals || []).length && !(pre.events || []).length) { return; }
+                state.value = {intervals: pre.intervals || [], events: pre.events || []};
+                if (state.cfg.mode === 'epoch') { state.value.intervals = toEpochs(state, state.value.intervals); }
+                state.pending = true;
+                render(state);
+            }).catch(function () { /* no pre-annotations */ });
     }
 
     function setup(form) {
@@ -658,11 +683,52 @@
         document.querySelectorAll('form.interval-label').forEach(setup);
     }
 
+    /* Show `text` (the answer JSON, or empty for none) in place of this
+       form's entries, without saving: a teammate's answer in a live session.
+       init() cannot do it, since setup() keeps the state of an instance it
+       has already set up. A selection survives when its entry still exists
+       (by id, else by content). A cleared answer shows what an unanswered
+       item shows: the pre-annotations, pending, once the plot is up (before
+       that, bindPlot() offers them itself). */
+    function restore(form, text) {
+        var state = STATES.get(form);
+        if (!state || state.instance !== instanceId()) { return false; }
+        var sel = state.selected, value = parseValue(text);
+        state.value = value;
+        state.pending = false;
+        state.selected = null;
+        if (sel) {
+            var key = function (x) { return x.id ? 'id:' + x.id : JSON.stringify([x.start, x.end, x.time, x.label, x.channel || null]); };
+            var want = key(sel.item);
+            value[sel.kind].forEach(function (x) { if (key(x) === want) { state.selected = {kind: sel.kind, item: x}; } });
+        }
+        render(state);
+        if (state.plot) { loadPreAnnotations(state); }
+        return true;
+    }
+
     document.addEventListener('keydown', onKey, true);
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { init(); }
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
-    window.PotatoIntervalLabel = {init: init, _states: STATES};
+    window.PotatoIntervalLabel = {init: init, restore: restore, _states: STATES};
+
+    // Live collaborative sessions: show a teammate's answer without a reload
+    // (see collab.js applyWidget). The answer is this scheme's one label, so
+    // it arrives in ctx.labels / the hidden input, not in ctx.value (_data).
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets['interval_label'] = {
+        apply: function (ctx) {
+            var form = ctx.form && ctx.form.matches && ctx.form.matches('form.interval-label') ? ctx.form : null;
+            if (!form) { return false; }
+            var input = form.querySelector('.interval-label-input');
+            var name = input ? input.getAttribute('label_name') : null;
+            var raw = ctx.labels && name ? ctx.labels[name] : null;
+            var text = raw === undefined || raw === null ? '' : String(raw);
+            if (input && input.value !== text) { input.value = text; }
+            return restore(form, text) === true;
+        }
+    };
 })();

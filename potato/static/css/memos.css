@@ -157,6 +157,7 @@
 
 /* WCAG-AA contrast on the small badge text */
 .memo-badge.private { background: light-dark(#eceef4, #1d2028); color: light-dark(#494f63, #bcbfca); border-color: light-dark(#dcdfe9, #464953); }
+.memo-badge.personal { background: light-dark(#f4ecf8, #271d2c); color: light-dark(#6b3a86, #d2b8e0); border-color: light-dark(#e2cfee, #4f3e59); }
 .memo-badge.shared  { background: light-dark(#e2f1e7, #1f2e24); color: light-dark(#246b3c, #b5ddc2); border-color: light-dark(#bcdec8, #425749); }
 .memo-badge.anchor  { background: light-dark(#e8edfa, #161d2e); color: light-dark(#2f4ea0, #a9b6db); border-color: light-dark(#c7d4f0, #3b465e); }
 

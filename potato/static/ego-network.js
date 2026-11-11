@@ -154,13 +154,20 @@
         return state.answer.alters.filter(function (a) { return namedIn(stage, a); });
     }
 
+    // A per-page nonce in every new alter id: two members of a live session
+    // adding their third person at once would otherwise both make "a3", and
+    // the server merges alters by id, so one would overwrite the other.
+    // Stored ids ("a3", or "a3_k2x9q1") are never renamed; the number still
+    // counts past every restored one.
+    var ID_NONCE = Math.random().toString(36).slice(2, 8);
+
     function nextId(state) {
         var max = 0;
         state.answer.alters.forEach(function (a) {
-            var m = /^a(\d+)$/.exec(a.id);
+            var m = /^a(\d+)(?:_[0-9a-z]+)?$/.exec(a.id);
             if (m) { max = Math.max(max, parseInt(m[1], 10)); }
         });
-        return 'a' + (max + 1);
+        return 'a' + (max + 1) + '_' + ID_NONCE;
     }
 
     function applySets(state, stage, alter, on) {
@@ -1007,5 +1014,26 @@
     document.addEventListener('instanceChanged', init);
     document.addEventListener('potato:instance-ready', init);
 
-    window.PotatoEgoNetwork = {init: init};
+    /* Live collaborative sessions: the teammate's answer is already in the
+       hidden input. Replace this form's answer with it and redraw; state that
+       is only about this annotator's view (step, open pair, selected person)
+       is kept where it still points at someone. render() and declare() write
+       nothing to the input. */
+    function applyLive(ctx) {
+        var form = ctx && ctx.form;
+        var state = form && STATES.get(form);
+        if (!state) { return false; }
+        state.answer = readStored(state.hidden);
+        Object.keys(state.selected).forEach(function (s) {
+            if (!alterById(state, state.selected[s])) { delete state.selected[s]; }
+        });
+        render(state);
+        declare(state);
+        return true;
+    }
+
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.ego_network = {apply: applyLive};
+
+    window.PotatoEgoNetwork = {init: init, _nextId: nextId};
 })();

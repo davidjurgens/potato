@@ -31,6 +31,8 @@ from .identifier_utils import (
     generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 
@@ -174,7 +176,8 @@ def _generate_internal(
 
         function paint(i) {{
             var h = _handoffs[i];
-            var card = document.querySelector('.hr-card[data-idx="' + i + '"]');
+            // This scheme's card: two handoff schemes share the indexes.
+            var card = document.getElementById(SCHEMA + '-list').querySelector('.hr-card[data-idx="' + i + '"]');
             if (!card) return;
             card.classList.toggle('hr-flagged', h.flags.length > 0);
             card.querySelectorAll('.hr-flag').forEach(function(b) {{
@@ -232,6 +235,7 @@ def _generate_internal(
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
         else build();
         document.addEventListener('instanceChanged', build);
+        {collab_rebuild_js('handoff_review', 'build')}
     }})();
     </script>
 

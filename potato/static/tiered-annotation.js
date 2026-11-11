@@ -51,6 +51,10 @@ class TieredAnnotationManager {
         this.mediaElement = null;
         this.isPlaying = false;
         this.annotationCounter = 0;
+        // Per-page part of new annotation ids. Two annotators in one live
+        // session could make `ann_<same ms>_1` and the server's merge (by
+        // id) would keep only one of them.
+        this.idNonce = Math.random().toString(36).slice(2, 8);
 
         // Media metadata
         this.mediaMetadata = {
@@ -1326,6 +1330,19 @@ class TieredAnnotationManager {
      * Load existing annotations from hidden input
      */
     _loadExistingAnnotations() {
+        // Replace, never merge into what is shown: a tier the stored answer
+        // does not mention is empty in it. (Before, such a tier kept whatever
+        // it held, so a teammate's cleared tier stayed drawn here.)
+        for (const tier of this.config.tiers) {
+            this.annotations[tier.name] = [];
+        }
+        if (this.peaks) {
+            try {
+                this.peaks.segments.removeAll();
+                if (this.peaks.points) this.peaks.points.removeAll();
+            } catch (e) { /* nothing drawn */ }
+        }
+
         if (!this.inputEl || !this.inputEl.value) {
             tieredDebugLog('No existing annotations to load');
             this._seedFromTranscript();
@@ -1453,6 +1470,47 @@ class TieredAnnotationManager {
     }
 
     /**
+     * Show a teammate's answer (live sessions): replace every tier with
+     * ``value`` (the answer JSON, or null for none) without saving. An empty
+     * answer shows what an unanswered item shows, the transcript seed if one
+     * is configured (seeds are never saved on their own).
+     */
+    applyRemoteAnswer(value) {
+        if (!this.inputEl) this.inputEl = document.getElementById(`input-${this.schemaName}`);
+        if (!this.inputEl) return false;
+        const json = value || '';
+        if (this.inputEl.value !== json) this.inputEl.value = json;
+
+        // A drag in progress holds an annotation object that is about to be
+        // replaced; finishing it would save the stale object's times.
+        for (const tierName in this.tierViews) {
+            const view = this.tierViews[tierName];
+            if (view) { view.dragState = null; view.hoveredHandle = null; }
+        }
+        if (this.zoomedTimelineView) {
+            this.zoomedTimelineView.dragState = null;
+            this.zoomedTimelineView.hoveredHandle = null;
+            if (typeof this.zoomedTimelineView._stopAutoScroll === 'function') {
+                this.zoomedTimelineView._stopAutoScroll();
+            }
+        }
+        this.isDragging = false;
+
+        const selectedId = this.selectedAnnotation ? this.selectedAnnotation.id : null;
+        this._loadExistingAnnotations();
+        this.selectedAnnotation = null;
+        if (selectedId) {
+            for (const tierName in this.annotations) {
+                const found = this.annotations[tierName].find(a => a.id === selectedId);
+                if (found) { this.selectedAnnotation = found; break; }
+            }
+        }
+        this._renderAllTiers();
+        if (this.zoomedTimelineView) this.zoomedTimelineView.render();
+        return true;
+    }
+
+    /**
      * Render all tier views
      */
     _renderAllTiers() {
@@ -1466,7 +1524,7 @@ class TieredAnnotationManager {
      * Generate unique annotation ID
      */
     _generateId() {
-        return `ann_${Date.now()}_${(++this.annotationCounter).toString(36)}`;
+        return `ann_${Date.now()}_${this.idNonce}_${(++this.annotationCounter).toString(36)}`;
     }
 
     /**
@@ -1803,7 +1861,16 @@ class TieredAnnotationManager {
     }
 
     /**
-     * Generate ELAN-style time slots
+     * Generate ELAN-style time slots, named by their time: {ts1500: 1500}.
+     *
+     * Annotations carry their own start_time/end_time and never refer to a
+     * slot; this map is an index the EAF exporter writes out. Numbered in
+     * time order (ts1, ts2, ...) every slot after a new earlier boundary was
+     * renamed on the next save, so two members of a live session saving
+     * different boundaries sent the server's key-by-key merge conflicting
+     * values for one key (ts3 = 1500 from one, ts3 = 2200 from the other),
+     * and the merged map lost times the annotations still used. Named by
+     * time, a slot's key never changes and two saves can only agree on it.
      */
     _generateTimeSlots() {
         const times = new Set();
@@ -1817,8 +1884,8 @@ class TieredAnnotationManager {
 
         const sortedTimes = Array.from(times).sort((a, b) => a - b);
         const slots = {};
-        sortedTimes.forEach((time, i) => {
-            slots[`ts${i + 1}`] = time;
+        sortedTimes.forEach((time) => {
+            slots[`ts${time}`] = time;
         });
 
         return slots;
@@ -3010,6 +3077,18 @@ class ZoomedTimelineView {
 
 // Export for use
 if (typeof window !== 'undefined') {
+    // Live collaborative sessions: show a teammate's answer without a reload
+    // (see collab.js applyWidget). collab.js has already written the answer
+    // into the hidden input; the manager redraws from it without saving.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets['tiered_annotation'] = {
+        apply(ctx) {
+            const form = ctx.form || document.getElementById(ctx.schema);
+            const m = form && form._tieredManager;
+            if (!m || typeof m.applyRemoteAnswer !== 'function') return false;
+            return m.applyRemoteAnswer(ctx.value) === true;
+        }
+    };
     window.TieredAnnotationManager = TieredAnnotationManager;
     window.TierView = TierView;
     window.ZoomedTimelineView = ZoomedTimelineView;

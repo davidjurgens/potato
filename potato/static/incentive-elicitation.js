@@ -200,7 +200,8 @@
         function show(bid) {
             if (slider) {
                 slider.classList.toggle('bdm-set', bid !== null);
-                if (bid !== null) { slider.value = String(bid); }
+                // No bid puts the thumb back where the page draws it unset.
+                slider.value = bid !== null ? String(bid) : slider.defaultValue;
                 out.textContent = bid !== null ? money(bid, cfg.currency) : '–';
                 slider.setAttribute('aria-valuetext', bid !== null ? money(bid, cfg.currency) : 'not set');
             }
@@ -264,7 +265,8 @@
 
         function show(p) {
             slider.classList.toggle('be-set', p !== null);
-            if (p !== null) { slider.value = String(p); }
+            // No report puts the thumb back where the page draws it unset.
+            slider.value = p !== null ? String(p) : slider.defaultValue;
             out.textContent = p !== null ? p + '%' : '–';
             slider.setAttribute('aria-valuetext', p !== null ? p + ' percent' : 'not set');
             declare(form, p !== null ? null : 'set a probability');
@@ -368,4 +370,23 @@
     document.addEventListener('potato:instance-ready', init);
 
     window.PotatoIncentiveWidgets = {init: init, countSwitches: countSwitches};
+
+    // Live collaborative sessions: a teammate's answer has already been
+    // written into this scheme's hidden input. Each widget function re-reads
+    // that input and redraws from it alone (replacing, not merging), binds its
+    // listeners only once per form (form._iw), and writes nothing back.
+    function liveApplier(selector, draw) {
+        return {
+            apply: function (ctx) {
+                var form = ctx && ctx.form;
+                if (!form || !form.matches || !form.matches(selector) || !hiddenInput(form)) { return false; }
+                draw(form);
+                return true;
+            }
+        };
+    }
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.price_list = liveApplier('form.price-list', priceList);
+    window.potatoCollabWidgets.bdm = liveApplier('form.bdm', bdm);
+    window.potatoCollabWidgets.belief_elicitation = liveApplier('form.belief-elicitation', belief);
 })();

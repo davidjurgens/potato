@@ -1724,17 +1724,11 @@ class SpanManager {
                     textContent = document.getElementById(`text-content-${firstField}`);
                 }
             }
-            const existingSpans = textContent ? textContent.querySelectorAll('.span-highlight') : [];
-            const hasServerRenderedSpans = existingSpans.length > 0;
-
             if (!instanceId) {
                 // No instance (a phase page): there are no spans to load, and
                 // asking for /api/spans/null only earned a 404.
-                this.annotations = { spans: [] };
-                if (!hasServerRenderedSpans) {
-                    this.clearAllStateAndOverlays();
-                    this.renderSpans();
-                }
+                this.clearAllStateAndOverlays();
+                this.renderSpans();
                 return Promise.resolve();
             }
 
@@ -1742,11 +1736,8 @@ class SpanManager {
 
             if (!response.ok) {
                 if (response.status === 404) {
-                    this.annotations = { spans: [] };
-                    if (!hasServerRenderedSpans) {
-                        this.clearAllStateAndOverlays();
-                        this.renderSpans();
-                    }
+                    this.clearAllStateAndOverlays();
+                    this.renderSpans();
                     return Promise.resolve();
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1911,9 +1902,10 @@ class SpanManager {
             const spans = this.getSpans();
             if (!spans || spans.length === 0) return;
 
+            const untargetedField = this.fieldForUntargetedSpans();
             const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
             sortedSpans.forEach((span, index) => {
-                const fieldKey = span.target_field || '';
+                const fieldKey = span.target_field || untargetedField;
                 const strategy = this.fieldStrategies[fieldKey] || this.positioningStrategy;
                 const overlaysEl = document.getElementById(`span-overlays-${fieldKey}`) || document.getElementById('span-overlays');
                 if (strategy && overlaysEl) {
@@ -1952,6 +1944,33 @@ class SpanManager {
     }
 
     /**
+     * The field a span with no `target_field` is drawn on, or '' for none.
+     *
+     * Such a span indexes the item's text (`text_key`), the text the hidden
+     * legacy `#text-content` holds. On an `instance_display` page there is
+     * no `#span-overlays` for it, so it was drawn nowhere: a span stored
+     * without a field (a prelabel, an import, an API write, or one made
+     * before the field was marked `span_target`) was in the data and absent
+     * from the page. It goes on the span-target field showing that same
+     * text, whose offsets are then the same offsets; never on a field that
+     * shows anything else.
+     */
+    fieldForUntargetedSpans() {
+        if (document.getElementById('span-overlays')) return '';
+        const legacy = document.getElementById('text-content');
+        const itemText = legacy && legacy.getAttribute('data-original-text');
+        if (!itemText) return '';
+        for (const [fieldKey, strategy] of Object.entries(this.fieldStrategies)) {
+            if (strategy && typeof strategy.getCanonicalText === 'function' &&
+                    strategy.getCanonicalText() === itemText &&
+                    document.getElementById(`span-overlays-${fieldKey}`)) {
+                return fieldKey;
+            }
+        }
+        return '';
+    }
+
+    /**
      * Decide which label chips have to collapse to a dot.
      *
      * Chips sit in the gutter above the text they label, anchored at the span's
@@ -1977,6 +1996,41 @@ class SpanManager {
             if (kept.some((k) => hits(k, box))) return true;
             kept.push(box);
             return false;
+        });
+    }
+
+    /**
+     * How far right each collapsed dot must move to clear the kept chips.
+     *
+     * A dot stays at its span's start, which is inside the chip it collided
+     * with whenever the two spans start close together ("alice works": the
+     * dot for "works" landed on the delete button of the chip for "alice").
+     * Drawn later, the dot sat on top of that button, so the kept span could
+     * not be removed. Each dot moves just past any kept chip it overlaps.
+     *
+     * @param {Array} boxes   chip rectangles as measured expanded, in render order
+     * @param {boolean[]} compact  planControlCompaction()'s answer for them
+     * @param {Array} dotBoxes  each collapsed chip's rectangle once collapsed
+     *        (null for a kept one)
+     * @returns {number[]} px to add to each chip's left (0 for most)
+     */
+    static planCompactNudges(boxes, compact, dotBoxes) {
+        const GAP = 2;
+        const hits = (a, b) => !(a.right <= b.left || a.left >= b.right ||
+                                 a.bottom <= b.top || a.top >= b.bottom);
+        const kept = (boxes || []).filter((b, i) => b && !(compact || [])[i]);
+        return (boxes || []).map((_, i) => {
+            const dot = (dotBoxes || [])[i];
+            if (!(compact || [])[i] || !dot) return 0;
+            let dx = 0;
+            for (let pass = 0; pass <= kept.length; pass++) {
+                const moved = {left: dot.left + dx, right: dot.right + dx,
+                               top: dot.top, bottom: dot.bottom};
+                const blocker = kept.find((k) => hits(k, moved));
+                if (!blocker) break;
+                dx = blocker.right + GAP - dot.left;
+            }
+            return dx;
         });
     }
 
@@ -2007,10 +2061,21 @@ class SpanManager {
         }
         // Measure everything expanded first, or an earlier collapse changes
         // the boxes the later ones are compared against.
-        controls.forEach((c) => c.classList.remove('is-compact'));
+        controls.forEach((c) => {
+            c.classList.remove('is-compact');
+            if (c.dataset.baseLeft !== undefined) c.style.left = c.dataset.baseLeft;
+        });
         const boxes = controls.map((c) => c.getBoundingClientRect());
-        SpanManager.planControlCompaction(boxes).forEach((compact, i) => {
-            controls[i].classList.toggle('is-compact', compact);
+        const compact = SpanManager.planControlCompaction(boxes);
+        compact.forEach((isCompact, i) => {
+            controls[i].classList.toggle('is-compact', isCompact);
+        });
+        const dots = controls.map((c, i) => (compact[i] ? c.getBoundingClientRect() : null));
+        SpanManager.planCompactNudges(boxes, compact, dots).forEach((dx, i) => {
+            if (!dx) return;
+            const c = controls[i];
+            if (c.dataset.baseLeft === undefined) c.dataset.baseLeft = c.style.left;
+            c.style.left = `${(parseFloat(c.dataset.baseLeft) || 0) + dx}px`;
         });
     }
 
@@ -2502,18 +2567,6 @@ class SpanManager {
         if (anyOverlay) {
             anyOverlay.remove();
         }
-
-        // Also remove server-rendered inline span-highlight elements
-        // These are rendered by render_span_annotations() on the server
-        const inlineSelector = `.span-highlight[data-annotation-id="${spanId}"]`;
-        document.querySelectorAll(inlineSelector).forEach(inlineSpan => {
-            // Unwrap the span: replace it with its text content
-            const parent = inlineSpan.parentNode;
-            while (inlineSpan.firstChild) {
-                parent.insertBefore(inlineSpan.firstChild, inlineSpan);
-            }
-            inlineSpan.remove();
-        });
 
         // Also remove from local state immediately
         if (this.annotations.spans) {

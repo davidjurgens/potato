@@ -70,20 +70,28 @@ def pytest_collection_modifyitems(config, items):
 # ---------- browser fixtures ----------
 
 @pytest.fixture(scope="session")
-def browser_instance():
-    """Session-scoped browser — launched once, shared across all tests."""
+def playwright_instance():
+    """The session's one Playwright: the sync API will not start a second
+    while it runs, so a test that needs ``devices`` takes it from here."""
     if not HAS_PLAYWRIGHT:
         pytest.skip("playwright not installed")
 
     pw = sync_playwright().start()
-    browser = pw.chromium.launch(
+    yield pw
+    with bounded_teardown("playwright_instance"):
+        pw.stop()
+
+
+@pytest.fixture(scope="session")
+def browser_instance(playwright_instance):
+    """Session-scoped browser — launched once, shared across all tests."""
+    browser = playwright_instance.chromium.launch(
         headless=True,
         args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     )
     yield browser
     with bounded_teardown("browser_instance"):
         browser.close()
-        pw.stop()
 
 
 @pytest.fixture

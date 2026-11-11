@@ -28,7 +28,7 @@ WATCHDOG = REPO_ROOT / "tests" / "helpers" / "teardown_watchdog.py"
 #: Every conftest that drives a real browser or a real server, and the fixtures
 #: in each whose teardown is known to talk to a subprocess that may be gone.
 BROWSER_CONFTESTS = {
-    PW_CONFTEST: {"browser_instance", "_default_server"},
+    PW_CONFTEST: {"playwright_instance", "browser_instance", "_default_server"},
     SELENIUM_CONFTEST: {"shared_chrome_browser", "shared_flask_server"},
 }
 

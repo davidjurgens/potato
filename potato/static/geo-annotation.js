@@ -22,6 +22,22 @@
     if (window.PotatoGeoAnnotation) { return; }
 
     var STATES = new WeakMap();
+    // This page's id nonce. The server merges a shared answer feature by
+    // feature by id; two members' browsers each numbering their third
+    // feature "f3" would overwrite one another. New ids are f<n>_<nonce>:
+    // the number still orders the list and names the feature.
+    var ID_NONCE = Math.random().toString(36).slice(2, 8) || 'x';
+    var FEATURE_ID = /^f(\d+)(?:_[a-z0-9]+)?$/;
+
+    function newFeatureId(state) {
+        return 'f' + (state.nextId++) + '_' + ID_NONCE;
+    }
+
+    /** The number in a feature id (f3, f3_ab12cd), or NaN. */
+    function featureNumber(id) {
+        var m = FEATURE_ID.exec(String(id));
+        return m ? parseInt(m[1], 10) : NaN;
+    }
     var GEO = 'EPSG:4326';
     var TOOL_NAMES = {select: 'Select / move', point: 'Point', line: 'Line', polygon: 'Polygon',
                       freehand: 'Freehand'};
@@ -466,21 +482,7 @@
             console.error('[geo] stored answer unreadable', e);
             return;
         }
-        feats.forEach(function (f) {
-            var id = f.getId();
-            var m = typeof id === 'string' && /^f(\d+)$/.exec(id);
-            if (!m || state.source.getFeatureById(id)) {
-                f.setId('f' + state.nextId);
-            }
-            // A model's feature keeps saying so; a pre-filled one without a
-            // source is marked as pre-filled.
-            if (fromPre && !f.get('source')) { f.set('source', 'preannotation'); }
-            if (!f.get('tool')) { f.set('tool', toolOf(f)); }
-            if (state.cfg.task === 'pin' && f.getGeometry().getType() !== 'Point') { return; }
-            state.source.addFeature(f);
-            var n = parseInt(String(f.getId()).slice(1), 10);
-            if (n >= state.nextId) { state.nextId = n + 1; }
-        });
+        addStoredFeatures(state, feats, fromPre);
         // Suggestions are not an answer until the annotator edits one of
         // them or presses "Accept suggestions": an item nobody looked at must
         // not count as labelled.
@@ -488,6 +490,80 @@
         // Arrived with features, suggested or stored: deleting them all is
         // then something to save.
         state.hadAnswer = state.hadAnswer || !!stored;
+    }
+
+    /* Add stored features to the map. A stored id (f3, or f3_<nonce> from
+       any member's browser) is kept; one in another form, or a repeat, gets
+       a new id. New ids number past every stored one. */
+    function addStoredFeatures(state, feats, fromPre) {
+        feats.forEach(function (f) {
+            var id = f.getId();
+            var m = typeof id === 'string' && FEATURE_ID.exec(id);
+            if (!m || state.source.getFeatureById(id)) {
+                f.setId(newFeatureId(state));
+            }
+            // A model's feature keeps saying so; a pre-filled one without a
+            // source is marked as pre-filled.
+            if (fromPre && !f.get('source')) { f.set('source', 'preannotation'); }
+            if (!f.get('tool')) { f.set('tool', toolOf(f)); }
+            if (state.cfg.task === 'pin' && f.getGeometry().getType() !== 'Point') { return; }
+            state.source.addFeature(f);
+            var n = featureNumber(f.getId());
+            if (n >= state.nextId) { state.nextId = n + 1; }
+        });
+    }
+
+    /* Replace what the map shows with the answer now in the hidden input,
+       and redraw. A teammate's answer in a live session arrives this way
+       (collab.js has written it to the input). Unlike restore() it does not
+       fall back to suggestions: an empty input is an empty map. Nothing is
+       saved. The view, tool and current label stay; the selection follows
+       its id; a shape being drawn is dropped. False before the map is built. */
+    function applyStored(state) {
+        if (!state.map || !state.source || !state.format) { return false; }
+        var cfg = state.cfg;
+        var stored = state.input && state.input.value ? asFeatureCollection(state.input.value) : null;
+        if (state.draw && state.drawing) {
+            try { state.draw.abortDrawing(); } catch (e) { /* nothing in progress */ }
+        }
+        state.drawing = false;
+        state.pendingPre = false;
+        if (cfg.task === 'classify_region') {
+            state.assign = {};
+            ((stored && stored.features) || []).forEach(function (f) {
+                var p = (f && f.properties) || {};
+                if (p.region !== undefined && p.label) { state.assign[String(p.region)] = p.label; }
+            });
+            state.regionSource.changed();
+        } else {
+            var feats = [];
+            if (stored) {
+                try {
+                    feats = state.format.readFeatures(stored, {dataProjection: GEO, featureProjection: state.proj});
+                } catch (e) {
+                    console.error('[geo] teammate answer unreadable', e);
+                    return false;
+                }
+            }
+            var keep = state.selectedId;
+            if (state.select) { state.select.getFeatures().clear(); }
+            state.source.clear();
+            addStoredFeatures(state, feats, false);
+            state.selectedId = keep && state.source.getFeatureById(keep) ? keep : null;
+            if (cfg.task === 'pin' && (!state.activePin || pinFor(state, state.activePin))) {
+                state.activePin = firstUnplaced(state);
+            }
+        }
+        if (stored) { state.hadAnswer = true; }
+        if (cfg.task === 'draw' && typeof cfg.max_features === 'number' &&
+                state.source.getFeatures().length >= cfg.max_features && state.tool !== 'select') {
+            setTool(state, 'select');
+        }
+        renderList(state);
+        if (cfg.task === 'classify_region') { refreshToolbar(state); }
+        else { selectFeature(state, state.selectedId, false); }
+        declare(state);
+        return true;
     }
 
     /* A model's features this map can show as they are: a label the scheme
@@ -520,7 +596,8 @@
 
     function orderedFeatures(state) {
         return state.source.getFeatures().slice().sort(function (a, b) {
-            return parseInt(String(a.getId()).slice(1), 10) - parseInt(String(b.getId()).slice(1), 10);
+            return (featureNumber(a.getId()) - featureNumber(b.getId())) ||
+                String(a.getId()).localeCompare(String(b.getId()));
         });
     }
 
@@ -758,7 +835,7 @@
             state.draw.on('drawend', function (e) {
                 state.drawing = false;
                 var f = e.feature;
-                f.setId('f' + state.nextId++);
+                f.setId(newFeatureId(state));
                 f.set('label', state.currentLabel);
                 f.set('tool', tool);
                 if (cfg.feature_text) { f.set('text', ''); }
@@ -781,7 +858,8 @@
     }
 
     function featureName(state, f) {
-        var n = String(f.getId()).slice(1);
+        var num = featureNumber(f.getId());
+        var n = isNaN(num) ? String(f.getId()) : String(num);
         var kind = KIND_NAMES[f.get('tool')] || 'Feature';
         return kind + ' ' + n;
     }
@@ -833,7 +911,7 @@
         var ol = window.ol, cfg = state.cfg;
         if (typeof cfg.max_features === 'number' && state.source.getFeatures().length >= cfg.max_features) { return; }
         var f = new ol.Feature({geometry: new ol.geom.Point(state.map.getView().getCenter())});
-        f.setId('f' + state.nextId++);
+        f.setId(newFeatureId(state));
         f.set('label', state.currentLabel);
         f.set('tool', 'point');
         if (cfg.feature_text) { f.set('text', ''); }
@@ -888,7 +966,7 @@
             f.unset('source');
         } else {
             f = new ol.Feature({geometry: new ol.geom.Point(coordinate)});
-            f.setId('f' + state.nextId++);
+            f.setId(newFeatureId(state));
             f.set('label', label);
             f.set('tool', 'point');
             if (state.cfg.feature_text) { f.set('text', ''); }
@@ -1163,12 +1241,37 @@
         init();
     });
 
+    function formFor(schema) {
+        return Array.prototype.filter.call(document.querySelectorAll('form.geo-annotation'), function (f) {
+            return f.getAttribute('data-schema-name') === schema;
+        })[0] || null;
+    }
+
     window.PotatoGeoAnnotation = {
         init: init,
         /* For tests and the debugger: the map and the answer of one scheme. */
         state: function (schema) {
-            var form = document.querySelector('form.geo-annotation[data-schema-name="' + schema + '"]');
+            var form = formFor(schema);
             return form ? STATES.get(form) : null;
+        },
+        /* Redraw one scheme from its hidden input (see applyStored). */
+        reload: function (schema) {
+            var form = formFor(schema);
+            var state = form && STATES.get(form);
+            return state ? applyStored(state) : false;
+        }
+    };
+
+    // Live collaborative sessions (collab.js): it has written the teammate's
+    // answer into this scheme's hidden input already.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.geo_annotation = {
+        apply: function (ctx) {
+            var form = ctx.form && ctx.form.classList && ctx.form.classList.contains('geo-annotation')
+                ? ctx.form : formFor(ctx.schema);
+            var state = form && STATES.get(form);
+            if (!state) { return false; }
+            return applyStored(state) === true;
         }
     };
 })();

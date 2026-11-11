@@ -140,3 +140,13 @@ def test_the_0_key_is_a_key():
     labels = [{"name": "road", "color": "#808080", "key_value": 0}]
     bindings = _keybindings(labels, ["cuboid_3d"], "scan")
     assert {"key": "0", "description": "Select road"} in bindings
+
+
+def test_attribute_hint_noun_is_the_one_the_viewer_redraws_with():
+    # The page's hint and the one pc-viewer.js redraws on every selection
+    # come from the same word; the viewer used to say "object".
+    attrs = [{"name": "occluded", "type": "bool"}]
+    html, _ = _generate_internal(scheme(tools=["cuboid_3d", "point_3d"], attributes=attrs))
+    noun = viewer_config(html)["attributeNoun"]
+    assert f'<p class="attribute-panel-hint">Select a {noun} to set its attributes.</p>' in html
+    assert noun == "box or point"
