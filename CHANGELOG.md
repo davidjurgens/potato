@@ -17,6 +17,12 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Fixed
 
+- In Firefox, answers on consent, instructions, prestudy and poststudy pages
+  never reached the server, so a required question blocked the annotator with
+  "Navigation failed. Please try again." The Firefox-only instance_id fix
+  found no id on these pages and set the page's synthetic `__phase_page__` id
+  to null, and `saveAnnotations()` sends nothing without an id. The fix now
+  skips phase pages and never sets an empty id.
 - `sequential_key_binding` could give two schemes on one page the same key.
   The key allocator never reserved triage's `1`, `2` and `3`, reserved `a`–`d`
   for BWS's worst column while BWS bound `q w e r`, ignored `key_value` on
