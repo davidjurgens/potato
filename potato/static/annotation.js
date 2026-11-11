@@ -5213,6 +5213,12 @@ function aggressiveFirefoxInstanceIdFix() {
     if (!isFirefox) {
         return; // Only apply to Firefox
     }
+    // Phase pages (consent, instructions, surveys) have no instance. Their
+    // synthetic '__phase_page__' id must survive, or saveAnnotations() sends
+    // nothing and required answers never reach the server.
+    if (window.config && !window.config.is_annotation_page) {
+        return;
+    }
 
     debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Starting aggressive Firefox fix');
 
@@ -5261,8 +5267,7 @@ function aggressiveFirefoxInstanceIdFix() {
         }
 
         // Method 4: If we still don't have it, try to get it from the server via API.
-        // Not on phase pages: they have no instance and the request only 404s.
-        if (!correctInstanceId && !(window.config && window.config.is_annotation_page === false)) {
+        if (!correctInstanceId) {
             debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id found, trying API call');
 
             // Make an API call to get the current instance info
@@ -5292,6 +5297,9 @@ function aggressiveFirefoxInstanceIdFix() {
 
 // Helper function to apply the instance_id fix
 function applyInstanceIdFix(instanceIdInput, correctInstanceId) {
+    if (!correctInstanceId) {
+        return; // Nothing found to fix with; never blank the current id.
+    }
     const currentValue = instanceIdInput.value;
 
     if (currentValue !== correctInstanceId) {
