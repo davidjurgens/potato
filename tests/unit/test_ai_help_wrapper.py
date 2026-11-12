@@ -12,20 +12,21 @@ from unittest.mock import patch, MagicMock
 class TestGenerateAIHelpHTML:
     """Test the generate_ai_help_html function."""
 
-    def test_returns_empty_string_when_ai_disabled(self):
+    def test_returns_empty_string_when_ai_disabled(self, monkeypatch):
         """Test that generate_ai_help_html returns empty string when DYNAMICAIHELP is None.
 
         This is the critical bug fix test - when AI support is disabled,
         DYNAMICAIHELP is None and calling generate_ai_help_html should not crash.
         """
-        # Import with DYNAMICAIHELP as None (default state)
-        from potato.ai.ai_help_wrapper import generate_ai_help_html, DYNAMICAIHELP
+        from potato.ai import ai_help_wrapper
 
-        # Verify DYNAMICAIHELP is None when not initialized
-        assert DYNAMICAIHELP is None
+        # Set the disabled state here: an in-process server test that ran
+        # earlier with AI on leaves the module-level helper set.
+        monkeypatch.setattr(ai_help_wrapper, "DYNAMICAIHELP", None)
 
         # Should return empty string, not crash
-        result = generate_ai_help_html(instance=1, annotation_id=0, annotation_type="radio")
+        result = ai_help_wrapper.generate_ai_help_html(
+            instance=1, annotation_id=0, annotation_type="radio")
         assert result == ""
 
     def test_returns_html_when_ai_enabled(self):
@@ -55,13 +56,12 @@ class TestGenerateAIHelpHTML:
 class TestGetAIWrapper:
     """Test the get_ai_wrapper function."""
 
-    def test_returns_empty_string_when_helper_none(self):
+    def test_returns_empty_string_when_helper_none(self, monkeypatch):
         """Test get_ai_wrapper returns empty string when helper is None."""
-        from potato.ai.ai_help_wrapper import get_ai_wrapper, DYNAMICAIHELP
+        from potato.ai import ai_help_wrapper
 
-        # When DYNAMICAIHELP is None
-        assert DYNAMICAIHELP is None
-        result = get_ai_wrapper()
+        monkeypatch.setattr(ai_help_wrapper, "DYNAMICAIHELP", None)
+        result = ai_help_wrapper.get_ai_wrapper()
         assert result == ""
 
     def test_returns_wrapper_html_when_helper_exists(self):

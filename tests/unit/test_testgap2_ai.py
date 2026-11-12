@@ -232,9 +232,15 @@ class TestSoloGate:
 
         clear_item_state_manager()
         M.clear_solo_mode_manager()
+        # A fresh state_dir of its own. Without one this used the repo's
+        # annotation_output/.solo_mode, loaded the phase the last run saved,
+        # and init started the labelling thread before the stub below, which
+        # sent every item to api.openai.com with the key "k".
+        state = create_test_directory("tg2_solo_gate")
+        shutil.rmtree(state, ignore_errors=True)
         cfg = {"annotation_schemes": [{"name": "sentiment", "annotation_type": "radio",
                                        "labels": ["positive", "negative"]}],
-               "solo_mode": {"enabled": True,
+               "solo_mode": {"enabled": True, "state_dir": state,
                              "labeling_models": [{"provider": "openai", "model": "gpt-x",
                                                   "api_key": "k"}],
                              "thresholds": {"end_human_annotation_agreement": 0.9,
@@ -243,6 +249,7 @@ class TestSoloGate:
         ism = init_item_state_manager(cfg)
         ism.add_items({f"i{n}": {"id": f"i{n}", "text": f"text {n}"} for n in range(50)})
         manager = M.init_solo_mode_manager(cfg)
+        assert manager._labeling_thread is None
         manager.start_background_labeling = lambda *a, **k: False
         manager.create_prompt_version("p", "user")
         manager.phase_controller.transition_to(SoloPhase.PARALLEL_ANNOTATION, force=True)

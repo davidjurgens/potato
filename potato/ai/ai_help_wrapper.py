@@ -15,10 +15,13 @@ def init_dynamic_ai_help():
     logger = logging.getLogger(__name__)
     logger.info(f"[init_dynamic_ai_help] Called. ai_support.enabled={config.get('ai_support', {}).get('enabled', False)}")
 
+    global DYNAMICAIHELP
     if not config["ai_support"]["enabled"]:
+        # Drop a helper left by an earlier boot in this process, or this
+        # server would render AI help built for that config.
+        DYNAMICAIHELP = None
         logger.info("[init_dynamic_ai_help] AI support disabled, returning")
         return
-    global DYNAMICAIHELP
     if DYNAMICAIHELP is None:
         DYNAMICAIHELP = DynamicAIHelp()
         logger.info(f"[init_dynamic_ai_help] Created DYNAMICAIHELP instance: {id(DYNAMICAIHELP)}")
