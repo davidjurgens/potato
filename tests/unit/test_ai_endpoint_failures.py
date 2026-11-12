@@ -353,3 +353,41 @@ class TestHealthCheck:
         """Even non-AIEndpointRequestError exceptions should be caught."""
         endpoint = _make_fake(query_raises=TimeoutError("network"))
         assert endpoint.health_check() is False
+
+
+class TestUnsetKeyReference:
+    """`api_key: ${OPENAI_API_KEY}` with the variable unset.
+
+    Config loading leaves the reference as written, and the endpoint used to
+    send that text as the key: no error at startup, then a 401 from the
+    provider on every AI call (54 of them in one browser-test run).
+    """
+
+    UNSET = "${POTATO_TEST_KEY_THAT_IS_NOT_SET}"
+
+    @patch("potato.ai.openai_endpoint.OpenAI")
+    def test_openai_refuses_to_start_instead_of_sending_it(self, mock_openai):
+        from potato.ai.openai_endpoint import OpenAIEndpoint
+        with patch.dict("os.environ", {}, clear=False) as env:
+            env.pop("OPENAI_API_KEY", None)
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            with pytest.raises(AIEndpointRequestError, match="API key is required"):
+                OpenAIEndpoint({"ai_config": {"api_key": self.UNSET, "model": "gpt-4o-mini"}})
+        mock_openai.assert_not_called()
+
+    @patch("potato.ai.openai_endpoint.OpenAI")
+    def test_openai_falls_back_to_its_own_variable(self, mock_openai):
+        from potato.ai.openai_endpoint import OpenAIEndpoint
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-from-env"}, clear=False) as env:
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            OpenAIEndpoint({"ai_config": {"api_key": self.UNSET, "model": "gpt-4o-mini"}})
+        assert mock_openai.call_args.kwargs["api_key"] == "sk-from-env"
+
+    @patch("potato.ai.anthropic_endpoint.anthropic")
+    def test_anthropic_refuses_to_start_instead_of_sending_it(self, mock_anthropic):
+        from potato.ai.anthropic_endpoint import AnthropicEndpoint
+        with patch.dict("os.environ", {}, clear=False) as env:
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            with pytest.raises(AIEndpointRequestError, match="API key is required"):
+                AnthropicEndpoint({"ai_config": {"api_key": self.UNSET}})
+        mock_anthropic.Anthropic.assert_not_called()

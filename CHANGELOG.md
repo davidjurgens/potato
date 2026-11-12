@@ -15,8 +15,23 @@ All notable changes to the Potato annotation platform are documented in this fil
   radius. A scheme with `segment_3d` now loads the cloud as one buffer, up to
   `max_points`, instead of as an octree, unless it sets `lod: true`.
 
+- Live collaborative sessions. Several annotators label the same item
+  together, with one shared answer per item, saved under a team user. Members
+  can follow a leader's view or move to other items on their own. Simultaneous
+  saves are merged, and by default, when two members change the same thing,
+  the later change wins and the other member can undo it. A side panel lists
+  who changed what on each item, holds notes only their author sees, and has
+  team discussion, chat and quick polls. Turned on with the `collab:` block; see
+  `docs/advanced/collaborative_sessions.md`.
+
 ### Fixed
 
+- An AI endpoint's `api_key` (in `ai_support`, and in other endpoints built the
+  same way) written as `${VAR}` with VAR unset was sent to the provider as the
+  literal text `${VAR}`, so the server started normally and every AI call
+  failed with a 401. The key is now treated as missing: the endpoint uses its
+  own environment variable (such as `OPENAI_API_KEY`) if that is set; otherwise
+  the server logs which variable is unset and runs with AI support off.
 - In Firefox, answers on consent, instructions, prestudy and poststudy pages
   never reached the server, so a required question blocked the annotator with
   "Navigation failed. Please try again." The Firefox-only instance_id fix
